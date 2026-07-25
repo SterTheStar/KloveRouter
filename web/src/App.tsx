@@ -8,6 +8,7 @@ import DashboardPage from "./pages/DashboardPage";
 import ProviderDetailPage from "./pages/ProviderDetailPage";
 import ApiKeysPage from "./pages/ApiKeysPage";
 import SettingsPage from "./pages/SettingsPage";
+import ModelsPage from "./pages/ModelsPage";
 import type { Page } from "./types";
 
 export default function App() {
@@ -48,6 +49,7 @@ export default function App() {
           {currentPage === "provider-detail" && selectedProviderId && (
             <ProviderDetailPage providerId={selectedProviderId} onBack={() => handleNavigate("dashboard")} />
           )}
+          {currentPage === "models" && <ModelsPage />}
           {currentPage === "keys" && <ApiKeysPage />}
           {currentPage === "settings" && <SettingsPage darkMode={darkMode} onThemeChange={setDarkMode} />}
         </main>

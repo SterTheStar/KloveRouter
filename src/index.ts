@@ -75,8 +75,29 @@ if (!config.isDev) {
 
 app.listen(config.port);
 
-console.log(`🦊 Klove AI Router running on http://localhost:${config.port}`);
-console.log(
-  `📋 Panel: http://localhost:${config.port}`
-);
-console.log(`🔑 Default password: ${config.defaultPassword}`);
+const b = "\x1b[1m", r = "\x1b[0m";
+const blue = "\x1b[38;2;91;206;250m", pink = "\x1b[38;2;245;169;184m", white = "\x1b[97m", dim = "\x1b[2m";
+const green = "\x1b[38;2;80;200;120m", cyan = "\x1b[38;2;0;200;200m", yellow = "\x1b[38;2;255;200;50m";
+const bgBlue = "\x1b[48;2;91;206;250m", bgGreen = "\x1b[48;2;80;200;120m";
+
+function badge(text: string, color: string) {
+  return `${color}${white}${b} ${text} ${r}`;
+}
+
+const ascii = `
+${b}${blue}     __ __ __${r}
+${b}${pink}    / //_// /___ _   _____${r}
+${b}${white}   / ,<  / / __ \\ | / / _ \\${r}
+${b}${pink}  / /| |/ / /_/ / |/ /  __/${r}
+${b}${blue} /_/ |_/_/\\____/|___/\\___/${r}
+`;
+const version = "1.0.0";
+
+console.log(ascii);
+console.log(`     ${b}${white}Klove${r} ${dim}v${version}${r} ${dim}by Esther${r}`);
+console.log(`     ${dim}https://github.com/SterTheStar/KloveRouter${r}`);
+console.log();
+console.log(`     ${badge("UP", bgGreen)} ${green}${b}Server running${r}`);
+console.log(`     ${badge("WEB", bgBlue)} ${cyan}${b}Panel${r}     http://localhost:${config.port}`);
+console.log(`     ${badge("API", bgBlue)} ${yellow}${b}API${r}      http://localhost:${config.port}/api`);
+console.log();

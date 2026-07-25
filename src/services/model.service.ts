@@ -10,6 +10,11 @@ export interface Model {
   created_at: string;
 }
 
+export interface ModelWithProvider extends Model {
+  provider_name: string;
+  provider_avatar: string | null;
+}
+
 export type CreateModelInput = {
   provider_id: string;
   model_id: string;
@@ -37,6 +42,18 @@ export const modelService = {
          ORDER BY m.model_id ASC`
       )
       .all() as Model[];
+  },
+
+  findAllActiveWithProvider(): ModelWithProvider[] {
+    const db = getDb();
+    return db
+      .query(
+        `SELECT m.*, p.name as provider_name, p.avatar as provider_avatar FROM models m
+         JOIN providers p ON p.id = m.provider_id
+         WHERE m.is_active = 1 AND p.is_active = 1
+         ORDER BY p.name ASC, m.model_id ASC`
+      )
+      .all() as ModelWithProvider[];
   },
 
   findById(id: string): Model | null {

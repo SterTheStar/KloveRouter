@@ -23,6 +23,11 @@ export interface Model {
   created_at: string;
 }
 
+export interface ModelWithProvider extends Model {
+  provider_name: string;
+  provider_avatar: string | null;
+}
+
 export interface ApiKey {
   id: string;
   name: string;

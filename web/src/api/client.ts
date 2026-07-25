@@ -96,6 +96,8 @@ export const providers = {
 
 // Models
 export const models = {
+  listAll: () =>
+    request<import("../types").ModelWithProvider[]>("/api/models"),
   listByProvider: (providerId: string) =>
     request<import("../types").Model[]>(`/api/providers/${providerId}/models`),
   create: (providerId: string, data: { model_id: string; display_name?: string }) =>

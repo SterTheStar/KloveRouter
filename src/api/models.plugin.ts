@@ -5,6 +5,9 @@ import { createOpenAIClient } from "../clients/openai";
 
 export const modelsPlugin = (app: Elysia) =>
   app
+    .get("/api/models", () => {
+      return modelService.findAllActiveWithProvider();
+    })
     .get("/api/providers/:id/models", ({ params: { id }, set }) => {
       const provider = providerService.findById(id);
       if (!provider) {
