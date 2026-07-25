@@ -23,6 +23,13 @@ export type CreateModelInput = {
 };
 
 export const modelService = {
+  findByProviderAndModel(providerId: string, modelId: string): Model | null {
+    const db = getDb();
+    return db
+      .query("SELECT * FROM models WHERE provider_id = ? AND model_id = ?")
+      .get(providerId, modelId) as Model | null;
+  },
+
   findByProvider(providerId: string): Model[] {
     const db = getDb();
     return db

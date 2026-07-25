@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { RiArrowLeftLine as ArrowLeft, RiCheckLine as Check, RiFileCopyLine as Copy, RiLoader4Line as LoaderCircle, RiPencilLine as Pencil, RiRefreshLine as RefreshCw, RiDeleteBinLine as Trash2, RiSearchLine as Search } from "@remixicon/react";
+import { RiArrowLeftLine as ArrowLeft, RiCheckLine as Check, RiCloseLine as CloseLine, RiFileCopyLine as Copy, RiLoader4Line as LoaderCircle, RiPencilLine as Pencil, RiRefreshLine as RefreshCw, RiDeleteBinLine as Trash2, RiSearchLine as Search, RiPlayCircleLine as PlayCircleLine } from "@remixicon/react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -28,6 +28,8 @@ export default function ProviderDetailPage({ providerId, onBack }: { providerId:
   const [deleteTarget, setDeleteTarget] = useState<Model | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [freeOnly, setFreeOnly] = useState(false);
+  const [testingId, setTestingId] = useState<string | null>(null);
+  const [testResult, setTestResult] = useState<Record<string, "success" | "error">>({});
 
   const filteredList = useMemo(() => {
     let result = list;
@@ -71,6 +73,16 @@ export default function ProviderDetailPage({ providerId, onBack }: { providerId:
   };
 
   const copy = (value: string) => navigator.clipboard?.writeText(value);
+  const testModel = async (id: string) => {
+    setTestingId(id);
+    try {
+      const result = await modelsApi.test(id);
+      setTestResult((prev) => ({ ...prev, [id]: result.success ? "success" : "error" }));
+    } catch {
+      setTestResult((prev) => ({ ...prev, [id]: "error" }));
+    }
+    setTestingId(null);
+  };
 
   if (loading) return <div className="flex justify-center p-12"><LoaderCircle className="size-5 animate-spin text-muted-foreground" /></div>;
   if (!provider) return <div className="p-6"><Alert variant="destructive"><AlertDescription>Provider not found.</AlertDescription></Alert></div>;
@@ -99,7 +111,7 @@ export default function ProviderDetailPage({ providerId, onBack }: { providerId:
       <Card variant="plain" className="overflow-hidden p-0 gap-0">
         <CardHeader className="flex flex-row items-center justify-between py-(--card-spacing)"><CardTitle>Models <span className="text-muted-foreground">({list.length})</span></CardTitle><div className="flex items-center gap-2"><div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input placeholder="Search..." className="h-8 w-48 border-none bg-muted pl-9" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} /></div><Button variant={freeOnly ? "default" : "secondary"} size="sm" onClick={() => setFreeOnly(!freeOnly)}>Free</Button>{list.length > 0 && <Button variant="destructive" size="sm" onClick={() => setClearOpen(true)}>Delete all</Button>}<Button variant="default" size="sm" onClick={() => setAddOpen(true)}>Add model</Button></div></CardHeader>
         <Separator />
-        {filteredList.length === 0 ? <div className="p-10 text-center text-sm text-muted-foreground">{list.length === 0 ? "No models found. Sync the provider or add one manually." : "No models match your search."}</div> : <Table><TableHeader><TableRow><TableHead>Model ID</TableHead><TableHead>Display name</TableHead><TableHead>Source</TableHead><TableHead>Status</TableHead><TableHead className="w-28">Actions</TableHead></TableRow></TableHeader><TableBody>{filteredList.map((model) => <TableRow key={model.id}><TableCell><div className="group flex items-center gap-1 font-mono text-xs"><span>{model.model_id}</span><Tooltip><TooltipTrigger render={<Button size="icon" variant="ghost" className="size-6 opacity-0 group-hover:opacity-100" onClick={() => copy(model.model_id)} />}><Copy className="size-3" /></TooltipTrigger><TooltipContent>Copy model ID</TooltipContent></Tooltip></div></TableCell><TableCell>{model.display_name || <span className="text-muted-foreground">—</span>}</TableCell><TableCell><Badge variant={model.is_manual ? "outline" : "secondary"}>{model.is_manual ? "Manual" : "Auto-synced"}</Badge></TableCell><TableCell><Switch checked={model.is_active === 1} onCheckedChange={async () => { const updated = await modelsApi.toggle(model.id); setList((items) => items.map((item) => item.id === model.id ? { ...item, is_active: updated.is_active } : item)); }} /></TableCell><TableCell><div className="flex gap-1"><Tooltip><TooltipTrigger render={<Button size="icon" variant="ghost" className="size-7" onClick={() => setEditTarget(model)} />}><Pencil className="size-3.5" /></TooltipTrigger><TooltipContent>Edit</TooltipContent></Tooltip><Tooltip><TooltipTrigger render={<Button size="icon" variant="ghost" className="size-7 text-destructive" onClick={() => setDeleteTarget(model)} />}><Trash2 className="size-3.5" /></TooltipTrigger><TooltipContent>Delete</TooltipContent></Tooltip></div></TableCell></TableRow>)}</TableBody></Table>}
+        {filteredList.length === 0 ? <div className="p-10 text-center text-sm text-muted-foreground">{list.length === 0 ? "No models found. Sync the provider or add one manually." : "No models match your search."}</div> : <Table><TableHeader><TableRow><TableHead>Model ID</TableHead><TableHead>Display name</TableHead><TableHead>Source</TableHead><TableHead>Status</TableHead><TableHead className="w-28">Actions</TableHead></TableRow></TableHeader><TableBody>{filteredList.map((model) => <TableRow key={model.id}><TableCell><div className="group flex items-center gap-1 font-mono text-xs"><span>{model.model_id}</span><Tooltip><TooltipTrigger render={<Button size="icon" variant="ghost" className="size-6 opacity-0 group-hover:opacity-100" onClick={() => copy(model.model_id)} />}><Copy className="size-3" /></TooltipTrigger><TooltipContent>Copy model ID</TooltipContent></Tooltip></div></TableCell><TableCell>{model.display_name || <span className="text-muted-foreground">—</span>}</TableCell><TableCell><Badge variant={model.is_manual ? "outline" : "secondary"}>{model.is_manual ? "Manual" : "Auto-synced"}</Badge></TableCell><TableCell><Switch checked={model.is_active === 1} onCheckedChange={async () => { const updated = await modelsApi.toggle(model.id); setList((items) => items.map((item) => item.id === model.id ? { ...item, is_active: updated.is_active } : item)); }} /></TableCell><TableCell><div className="flex justify-center gap-1">{testResult[model.id] === "success" ? <Check className="size-5 text-green-500" /> : testResult[model.id] === "error" ? <CloseLine className="size-5 text-destructive" /> : <Tooltip><TooltipTrigger render={<Button size="icon" variant="ghost" className="size-7" onClick={() => testModel(model.id)} disabled={testingId === model.id} />}>{testingId === model.id ? <LoaderCircle className="size-5 animate-spin" /> : <PlayCircleLine className="size-5" />}</TooltipTrigger><TooltipContent>Test</TooltipContent></Tooltip>}<Tooltip><TooltipTrigger render={<Button size="icon" variant="ghost" className="size-7" onClick={() => setEditTarget(model)} />}><Pencil className="size-5" /></TooltipTrigger><TooltipContent>Edit</TooltipContent></Tooltip><Tooltip><TooltipTrigger render={<Button size="icon" variant="ghost" className="size-7 text-destructive" onClick={() => setDeleteTarget(model)} />}><Trash2 className="size-5" /></TooltipTrigger><TooltipContent>Delete</TooltipContent></Tooltip></div></TableCell></TableRow>)}</TableBody></Table>}
       </Card>
       <AddModelModal isOpen={addOpen} onClose={() => setAddOpen(false)} onSuccess={load} providerId={providerId} />
       <EditModelModal isOpen={!!editTarget} model={editTarget} onClose={() => setEditTarget(null)} onSuccess={load} />

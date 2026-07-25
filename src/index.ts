@@ -11,6 +11,7 @@ import {
   keysPlugin,
   settingsPlugin,
   proxyPlugin,
+  statsPlugin,
 } from "./api";
 
 // Initialize database
@@ -50,7 +51,8 @@ const protectedApp = new Elysia()
   .use(providersPlugin)
   .use(modelsPlugin)
   .use(keysPlugin)
-  .use(settingsPlugin);
+  .use(settingsPlugin)
+  .use(statsPlugin);
 
 app.use(protectedApp as any);
 

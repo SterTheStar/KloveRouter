@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { RiLoader4Line as LoaderCircle, RiSearchLine as Search, RiFilterLine as Filter, RiArrowDownSLine as ChevronDown, RiArrowRightSLine as ChevronRight } from "@remixicon/react";
+import { RiLoader4Line as LoaderCircle, RiSearchLine as Search, RiFilterLine as Filter, RiArrowDownSLine as ChevronDown, RiArrowRightSLine as ChevronRight, RiPlayCircleLine as PlayCircleLine, RiCheckLine as CheckLine, RiCloseLine as CloseLine } from "@remixicon/react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -8,24 +8,33 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuLabel, DropdownMenuGroup } from "@/components/ui/dropdown-menu";
-import { models } from "../api/client";
+import { models, stats } from "../api/client";
 import type { ModelWithProvider } from "../types";
 
 type SourceFilter = "all" | "manual" | "synced";
 
 export default function ModelsPage() {
   const [list, setList] = useState<ModelWithProvider[]>([]);
+  const [tpsMap, setTpsMap] = useState<Record<string, number | null>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>("all");
   const [selectedProviders, setSelectedProviders] = useState<Set<string>>(new Set());
   const [collapsedProviders, setCollapsedProviders] = useState<Set<string>>(new Set());
+  const [testingId, setTestingId] = useState<string | null>(null);
+  const [testResult, setTestResult] = useState<Record<string, "success" | "error">>({});
 
   const load = useCallback(async () => {
     try {
       setLoading(true);
-      setList(await models.listAll());
+      const [modelList, tpsData] = await Promise.all([models.listAll(), stats.tps()]);
+      setList(modelList);
+      const map: Record<string, number | null> = {};
+      for (const item of tpsData) {
+        map[item.model_id] = item.tps;
+      }
+      setTpsMap(map);
       setError(null);
     } catch (e: any) {
       setError(e.message);
@@ -88,6 +97,18 @@ export default function ModelsPage() {
       }
       return next;
     });
+  };
+
+  const testModel = async (modelId: string) => {
+    setTestingId(modelId);
+    try {
+      const result = await models.test(modelId);
+      setTestResult((prev) => ({ ...prev, [modelId]: result.success ? "success" : "error" }));
+    } catch {
+      setTestResult((prev) => ({ ...prev, [modelId]: "error" }));
+    } finally {
+      setTestingId(null);
+    }
   };
 
   const toggleProvider = (name: string) => {
@@ -159,6 +180,8 @@ export default function ModelsPage() {
                 <TableHead>Display name</TableHead>
                 <TableHead>Provider</TableHead>
                 <TableHead>Source</TableHead>
+                <TableHead>TPS</TableHead>
+                <TableHead className="w-16">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -167,7 +190,7 @@ export default function ModelsPage() {
                 return (
                   <React.Fragment key={providerName}>
                     <TableRow className="bg-muted/30 cursor-pointer" onClick={() => toggleCollapse(providerName)}>
-                      <TableCell colSpan={4} className="font-medium">
+                      <TableCell colSpan={6} className="font-medium">
                         <div className="flex items-center gap-2">
                           <Button variant="ghost" size="icon-xs" className="size-6" onClick={(e) => { e.stopPropagation(); toggleCollapse(providerName); }}>
                             {isCollapsed ? <ChevronRight className="size-4" /> : <ChevronDown className="size-4" />}
@@ -181,14 +204,28 @@ export default function ModelsPage() {
                         </div>
                       </TableCell>
                     </TableRow>
-                    {!isCollapsed && models.map((model) => (
-                      <TableRow key={model.id}>
-                        <TableCell className="font-mono text-xs">{model.model_id}</TableCell>
-                        <TableCell>{model.display_name || <span className="text-muted-foreground">—</span>}</TableCell>
-                        <TableCell>{model.provider_name}</TableCell>
-                        <TableCell><Badge variant={model.is_manual ? "outline" : "secondary"}>{model.is_manual ? "Manual" : "Auto-synced"}</Badge></TableCell>
-                      </TableRow>
-                    ))}
+                    {!isCollapsed && models.map((model) => {
+                      const tps = tpsMap[model.id];
+                      const result = testResult[model.id];
+                      return (
+                        <TableRow key={model.id}>
+                          <TableCell className="font-mono text-xs">{model.model_id}</TableCell>
+                          <TableCell>{model.display_name || <span className="text-muted-foreground">—</span>}</TableCell>
+                          <TableCell>{model.provider_name}</TableCell>
+                          <TableCell><Badge variant={model.is_manual ? "outline" : "secondary"}>{model.is_manual ? "Manual" : "Auto-synced"}</Badge></TableCell>
+                          <TableCell className="font-mono text-xs">{tps !== undefined && tps !== null ? tps.toFixed(1) : "—"}</TableCell>
+                          <TableCell>
+                            <div className="flex justify-center">
+                              {result === "success" ? <CheckLine className="size-4 text-green-500" />
+                                : result === "error" ? <CloseLine className="size-4 text-destructive" />
+                                : <Button variant="ghost" size="icon-xs" className="size-7" onClick={(e) => { e.stopPropagation(); testModel(model.id); }} disabled={testingId === model.id}>
+                                    {testingId === model.id ? <LoaderCircle className="size-5 animate-spin" /> : <PlayCircleLine className="size-5" />}
+                                  </Button>}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
                   </React.Fragment>
                 );
               })}

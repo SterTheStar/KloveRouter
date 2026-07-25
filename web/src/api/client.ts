@@ -127,6 +127,10 @@ export const models = {
     request<{ success: boolean; removed: number }>(`/api/providers/${providerId}/models`, {
       method: "DELETE",
     }),
+  test: (id: string) =>
+    request<{ success: boolean; duration_ms?: number; reply?: string; error?: string }>(`/api/models/${id}/test`, {
+      method: "POST",
+    }),
 };
 
 // API Keys
@@ -141,6 +145,20 @@ export const apiKeys = {
     request<{ success: boolean }>(`/api/keys/${id}`, {
       method: "DELETE",
     }),
+};
+
+// Stats
+export const stats = {
+  overview: (days = 30) =>
+    request<import("../types").StatsOverview>(`/api/stats/overview?days=${days}`),
+  byProvider: (days = 30) =>
+    request<import("../types").StatsByProvider[]>(`/api/stats/by-provider?days=${days}`),
+  byModel: (days = 30) =>
+    request<import("../types").StatsByModel[]>(`/api/stats/by-model?days=${days}`),
+  daily: (days = 30) =>
+    request<import("../types").DailyStats[]>(`/api/stats/daily?days=${days}`),
+  tps: () =>
+    request<{ model_id: string; tps: number | null }[]>("/api/stats/tps"),
 };
 
 // Settings

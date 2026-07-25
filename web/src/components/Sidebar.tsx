@@ -1,4 +1,4 @@
-import { RiDashboardLine as DashboardLine, RiKey2Line as Key2Line, RiSettings4Line as Settings4Line, RiLogoutBoxRLine as LogoutBoxRLine, RiBubbleChartLine as BubbleChartLine } from "@remixicon/react";
+import { RiDashboardLine as DashboardLine, RiKey2Line as Key2Line, RiSettings4Line as Settings4Line, RiLogoutBoxRLine as LogoutBoxRLine, RiBubbleChartLine as BubbleChartLine, RiBarChartBoxLine as BarChartBoxLine } from "@remixicon/react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import type { Page } from "../types";
@@ -6,6 +6,7 @@ import type { Page } from "../types";
 const items = [
   { page: "dashboard" as Page, label: "Providers", icon: DashboardLine },
   { page: "models" as Page, label: "Models", icon: BubbleChartLine },
+  { page: "stats" as Page, label: "Stats", icon: BarChartBoxLine },
   { page: "keys" as Page, label: "API Keys", icon: Key2Line },
   { page: "settings" as Page, label: "Settings", icon: Settings4Line },
 ];

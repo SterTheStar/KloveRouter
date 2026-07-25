@@ -2,6 +2,7 @@ import { Elysia, t } from "elysia";
 import { keyService } from "../services/key.service";
 import { providerService } from "../services/provider.service";
 import { modelService } from "../services/model.service";
+import { usageService } from "../services/usage.service";
 import { createOpenAIClient, parseModelName } from "../clients/openai";
 
 async function verifyApiKey(headers: Record<string, string | undefined>) {
@@ -133,7 +134,23 @@ export const proxyPlugin = (app: Elysia) =>
 
         // Non-streaming
         try {
+          const start = performance.now();
           const completion = await client.chat.completions.create(payload);
+          const durationMs = Math.round(performance.now() - start);
+
+          // Record token usage
+          if (completion.usage) {
+            const modelRecord = modelService.findByProviderAndModel(provider.id, parsed.modelId);
+            usageService.record(
+              provider.id,
+              modelRecord?.id ?? parsed.modelId,
+              parsed.modelId,
+              completion.usage.prompt_tokens ?? 0,
+              completion.usage.completion_tokens ?? 0,
+              durationMs
+            );
+          }
+
           return completion;
         } catch (error: any) {
           set.status = 502;

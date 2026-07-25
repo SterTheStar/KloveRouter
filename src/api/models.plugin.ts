@@ -105,6 +105,43 @@ export const modelsPlugin = (app: Elysia) =>
         };
       }
     })
+    .post("/api/models/:id/test", async ({ params: { id }, set }) => {
+      const model = modelService.findById(id);
+      if (!model) {
+        set.status = 404;
+        return { error: "Model not found" };
+      }
+      const provider = providerService.findById(model.provider_id);
+      if (!provider || !provider.is_active) {
+        set.status = 400;
+        return { error: "Provider not found or inactive" };
+      }
+
+      try {
+        const client = createOpenAIClient(provider);
+        const start = performance.now();
+        const completion = await client.chat.completions.create({
+          model: model.model_id,
+          messages: [{ role: "user", content: "Say 'ok' and nothing else." }],
+          max_tokens: 10,
+        });
+        const durationMs = Math.round(performance.now() - start);
+        const reply = (completion.choices?.[0]?.message?.content ?? "").trim();
+
+        return {
+          success: true,
+          duration_ms: durationMs,
+          reply,
+          usage: completion.usage ?? null,
+        };
+      } catch (error: any) {
+        set.status = 502;
+        return {
+          success: false,
+          error: error.message || "Test failed",
+        };
+      }
+    })
     .put("/api/models/:id/toggle", ({ params: { id }, set }) => {
       const model = modelService.toggleActive(id);
       if (!model) {
