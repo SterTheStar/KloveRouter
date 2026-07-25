@@ -3,6 +3,7 @@ export interface Provider {
   name: string;
   base_url: string;
   avatar: string | null;
+  protocol: "openai" | "anthropic";
   is_active: number;
   created_at: string;
   updated_at: string;

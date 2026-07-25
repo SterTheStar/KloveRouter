@@ -65,7 +65,7 @@ export const providers = {
   list: () => request<import("../types").Provider[]>("/api/providers"),
   get: (id: string) =>
     request<import("../types").ProviderDetail>(`/api/providers/${id}`),
-  create: (data: { name: string; base_url: string; api_key: string; avatar?: string }) =>
+  create: (data: { name: string; base_url: string; api_key: string; avatar?: string; protocol?: "openai" | "anthropic" }) =>
     request<import("../types").Provider>("/api/providers", {
       method: "POST",
       body: JSON.stringify(data),
@@ -77,6 +77,7 @@ export const providers = {
       base_url?: string;
       api_key?: string;
       avatar?: string | null;
+      protocol?: "openai" | "anthropic";
       is_active?: number;
     }
   ) =>

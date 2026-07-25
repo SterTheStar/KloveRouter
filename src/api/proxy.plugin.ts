@@ -4,6 +4,72 @@ import { providerService } from "../services/provider.service";
 import { modelService } from "../services/model.service";
 import { usageService } from "../services/usage.service";
 import { createOpenAIClient, parseModelName } from "../clients/openai";
+import { createAnthropicMessage, createAnthropicStream, splitAnthropicMessages, toOpenAICompletion } from "../clients/anthropic";
+
+function anthropicPayload(body: any, modelId: string, stream = false) {
+  const messages = splitAnthropicMessages(body.messages);
+  return {
+    model: modelId,
+    messages: messages.messages,
+    ...(messages.system ? { system: messages.system } : {}),
+    max_tokens: body.max_tokens ?? 1024,
+    ...(body.temperature !== undefined ? { temperature: body.temperature } : {}),
+    ...(body.top_p !== undefined ? { top_p: body.top_p } : {}),
+    ...(body.stop !== undefined ? { stop_sequences: Array.isArray(body.stop) ? body.stop : [body.stop] } : {}),
+    stream,
+  };
+}
+
+function anthropicStreamResponse(
+  response: Response,
+  onUsage: (promptTokens: number, completionTokens: number, durationMs: number) => void,
+  start: number,
+  model: string
+) {
+  const reader = response.body?.getReader();
+  if (!reader) throw new Error("Anthropic returned an empty stream");
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let promptTokens = 0;
+  let completionTokens = 0;
+  let index = 0;
+
+  return new Response(new ReadableStream({
+    async start(controller) {
+      const emit = (chunk: Record<string, unknown>) => {
+        controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(chunk)}\n\n`));
+      };
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          buffer += decoder.decode(value ?? new Uint8Array(), { stream: !done });
+          const events = buffer.split("\n\n");
+          buffer = events.pop() ?? "";
+          for (const event of events) {
+            const dataLine = event.split("\n").find((line) => line.startsWith("data:"));
+            if (!dataLine) continue;
+            const data = JSON.parse(dataLine.slice(5).trim());
+            if (data.type === "message_start") {
+              promptTokens = data.message?.usage?.input_tokens ?? 0;
+            } else if (data.type === "content_block_delta" && data.delta?.text) {
+              emit({ id: data.index ?? `chatcmpl-${Date.now()}`, object: "chat.completion.chunk", created: Math.floor(Date.now() / 1000), model, choices: [{ index, delta: { content: data.delta.text }, finish_reason: null }] });
+            } else if (data.type === "message_delta") {
+              completionTokens = data.usage?.output_tokens ?? completionTokens;
+              emit({ id: `chatcmpl-${Date.now()}`, object: "chat.completion.chunk", created: Math.floor(Date.now() / 1000), model, choices: [{ index, delta: {}, finish_reason: data.delta?.stop_reason ?? "stop" }], usage: { prompt_tokens: promptTokens, completion_tokens: completionTokens, total_tokens: promptTokens + completionTokens } });
+            }
+          }
+          if (done) break;
+        }
+        onUsage(promptTokens, completionTokens, Math.round(performance.now() - start));
+        controller.enqueue(new TextEncoder().encode("data: [DONE]\n\n"));
+      } catch (error: any) {
+        controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({ error: { message: error.message } })}\n\n`));
+      } finally {
+        controller.close();
+      }
+    },
+  }), { headers: { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", Connection: "keep-alive" } });
+}
 
 async function verifyApiKey(headers: Record<string, string | undefined>) {
   const auth = headers.authorization;
@@ -69,8 +135,8 @@ export const proxyPlugin = (app: Elysia) =>
           };
         }
 
-        // Create OpenAI client
-        const client = createOpenAIClient(provider);
+        // OpenAI-compatible providers use the SDK; Anthropic uses its native Messages API.
+        const client = provider.protocol === "anthropic" ? null : createOpenAIClient(provider);
 
         // Build request payload for the provider
         const payload: any = {
@@ -88,13 +154,45 @@ export const proxyPlugin = (app: Elysia) =>
           payload.presence_penalty = body.presence_penalty;
         if (body.stop !== undefined) payload.stop = body.stop;
 
+        if (provider.protocol === "anthropic") {
+          try {
+            const start = performance.now();
+            const modelRecord = modelService.findByProviderAndModel(provider.id, parsed.modelId);
+            if (body.stream) {
+              const response = await createAnthropicStream(provider, anthropicPayload(body, parsed.modelId));
+              return anthropicStreamResponse(
+                response,
+                (promptTokens, completionTokens, durationMs) => {
+                  usageService.record(provider.id, modelRecord?.id ?? parsed.modelId, parsed.modelId, promptTokens, completionTokens, durationMs);
+                },
+                start,
+                parsed.modelId
+              );
+            }
+
+            const completion = await createAnthropicMessage(provider, anthropicPayload(body, parsed.modelId));
+            usageService.record(
+              provider.id,
+              modelRecord?.id ?? parsed.modelId,
+              parsed.modelId,
+              completion.usage?.input_tokens ?? 0,
+              completion.usage?.output_tokens ?? 0,
+              Math.round(performance.now() - start)
+            );
+            return toOpenAICompletion(completion);
+          } catch (error: any) {
+            set.status = 502;
+            return { error: "Provider request failed", message: error.message };
+          }
+        }
+
         // Handle streaming
         if (body.stream) {
           try {
-            const stream = await client.chat.completions.create({
+            const stream = await client!.chat.completions.create({
               ...payload,
               stream: true,
-            });
+            }) as any;
 
             return new Response(
               new ReadableStream({
@@ -135,7 +233,7 @@ export const proxyPlugin = (app: Elysia) =>
         // Non-streaming
         try {
           const start = performance.now();
-          const completion = await client.chat.completions.create(payload);
+          const completion = await client!.chat.completions.create(payload);
           const durationMs = Math.round(performance.now() - start);
 
           // Record token usage

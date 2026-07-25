@@ -35,7 +35,8 @@ export const providersPlugin = (app: Elysia) =>
           name: t.String({ minLength: 1 }),
           base_url: t.String({ minLength: 1 }),
           api_key: t.String({ minLength: 1 }),
-          avatar: t.Optional(t.String()),
+           avatar: t.Optional(t.String()),
+           protocol: t.Optional(t.Union([t.Literal("openai"), t.Literal("anthropic")])),
         }),
       }
     )
@@ -56,6 +57,7 @@ export const providersPlugin = (app: Elysia) =>
           base_url: t.Optional(t.String({ minLength: 1 })),
           api_key: t.Optional(t.String({ minLength: 1 })),
           avatar: t.Optional(t.Union([t.String(), t.Null()])),
+          protocol: t.Optional(t.Union([t.Literal("openai"), t.Literal("anthropic")])),
           is_active: t.Optional(t.Numeric()),
         }),
       }

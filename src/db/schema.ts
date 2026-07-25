@@ -9,6 +9,7 @@ export function initSchema(db: Database): void {
       base_url    TEXT NOT NULL,
       api_key     TEXT NOT NULL,
       avatar      TEXT,
+      protocol    TEXT NOT NULL DEFAULT 'openai',
       is_active   INTEGER NOT NULL DEFAULT 1,
       created_at  TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
@@ -60,6 +61,9 @@ export function initSchema(db: Database): void {
     .all() as { name: string }[];
   if (!cols.find((c) => c.name === "avatar")) {
     db.exec("ALTER TABLE providers ADD COLUMN avatar TEXT");
+  }
+  if (!cols.find((c) => c.name === "protocol")) {
+    db.exec("ALTER TABLE providers ADD COLUMN protocol TEXT NOT NULL DEFAULT 'openai'");
   }
 
   // Seed default password if not exists

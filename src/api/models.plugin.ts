@@ -2,6 +2,7 @@ import { Elysia, t } from "elysia";
 import { modelService } from "../services/model.service";
 import { providerService } from "../services/provider.service";
 import { createOpenAIClient } from "../clients/openai";
+import { createAnthropicMessage, toOpenAICompletion } from "../clients/anthropic";
 
 export const modelsPlugin = (app: Elysia) =>
   app
@@ -47,11 +48,15 @@ export const modelsPlugin = (app: Elysia) =>
       }
 
       try {
-        const url = provider.base_url.replace(/\/+$/, "") + "/models";
+        const url = provider.protocol === "anthropic"
+          ? provider.base_url.replace(/\/+$/, "") + "/models"
+          : provider.base_url.replace(/\/+$/, "") + "/models";
         const res = await fetch(url, {
           headers: {
-            Authorization: `Bearer ${provider.api_key}`,
             "Content-Type": "application/json",
+            ...(provider.protocol === "anthropic"
+              ? { "x-api-key": provider.api_key, "anthropic-version": "2023-06-01" }
+              : { Authorization: `Bearer ${provider.api_key}` }),
           },
         });
 
@@ -118,13 +123,18 @@ export const modelsPlugin = (app: Elysia) =>
       }
 
       try {
-        const client = createOpenAIClient(provider);
         const start = performance.now();
-        const completion = await client.chat.completions.create({
-          model: model.model_id,
-          messages: [{ role: "user", content: "Say 'ok' and nothing else." }],
-          max_tokens: 10,
-        });
+        const completion = provider.protocol === "anthropic"
+          ? toOpenAICompletion(await createAnthropicMessage(provider, {
+              model: model.model_id,
+              max_tokens: 10,
+              messages: [{ role: "user", content: "Say 'ok' and nothing else." }],
+            }))
+          : await createOpenAIClient(provider).chat.completions.create({
+              model: model.model_id,
+              messages: [{ role: "user", content: "Say 'ok' and nothing else." }],
+              max_tokens: 10,
+            });
         const durationMs = Math.round(performance.now() - start);
         const reply = (completion.choices?.[0]?.message?.content ?? "").trim();
 

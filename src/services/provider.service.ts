@@ -6,6 +6,7 @@ export interface Provider {
   base_url: string;
   api_key: string;
   avatar: string | null;
+  protocol: "openai" | "anthropic";
   is_active: number;
   created_at: string;
   updated_at: string;
@@ -16,6 +17,7 @@ export interface ProviderPublic {
   name: string;
   base_url: string;
   avatar: string | null;
+  protocol: "openai" | "anthropic";
   is_active: number;
   created_at: string;
   updated_at: string;
@@ -26,6 +28,7 @@ export type CreateProviderInput = {
   base_url: string;
   api_key: string;
   avatar?: string;
+  protocol?: "openai" | "anthropic";
 };
 
 export type UpdateProviderInput = {
@@ -33,6 +36,7 @@ export type UpdateProviderInput = {
   base_url?: string;
   api_key?: string;
   avatar?: string | null;
+  protocol?: "openai" | "anthropic";
   is_active?: number;
 };
 
@@ -51,6 +55,7 @@ function toPublic(p: Provider): ProviderPublic {
     name: p.name,
     base_url: p.base_url,
     avatar: p.avatar ?? getFaviconUrl(p.base_url),
+    protocol: p.protocol ?? "openai",
     is_active: p.is_active,
     created_at: p.created_at,
     updated_at: p.updated_at,
@@ -116,6 +121,10 @@ export const providerService = {
     if (input.avatar !== undefined) {
       updates.push("avatar = ?");
       values.push(input.avatar);
+    }
+    if (input.protocol !== undefined) {
+      updates.push("protocol = ?");
+      values.push(input.protocol);
     }
     if (input.is_active !== undefined) {
       updates.push("is_active = ?");

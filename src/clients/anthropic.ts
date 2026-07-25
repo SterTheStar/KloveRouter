@@ -1,0 +1,85 @@
+import type { Provider } from "../services/provider.service";
+
+export type AnthropicMessage = {
+  role: "user" | "assistant" | "system";
+  content: unknown;
+};
+
+export type AnthropicResponse = {
+  id: string;
+  type: "message";
+  role: "assistant";
+  content: { type: string; text?: string }[];
+  model: string;
+  stop_reason: string | null;
+  usage?: { input_tokens?: number; output_tokens?: number };
+};
+
+function endpoint(provider: Provider): string {
+  const baseUrl = provider.base_url.replace(/\/+$/, "");
+  return baseUrl.endsWith("/v1") ? `${baseUrl}/messages` : `${baseUrl}/v1/messages`;
+}
+
+function headers(provider: Provider): Record<string, string> {
+  return {
+    "Content-Type": "application/json",
+    "x-api-key": provider.api_key,
+    "anthropic-version": "2023-06-01",
+  };
+}
+
+export function splitAnthropicMessages(messages: AnthropicMessage[]) {
+  const systemMessages = messages.filter((message) => (message as { role: string }).role === "system");
+  return {
+    system: systemMessages.length > 0 ? systemMessages.map((message) => message.content).join("\n") : undefined,
+    messages: messages
+      .filter((message) => message.role === "user" || message.role === "assistant")
+      .map((message) => ({ role: message.role, content: message.content })),
+  };
+}
+
+export async function createAnthropicMessage(
+  provider: Provider,
+  payload: Record<string, unknown>
+): Promise<AnthropicResponse> {
+  const response = await fetch(endpoint(provider), {
+    method: "POST",
+    headers: headers(provider),
+    body: JSON.stringify(payload),
+  });
+  const data = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new Error(data?.error?.message ?? data?.message ?? `Anthropic request failed (${response.status})`);
+  }
+  return data as AnthropicResponse;
+}
+
+export async function createAnthropicStream(
+  provider: Provider,
+  payload: Record<string, unknown>
+): Promise<Response> {
+  const response = await fetch(endpoint(provider), {
+    method: "POST",
+    headers: headers(provider),
+    body: JSON.stringify({ ...payload, stream: true }),
+  });
+  if (!response.ok) {
+    const data = await response.json().catch(() => null);
+    throw new Error(data?.error?.message ?? data?.message ?? `Anthropic request failed (${response.status})`);
+  }
+  return response;
+}
+
+export function toOpenAICompletion(response: AnthropicResponse) {
+  const text = response.content?.filter((block) => block.type === "text").map((block) => block.text ?? "").join("") ?? "";
+  const promptTokens = response.usage?.input_tokens ?? 0;
+  const completionTokens = response.usage?.output_tokens ?? 0;
+  return {
+    id: response.id,
+    object: "chat.completion",
+    created: Math.floor(Date.now() / 1000),
+    model: response.model,
+    choices: [{ index: 0, message: { role: "assistant", content: text }, finish_reason: response.stop_reason ?? "stop" }],
+    usage: { prompt_tokens: promptTokens, completion_tokens: completionTokens, total_tokens: promptTokens + completionTokens },
+  };
+}
