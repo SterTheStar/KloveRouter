@@ -1,148 +1,16 @@
 import { useState } from "react";
-import Box from "@mui/material/Box";
-import Typography from "@mui/material/Typography";
-import TextField from "@mui/material/TextField";
-import Button from "@mui/material/Button";
-import Alert from "@mui/material/Alert";
-import Paper from "@mui/material/Paper";
+import { RiCheckLine as Check, RiLoader4Line as LoaderCircle, RiMoonLine as MoonLine, RiSunLine as SunLine } from "@remixicon/react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Separator } from "@/components/ui/separator";
+import { Switch } from "@/components/ui/switch";
 import { settings } from "../api/client";
 
-export default function SettingsPage() {
-  const [currentPassword, setCurrentPassword] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
-
-  const handleSave = async () => {
-    setError(null);
-    setSuccess(null);
-
-    if (!currentPassword) {
-      setError("Current password is required.");
-      return;
-    }
-    if (newPassword.length < 4) {
-      setError("New password must be at least 4 characters.");
-      return;
-    }
-    if (newPassword !== confirmPassword) {
-      setError("Passwords do not match.");
-      return;
-    }
-
-    setSaving(true);
-    try {
-      const result = await settings.changePassword(currentPassword, newPassword);
-      setSuccess(result.message);
-      setCurrentPassword("");
-      setNewPassword("");
-      setConfirmPassword("");
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <Box sx={{ p: 3, maxWidth: 720 }}>
-      <Box sx={{ mb: 3 }}>
-        <Typography variant="h5" fontWeight={700}>
-          Settings
-        </Typography>
-        <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-          Manage your Klove panel settings
-        </Typography>
-      </Box>
-
-      <Paper variant="outlined" sx={{ p: 3 }}>
-        <Typography variant="subtitle1" fontWeight={600} sx={{ mb: 0.5 }}>
-          Change Panel Password
-        </Typography>
-        <Typography
-          variant="body2"
-          color="text.secondary"
-          sx={{ mb: 2.5 }}
-        >
-          Update the password required to access the Klove panel.
-        </Typography>
-
-        <Box
-          sx={{
-            display: "flex",
-            flexDirection: { xs: "column", md: "row" },
-            gap: 2,
-            mb: 2,
-          }}
-        >
-          <TextField
-            label="Current Password"
-            type="password"
-            value={currentPassword}
-            onChange={(e) => setCurrentPassword(e.target.value)}
-            required
-            size="small"
-            sx={{ flex: 1 }}
-          />
-          <TextField
-            label="New Password"
-            type="password"
-            value={newPassword}
-            onChange={(e) => setNewPassword(e.target.value)}
-            required
-            error={newPassword.length > 0 && newPassword.length < 4}
-            helperText={
-              newPassword.length > 0 && newPassword.length < 4
-                ? "New password is too short."
-                : "Minimum 4 characters."
-            }
-            size="small"
-            sx={{ flex: 1 }}
-          />
-          <TextField
-            label="Confirm New Password"
-            type="password"
-            value={confirmPassword}
-            onChange={(e) => setConfirmPassword(e.target.value)}
-            required
-            error={
-              confirmPassword.length > 0 && confirmPassword !== newPassword
-            }
-            helperText={
-              confirmPassword.length > 0 && confirmPassword !== newPassword
-                ? "Passwords do not match."
-                : undefined
-            }
-            size="small"
-            sx={{ flex: 1 }}
-          />
-        </Box>
-
-        {error && (
-          <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
-            {error}
-          </Alert>
-        )}
-        {success && (
-          <Alert
-            severity="success"
-            sx={{ mb: 2 }}
-            onClose={() => setSuccess(null)}
-          >
-            {success}
-          </Alert>
-        )}
-
-        <Button
-          variant="contained"
-          onClick={handleSave}
-          disabled={saving}
-        >
-          {saving ? "Saving..." : "Change Password"}
-        </Button>
-      </Paper>
-    </Box>
-  );
+export default function SettingsPage({ darkMode, onThemeChange }: { darkMode: boolean; onThemeChange: (value: boolean) => void }) {
+  const [current, setCurrent] = useState(""); const [next, setNext] = useState(""); const [confirm, setConfirm] = useState(""); const [saving, setSaving] = useState(false); const [error, setError] = useState<string | null>(null); const [success, setSuccess] = useState<string | null>(null);
+  const submit = async () => { setError(null); setSuccess(null); if (!current) return setError("Current password is required."); if (next.length < 4) return setError("New password must be at least 4 characters."); if (next !== confirm) return setError("Passwords do not match."); setSaving(true); try { const result = await settings.changePassword(current, next); setSuccess(result.message); setCurrent(""); setNext(""); setConfirm(""); } catch (e: any) { setError(e.message); } finally { setSaving(false); } };
+  return <div className="w-full space-y-6 p-6"><h1 className="font-heading text-2xl font-semibold tracking-tight">Settings</h1><Card><CardHeader><CardTitle>Appearance</CardTitle></CardHeader><CardContent><div className="flex items-center justify-between"><div className="flex items-center gap-3"><div className="flex size-9 items-center justify-center rounded-md bg-muted">{darkMode ? <MoonLine className="size-4" /> : <SunLine className="size-4" />}</div><div><div className="text-sm font-medium">Dark mode</div><div className="text-xs text-muted-foreground">{darkMode ? "Dark theme is enabled" : "Light theme is enabled"}</div></div></div><Switch checked={darkMode} onCheckedChange={onThemeChange} aria-label="Toggle dark mode" /></div></CardContent></Card><Card><CardHeader><CardTitle>Change panel password</CardTitle></CardHeader><CardContent className="space-y-5"><div className="grid gap-4 md:grid-cols-3"><div className="space-y-2"><Label htmlFor="current-password">Current password</Label><Input id="current-password" type="password" value={current} onChange={(e) => setCurrent(e.target.value)} /></div><div className="space-y-2"><Label htmlFor="new-password">New password</Label><Input id="new-password" type="password" value={next} onChange={(e) => setNext(e.target.value)} /><p className="text-xs text-muted-foreground">Minimum 4 characters.</p></div><div className="space-y-2"><Label htmlFor="confirm-password">Confirm password</Label><Input id="confirm-password" type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} /></div></div>{error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}{success && <Alert variant="default"><Check className="size-4" /><AlertDescription>{success}</AlertDescription></Alert>}<Button onClick={submit} disabled={saving}>{saving ? <LoaderCircle className="size-4 animate-spin" /> : null}{saving ? "Saving..." : "Change password"}</Button></CardContent></Card></div>;
 }

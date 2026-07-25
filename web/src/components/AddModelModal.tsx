@@ -1,101 +1,14 @@
 import { useState } from "react";
-import Dialog from "@mui/material/Dialog";
-import DialogTitle from "@mui/material/DialogTitle";
-import DialogContent from "@mui/material/DialogContent";
-import DialogActions from "@mui/material/DialogActions";
-import TextField from "@mui/material/TextField";
-import Button from "@mui/material/Button";
-import Alert from "@mui/material/Alert";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { models } from "../api/client";
 
-interface AddModelModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  onSuccess: () => void;
-  providerId: string;
-}
-
-export default function AddModelModal({
-  isOpen,
-  onClose,
-  onSuccess,
-  providerId,
-}: AddModelModalProps) {
-  const [modelId, setModelId] = useState("");
-  const [displayName, setDisplayName] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const handleClose = () => {
-    if (loading) return;
-    setModelId("");
-    setDisplayName("");
-    setError(null);
-    onClose();
-  };
-
-  const handleSubmit = async () => {
-    if (!modelId) {
-      setError("Model ID is required.");
-      return;
-    }
-    setLoading(true);
-    setError(null);
-    try {
-      await models.create(providerId, {
-        model_id: modelId,
-        display_name: displayName || undefined,
-      });
-      setModelId("");
-      setDisplayName("");
-      onSuccess();
-      onClose();
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <Dialog open={isOpen} onClose={handleClose} fullWidth maxWidth="sm">
-      <DialogTitle>Add Model Manually</DialogTitle>
-      <DialogContent>
-        <TextField
-          fullWidth
-          label="Model ID"
-          placeholder="e.g. gpt-4, claude-3-opus"
-          value={modelId}
-          onChange={(e) => setModelId(e.target.value)}
-          helperText="The model identifier used in API calls"
-          required
-          sx={{ mb: 2, mt: 1 }}
-        />
-        <TextField
-          fullWidth
-          label="Display Name (optional)"
-          placeholder="e.g. GPT-4 Turbo"
-          value={displayName}
-          onChange={(e) => setDisplayName(e.target.value)}
-        />
-        {error && (
-          <Alert severity="error" sx={{ mt: 2 }}>
-            {error}
-          </Alert>
-        )}
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={handleClose} disabled={loading}>
-          Cancel
-        </Button>
-        <Button
-          variant="contained"
-          onClick={handleSubmit}
-          disabled={loading}
-        >
-          {loading ? "Saving..." : "Save Model"}
-        </Button>
-      </DialogActions>
-    </Dialog>
-  );
+export default function AddModelModal({ isOpen, onClose, onSuccess, providerId }: { isOpen: boolean; onClose: () => void; onSuccess: () => void; providerId: string }) {
+  const [modelId, setModelId] = useState(""); const [displayName, setDisplayName] = useState(""); const [loading, setLoading] = useState(false); const [error, setError] = useState<string | null>(null);
+  const close = () => { if (loading) return; setModelId(""); setDisplayName(""); setError(null); onClose(); };
+  const submit = async () => { if (!modelId) return setError("Model ID is required."); setLoading(true); try { await models.create(providerId, { model_id: modelId, display_name: displayName || undefined }); onSuccess(); close(); } catch (e: any) { setError(e.message); } finally { setLoading(false); } };
+  return <Dialog open={isOpen} onOpenChange={(open) => !open && close()}><DialogContent><DialogHeader><DialogTitle>Add model</DialogTitle><DialogDescription>Add a model manually to this provider.</DialogDescription></DialogHeader><div className="space-y-4"><div className="space-y-2"><Label htmlFor="model-id">Model ID</Label><Input id="model-id" value={modelId} onChange={(e) => setModelId(e.target.value)} placeholder="gpt-4o" /></div><div className="space-y-2"><Label htmlFor="model-display">Display name</Label><Input id="model-display" value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="GPT-4o" /></div>{error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}</div><DialogFooter><Button variant="outline" onClick={close} disabled={loading}>Cancel</Button><Button onClick={submit} disabled={loading}>{loading ? "Saving..." : "Save model"}</Button></DialogFooter></DialogContent></Dialog>;
 }

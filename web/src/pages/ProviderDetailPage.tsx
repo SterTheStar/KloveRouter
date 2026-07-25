@@ -1,453 +1,110 @@
-import { useState, useEffect, useCallback } from "react";
-import Box from "@mui/material/Box";
-import Typography from "@mui/material/Typography";
-import Button from "@mui/material/Button";
-import TextField from "@mui/material/TextField";
-import Switch from "@mui/material/Switch";
-import Chip from "@mui/material/Chip";
-import LinearProgress from "@mui/material/LinearProgress";
-import Divider from "@mui/material/Divider";
-import Alert from "@mui/material/Alert";
-import Table from "@mui/material/Table";
-import TableHead from "@mui/material/TableHead";
-import TableBody from "@mui/material/TableBody";
-import TableRow from "@mui/material/TableRow";
-import TableCell from "@mui/material/TableCell";
-import TableContainer from "@mui/material/TableContainer";
-import Paper from "@mui/material/Paper";
-import Tooltip from "@mui/material/Tooltip";
-import IconButton from "@mui/material/IconButton";
-import ArrowBackIcon from "@mui/icons-material/ArrowBack";
-import ContentCopyIcon from "@mui/icons-material/ContentCopy";
-import EditIcon from "@mui/icons-material/Edit";
-import DeleteIcon from "@mui/icons-material/Delete";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { RiArrowLeftLine as ArrowLeft, RiCheckLine as Check, RiFileCopyLine as Copy, RiLoader4Line as LoaderCircle, RiPencilLine as Pencil, RiRefreshLine as RefreshCw, RiDeleteBinLine as Trash2, RiSearchLine as Search } from "@remixicon/react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Separator } from "@/components/ui/separator";
+import { Switch } from "@/components/ui/switch";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import AvatarUpload from "../components/AvatarUpload";
 import AddModelModal from "../components/AddModelModal";
 import EditModelModal from "../components/EditModelModal";
 import ConfirmDialog from "../components/ConfirmDialog";
 import { providers, models as modelsApi } from "../api/client";
-import type { Provider, Model } from "../types";
+import type { Model, Provider } from "../types";
 
-interface ProviderDetailPageProps {
-  providerId: string;
-  onBack: () => void;
-}
-
-export default function ProviderDetailPage({
-  providerId,
-  onBack,
-}: ProviderDetailPageProps) {
+export default function ProviderDetailPage({ providerId, onBack }: { providerId: string; onBack: () => void }) {
   const [provider, setProvider] = useState<Provider | null>(null);
-  const [modelList, setModelList] = useState<Model[]>([]);
+  const [list, setList] = useState<Model[]>([]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
-  const [showAddModel, setShowAddModel] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<Model | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Model | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [freeOnly, setFreeOnly] = useState(false);
+
+  const filteredList = useMemo(() => {
+    let result = list;
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      result = result.filter((m) => m.model_id.toLowerCase().includes(q) || (m.display_name?.toLowerCase().includes(q) ?? false));
+    }
+    if (freeOnly) {
+      result = result.filter((m) => m.model_id.toLowerCase().includes("free") || (m.display_name?.toLowerCase().includes("free") ?? false));
+    }
+    return result;
+  }, [list, searchQuery, freeOnly]);
+  const [clearOpen, setClearOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const [editName, setEditName] = useState("");
-  const [editBaseUrl, setEditBaseUrl] = useState("");
-  const [editApiKey, setEditApiKey] = useState("");
-  const [editAvatar, setEditAvatar] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
+  const [name, setName] = useState("");
+  const [baseUrl, setBaseUrl] = useState("");
+  const [apiKey, setApiKey] = useState("");
+  const [avatar, setAvatar] = useState<string | null>(null);
 
-  const [deleteTarget, setDeleteTarget] = useState<Model | null>(null);
-  const [deleting, setDeleting] = useState(false);
-  const [clearAllOpen, setClearAllOpen] = useState(false);
-  const [clearingAll, setClearingAll] = useState(false);
-
-  const fetchData = useCallback(async () => {
+  const load = useCallback(async () => {
     try {
       setLoading(true);
-      const [prov, mods] = await Promise.all([
-        providers.get(providerId),
-        modelsApi.listByProvider(providerId),
-      ]);
-      setProvider(prov);
-      setModelList(mods);
-      setEditName(prov.name);
-      setEditBaseUrl(prov.base_url);
-      setEditAvatar(prov.avatar ?? null);
-      setEditApiKey("");
-      setError(null);
-      setSuccess(null);
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
+      const [current, models] = await Promise.all([providers.get(providerId), modelsApi.listByProvider(providerId)]);
+      setProvider(current); setList(models); setName(current.name); setBaseUrl(current.base_url); setAvatar(current.avatar); setApiKey("");
+    } catch (e: any) { setError(e.message); } finally { setLoading(false); }
   }, [providerId]);
 
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+  useEffect(() => { load(); }, [load]);
 
-  const handleSave = async () => {
+  const save = async () => {
     setSaving(true);
-    setError(null);
-    setSuccess(null);
-    try {
-      const data: any = { name: editName, base_url: editBaseUrl, avatar: editAvatar };
-      if (editApiKey) data.api_key = editApiKey;
-      const updated = await providers.update(providerId, data);
-      setProvider(updated);
-      setEditApiKey("");
-      setSuccess("Provider updated successfully.");
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setSaving(false);
-    }
+    try { const updated = await providers.update(providerId, { name, base_url: baseUrl, avatar, ...(apiKey ? { api_key: apiKey } : {}) }); setProvider(updated); setApiKey(""); setSuccess("Provider updated."); }
+    catch (e: any) { setError(e.message); } finally { setSaving(false); }
   };
 
-  const handleSync = async () => {
+  const sync = async () => {
     setSyncing(true);
-    setError(null);
-    setSuccess(null);
-    try {
-      const result = await modelsApi.sync(providerId);
-      await fetchData();
-      setSuccess(result.message);
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setSyncing(false);
-    }
+    try { const result = await modelsApi.sync(providerId); await load(); setSuccess(result.message); }
+    catch (e: any) { setError(e.message); } finally { setSyncing(false); }
   };
 
-  const handleToggleModel = async (modelId: string) => {
-    try {
-      const updated = await modelsApi.toggle(modelId);
-      setModelList((prev) =>
-        prev.map((m) =>
-          m.id === modelId ? { ...m, is_active: updated.is_active } : m
-        )
-      );
-    } catch (err: any) {
-      console.error("Toggle model failed:", err);
-    }
-  };
+  const copy = (value: string) => navigator.clipboard?.writeText(value);
 
-  const handleDeleteModel = async () => {
-    if (!deleteTarget) return;
-    setDeleting(true);
-    try {
-      await modelsApi.remove(deleteTarget.id);
-      setModelList((prev) => prev.filter((m) => m.id !== deleteTarget.id));
-      setDeleteTarget(null);
-    } catch (err: any) {
-      console.error("Delete model failed:", err);
-    } finally {
-      setDeleting(false);
-    }
-  };
-
-  const handleClearAll = async () => {
-    setClearingAll(true);
-    try {
-      await modelsApi.deleteAll(providerId);
-      setModelList([]);
-      setClearAllOpen(false);
-    } catch (err: any) {
-      console.error("Clear all failed:", err);
-    } finally {
-      setClearingAll(false);
-    }
-  };   
-
-  const copyToClipboard = async (text: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
-    } catch {
-      const el = document.createElement("textarea");
-      el.value = text;
-      document.body.appendChild(el);
-      el.select();
-      document.execCommand("copy");
-      document.body.removeChild(el);
-    }
-  };
-
-  if (loading) {
-    return (
-      <Box sx={{ p: 3 }}>
-        <LinearProgress />
-      </Box>
-    );
-  }
-
-  if (!provider) {
-    return (
-      <Box sx={{ p: 3 }}>
-        <Alert severity="error" sx={{ mb: 2 }}>
-          Provider not found.
-        </Alert>
-        <Button variant="outlined" onClick={onBack}>
-          Back to Providers
-        </Button>
-      </Box>
-    );
-  }
+  if (loading) return <div className="flex justify-center p-12"><LoaderCircle className="size-5 animate-spin text-muted-foreground" /></div>;
+  if (!provider) return <div className="p-6"><Alert variant="destructive"><AlertDescription>Provider not found.</AlertDescription></Alert></div>;
 
   return (
-    <Box sx={{ p: 3 }}>
-      <Box
-        sx={{
-          display: "flex",
-          alignItems: "center",
-          gap: 1.5,
-          mb: 3,
-        }}
-      >
-        <Button
-          variant="outlined"
-          size="small"
-          startIcon={<ArrowBackIcon />}
-          onClick={onBack}
-        >
-          Back
-        </Button>
-        <Typography variant="h5" fontWeight={700}>
-          {provider.name}
-        </Typography>
-      </Box>
+    <div className="w-full space-y-6 p-6">
+      <div className="flex items-center gap-3">
+        <Button variant="outline" size="sm" onClick={onBack}><ArrowLeft className="size-4" />Back</Button>
+        <h1 className="font-heading text-2xl font-semibold tracking-tight">Provider configuration</h1>
+      </div>
+      {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
+      {success && <Alert><Check className="size-4" /><AlertDescription>{success}</AlertDescription></Alert>}
 
-      {error && (
-        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
-          {error}
-        </Alert>
-      )}
-      {success && (
-        <Alert severity="success" sx={{ mb: 2 }} onClose={() => setSuccess(null)}>
-          {success}
-        </Alert>
-      )}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between"><CardTitle>Connection settings</CardTitle><div className="flex gap-2"><Button variant="outline" onClick={sync} disabled={syncing}>{syncing ? <LoaderCircle className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}Sync models</Button><Button onClick={save} disabled={saving}>{saving ? "Saving..." : "Save changes"}</Button></div></CardHeader>
+        <CardContent className="space-y-5">
+          <AvatarUpload value={avatar} name={name} onChange={setAvatar} />
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2"><Label htmlFor="provider-name">Provider name</Label><Input id="provider-name" value={name} onChange={(e) => setName(e.target.value)} /></div>
+            <div className="space-y-2"><Label htmlFor="provider-url">Base URL</Label><Input id="provider-url" value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} /></div>
+          </div>
+          <div className="space-y-2"><Label htmlFor="provider-key">API key</Label><Input id="provider-key" type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder="Leave blank to keep current key" /></div>
+        </CardContent>
+      </Card>
 
-      {/* Connection Settings */}
-      <Paper variant="outlined" sx={{ p: 3, mb: 3 }}>
-        <Typography variant="subtitle1" fontWeight={600} sx={{ mb: 2 }}>
-          Connection Settings
-        </Typography>
-        <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
-          <AvatarUpload value={editAvatar} name={editName} onChange={setEditAvatar} />
-          <Box sx={{ display: "flex", gap: 2, flexDirection: { xs: "column", md: "row" } }}>
-            <TextField
-              label="Provider Name"
-              value={editName}
-              onChange={(e) => setEditName(e.target.value)}
-              helperText="Identifier used for routing (providername/modelname)"
-              size="small"
-              sx={{ flex: 1 }}
-            />
-            <TextField
-              label="Base URL"
-              value={editBaseUrl}
-              onChange={(e) => setEditBaseUrl(e.target.value)}
-              helperText="API base URL"
-              size="small"
-              sx={{ flex: 1 }}
-            />
-          </Box>
-          <TextField
-            label="API Key"
-            value={editApiKey}
-            onChange={(e) => setEditApiKey(e.target.value)}
-            type="password"
-            placeholder="Enter new API key (leave blank to keep current)"
-            helperText="Fill only if changing the key"
-            size="small"
-          />
-          <Box sx={{ display: "flex", gap: 1 }}>
-            <Button
-              variant="contained"
-              onClick={handleSave}
-              disabled={saving}
-            >
-              {saving ? "Saving..." : "Save Changes"}
-            </Button>
-            <Button
-              variant="outlined"
-              onClick={handleSync}
-              disabled={syncing}
-            >
-              {syncing ? "Syncing..." : "Sync Models"}
-            </Button>
-          </Box>
-        </Box>
-      </Paper>
-
-      {/* Models */}
-      <Paper variant="outlined" sx={{ p: 0 }}>
-        <Box
-          sx={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            px: 3,
-            py: 2,
-          }}
-        >
-          <Typography variant="subtitle1" fontWeight={600}>
-            Models ({modelList.length})
-          </Typography>
-          <Box sx={{ display: "flex", gap: 1 }}>
-            {modelList.length > 0 && (
-              <Button
-                size="small"
-                variant="outlined"
-                color="error"
-                onClick={() => setClearAllOpen(true)}
-              >
-                Delete All
-              </Button>
-            )}
-            <Button
-              size="small"
-              variant="contained"
-              onClick={() => setShowAddModel(true)}
-            >
-              Add Model
-            </Button>
-          </Box>
-        </Box>
-        <Divider />
-        {modelList.length === 0 ? (
-          <Typography
-            variant="body2"
-            color="text.secondary"
-            sx={{ textAlign: "center", py: 4, px: 3 }}
-          >
-            No models yet. Click "Sync Models" above to fetch from the provider,
-            or click "Add Model" to add one manually.
-          </Typography>
-        ) : (
-          <TableContainer>
-            <Table size="small">
-              <TableHead>
-                <TableRow>
-                  <TableCell sx={{ fontWeight: 600 }}>Model ID</TableCell>
-                  <TableCell sx={{ fontWeight: 600 }}>Display Name</TableCell>
-                  <TableCell sx={{ fontWeight: 600 }}>Source</TableCell>
-                  <TableCell sx={{ fontWeight: 600 }}>Status</TableCell>
-                  <TableCell sx={{ fontWeight: 600, width: 140 }}>Actions</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {modelList.map((model) => (
-                  <TableRow key={model.id}>
-                    <TableCell>
-                      <Box
-                        sx={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 0.5,
-                          "& .copy-icon": { opacity: 0, transition: "opacity 0.15s" },
-                          "&:hover .copy-icon": { opacity: 1 },
-                        }}
-                      >
-                        <Typography
-                          variant="body2"
-                          fontFamily="monospace"
-                          fontSize="0.8rem"
-                        >
-                          {model.model_id}
-                        </Typography>
-                        <Tooltip title="Copy model ID">
-                          <IconButton
-                            className="copy-icon"
-                            size="small"
-                            onClick={() => copyToClipboard(model.model_id)}
-                            sx={{ width: 22, height: 22 }}
-                          >
-                            <ContentCopyIcon sx={{ fontSize: 14 }} />
-                          </IconButton>
-                        </Tooltip>
-                      </Box>
-                    </TableCell>
-                    <TableCell>
-                      {model.display_name || (
-                        <Typography variant="body2" color="text.disabled">
-                          —
-                        </Typography>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <Chip
-                        label={model.is_manual ? "Manual" : "Auto-synced"}
-                        color={model.is_manual ? "warning" : "primary"}
-                        size="small"
-                        variant="outlined"
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <Switch
-                        checked={model.is_active === 1}
-                        onChange={() => handleToggleModel(model.id)}
-                        size="small"
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <Box sx={{ display: "flex", gap: 0.5 }}>
-                        <Tooltip title="Edit model">
-                          <IconButton
-                            size="small"
-                            onClick={() => setEditTarget(model)}
-                          >
-                            <EditIcon fontSize="small" />
-                          </IconButton>
-                        </Tooltip>
-                        <Tooltip title="Delete model">
-                          <IconButton
-                            size="small"
-                            color="error"
-                            onClick={() => setDeleteTarget(model)}
-                          >
-                            <DeleteIcon fontSize="small" />
-                          </IconButton>
-                        </Tooltip>
-                      </Box>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        )}
-      </Paper>
-
-      <AddModelModal
-        isOpen={showAddModel}
-        onClose={() => setShowAddModel(false)}
-        onSuccess={fetchData}
-        providerId={providerId}
-      />
-
-      <EditModelModal
-        isOpen={!!editTarget}
-        model={editTarget}
-        onClose={() => setEditTarget(null)}
-        onSuccess={fetchData}
-      />
-
-      <ConfirmDialog
-        open={!!deleteTarget}
-        title="Delete Model"
-        message={`Remove model "${deleteTarget?.model_id}" from this provider?`}
-        confirmLabel="Delete"
-        onConfirm={handleDeleteModel}
-        onCancel={() => setDeleteTarget(null)}
-        loading={deleting}
-      />
-
-      <ConfirmDialog
-        open={clearAllOpen}
-        title="Delete All Models"
-        message={`Remove all ${modelList.length} models from "${provider.name}"? This action cannot be undone.`}
-        confirmLabel="Delete All"
-        onConfirm={handleClearAll}
-        onCancel={() => setClearAllOpen(false)}
-        loading={clearingAll}
-      />
-    </Box>
+      <Card variant="plain" className="overflow-hidden p-0 gap-0">
+        <CardHeader className="flex flex-row items-center justify-between py-(--card-spacing)"><CardTitle>Models <span className="text-muted-foreground">({list.length})</span></CardTitle><div className="flex items-center gap-2"><div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input placeholder="Search..." className="h-8 w-48 border-none bg-muted pl-9" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} /></div><Button variant={freeOnly ? "default" : "secondary"} size="sm" onClick={() => setFreeOnly(!freeOnly)}>Free</Button>{list.length > 0 && <Button variant="destructive" size="sm" onClick={() => setClearOpen(true)}>Delete all</Button>}<Button variant="default" size="sm" onClick={() => setAddOpen(true)}>Add model</Button></div></CardHeader>
+        <Separator />
+        {filteredList.length === 0 ? <div className="p-10 text-center text-sm text-muted-foreground">{list.length === 0 ? "No models found. Sync the provider or add one manually." : "No models match your search."}</div> : <Table><TableHeader><TableRow><TableHead>Model ID</TableHead><TableHead>Display name</TableHead><TableHead>Source</TableHead><TableHead>Status</TableHead><TableHead className="w-28">Actions</TableHead></TableRow></TableHeader><TableBody>{filteredList.map((model) => <TableRow key={model.id}><TableCell><div className="group flex items-center gap-1 font-mono text-xs"><span>{model.model_id}</span><Tooltip><TooltipTrigger render={<Button size="icon" variant="ghost" className="size-6 opacity-0 group-hover:opacity-100" onClick={() => copy(model.model_id)} />}><Copy className="size-3" /></TooltipTrigger><TooltipContent>Copy model ID</TooltipContent></Tooltip></div></TableCell><TableCell>{model.display_name || <span className="text-muted-foreground">—</span>}</TableCell><TableCell><Badge variant={model.is_manual ? "outline" : "secondary"}>{model.is_manual ? "Manual" : "Auto-synced"}</Badge></TableCell><TableCell><Switch checked={model.is_active === 1} onCheckedChange={async () => { const updated = await modelsApi.toggle(model.id); setList((items) => items.map((item) => item.id === model.id ? { ...item, is_active: updated.is_active } : item)); }} /></TableCell><TableCell><div className="flex gap-1"><Tooltip><TooltipTrigger render={<Button size="icon" variant="ghost" className="size-7" onClick={() => setEditTarget(model)} />}><Pencil className="size-3.5" /></TooltipTrigger><TooltipContent>Edit</TooltipContent></Tooltip><Tooltip><TooltipTrigger render={<Button size="icon" variant="ghost" className="size-7 text-destructive" onClick={() => setDeleteTarget(model)} />}><Trash2 className="size-3.5" /></TooltipTrigger><TooltipContent>Delete</TooltipContent></Tooltip></div></TableCell></TableRow>)}</TableBody></Table>}
+      </Card>
+      <AddModelModal isOpen={addOpen} onClose={() => setAddOpen(false)} onSuccess={load} providerId={providerId} />
+      <EditModelModal isOpen={!!editTarget} model={editTarget} onClose={() => setEditTarget(null)} onSuccess={load} />
+      <ConfirmDialog open={!!deleteTarget} title="Delete model" message={`Remove ${deleteTarget?.model_id}?`} confirmLabel="Delete" onConfirm={async () => { if (!deleteTarget) return; await modelsApi.remove(deleteTarget.id); setList((items) => items.filter((item) => item.id !== deleteTarget.id)); setDeleteTarget(null); }} onCancel={() => setDeleteTarget(null)} />
+      <ConfirmDialog open={clearOpen} title="Delete all models" message={`Remove all ${list.length} models from ${provider.name}?`} confirmLabel="Delete all" onConfirm={async () => { await modelsApi.deleteAll(providerId); setList([]); setClearOpen(false); }} onCancel={() => setClearOpen(false)} />
+    </div>
   );
 }

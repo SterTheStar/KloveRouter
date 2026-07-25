@@ -1,111 +1,32 @@
-import {
-  Drawer,
-  List,
-  ListItem,
-  ListItemButton,
-  ListItemIcon,
-  ListItemText,
-  Box,
-  Typography,
-  Divider,
-} from "@mui/material";
-import DashboardIcon from "@mui/icons-material/Dashboard";
-import VpnKeyIcon from "@mui/icons-material/VpnKey";
-import SettingsIcon from "@mui/icons-material/Settings";
-import LogoutIcon from "@mui/icons-material/Logout";
+import { RiDashboardLine as DashboardLine, RiKey2Line as Key2Line, RiSettings4Line as Settings4Line, RiLogoutBoxRLine as LogoutBoxRLine } from "@remixicon/react";
+import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
 import type { Page } from "../types";
 
-const DRAWER_WIDTH = 240;
-
-interface NavItem {
-  page: Page;
-  label: string;
-  icon: React.ReactElement;
-}
-
-const navItems: NavItem[] = [
-  { page: "dashboard", label: "Providers", icon: <DashboardIcon /> },
-  { page: "keys", label: "API Keys", icon: <VpnKeyIcon /> },
-  { page: "settings", label: "Settings", icon: <SettingsIcon /> },
+const items = [
+  { page: "dashboard" as Page, label: "Providers", icon: DashboardLine },
+  { page: "keys" as Page, label: "API Keys", icon: Key2Line },
+  { page: "settings" as Page, label: "Settings", icon: Settings4Line },
 ];
 
-interface SidebarProps {
-  currentPage: Page;
-  onNavigate: (page: Page) => void;
-  onLogout: () => void;
-}
-
-export default function Sidebar({
-  currentPage,
-  onNavigate,
-  onLogout,
-}: SidebarProps) {
+export default function Sidebar({ currentPage, onNavigate, onLogout }: {
+  currentPage: Page; onNavigate: (page: Page) => void; onLogout: () => void;
+}) {
   return (
-    <Drawer
-      variant="permanent"
-      sx={{
-        width: DRAWER_WIDTH,
-        flexShrink: 0,
-        "& .MuiDrawer-paper": {
-          width: DRAWER_WIDTH,
-          boxSizing: "border-box",
-        },
-      }}
-    >
-      <Box
-        sx={{
-          p: 3,
-          display: "flex",
-          alignItems: "center",
-          gap: 1.5,
-        }}
-      >
-        <Typography
-          variant="h6"
-          fontWeight={800}
-          letterSpacing="-0.02em"
-        >
-          Klove
-        </Typography>
-      </Box>
-      <Divider />
-      <List sx={{ flex: 1, px: 1.5, pt: 1 }}>
-        {navItems.map((item) => (
-          <ListItem key={item.page} disablePadding sx={{ mb: 0.5 }}>
-            <ListItemButton
-              selected={currentPage === item.page}
-              onClick={() => onNavigate(item.page)}
-              sx={{ borderRadius: 1 }}
-            >
-              <ListItemIcon sx={{ minWidth: 36 }}>
-                {item.icon}
-              </ListItemIcon>
-              <ListItemText
-                primary={item.label}
-                primaryTypographyProps={{
-                  fontWeight: currentPage === item.page ? 600 : 400,
-                }}
-              />
-            </ListItemButton>
-          </ListItem>
+    <aside className="hidden sticky top-0 h-svh w-60 shrink-0 flex-col border-r bg-sidebar text-sidebar-foreground md:flex">
+      <div className="flex h-16 items-center justify-center gap-3 px-5">
+        <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" className="size-8 text-foreground"><g id="SVGRepo_bgCarrier" stroke-width="0"></g><g id="SVGRepo_tracerCarrier" stroke-linecap="round" stroke-linejoin="round"></g><g id="SVGRepo_iconCarrier"> <path d="M5.6906 6.00001L3.16512 1.62576C4.50811 0.605527 6.18334 0 8 0C8.37684 0 8.74759 0.0260554 9.11056 0.076463L5.6906 6.00001Z" fill="currentColor"></path> <path d="M5.11325 9L1.69363 3.07705C0.632438 4.43453 0 6.14341 0 8C0 8.33866 0.0210434 8.67241 0.0618939 9H5.11325Z" fill="currentColor"></path> <path d="M4.89635 15.3757C2.93947 14.5512 1.37925 12.9707 0.581517 11H7.42265L4.89635 15.3757Z" fill="currentColor"></path> <path d="M8 16C7.62316 16 7.25241 15.9739 6.88944 15.9235L10.3094 10L12.8349 14.3742C11.4919 15.3945 9.81666 16 8 16Z" fill="currentColor"></path> <path d="M16 8C16 9.85659 15.3676 11.5655 14.3064 12.9229L10.8868 7H15.9381C15.979 7.32759 16 7.66134 16 8Z" fill="currentColor"></path> <path d="M11.1036 0.624326C13.0605 1.44877 14.6208 3.02927 15.4185 5H8.57735L11.1036 0.624326Z" fill="currentColor"></path> </g></svg>
+        <span className="text-2xl" style={{ fontFamily: "'Playwrite NZ Basic', cursive" }}>Klove</span>
+      </div>
+      <nav className="flex-1 overflow-y-auto space-y-1 p-3">
+        {items.map(({ page, label, icon: Icon }) => (
+          <Button key={page} size="lg" variant={currentPage === page ? "secondary" : "ghost"} className="w-full justify-start gap-3" onClick={() => onNavigate(page)}>
+            <Icon className="size-5" />{label}
+          </Button>
         ))}
-      </List>
-      <Divider />
-      <List sx={{ px: 1.5, py: 1 }}>
-        <ListItem disablePadding>
-          <ListItemButton onClick={onLogout} sx={{ borderRadius: 1 }}>
-            <ListItemIcon sx={{ minWidth: 36 }}>
-              <LogoutIcon />
-            </ListItemIcon>
-            <ListItemText
-              primary="Logout"
-              primaryTypographyProps={{ color: "error" }}
-            />
-          </ListItemButton>
-        </ListItem>
-      </List>
-    </Drawer>
+      </nav>
+      <Separator />
+      <div className="p-3"><Button size="lg" variant="ghost" className="w-full justify-start gap-3 text-destructive" onClick={onLogout}><LogoutBoxRLine className="size-5" />Logout</Button></div>
+    </aside>
   );
 }
-
-export { DRAWER_WIDTH };

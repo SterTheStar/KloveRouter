@@ -1,53 +1,8 @@
-import Dialog from "@mui/material/Dialog";
-import DialogTitle from "@mui/material/DialogTitle";
-import DialogContent from "@mui/material/DialogContent";
-import DialogContentText from "@mui/material/DialogContentText";
-import DialogActions from "@mui/material/DialogActions";
-import Button from "@mui/material/Button";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
-interface ConfirmDialogProps {
-  open: boolean;
-  title: string;
-  message: string;
-  confirmLabel?: string;
-  cancelLabel?: string;
-  severity?: "error" | "warning";
-  onConfirm: () => void;
-  onCancel: () => void;
-  loading?: boolean;
-}
-
-export default function ConfirmDialog({
-  open,
-  title,
-  message,
-  confirmLabel = "Confirm",
-  cancelLabel = "Cancel",
-  severity = "error",
-  onConfirm,
-  onCancel,
-  loading = false,
-}: ConfirmDialogProps) {
-  return (
-    <Dialog open={open} onClose={onCancel} maxWidth="xs" fullWidth>
-      <DialogTitle>{title}</DialogTitle>
-      <DialogContent>
-        <DialogContentText>{message}</DialogContentText>
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={onCancel} disabled={loading}>
-          {cancelLabel}
-        </Button>
-        <Button
-          variant="contained"
-          color={severity}
-          onClick={onConfirm}
-          disabled={loading}
-          autoFocus
-        >
-          {loading ? "Removing..." : confirmLabel}
-        </Button>
-      </DialogActions>
-    </Dialog>
-  );
+export default function ConfirmDialog({ open, title, message, confirmLabel = "Confirm", onConfirm, onCancel, loading = false }: {
+  open: boolean; title: string; message: string; confirmLabel?: string; onConfirm: () => void; onCancel: () => void; loading?: boolean;
+}) {
+  return <Dialog open={open} onOpenChange={(value) => !value && onCancel()}><DialogContent><DialogHeader><DialogTitle>{title}</DialogTitle><DialogDescription>{message}</DialogDescription></DialogHeader><DialogFooter><Button variant="outline" onClick={onCancel} disabled={loading}>Cancel</Button><Button variant="destructive" onClick={onConfirm} disabled={loading}>{loading ? "Removing..." : confirmLabel}</Button></DialogFooter></DialogContent></Dialog>;
 }

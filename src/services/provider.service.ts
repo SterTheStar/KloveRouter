@@ -36,12 +36,21 @@ export type UpdateProviderInput = {
   is_active?: number;
 };
 
+function getFaviconUrl(baseUrl: string): string | null {
+  try {
+    const hostname = new URL(baseUrl).hostname;
+    return `https://www.google.com/s2/favicons?domain=${hostname}&sz=64`;
+  } catch {
+    return null;
+  }
+}
+
 function toPublic(p: Provider): ProviderPublic {
   return {
     id: p.id,
     name: p.name,
     base_url: p.base_url,
-    avatar: p.avatar,
+    avatar: p.avatar ?? getFaviconUrl(p.base_url),
     is_active: p.is_active,
     created_at: p.created_at,
     updated_at: p.updated_at,
@@ -51,9 +60,9 @@ function toPublic(p: Provider): ProviderPublic {
 export const providerService = {
   findAll(): ProviderPublic[] {
     const db = getDb();
-    return db
-      .query("SELECT id, name, base_url, avatar, is_active, created_at, updated_at FROM providers ORDER BY created_at DESC")
-      .all() as ProviderPublic[];
+    return (db
+      .query("SELECT * FROM providers ORDER BY created_at DESC")
+      .all() as Provider[]).map(toPublic);
   },
 
   findById(id: string): Provider | null {
@@ -61,6 +70,11 @@ export const providerService = {
     return db
       .query("SELECT * FROM providers WHERE id = ?")
       .get(id) as Provider | null;
+  },
+
+  findPublicById(id: string): ProviderPublic | null {
+    const p = this.findById(id);
+    return p ? toPublic(p) : null;
   },
 
   findByName(name: string): Provider | null {
@@ -76,7 +90,7 @@ export const providerService = {
     db.query(
       "INSERT INTO providers (id, name, base_url, api_key, avatar) VALUES (?, ?, ?, ?, ?)"
     ).run(id, input.name, input.base_url.replace(/\/+$/, ""), input.api_key, input.avatar ?? null);
-    return this.findById(id) as ProviderPublic;
+    return this.findPublicById(id)!;
   },
 
   update(id: string, input: UpdateProviderInput): ProviderPublic | null {
@@ -108,7 +122,7 @@ export const providerService = {
       values.push(input.is_active);
     }
 
-    if (updates.length === 0) return this.findById(id) as ProviderPublic;
+    if (updates.length === 0) return this.findPublicById(id);
 
     updates.push("updated_at = datetime('now')");
     values.push(id);
@@ -117,7 +131,7 @@ export const providerService = {
       `UPDATE providers SET ${updates.join(", ")} WHERE id = ?`
     ).run(...values);
 
-    return this.findById(id) as ProviderPublic;
+    return this.findPublicById(id);
   },
 
   remove(id: string): boolean {

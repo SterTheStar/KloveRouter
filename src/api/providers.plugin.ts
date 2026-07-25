@@ -12,14 +12,9 @@ export const providersPlugin = (app: Elysia) =>
         set.status = 404;
         return { error: "Provider not found" };
       }
+      const pub = providerService.findPublicById(id)!;
       return {
-        id: provider.id,
-        name: provider.name,
-        base_url: provider.base_url,
-        avatar: provider.avatar,
-        is_active: provider.is_active,
-        created_at: provider.created_at,
-        updated_at: provider.updated_at,
+        ...pub,
         api_key: provider.api_key
           ? provider.api_key.slice(0, 6) + "..." + provider.api_key.slice(-4)
           : null,

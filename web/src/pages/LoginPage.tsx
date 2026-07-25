@@ -1,85 +1,13 @@
 import { useState, type FormEvent } from "react";
-import Box from "@mui/material/Box";
-import Paper from "@mui/material/Paper";
-import TextField from "@mui/material/TextField";
-import Button from "@mui/material/Button";
-import Typography from "@mui/material/Typography";
+import { RiLock2Line as LockKeyhole } from "@remixicon/react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
-interface LoginPageProps {
-  onLogin: (password: string) => Promise<boolean>;
-  error: string | null;
-  loading: boolean;
-}
-
-export default function LoginPage({ onLogin, error, loading }: LoginPageProps) {
+export default function LoginPage({ onLogin, error, loading }: { onLogin: (password: string) => Promise<boolean>; error: string | null; loading: boolean }) {
   const [password, setPassword] = useState("");
-
-  const handleSubmit = async (e: FormEvent) => {
-    e.preventDefault();
-    await onLogin(password);
-  };
-
-  return (
-    <Box
-      sx={{
-        height: "100vh",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-      }}
-    >
-      <Paper
-        elevation={0}
-        sx={{
-          width: 380,
-          p: 4,
-          textAlign: "center",
-          border: 1,
-          borderColor: "divider",
-          borderRadius: 2,
-        }}
-      >
-        <Typography variant="h3" sx={{ mb: 1 }}>
-          🧠
-        </Typography>
-        <Typography variant="h5" fontWeight={700} sx={{ mb: 0.5 }}>
-          Klove
-        </Typography>
-        <Typography
-          variant="body2"
-          color="text.secondary"
-          sx={{ mb: 3 }}
-        >
-          AI Router Panel
-        </Typography>
-        <Box
-          component="form"
-          onSubmit={handleSubmit}
-          sx={{ display: "flex", flexDirection: "column", gap: 2 }}
-        >
-          <TextField
-            fullWidth
-            type="password"
-            label="Password"
-            placeholder="Enter panel password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            autoFocus
-            error={!!error}
-            helperText={error}
-            size="medium"
-          />
-          <Button
-            type="submit"
-            variant="contained"
-            size="large"
-            disabled={loading}
-          >
-            {loading ? "Authenticating..." : "Enter Panel"}
-          </Button>
-        </Box>
-      </Paper>
-    </Box>
-  );
+  const submit = async (event: FormEvent) => { event.preventDefault(); await onLogin(password); };
+  return <div className="flex min-h-svh items-center justify-center bg-muted/30 p-4"><Card className="w-full max-w-sm"><CardHeader className="items-center text-center"><div className="mb-2 flex size-12 items-center justify-center rounded-xl bg-primary text-primary-foreground"><LockKeyhole className="size-6" /></div><CardTitle className="font-heading text-2xl">Klove</CardTitle><CardDescription>AI Router Panel</CardDescription></CardHeader><CardContent><form onSubmit={submit} className="space-y-4"><div className="space-y-2"><Label htmlFor="password">Password</Label><Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoFocus required placeholder="Enter panel password" /></div>{error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}<Button className="w-full" type="submit" disabled={loading}>{loading ? "Authenticating..." : "Enter panel"}</Button></form></CardContent></Card></div>;
 }
