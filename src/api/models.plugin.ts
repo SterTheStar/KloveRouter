@@ -3,6 +3,7 @@ import { modelService } from "../services/model.service";
 import { providerService } from "../services/provider.service";
 import { createOpenAIClient } from "../clients/openai";
 import { createAnthropicMessage, toOpenAICompletion } from "../clients/anthropic";
+import { codexModels, codexTest } from "../integrations/codex";
 
 export const modelsPlugin = (app: Elysia) =>
   app
@@ -48,6 +49,23 @@ export const modelsPlugin = (app: Elysia) =>
       }
 
       try {
+        if (provider.protocol === "codex") {
+          const available = await codexModels();
+          for (const model of available) {
+            modelService.upsert({
+              provider_id: id,
+              model_id: model.id,
+              display_name: model.display_name,
+              is_manual: 0,
+            });
+          }
+          return {
+            success: true,
+            models_found: available.length,
+            message: `Synced ${available.length} Codex models from ${provider.name}`,
+          };
+        }
+
         const url = provider.protocol === "anthropic"
           ? provider.base_url.replace(/\/+$/, "") + "/models"
           : provider.base_url.replace(/\/+$/, "") + "/models";
@@ -124,7 +142,9 @@ export const modelsPlugin = (app: Elysia) =>
 
       try {
         const start = performance.now();
-        const completion = provider.protocol === "anthropic"
+        const completion = provider.protocol === "codex"
+          ? { choices: [{ message: { content: await codexTest(model.model_id) } }], usage: null }
+          : provider.protocol === "anthropic"
           ? toOpenAICompletion(await createAnthropicMessage(provider, {
               model: model.model_id,
               max_tokens: 10,

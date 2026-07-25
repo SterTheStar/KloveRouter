@@ -12,6 +12,8 @@ import {
   settingsPlugin,
   proxyPlugin,
   statsPlugin,
+  codexPlugin,
+  codexPublicPlugin,
 } from "./api";
 
 // Initialize database
@@ -27,6 +29,7 @@ const app = new Elysia()
   )
   // Public routes
   .use(authPlugin)
+  .use(codexPublicPlugin)
   .use(proxyPlugin);
 
 // Protected routes (require JWT)
@@ -52,9 +55,13 @@ const protectedApp = new Elysia()
   .use(modelsPlugin)
   .use(keysPlugin)
   .use(settingsPlugin)
-  .use(statsPlugin);
+  .use(statsPlugin)
+  .use(codexPlugin);
 
 app.use(protectedApp as any);
+
+// Codex OAuth requires the fixed localhost callback registered by Codex.
+new Elysia().use(codexPublicPlugin).listen(1455);
 
 // Serve frontend in production
 if (!config.isDev) {

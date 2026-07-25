@@ -6,7 +6,7 @@ export interface Provider {
   base_url: string;
   api_key: string;
   avatar: string | null;
-  protocol: "openai" | "anthropic";
+  protocol: "openai" | "anthropic" | "codex";
   is_active: number;
   created_at: string;
   updated_at: string;
@@ -17,7 +17,7 @@ export interface ProviderPublic {
   name: string;
   base_url: string;
   avatar: string | null;
-  protocol: "openai" | "anthropic";
+  protocol: "openai" | "anthropic" | "codex";
   is_active: number;
   created_at: string;
   updated_at: string;
@@ -28,7 +28,7 @@ export type CreateProviderInput = {
   base_url: string;
   api_key: string;
   avatar?: string;
-  protocol?: "openai" | "anthropic";
+  protocol?: "openai" | "anthropic" | "codex";
 };
 
 export type UpdateProviderInput = {
@@ -36,7 +36,7 @@ export type UpdateProviderInput = {
   base_url?: string;
   api_key?: string;
   avatar?: string | null;
-  protocol?: "openai" | "anthropic";
+  protocol?: "openai" | "anthropic" | "codex";
   is_active?: number;
 };
 
@@ -93,8 +93,8 @@ export const providerService = {
     const db = getDb();
     const id = crypto.randomUUID();
     db.query(
-      "INSERT INTO providers (id, name, base_url, api_key, avatar) VALUES (?, ?, ?, ?, ?)"
-    ).run(id, input.name, input.base_url.replace(/\/+$/, ""), input.api_key, input.avatar ?? null);
+      "INSERT INTO providers (id, name, base_url, api_key, avatar, protocol) VALUES (?, ?, ?, ?, ?, ?)"
+    ).run(id, input.name, input.base_url.replace(/\/+$/, ""), input.api_key, input.avatar ?? null, input.protocol ?? "openai");
     return this.findPublicById(id)!;
   },
 

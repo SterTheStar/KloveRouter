@@ -5,6 +5,7 @@ import { modelService } from "../services/model.service";
 import { usageService } from "../services/usage.service";
 import { createOpenAIClient, parseModelName } from "../clients/openai";
 import { createAnthropicMessage, createAnthropicStream, splitAnthropicMessages, toOpenAICompletion } from "../clients/anthropic";
+import { codexResponses } from "../integrations/codex";
 
 function anthropicPayload(body: any, modelId: string, stream = false) {
   const messages = splitAnthropicMessages(body.messages);
@@ -183,6 +184,16 @@ export const proxyPlugin = (app: Elysia) =>
           } catch (error: any) {
             set.status = 502;
             return { error: "Provider request failed", message: error.message };
+          }
+        }
+
+        if (provider.protocol === "codex") {
+          try {
+            const response = await codexResponses(body, parsed.modelId);
+            return response;
+          } catch (error: any) {
+            set.status = error.message.includes("limit") ? 429 : 502;
+            return { error: "Codex request failed", message: error.message };
           }
         }
 

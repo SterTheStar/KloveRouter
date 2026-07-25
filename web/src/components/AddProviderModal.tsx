@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import AvatarUpload from "./AvatarUpload";
-import { providers } from "../api/client";
+import { codex, providers } from "../api/client";
 import openAiLogo from "../assets/providers/openai.svg";
 import anthropicLogo from "../assets/providers/anthropic.png";
 
@@ -27,6 +27,14 @@ const providerTypes = [
     logo: anthropicLogo,
     placeholder: "https://api.anthropic.com",
   },
+  {
+    id: "codex",
+    protocol: "codex" as const,
+    name: "OpenAI Codex",
+    description: "Unofficial ChatGPT OAuth integration using Codex limits",
+    logo: openAiLogo,
+    placeholder: "https://chatgpt.com/backend-api/codex",
+  },
 ];
 
 export default function AddProviderModal({ isOpen, onClose, onSuccess }: { isOpen: boolean; onClose: () => void; onSuccess: () => void }) {
@@ -45,7 +53,51 @@ export default function AddProviderModal({ isOpen, onClose, onSuccess }: { isOpe
     setStep("form");
   };
 
-  const submit = async () => { if (!name || !baseUrl || !apiKey) return setError("All fields are required."); setLoading(true); setError(null); try { await providers.create({ name, base_url: baseUrl, api_key: apiKey, protocol: selectedType?.protocol, avatar: avatar || undefined }); onSuccess(); close(); } catch (e: any) { setError(e.message); } finally { setLoading(false); } };
+  const submit = async () => {
+    if (selectedType?.protocol === "codex") {
+      return setError("Connect your Codex account before adding this provider.");
+    }
+    if (!name || !baseUrl || !apiKey) return setError("All fields are required.");
+    setLoading(true); setError(null);
+    try { await providers.create({ name, base_url: baseUrl, api_key: apiKey, protocol: selectedType?.protocol, avatar: avatar || undefined }); onSuccess(); close(); } catch (e: any) { setError(e.message); } finally { setLoading(false); }
+  };
+
+  const connectCodex = async () => {
+    setLoading(true); setError(null);
+    try {
+      const result = await codex.login();
+      window.open(result.auth_url, "klove-codex-login", "popup,width=520,height=720");
+      const started = Date.now();
+      const poll = window.setInterval(async () => {
+        try {
+          const status = await codex.status();
+          if (status.authenticated) {
+            window.clearInterval(poll);
+            try {
+              await providers.create({
+                name: "codex",
+                base_url: "https://chatgpt.com/backend-api/codex",
+                api_key: "codex-session",
+                protocol: "codex",
+              });
+              onSuccess();
+              close();
+            } catch (error: any) {
+              setLoading(false);
+              setError(error.message);
+            }
+          } else if (Date.now() - started > 5 * 60_000) {
+            window.clearInterval(poll);
+            setLoading(false);
+            setError("Codex login timed out.");
+          }
+        } catch { /* keep polling during browser login */ }
+      }, 1500);
+    } catch (e: any) {
+      setError(e.message);
+      setLoading(false);
+    }
+  };
 
   const filteredTypes = providerTypes.filter(
     (t) => t.name.toLowerCase().includes(searchQuery.toLowerCase()) || t.description.toLowerCase().includes(searchQuery.toLowerCase())
@@ -89,13 +141,14 @@ export default function AddProviderModal({ isOpen, onClose, onSuccess }: { isOpe
             </div>
           </DialogHeader>
           <div className="space-y-4">
+            {selectedType?.protocol === "codex" && <Alert><AlertDescription><strong>Unofficial OAuth:</strong> Klove uses private Codex/ChatGPT endpoints and your local Codex session. It may stop working without notice and limits are controlled by OpenAI.</AlertDescription></Alert>}
             <AvatarUpload value={avatar} name={name} onChange={setAvatar} />
             <div className="space-y-2"><Label htmlFor="provider-name">Provider name</Label><Input id="provider-name" value={name} onChange={(e) => setName(e.target.value)} placeholder={selectedType?.id} /></div>
             <div className="space-y-2"><Label htmlFor="provider-url">Base URL</Label><Input id="provider-url" value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} placeholder={selectedType?.placeholder} /></div>
-            <div className="space-y-2"><Label htmlFor="provider-key">API key</Label><Input id="provider-key" type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder="sk-..." /></div>
+            {selectedType?.protocol !== "codex" && <div className="space-y-2"><Label htmlFor="provider-key">API key</Label><Input id="provider-key" type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder="sk-..." /></div>}
             {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
           </div>
-          <DialogFooter><Button variant="outline" onClick={close} disabled={loading}>Cancel</Button><Button onClick={submit} disabled={loading}>{loading ? "Saving..." : "Save provider"}</Button></DialogFooter>
+          <DialogFooter><Button variant="outline" onClick={close} disabled={loading}>Cancel</Button>{selectedType?.protocol === "codex" ? <Button onClick={connectCodex} disabled={loading}>{loading ? "Opening login..." : "Connect Codex"}</Button> : <Button onClick={submit} disabled={loading}>{loading ? "Saving..." : "Save provider"}</Button>}</DialogFooter>
         </>
       )}
     </DialogContent>

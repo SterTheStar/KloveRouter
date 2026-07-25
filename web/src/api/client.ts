@@ -65,7 +65,7 @@ export const providers = {
   list: () => request<import("../types").Provider[]>("/api/providers"),
   get: (id: string) =>
     request<import("../types").ProviderDetail>(`/api/providers/${id}`),
-  create: (data: { name: string; base_url: string; api_key: string; avatar?: string; protocol?: "openai" | "anthropic" }) =>
+  create: (data: { name: string; base_url: string; api_key: string; avatar?: string; protocol?: "openai" | "anthropic" | "codex" }) =>
     request<import("../types").Provider>("/api/providers", {
       method: "POST",
       body: JSON.stringify(data),
@@ -77,7 +77,7 @@ export const providers = {
       base_url?: string;
       api_key?: string;
       avatar?: string | null;
-      protocol?: "openai" | "anthropic";
+      protocol?: "openai" | "anthropic" | "codex";
       is_active?: number;
     }
   ) =>
@@ -93,6 +93,14 @@ export const providers = {
     request<import("../types").Provider>(`/api/providers/${id}/toggle`, {
       method: "POST",
     }),
+};
+
+export const codex = {
+  status: () => request<{ authenticated: boolean; account_id: string | null; auth_path: string; last_refresh: string | null; warning: string }>("/api/codex/status"),
+  login: () => request<{ auth_url: string; warning: string }>("/api/codex/login", { method: "POST" }),
+  logout: () => request<{ authenticated: boolean }>("/api/codex/logout", { method: "POST" }),
+  refresh: () => request<{ authenticated: boolean }>("/api/codex/refresh", { method: "POST" }),
+  models: () => request<{ id: string; object: string; owned_by: string }[]>("/api/codex/models"),
 };
 
 // Models

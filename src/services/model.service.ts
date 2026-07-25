@@ -22,6 +22,16 @@ export type CreateModelInput = {
   is_manual?: number;
 };
 
+function providerAvatar(avatar: string | null, baseUrl: string): string | null {
+  if (avatar) return avatar;
+  try {
+    const hostname = new URL(baseUrl).hostname;
+    return `https://www.google.com/s2/favicons?domain=${hostname}&sz=64`;
+  } catch {
+    return null;
+  }
+}
+
 export const modelService = {
   findByProviderAndModel(providerId: string, modelId: string): Model | null {
     const db = getDb();
@@ -53,14 +63,19 @@ export const modelService = {
 
   findAllActiveWithProvider(): ModelWithProvider[] {
     const db = getDb();
-    return db
+    const models = db
       .query(
-        `SELECT m.*, p.name as provider_name, p.avatar as provider_avatar FROM models m
+        `SELECT m.*, p.name as provider_name, p.avatar as provider_avatar, p.base_url as provider_base_url FROM models m
          JOIN providers p ON p.id = m.provider_id
          WHERE m.is_active = 1 AND p.is_active = 1
          ORDER BY p.name ASC, m.model_id ASC`
       )
-      .all() as ModelWithProvider[];
+      .all() as (ModelWithProvider & { provider_base_url: string })[];
+
+    return models.map(({ provider_base_url, ...model }) => ({
+      ...model,
+      provider_avatar: providerAvatar(model.provider_avatar, provider_base_url),
+    }));
   },
 
   findById(id: string): Model | null {

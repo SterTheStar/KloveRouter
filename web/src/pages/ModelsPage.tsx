@@ -207,17 +207,18 @@ export default function ModelsPage() {
                     {!isCollapsed && models.map((model) => {
                       const tps = tpsMap[model.id];
                       const result = testResult[model.id];
+                      const fullModelId = `${model.provider_name}/${model.model_id}`;
                       return (
                         <TableRow key={model.id}>
-                          <TableCell className="font-mono text-xs">{model.model_id}</TableCell>
+                          <TableCell className="font-mono text-xs">{fullModelId}</TableCell>
                           <TableCell>{model.display_name || <span className="text-muted-foreground">—</span>}</TableCell>
                           <TableCell>{model.provider_name}</TableCell>
                           <TableCell><Badge variant={model.is_manual ? "outline" : "secondary"}>{model.is_manual ? "Manual" : "Auto-synced"}</Badge></TableCell>
                           <TableCell className="font-mono text-xs">{tps !== undefined && tps !== null ? tps.toFixed(1) : "—"}</TableCell>
                           <TableCell>
-                            <div className="flex justify-center">
-                              {result === "success" ? <CheckLine className="size-4 text-green-500" />
-                                : result === "error" ? <CloseLine className="size-4 text-destructive" />
+                            <div className="flex h-7 items-center justify-center">
+                              {result === "success" ? <CheckLine className="block size-4 text-green-500" />
+                                : result === "error" ? <CloseLine className="block size-4 text-destructive" />
                                 : <Button variant="ghost" size="icon-xs" className="size-7" onClick={(e) => { e.stopPropagation(); testModel(model.id); }} disabled={testingId === model.id}>
                                     {testingId === model.id ? <LoaderCircle className="size-5 animate-spin" /> : <PlayCircleLine className="size-5" />}
                                   </Button>}
