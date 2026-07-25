@@ -1,0 +1,151 @@
+const API_BASE = "";
+
+function getToken(): string | null {
+  return localStorage.getItem("klove_token");
+}
+
+export function setToken(token: string) {
+  localStorage.setItem("klove_token", token);
+}
+
+export function clearToken() {
+  localStorage.removeItem("klove_token");
+}
+
+export function isAuthenticated(): boolean {
+  return !!getToken();
+}
+
+async function request<T>(
+  path: string,
+  options: RequestInit = {}
+): Promise<T> {
+  const token = getToken();
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...(options.headers as Record<string, string>),
+  };
+
+  const res = await fetch(`${API_BASE}${path}`, {
+    ...options,
+    headers,
+  });
+
+  // Handle streaming responses differently
+  const contentType = res.headers.get("content-type");
+  if (contentType && contentType.includes("text/event-stream")) {
+    return res as unknown as T;
+  }
+
+  const data = await res.json().catch(() => null);
+
+  if (!res.ok) {
+    const message =
+      data?.error || data?.message || `HTTP ${res.status}: ${res.statusText}`;
+    throw new Error(message);
+  }
+
+  return data as T;
+}
+
+// Auth
+export const auth = {
+  login: (password: string) =>
+    request<{ token: string }>("/api/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ password }),
+    }),
+  verify: () =>
+    request<{ valid: boolean; role?: string }>("/api/auth/verify"),
+};
+
+// Providers
+export const providers = {
+  list: () => request<import("../types").Provider[]>("/api/providers"),
+  get: (id: string) =>
+    request<import("../types").ProviderDetail>(`/api/providers/${id}`),
+  create: (data: { name: string; base_url: string; api_key: string; avatar?: string }) =>
+    request<import("../types").Provider>("/api/providers", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  update: (
+    id: string,
+    data: {
+      name?: string;
+      base_url?: string;
+      api_key?: string;
+      avatar?: string | null;
+      is_active?: number;
+    }
+  ) =>
+    request<import("../types").Provider>(`/api/providers/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+  remove: (id: string) =>
+    request<{ success: boolean }>(`/api/providers/${id}`, {
+      method: "DELETE",
+    }),
+  toggle: (id: string) =>
+    request<import("../types").Provider>(`/api/providers/${id}/toggle`, {
+      method: "POST",
+    }),
+};
+
+// Models
+export const models = {
+  listByProvider: (providerId: string) =>
+    request<import("../types").Model[]>(`/api/providers/${providerId}/models`),
+  create: (providerId: string, data: { model_id: string; display_name?: string }) =>
+    request<import("../types").Model>(`/api/providers/${providerId}/models`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  sync: (providerId: string) =>
+    request<{ success: boolean; models_found: number; message: string }>(
+      `/api/providers/${providerId}/sync`,
+      { method: "POST" }
+    ),
+  toggle: (id: string) =>
+    request<import("../types").Model>(`/api/models/${id}/toggle`, {
+      method: "PUT",
+    }),
+  update: (id: string, data: { model_id?: string; display_name?: string | null }) =>
+    request<import("../types").Model>(`/api/models/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+  remove: (id: string) =>
+    request<{ success: boolean }>(`/api/models/${id}`, {
+      method: "DELETE",
+    }),
+  deleteAll: (providerId: string) =>
+    request<{ success: boolean; removed: number }>(`/api/providers/${providerId}/models`, {
+      method: "DELETE",
+    }),
+};
+
+// API Keys
+export const apiKeys = {
+  list: () => request<import("../types").ApiKey[]>("/api/keys"),
+  create: (name: string) =>
+    request<import("../types").ApiKeyWithSecret>("/api/keys", {
+      method: "POST",
+      body: JSON.stringify({ name }),
+    }),
+  remove: (id: string) =>
+    request<{ success: boolean }>(`/api/keys/${id}`, {
+      method: "DELETE",
+    }),
+};
+
+// Settings
+export const settings = {
+  changePassword: (current_password: string, new_password: string) =>
+    request<{ success: boolean; message: string }>("/api/settings/password", {
+      method: "PUT",
+      body: JSON.stringify({ current_password, new_password }),
+    }),
+};

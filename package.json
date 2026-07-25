@@ -1,0 +1,25 @@
+{
+  "name": "klove",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev:backend": "bun --watch src/index.ts",
+    "dev:frontend": "bun --cwd web dev",
+    "dev": "bun run dev:backend & bun run dev:frontend",
+    "build": "bun --cwd web build",
+    "start": "NODE_ENV=production bun src/index.ts",
+    "postinstall": "cd web && bun install"
+  },
+  "dependencies": {
+    "elysia": "^1.2.0",
+    "@elysiajs/jwt": "^1.2.0",
+    "@elysiajs/cors": "^1.2.0",
+    "@elysiajs/static": "^1.2.0",
+    "openai": "^4.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0",
+    "@types/bun": "latest"
+  }
+}
