@@ -44,9 +44,20 @@ export const requestLogService = {
   },
 
   complete(id: string, input: { status?: RequestLogStatus; statusCode?: number; promptTokens?: number; completionTokens?: number; cacheRead?: number; cacheWrite?: number; cost?: number; durationMs?: number; tps?: number | null; error?: string | null }) {
+    const db = getDb();
     const prompt = input.promptTokens ?? 0;
     const completion = input.completionTokens ?? 0;
-    getDb().query("UPDATE request_logs SET status = ?, status_code = ?, tokens_prompt = ?, tokens_completion = ?, tokens_cache_read = ?, tokens_cache_write = ?, tokens_total = ?, estimated_cost_usd = ?, duration_ms = ?, tps = ?, error_message = ?, completed_at = datetime('now') WHERE id = ?").run(input.status ?? "success", input.statusCode ?? 200, prompt, completion, input.cacheRead ?? 0, input.cacheWrite ?? 0, prompt + completion, input.cost ?? 0, input.durationMs ?? null, input.tps ?? (input.durationMs && input.durationMs > 0 ? completion / (input.durationMs / 1000) : null), input.error ?? null, id);
+    const cacheRead = input.cacheRead ?? 0;
+    const cacheWrite = input.cacheWrite ?? 0;
+    let cost = input.cost;
+    if (cost === undefined && prompt + completion > 0) {
+      const request = db.query("SELECT provider_id, model_name FROM request_logs WHERE id = ?").get(id) as { provider_id: string | null; model_name: string } | null;
+      const tier = request?.provider_id ? db.query(
+        "SELECT t.input_per_million, t.output_per_million, t.cache_read_per_million, t.cache_write_per_million FROM model_pricing_tiers t JOIN models m ON m.id = t.model_id WHERE m.provider_id = ? AND m.model_id = ? AND t.threshold_tokens <= ? ORDER BY t.threshold_tokens DESC LIMIT 1"
+      ).get(request.provider_id, request.model_name, prompt) as { input_per_million: number; output_per_million: number; cache_read_per_million: number; cache_write_per_million: number } | null : null;
+      cost = tier ? (Math.max(0, prompt - cacheRead) * tier.input_per_million + completion * tier.output_per_million + cacheRead * tier.cache_read_per_million + cacheWrite * tier.cache_write_per_million) / 1_000_000 : 0;
+    }
+    db.query("UPDATE request_logs SET status = ?, status_code = ?, tokens_prompt = ?, tokens_completion = ?, tokens_cache_read = ?, tokens_cache_write = ?, tokens_total = ?, estimated_cost_usd = ?, duration_ms = ?, tps = ?, error_message = ?, completed_at = datetime('now') WHERE id = ?").run(input.status ?? "success", input.statusCode ?? 200, prompt, completion, cacheRead, cacheWrite, prompt + completion, cost ?? 0, input.durationMs ?? null, input.tps ?? (input.durationMs && input.durationMs > 0 ? completion / (input.durationMs / 1000) : null), input.error ?? null, id);
   },
 
   list(input: { limit?: number; offset?: number; status?: string; provider?: string; search?: string } = {}) {

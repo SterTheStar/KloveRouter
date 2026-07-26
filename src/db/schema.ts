@@ -226,6 +226,27 @@ export function initSchema(db: Database): void {
     ).run(crypto.randomUUID(), model.id, inputPrice, outputPrice, cachePrice);
   }
 
+  // Fill costs for request logs created before cost calculation was wired in.
+  db.exec(`
+    UPDATE request_logs
+    SET estimated_cost_usd = COALESCE((
+      SELECT (
+        MAX(0, request_logs.tokens_prompt - request_logs.tokens_cache_read) * t.input_per_million
+        + request_logs.tokens_completion * t.output_per_million
+        + request_logs.tokens_cache_read * t.cache_read_per_million
+        + request_logs.tokens_cache_write * t.cache_write_per_million
+      ) / 1000000.0
+      FROM models m
+      JOIN model_pricing_tiers t ON t.model_id = m.id
+      WHERE m.provider_id = request_logs.provider_id
+        AND m.model_id = request_logs.model_name
+        AND t.threshold_tokens <= request_logs.tokens_prompt
+      ORDER BY t.threshold_tokens DESC
+      LIMIT 1
+    ), estimated_cost_usd)
+    WHERE estimated_cost_usd = 0 AND tokens_total > 0
+  `);
+
   const rotationCols = db.query("PRAGMA table_info(provider_credential_rotation)").all() as { name: string }[];
   if (!rotationCols.find((c) => c.name === "request_sequence")) db.exec("ALTER TABLE provider_credential_rotation ADD COLUMN request_sequence INTEGER NOT NULL DEFAULT 0");
   const cooldownCols = db.query("PRAGMA table_info(provider_credential_cooldown)").all() as { name: string }[];

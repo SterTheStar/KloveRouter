@@ -278,9 +278,9 @@ export const proxyPlugin = (app: Elysia) =>
             attempted.add(credential.id);
             try {
               const start = performance.now(); const modelRecord = modelService.findByProviderAndModel(provider.id, parsed.modelId); const credentialProvider = { ...provider, api_key: credential.secret ?? "" };
-              if (body.stream) return anthropicStreamResponse(await createAnthropicStream(credentialProvider, anthropicPayload(body, parsed.modelId), credential.secret ?? undefined), (promptTokens, completionTokens, durationMs, _generationDurationMs, details) => { usageService.record(provider.id, modelRecord?.id ?? parsed.modelId, parsed.modelId, promptTokens, completionTokens, durationMs, durationMs, details); requestLogService.complete(requestLogId, { promptTokens, completionTokens, cacheRead: details?.cacheRead, cacheWrite: details?.cacheWrite, durationMs }); }, start, parsed.modelId);
+              if (body.stream) return anthropicStreamResponse(await createAnthropicStream(credentialProvider, anthropicPayload(body, parsed.modelId), credential.secret ?? undefined), (promptTokens, completionTokens, durationMs, _generationDurationMs, details) => { const usage = usageService.record(provider.id, modelRecord?.id ?? parsed.modelId, parsed.modelId, promptTokens, completionTokens, durationMs, durationMs, details); requestLogService.complete(requestLogId, { promptTokens, completionTokens, cacheRead: details?.cacheRead, cacheWrite: details?.cacheWrite, cost: usage.estimated_cost_usd, durationMs }); }, start, parsed.modelId);
               const completion = await createAnthropicMessage(credentialProvider, anthropicPayload(body, parsed.modelId), credential.secret ?? undefined);
-              const details = tokenDetails(completion.usage); const durationMs = Math.round(performance.now() - start); usageService.record(provider.id, modelRecord?.id ?? parsed.modelId, parsed.modelId, completion.usage?.input_tokens ?? 0, completion.usage?.output_tokens ?? 0, durationMs, undefined, details); requestLogService.complete(requestLogId, { promptTokens: completion.usage?.input_tokens, completionTokens: completion.usage?.output_tokens, cacheRead: details.cacheRead, cacheWrite: details.cacheWrite, durationMs }); credentialService.clearError(credential.id); credentialService.clearCooldown(credential.id); return toOpenAICompletion(completion);
+              const details = tokenDetails(completion.usage); const durationMs = Math.round(performance.now() - start); const usage = usageService.record(provider.id, modelRecord?.id ?? parsed.modelId, parsed.modelId, completion.usage?.input_tokens ?? 0, completion.usage?.output_tokens ?? 0, durationMs, undefined, details); requestLogService.complete(requestLogId, { promptTokens: completion.usage?.input_tokens, completionTokens: completion.usage?.output_tokens, cacheRead: details.cacheRead, cacheWrite: details.cacheWrite, cost: usage.estimated_cost_usd, durationMs }); credentialService.clearError(credential.id); credentialService.clearCooldown(credential.id); return toOpenAICompletion(completion);
             } catch (error: any) {
               failures.push(error.message); credentialService.markError(credential.id, error.message);
               if (provider.credential_mode !== "round_robin") break;
@@ -296,7 +296,7 @@ export const proxyPlugin = (app: Elysia) =>
             attempted.add(credential.id);
             try {
               const start = performance.now(); const response = codexStreamToOpenAI(await codexResponses(body, parsed.modelId, credential), parsed.modelId); const modelRecord = modelService.findByProviderAndModel(provider.id, parsed.modelId); credentialService.clearError(credential.id); credentialService.clearCooldown(credential.id);
-              return recordSseUsageResponse(response, (promptTokens, completionTokens, durationMs, generationDurationMs, details) => { usageService.record(provider.id, modelRecord?.id ?? parsed.modelId, parsed.modelId, promptTokens, completionTokens, durationMs, generationDurationMs, details); requestLogService.complete(requestLogId, { promptTokens, completionTokens, cacheRead: details?.cacheRead, cacheWrite: details?.cacheWrite, durationMs }); }, start);
+              return recordSseUsageResponse(response, (promptTokens, completionTokens, durationMs, generationDurationMs, details) => { const usage = usageService.record(provider.id, modelRecord?.id ?? parsed.modelId, parsed.modelId, promptTokens, completionTokens, durationMs, generationDurationMs, details); requestLogService.complete(requestLogId, { promptTokens, completionTokens, cacheRead: details?.cacheRead, cacheWrite: details?.cacheWrite, cost: usage.estimated_cost_usd, durationMs }); }, start);
             } catch (error: any) {
               failures.push(error.message); credentialService.markError(credential.id, error.message);
               if (provider.credential_mode !== "round_robin") break;
@@ -318,7 +318,7 @@ export const proxyPlugin = (app: Elysia) =>
               credentialService.clearCooldown(credential.id);
               const modelRecord = modelService.findByProviderAndModel(provider.id, parsed.modelId);
               return recordSseUsageResponse(response, (promptTokens, completionTokens, durationMs, generationDurationMs, details) => {
-                 usageService.record(provider.id, modelRecord?.id ?? parsed.modelId, parsed.modelId, promptTokens, completionTokens, durationMs, generationDurationMs, details); requestLogService.complete(requestLogId, { promptTokens, completionTokens, cacheRead: details?.cacheRead, cacheWrite: details?.cacheWrite, durationMs });
+                 const usage = usageService.record(provider.id, modelRecord?.id ?? parsed.modelId, parsed.modelId, promptTokens, completionTokens, durationMs, generationDurationMs, details); requestLogService.complete(requestLogId, { promptTokens, completionTokens, cacheRead: details?.cacheRead, cacheWrite: details?.cacheWrite, cost: usage.estimated_cost_usd, durationMs });
               }, start);
             } catch (error: any) {
               credentialService.markError(credential.id, error.message);
@@ -382,7 +382,7 @@ export const proxyPlugin = (app: Elysia) =>
                       controller.enqueue(new TextEncoder().encode(data));
                     }
                     const endedAt = performance.now();
-                     const durationMs = Math.round(endedAt - start); usageService.record(provider.id, modelRecord?.id ?? parsed.modelId, parsed.modelId, promptTokens, completionTokens, durationMs, Math.round(endedAt - (firstTokenAt ?? start)), cacheDetails); requestLogService.complete(requestLogId, { promptTokens, completionTokens, cacheRead: cacheDetails.cacheRead, cacheWrite: cacheDetails.cacheWrite, durationMs });
+                     const durationMs = Math.round(endedAt - start); const usage = usageService.record(provider.id, modelRecord?.id ?? parsed.modelId, parsed.modelId, promptTokens, completionTokens, durationMs, Math.round(endedAt - (firstTokenAt ?? start)), cacheDetails); requestLogService.complete(requestLogId, { promptTokens, completionTokens, cacheRead: cacheDetails.cacheRead, cacheWrite: cacheDetails.cacheWrite, cost: usage.estimated_cost_usd, durationMs });
                     controller.enqueue(new TextEncoder().encode("data: [DONE]\n\n"));
                   } catch (err: any) {
                     const errorData = `data: ${JSON.stringify({
@@ -419,7 +419,7 @@ export const proxyPlugin = (app: Elysia) =>
 
           // Record token usage
           const modelRecord = modelService.findByProviderAndModel(provider.id, parsed.modelId);
-           usageService.record(
+           const usage = usageService.record(
             provider.id,
             modelRecord?.id ?? parsed.modelId,
             parsed.modelId,
@@ -429,7 +429,7 @@ export const proxyPlugin = (app: Elysia) =>
              durationMs,
              tokenDetails(completion.usage)
            );
-           const details = tokenDetails(completion.usage); requestLogService.complete(requestLogId, { promptTokens: completion.usage?.prompt_tokens, completionTokens: completion.usage?.completion_tokens, cacheRead: details.cacheRead, cacheWrite: details.cacheWrite, durationMs });
+           const details = tokenDetails(completion.usage); requestLogService.complete(requestLogId, { promptTokens: completion.usage?.prompt_tokens, completionTokens: completion.usage?.completion_tokens, cacheRead: details.cacheRead, cacheWrite: details.cacheWrite, cost: usage.estimated_cost_usd, durationMs });
 
             credentialService.clearError(credential.id);
             return completion;
