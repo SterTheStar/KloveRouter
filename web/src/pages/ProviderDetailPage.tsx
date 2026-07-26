@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { RiAddLine as Add, RiArrowLeftLine as ArrowLeft, RiCheckLine as Check, RiCloseCircleLine as CloseCircle, RiCloseLine as CloseLine, RiFileCopyLine as Copy, RiEyeLine as Eye, RiEyeOffLine as EyeOff, RiLoader4Line as LoaderCircle, RiLoginBoxLine as LoginIcon, RiLogoutBoxLine as LogoutIcon, RiPencilLine as Pencil, RiRefreshLine as RefreshCw, RiDeleteBinLine as Trash2, RiSearchLine as Search, RiPlayCircleLine as PlayCircleLine } from "@remixicon/react";
+import { RiAddLine as Add, RiArrowDownSLine as ChevronDown, RiArrowLeftLine as ArrowLeft, RiCheckLine as Check, RiCloseCircleLine as CloseCircle, RiCloseLine as CloseLine, RiFileCopyLine as Copy, RiEyeLine as Eye, RiEyeOffLine as EyeOff, RiLoader4Line as LoaderCircle, RiLoginBoxLine as LoginIcon, RiLogoutBoxLine as LogoutIcon, RiPencilLine as Pencil, RiRefreshLine as RefreshCw, RiDeleteBinLine as Trash2, RiSearchLine as Search, RiPlayCircleLine as PlayCircleLine } from "@remixicon/react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,7 @@ import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import AvatarUpload from "../components/AvatarUpload";
 import AddModelModal from "../components/AddModelModal";
 import EditModelModal from "../components/EditModelModal";
@@ -63,6 +64,13 @@ export default function ProviderDetailPage({ providerId, onBack }: { providerId:
   const [credentialAction, setCredentialAction] = useState(false);
   const [logoutOpen, setLogoutOpen] = useState(false);
   const [logoutCredentialId, setLogoutCredentialId] = useState<string | null>(null);
+  const [routingSaving, setRoutingSaving] = useState(false);
+
+  const routableCredentials = useMemo(() => credentials.filter((credential) => {
+    if (!credential.is_active) return false;
+    if (credential.kind === "api_key") return Boolean(credential.masked_secret);
+    return Boolean(credential.account_id || credential.email || credential.project_id);
+  }), [credentials]);
 
   const load = useCallback(async () => {
     try {
@@ -117,7 +125,10 @@ export default function ProviderDetailPage({ providerId, onBack }: { providerId:
   };
 
   const setCredentialMode = async (mode: "fixed" | "round_robin", fixedId?: string | null) => {
-     try { const updated = await providers.update(providerId, { credential_mode: mode, fixed_credential_id: fixedId ?? null }); setProvider(updated); notifySuccess("Credential selection updated"); } catch (e: any) { setError(e.message); notifyError("Could not update credential selection", e.message); }
+     const selectedId = mode === "fixed" ? fixedId ?? provider?.fixed_credential_id ?? routableCredentials[0]?.id ?? null : null;
+     if (mode === "fixed" && !selectedId) return notifyError("No credential available", "Add or connect a credential before selecting fixed routing.");
+     setRoutingSaving(true);
+     try { const updated = await providers.update(providerId, { credential_mode: mode, fixed_credential_id: selectedId }); setProvider(updated); notifySuccess(mode === "round_robin" ? "Round robin enabled" : "Fixed credential selected"); } catch (e: any) { setError(e.message); notifyError("Could not update credential selection", e.message); } finally { setRoutingSaving(false); }
   };
 
   const addApiKey = async () => {
@@ -191,6 +202,39 @@ export default function ProviderDetailPage({ providerId, onBack }: { providerId:
             <div className="space-y-2"><Label htmlFor="provider-name">Provider name</Label><Input id="provider-name" value={name} onChange={(e) => setName(e.target.value)} /></div>
             <div className="space-y-2"><Label htmlFor="provider-url">Base URL</Label><Input id="provider-url" value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} /></div>
           </div>
+          {routableCredentials.length > 1 && <div className="space-y-2">
+            <Label>Credential routing</Label>
+            <div className="grid gap-3 md:grid-cols-2">
+              <DropdownMenu>
+                <DropdownMenuTrigger render={<Button variant="outline" className="w-full justify-between" disabled={routingSaving || routableCredentials.length === 0} />}>
+                  {provider.credential_mode === "round_robin" ? "Round robin" : "Fixed credential"}<ChevronDown className="size-4 text-muted-foreground" />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent className="min-w-[var(--anchor-width)]">
+                  <DropdownMenuGroup>
+                    <DropdownMenuLabel>Routing strategy</DropdownMenuLabel>
+                    <DropdownMenuRadioGroup value={provider.credential_mode ?? "fixed"} onValueChange={(value) => setCredentialMode(value as "fixed" | "round_robin")}>
+                      <DropdownMenuRadioItem value="fixed">Fixed credential</DropdownMenuRadioItem>
+                      <DropdownMenuRadioItem value="round_robin" disabled={routableCredentials.length < 2}>Round robin</DropdownMenuRadioItem>
+                    </DropdownMenuRadioGroup>
+                  </DropdownMenuGroup>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <DropdownMenu>
+                <DropdownMenuTrigger render={<Button variant="outline" className="w-full justify-between" disabled={routingSaving || provider.credential_mode === "round_robin" || routableCredentials.length === 0} />}>
+                  <span className="truncate">{routableCredentials.find((credential) => credential.id === provider.fixed_credential_id)?.label ?? routableCredentials[0]?.label ?? "No credential"}</span><ChevronDown className="size-4 text-muted-foreground" />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent className="min-w-[var(--anchor-width)]">
+                  <DropdownMenuGroup>
+                    <DropdownMenuLabel>Fixed credential</DropdownMenuLabel>
+                    <DropdownMenuRadioGroup value={provider.fixed_credential_id ?? routableCredentials[0]?.id ?? ""} onValueChange={(value) => setCredentialMode("fixed", value)}>
+                      {routableCredentials.map((credential) => <DropdownMenuRadioItem key={credential.id} value={credential.id}><span className="min-w-0"><span className="block truncate">{credential.label}</span><span className="block truncate font-mono text-[10px] text-muted-foreground">{credential.email || credential.account_id || credential.masked_secret || credential.id}</span></span></DropdownMenuRadioItem>)}
+                    </DropdownMenuRadioGroup>
+                  </DropdownMenuGroup>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+            <p className="text-xs text-muted-foreground">{provider.credential_mode === "round_robin" ? `Requests rotate across ${routableCredentials.length} active credentials, selecting the least recently used.` : "Every request uses the selected credential. If it becomes unavailable, the backend falls back to another active credential."}</p>
+          </div>}
              {(provider.protocol === "codex" || provider.protocol === "antigravity") ? (
              <div className="space-y-2">
                <Label>Connected accounts</Label>

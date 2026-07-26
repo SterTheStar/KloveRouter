@@ -63,6 +63,25 @@ export function initSchema(db: Database): void {
       created_at  TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
+    CREATE TABLE IF NOT EXISTS provider_credential_rotation (
+      provider_id        TEXT PRIMARY KEY,
+      last_credential_id TEXT,
+      request_sequence   INTEGER NOT NULL DEFAULT 0,
+      updated_at         TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (provider_id) REFERENCES providers(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS provider_credential_cooldown (
+      credential_id     TEXT PRIMARY KEY,
+      provider_id       TEXT NOT NULL,
+      remaining_requests INTEGER NOT NULL DEFAULT 0,
+      cooldown_until_sequence INTEGER NOT NULL DEFAULT 0,
+      reason            TEXT,
+      updated_at        TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (credential_id) REFERENCES provider_credentials(id) ON DELETE CASCADE,
+      FOREIGN KEY (provider_id) REFERENCES providers(id) ON DELETE CASCADE
+    );
+
     CREATE TABLE IF NOT EXISTS settings (
       key   TEXT PRIMARY KEY,
       value TEXT NOT NULL
@@ -118,6 +137,11 @@ export function initSchema(db: Database): void {
 
   const usageCols = db.query("PRAGMA table_info(usage_log)").all() as { name: string }[];
   if (!usageCols.find((c) => c.name === "generation_duration_ms")) db.exec("ALTER TABLE usage_log ADD COLUMN generation_duration_ms INTEGER NOT NULL DEFAULT 0");
+
+  const rotationCols = db.query("PRAGMA table_info(provider_credential_rotation)").all() as { name: string }[];
+  if (!rotationCols.find((c) => c.name === "request_sequence")) db.exec("ALTER TABLE provider_credential_rotation ADD COLUMN request_sequence INTEGER NOT NULL DEFAULT 0");
+  const cooldownCols = db.query("PRAGMA table_info(provider_credential_cooldown)").all() as { name: string }[];
+  if (!cooldownCols.find((c) => c.name === "cooldown_until_sequence")) db.exec("ALTER TABLE provider_credential_cooldown ADD COLUMN cooldown_until_sequence INTEGER NOT NULL DEFAULT 0");
 
   const providerRows = db.query("SELECT id, api_key, protocol FROM providers WHERE api_key IS NOT NULL AND api_key != ''").all() as { id: string; api_key: string; protocol: string }[];
   for (const provider of providerRows) {

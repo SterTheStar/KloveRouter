@@ -134,7 +134,13 @@ export const credentialService = {
     return getDb().query("DELETE FROM provider_credentials WHERE id = ?").run(id).changes > 0;
   },
 
-  select(providerId: string, mode: CredentialMode, fixedId?: string | null): ProviderCredential | null {
+  beginRequest(providerId: string) {
+    const db = getDb();
+    db.query("INSERT INTO provider_credential_rotation (provider_id, request_sequence, updated_at) VALUES (?, 1, datetime('now')) ON CONFLICT(provider_id) DO UPDATE SET request_sequence = request_sequence + 1, updated_at = datetime('now')").run(providerId);
+    return (db.query("SELECT request_sequence FROM provider_credential_rotation WHERE provider_id = ?").get(providerId) as { request_sequence: number }).request_sequence;
+  },
+
+  select(providerId: string, mode: CredentialMode, fixedId?: string | null, requestSequence?: number): ProviderCredential | null {
     const db = getDb();
     const provider = db.query("SELECT protocol FROM providers WHERE id = ?").get(providerId) as { protocol: string } | null;
     const eligible = provider?.protocol === "codex" ? "kind = 'codex' AND access_token IS NOT NULL" : provider?.protocol === "antigravity" ? "kind = 'antigravity' AND refresh_token IS NOT NULL" : "kind = 'api_key' AND secret IS NOT NULL";
@@ -144,10 +150,45 @@ export const credentialService = {
       if (row) db.query("UPDATE provider_credentials SET last_used_at = datetime('now'), updated_at = datetime('now') WHERE id = ?").run(row.id);
       return row;
     }
-    const raw = db.query(`SELECT id FROM provider_credentials WHERE provider_id = ? AND is_active = 1 AND ${eligible} ORDER BY COALESCE(last_used_at, '1970-01-01') ASC, created_at ASC LIMIT 1`).get(providerId) as { id: string } | null;
-    const row = raw ? this.findById(raw.id) : null;
-    if (row) db.query("UPDATE provider_credentials SET last_used_at = datetime('now'), updated_at = datetime('now') WHERE id = ?").run(row.id);
-    return row;
+    db.exec("BEGIN IMMEDIATE");
+    try {
+      const sequence = requestSequence ?? (db.query("SELECT request_sequence FROM provider_credential_rotation WHERE provider_id = ?").get(providerId) as { request_sequence?: number } | null)?.request_sequence ?? 0;
+      const candidates = db.query(`SELECT c.id FROM provider_credentials c LEFT JOIN provider_credential_cooldown cooldown ON cooldown.credential_id = c.id AND cooldown.cooldown_until_sequence >= ? WHERE c.provider_id = ? AND c.is_active = 1 AND ${eligible.replaceAll("kind", "c.kind").replaceAll("access_token", "c.access_token").replaceAll("refresh_token", "c.refresh_token").replaceAll("secret", "c.secret")} AND cooldown.credential_id IS NULL ORDER BY c.created_at ASC, c.id ASC`).all(sequence, providerId) as { id: string }[];
+      if (!candidates.length) {
+        const fallback = db.query(`SELECT id FROM provider_credentials WHERE provider_id = ? AND is_active = 1 AND ${eligible} ORDER BY created_at ASC, id ASC LIMIT 1`).get(providerId) as { id: string } | null;
+        if (!fallback) {
+          db.query("DELETE FROM provider_credential_rotation WHERE provider_id = ?").run(providerId);
+          db.exec("COMMIT");
+          return null;
+        }
+        db.query("DELETE FROM provider_credential_cooldown WHERE credential_id = ?").run(fallback.id);
+        candidates.push(fallback);
+      }
+      const state = db.query("SELECT last_credential_id FROM provider_credential_rotation WHERE provider_id = ?").get(providerId) as { last_credential_id: string | null } | null;
+      const previousIndex = state?.last_credential_id ? candidates.findIndex((candidate) => candidate.id === state.last_credential_id) : -1;
+      const selected = candidates[(previousIndex + 1) % candidates.length];
+      db.query("INSERT INTO provider_credential_rotation (provider_id, last_credential_id, updated_at) VALUES (?, ?, datetime('now')) ON CONFLICT(provider_id) DO UPDATE SET last_credential_id = excluded.last_credential_id, updated_at = datetime('now')").run(providerId, selected.id);
+      db.query("UPDATE provider_credentials SET last_used_at = strftime('%Y-%m-%d %H:%M:%f', 'now'), updated_at = datetime('now') WHERE id = ?").run(selected.id);
+      db.query("DELETE FROM provider_credential_cooldown WHERE provider_id = ? AND cooldown_until_sequence < ?").run(providerId, sequence);
+      db.exec("COMMIT");
+      return this.findById(selected.id);
+    } catch (error) {
+      db.exec("ROLLBACK");
+      throw error;
+    }
+  },
+
+  markCooldown(id: string, requests = 10, reason?: string, requestSequence?: number) {
+    const credential = this.findById(id);
+    if (!credential) return;
+    const db = getDb();
+    const sequence = requestSequence ?? (db.query("SELECT request_sequence FROM provider_credential_rotation WHERE provider_id = ?").get(credential.provider_id) as { request_sequence?: number } | null)?.request_sequence ?? 0;
+    getDb().query("INSERT INTO provider_credential_cooldown (credential_id, provider_id, remaining_requests, cooldown_until_sequence, reason, updated_at) VALUES (?, ?, ?, ?, ?, datetime('now')) ON CONFLICT(credential_id) DO UPDATE SET remaining_requests = excluded.remaining_requests, cooldown_until_sequence = excluded.cooldown_until_sequence, reason = excluded.reason, updated_at = datetime('now')").run(id, credential.provider_id, requests, sequence + requests, reason?.slice(0, 500) ?? null);
+    logger.warn("Credential placed on request cooldown", { credential_id: id, provider_id: credential.provider_id, remaining_requests: requests, reason });
+  },
+
+  clearCooldown(id: string) {
+    getDb().query("DELETE FROM provider_credential_cooldown WHERE credential_id = ?").run(id);
   },
 
   markError(id: string, message: string) {

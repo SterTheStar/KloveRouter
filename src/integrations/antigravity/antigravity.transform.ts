@@ -21,6 +21,17 @@ function contentParts(content: any) {
 }
 function functionName(value: any) { return String(value ?? "function").replace(/[^a-zA-Z0-9_]/g, "_").slice(0, 64) || "function"; }
 function functionArguments(value: any) { try { return typeof value === "string" ? JSON.parse(value || "{}") : value && typeof value === "object" ? value : {}; } catch { return {}; } }
+function functionResult(value: any): any {
+  if (Array.isArray(value)) {
+    const text = value.map((part) => part?.type === "text" ? textValue(part.text) : textValue(part)).filter(Boolean).join("\n");
+    return text || value;
+  }
+  if (typeof value === "string") {
+    try { return JSON.parse(value); } catch { return value; }
+  }
+  if (value && typeof value === "object") return value;
+  return value ?? "";
+}
 type AntigravityCall = { id: string; name: string; thoughtSignature?: string };
 const signaturePrefix = "agcall_";
 function encodeFunctionCallId(id: any, name: any, thoughtSignature?: any) {
@@ -74,7 +85,7 @@ export function toGoogleBody(body: any, projectId: string, sessionId = crypto.ra
     if (message.role === "tool") {
       const call = calls.get(String(message.tool_call_id ?? ""));
       const decoded = call ?? decodeFunctionCall(message.tool_call_id, message.name);
-      contents.push({ role: "user", parts: [{ functionResponse: { id: decoded.id, name: decoded.name, response: { result: functionArguments(message.content) } } }] });
+      contents.push({ role: "user", parts: [{ functionResponse: { id: decoded.id, name: decoded.name, response: { result: functionResult(message.content) } } }] });
       continue;
     }
     const parts = contentParts(message.content);
@@ -87,7 +98,7 @@ export function toGoogleBody(body: any, projectId: string, sessionId = crypto.ra
         } else if (part?.type === "tool_result") {
           const call = calls.get(String(part.tool_use_id ?? ""));
           const decoded = call ?? decodeFunctionCall(part.tool_use_id);
-          parts.push({ functionResponse: { id: decoded.id, name: decoded.name, response: { result: functionArguments(part.content) } } });
+          parts.push({ functionResponse: { id: decoded.id, name: decoded.name, response: { result: functionResult(part.content) } } });
         }
       }
     }

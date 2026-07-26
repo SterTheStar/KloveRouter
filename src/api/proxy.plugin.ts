@@ -42,6 +42,11 @@ function buildChatPayload(body: any, model: string, stream: boolean) {
   return payload;
 }
 
+function isQuotaError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  return /429|quota|resource_exhausted|too many requests|rate.?limit/i.test(message);
+}
+
 function anthropicStreamResponse(
   response: Response,
   onUsage: (promptTokens: number, completionTokens: number, durationMs: number, generationDurationMs?: number) => void,
@@ -233,82 +238,99 @@ export const proxyPlugin = (app: Elysia) =>
           return { error: "Model blocked", message: `Model "${parsed.modelId}" is not available through Antigravity` };
         }
 
-        const credential = credentialService.select(provider.id, provider.credential_mode, provider.fixed_credential_id) || credentialService.select(provider.id, "round_robin");
+        const requestSequence = provider.credential_mode === "round_robin" ? credentialService.beginRequest(provider.id) : undefined;
+        let credential = credentialService.select(provider.id, provider.credential_mode, provider.fixed_credential_id, requestSequence) || credentialService.select(provider.id, "round_robin", null, requestSequence);
         if (!credential) {
           set.status = 503;
           return { error: "No active provider credential", message: `Provider "${provider.name}" has no active credential` };
         }
-        const credentialProvider = { ...provider, api_key: credential.secret ?? "" };
         logger.debug("Credential selected", { provider: provider.name, mode: provider.credential_mode, credential_id: credential.id, kind: credential.kind });
-        const client = provider.protocol === "anthropic" ? null : createOpenAIClient(credentialProvider);
 
         // Build request payload for the provider
         const payload: any = buildChatPayload(body, parsed.modelId, body.stream ?? false);
 
         if (provider.protocol === "anthropic") {
-          try {
-            const start = performance.now();
-            const modelRecord = modelService.findByProviderAndModel(provider.id, parsed.modelId);
-            if (body.stream) {
-              const response = await createAnthropicStream(credentialProvider, anthropicPayload(body, parsed.modelId), credential.secret ?? undefined);
-              return anthropicStreamResponse(
-                response,
-                (promptTokens, completionTokens, durationMs) => {
-                  usageService.record(provider.id, modelRecord?.id ?? parsed.modelId, parsed.modelId, promptTokens, completionTokens, durationMs);
-                },
-                start,
-                parsed.modelId
-              );
+          const attempted = new Set<string>(); const failures: string[] = [];
+          while (credential && !attempted.has(credential.id)) {
+            attempted.add(credential.id);
+            try {
+              const start = performance.now(); const modelRecord = modelService.findByProviderAndModel(provider.id, parsed.modelId); const credentialProvider = { ...provider, api_key: credential.secret ?? "" };
+              if (body.stream) return anthropicStreamResponse(await createAnthropicStream(credentialProvider, anthropicPayload(body, parsed.modelId), credential.secret ?? undefined), (promptTokens, completionTokens, durationMs) => usageService.record(provider.id, modelRecord?.id ?? parsed.modelId, parsed.modelId, promptTokens, completionTokens, durationMs), start, parsed.modelId);
+              const completion = await createAnthropicMessage(credentialProvider, anthropicPayload(body, parsed.modelId), credential.secret ?? undefined);
+              usageService.record(provider.id, modelRecord?.id ?? parsed.modelId, parsed.modelId, completion.usage?.input_tokens ?? 0, completion.usage?.output_tokens ?? 0, Math.round(performance.now() - start)); credentialService.clearError(credential.id); credentialService.clearCooldown(credential.id); return toOpenAICompletion(completion);
+            } catch (error: any) {
+              failures.push(error.message); credentialService.markError(credential.id, error.message);
+              if (provider.credential_mode !== "round_robin") break;
+              credentialService.markCooldown(credential.id, 10, error.message, requestSequence); const next = credentialService.select(provider.id, "round_robin", null, requestSequence); if (!next || attempted.has(next.id)) break; credential = next;
             }
-
-            const completion = await createAnthropicMessage(credentialProvider, anthropicPayload(body, parsed.modelId), credential.secret ?? undefined);
-            usageService.record(
-              provider.id,
-              modelRecord?.id ?? parsed.modelId,
-              parsed.modelId,
-              completion.usage?.input_tokens ?? 0,
-              completion.usage?.output_tokens ?? 0,
-              Math.round(performance.now() - start)
-            );
-            return toOpenAICompletion(completion);
-          } catch (error: any) {
-            set.status = 502;
-            return { error: "Provider request failed", message: error.message };
           }
+          set.status = failures.every(isQuotaError) ? 429 : 502; return { error: "Provider request failed", message: `All ${attempted.size} available credentials failed. ${failures.at(-1)}` };
         }
 
         if (provider.protocol === "codex") {
-          try {
-            const start = performance.now();
-            const response = codexStreamToOpenAI(await codexResponses(body, parsed.modelId, credential), parsed.modelId);
-            const modelRecord = modelService.findByProviderAndModel(provider.id, parsed.modelId);
-            return recordSseUsageResponse(response, (promptTokens, completionTokens, durationMs, generationDurationMs) => {
-              usageService.record(provider.id, modelRecord?.id ?? parsed.modelId, parsed.modelId, promptTokens, completionTokens, durationMs, generationDurationMs);
-            }, start);
-          } catch (error: any) {
-            credentialService.markError(credential.id, error.message);
-            set.status = error.message.includes("limit") ? 429 : 502;
-            return { error: "Codex request failed", message: error.message };
+          const attempted = new Set<string>(); const failures: string[] = [];
+          while (credential && !attempted.has(credential.id)) {
+            attempted.add(credential.id);
+            try {
+              const start = performance.now(); const response = codexStreamToOpenAI(await codexResponses(body, parsed.modelId, credential), parsed.modelId); const modelRecord = modelService.findByProviderAndModel(provider.id, parsed.modelId); credentialService.clearError(credential.id); credentialService.clearCooldown(credential.id);
+              return recordSseUsageResponse(response, (promptTokens, completionTokens, durationMs, generationDurationMs) => usageService.record(provider.id, modelRecord?.id ?? parsed.modelId, parsed.modelId, promptTokens, completionTokens, durationMs, generationDurationMs), start);
+            } catch (error: any) {
+              failures.push(error.message); credentialService.markError(credential.id, error.message);
+              if (provider.credential_mode !== "round_robin") break;
+              credentialService.markCooldown(credential.id, 10, error.message, requestSequence); const next = credentialService.select(provider.id, "round_robin", null, requestSequence); if (!next || attempted.has(next.id)) break; credential = next;
+            }
           }
+          set.status = failures.every(isQuotaError) ? 429 : 502; return { error: "Codex request failed", message: `All ${attempted.size} available credentials failed. ${failures.at(-1)}` };
         }
 
         if (provider.protocol === "antigravity") {
-          try {
-            const start = performance.now();
-            const response = await antigravityResponses(body, parsed.modelId, credential);
-            const modelRecord = modelService.findByProviderAndModel(provider.id, parsed.modelId);
-            return recordSseUsageResponse(response, (promptTokens, completionTokens, durationMs, generationDurationMs) => {
-              usageService.record(provider.id, modelRecord?.id ?? parsed.modelId, parsed.modelId, promptTokens, completionTokens, durationMs, generationDurationMs);
-            }, start);
+          const attempted = new Set<string>();
+          const failures: string[] = [];
+          while (credential && !attempted.has(credential.id)) {
+            attempted.add(credential.id);
+            try {
+              const start = performance.now();
+              const response = await antigravityResponses(body, parsed.modelId, credential);
+              credentialService.clearError(credential.id);
+              credentialService.clearCooldown(credential.id);
+              const modelRecord = modelService.findByProviderAndModel(provider.id, parsed.modelId);
+              return recordSseUsageResponse(response, (promptTokens, completionTokens, durationMs, generationDurationMs) => {
+                usageService.record(provider.id, modelRecord?.id ?? parsed.modelId, parsed.modelId, promptTokens, completionTokens, durationMs, generationDurationMs);
+              }, start);
+            } catch (error: any) {
+              credentialService.markError(credential.id, error.message);
+              failures.push(error.message);
+              if (provider.credential_mode !== "round_robin") {
+                set.status = isQuotaError(error) ? 429 : 502;
+                return { error: "Antigravity request failed", message: error.message };
+              }
+              credentialService.markCooldown(credential.id, 10, error.message, requestSequence);
+              const next = credentialService.select(provider.id, "round_robin", null, requestSequence);
+              if (!next || attempted.has(next.id)) {
+                break;
+              }
+              logger.info("Retrying Antigravity request with next credential", { provider: provider.name, failed_credential_id: credential.id, next_credential_id: next.id });
+              credential = next;
+            }
           }
-          catch (error: any) { credentialService.markError(credential.id, error.message); set.status = error.message.includes("429") ? 429 : 502; return { error: "Antigravity request failed", message: error.message }; }
+          const allQuotaLimited = failures.length > 0 && failures.every((message) => isQuotaError(message));
+          set.status = allQuotaLimited ? 429 : failures.length ? 502 : 503;
+          return {
+            error: allQuotaLimited ? "Antigravity quota exhausted" : "Antigravity request failed",
+            message: failures.length
+              ? `All ${attempted.size} available Antigravity credential${attempted.size === 1 ? "" : "s"} failed. ${failures.at(-1)}`
+              : "No credential is currently available for this request.",
+          };
         }
 
         // Handle streaming
         if (body.stream) {
-          try {
+          const attempted = new Set<string>(); const failures: string[] = [];
+          while (credential && !attempted.has(credential.id)) try {
+            attempted.add(credential.id);
             const start = performance.now();
             const modelRecord = modelService.findByProviderAndModel(provider.id, parsed.modelId);
+            const client = createOpenAIClient({ ...provider, api_key: credential.secret ?? "" });
             const stream = await client!.chat.completions.create({
               ...payload,
               stream: true,
@@ -319,7 +341,7 @@ export const proxyPlugin = (app: Elysia) =>
             let completionTokens = 0;
             let firstTokenAt: number | null = null;
 
-            return new Response(
+             credentialService.clearError(credential.id); credentialService.clearCooldown(credential.id); return new Response(
               new ReadableStream({
                 async start(controller) {
                   try {
@@ -354,19 +376,19 @@ export const proxyPlugin = (app: Elysia) =>
                 },
               }
             );
-          } catch (error: any) {
-            set.status = 502;
-            return {
-              error: "Provider request failed",
-              message: error.message,
-            };
-          }
+           } catch (error: any) {
+             failures.push(error.message); credentialService.markError(credential.id, error.message);
+             if (provider.credential_mode !== "round_robin") break;
+             credentialService.markCooldown(credential.id, 10, error.message, requestSequence); const next = credentialService.select(provider.id, "round_robin", null, requestSequence); if (!next || attempted.has(next.id)) break; credential = next;
+           }
+           set.status = failures.every(isQuotaError) ? 429 : 502; return { error: "Provider request failed", message: `All ${attempted.size} available credentials failed. ${failures.at(-1)}` };
         }
 
         // Non-streaming
-        try {
+        { const attempted = new Set<string>(); const failures: string[] = []; while (credential && !attempted.has(credential.id)) try {
+          attempted.add(credential.id);
           const start = performance.now();
-          const completion = await client!.chat.completions.create(payload);
+          const completion = await createOpenAIClient({ ...provider, api_key: credential.secret ?? "" }).chat.completions.create(payload);
           const durationMs = Math.round(performance.now() - start);
 
           // Record token usage
@@ -384,12 +406,11 @@ export const proxyPlugin = (app: Elysia) =>
             credentialService.clearError(credential.id);
             return completion;
         } catch (error: any) {
-          set.status = 502;
-          return {
-            error: "Provider request failed",
-            message: error.message,
-          };
+          failures.push(error.message); credentialService.markError(credential.id, error.message);
+          if (provider.credential_mode !== "round_robin") break;
+          credentialService.markCooldown(credential.id, 10, error.message, requestSequence); const next = credentialService.select(provider.id, "round_robin", null, requestSequence); if (!next || attempted.has(next.id)) break; credential = next;
         }
+        set.status = failures.every(isQuotaError) ? 429 : 502; return { error: "Provider request failed", message: `All ${attempted.size} available credentials failed. ${failures.at(-1)}` }; }
       },
       {
         // Keep the proxy forward-compatible with new OpenAI fields. The
