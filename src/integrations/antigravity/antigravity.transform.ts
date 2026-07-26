@@ -1,3 +1,5 @@
+import { logger } from "../../logger";
+
 function modelId(model: string) { return model.toLowerCase().replace(/^antigravity-/, ""); }
 function modelReasoningEffort(model: string) {
   const normalized = model.toLowerCase();
@@ -146,4 +148,61 @@ export function googleEventToOpenAI(data: any, model: string, id: string) {
   const reason = candidate?.finishReason; const finish_reason = reason === "STOP" ? "stop" : reason === "MAX_TOKENS" ? "length" : reason ? "stop" : null;
   const usageMetadata = value.usageMetadata; return { id, object: "chat.completion.chunk", created: Math.floor(Date.now() / 1000), model, choices: [{ index: 0, delta, finish_reason }], ...(usageMetadata ? { usage: { prompt_tokens: usageMetadata.promptTokenCount ?? 0, completion_tokens: usageMetadata.candidatesTokenCount ?? 0, total_tokens: usageMetadata.totalTokenCount ?? 0, prompt_tokens_details: { cached_tokens: usageMetadata.cachedContentTokenCount ?? 0 } } } : {}) };
 }
-export function googleStreamToOpenAI(response: Response, model: string, id: string) { const reader = response.body?.getReader(); if (!reader) throw new Error("Antigravity returned an empty stream"); const decoder = new TextDecoder(); const encoder = new TextEncoder(); let buffer = ""; return new Response(new ReadableStream({ async start(controller) { const emit = (data: any) => controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`)); try { while (true) { const { done, value } = await reader.read(); buffer += decoder.decode(value ?? new Uint8Array(), { stream: !done }); const lines = buffer.split("\n"); buffer = lines.pop() ?? ""; for (const line of lines) { const raw = line.trim().replace(/^data:\s*/, ""); if (!raw || raw === "[DONE]") continue; try { const event = googleEventToOpenAI(JSON.parse(raw), model, id); if (event.choices[0].delta.content || event.choices[0].delta.reasoning_content || event.choices[0].delta.tool_calls || event.choices[0].finish_reason) emit(event); } catch {} } if (done) break; } emit({ id, object: "chat.completion.chunk", created: Math.floor(Date.now() / 1000), model, choices: [{ index: 0, delta: {}, finish_reason: "stop" }] }); } catch (error: any) { emit({ error: { message: error?.message ?? "Antigravity stream disconnected" } }); } finally { controller.enqueue(encoder.encode("data: [DONE]\n\n")); controller.close(); } } }), { headers: { "Content-Type": "text/event-stream; charset=utf-8", "Cache-Control": "no-cache, no-transform", Connection: "keep-alive", "X-Accel-Buffering": "no" } }); }
+export function googleStreamToOpenAI(response: Response, model: string, id: string) {
+  const reader = response.body?.getReader();
+  if (!reader) throw new Error("Antigravity returned an empty stream");
+  const decoder = new TextDecoder();
+  const encoder = new TextEncoder();
+  const streamStarted = performance.now();
+  let buffer = "";
+  let firstDeltaLogged = false;
+  let finishEmitted = false;
+
+  return new Response(new ReadableStream({
+    async start(controller) {
+      const emit = (data: any) => controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
+      const processEvent = (eventText: string) => {
+        const raw = eventText
+          .split(/\r\n|\r|\n/)
+          .filter((line) => line.startsWith("data:"))
+          .map((line) => line.slice(5).replace(/^ /, ""))
+          .join("\n")
+          .trim();
+        if (!raw || raw === "[DONE]") return;
+        try {
+          const event = googleEventToOpenAI(JSON.parse(raw), model, id);
+          const choice = event.choices[0];
+          const hasDelta = choice.delta.content || choice.delta.reasoning_content || choice.delta.tool_calls;
+          if (!firstDeltaLogged && hasDelta) {
+            firstDeltaLogged = true;
+            logger.debug("Antigravity first stream delta received", { model, duration_ms: Math.round(performance.now() - streamStarted) });
+          }
+          if (choice.finish_reason) finishEmitted = true;
+          if (hasDelta || choice.finish_reason || event.usage) emit(event);
+        } catch { /* Ignore non-JSON SSE keepalive events. */ }
+      };
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          buffer += decoder.decode(value ?? new Uint8Array(), { stream: !done });
+          const events = buffer.split(/\r\n\r\n|\n\n|\r\r/);
+          buffer = events.pop() ?? "";
+          for (const event of events) processEvent(event);
+          if (done) {
+            if (buffer.trim()) processEvent(buffer);
+            break;
+          }
+        }
+        if (!finishEmitted) {
+          emit({ id, object: "chat.completion.chunk", created: Math.floor(Date.now() / 1000), model, choices: [{ index: 0, delta: {}, finish_reason: "stop" }] });
+        }
+      } catch (error: any) {
+        emit({ error: { message: error?.message ?? "Antigravity stream disconnected" } });
+      } finally {
+        controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+        controller.close();
+      }
+    },
+  }), { headers: { "Content-Type": "text/event-stream; charset=utf-8", "Cache-Control": "no-cache, no-transform", Connection: "keep-alive", "X-Accel-Buffering": "no" } });
+}

@@ -11,6 +11,7 @@ import { logger } from "../logger";
 import { antigravityResponses } from "../integrations/antigravity";
 import { isBlockedAntigravityModel } from "../integrations/antigravity";
 import { requestLogService } from "../services/request-log.service";
+import { openAIStreamResponse } from "./openai-stream";
 
 function anthropicPayload(body: any, modelId: string, stream = false) {
   const messages = splitAnthropicMessages(body.messages);
@@ -387,6 +388,7 @@ export const proxyPlugin = (app: Elysia) =>
           const attempted = new Set<string>(); const failures: string[] = [];
           while (credential && !attempted.has(credential.id)) try {
             attempted.add(credential.id);
+            const credentialId = credential.id;
             const start = performance.now();
             const modelRecord = modelService.findByProviderAndModel(provider.id, parsed.modelId);
             const client = createOpenAIClient({ ...provider, api_key: credential.secret ?? "" });
@@ -396,43 +398,23 @@ export const proxyPlugin = (app: Elysia) =>
               stream_options: { include_usage: true },
             }) as any;
 
-            let promptTokens = 0;
-            let completionTokens = 0;
-            let cacheDetails = { cacheRead: 0, cacheWrite: 0 };
-            let firstTokenAt: number | null = null;
-
-             credentialService.clearError(credential.id); credentialService.clearCooldown(credential.id); return new Response(
-              new ReadableStream({
-                async start(controller) {
-                  try {
-                    for await (const chunk of stream) {
-                      const usage = chunk.usage;
-                      firstTokenAt ??= performance.now();
-                      if (usage) {
-                        promptTokens = Number(usage.prompt_tokens ?? 0);
-                        completionTokens = Number(usage.completion_tokens ?? 0);
-                        cacheDetails = tokenDetails(usage);
-                      }
-                      const data = `data: ${JSON.stringify(chunk)}\n\n`;
-                      controller.enqueue(new TextEncoder().encode(data));
-                    }
-                    const endedAt = performance.now();
-                     const durationMs = Math.round(endedAt - start); const usage = usageService.record(provider.id, modelRecord?.id ?? parsed.modelId, parsed.modelId, promptTokens, completionTokens, durationMs, Math.round(endedAt - (firstTokenAt ?? start)), cacheDetails); requestLogService.complete(requestLogId, { promptTokens, completionTokens, cacheRead: cacheDetails.cacheRead, cacheWrite: cacheDetails.cacheWrite, cost: usage.estimated_cost_usd, durationMs });
-                    controller.enqueue(new TextEncoder().encode("data: [DONE]\n\n"));
-                  } catch (err: any) {
-                    const errorData = `data: ${JSON.stringify({
-                      error: { message: err.message },
-                    })}\n\n`;
-                    controller.enqueue(new TextEncoder().encode(errorData));
-                  } finally {
-                    controller.close();
-                  }
-                },
-              }),
-              {
-                headers: streamingHeaders(),
-              }
-            );
+             return openAIStreamResponse(stream, {
+               start,
+               tokenDetails,
+               onComplete: ({ promptTokens, completionTokens, cacheRead, cacheWrite, durationMs, generationDurationMs }) => {
+                 const usage = usageService.record(provider.id, modelRecord?.id ?? parsed.modelId, parsed.modelId, promptTokens, completionTokens, durationMs, generationDurationMs, { cacheRead, cacheWrite });
+                 requestLogService.complete(requestLogId, { promptTokens, completionTokens, cacheRead, cacheWrite, cost: usage.estimated_cost_usd, durationMs });
+                 credentialService.clearError(credentialId);
+                 credentialService.clearCooldown(credentialId);
+               },
+               onError: (error, stats) => {
+                 credentialService.markError(credentialId, error.message);
+                 requestLogService.complete(requestLogId, { status: "error", statusCode: 502, promptTokens: stats.promptTokens, completionTokens: stats.completionTokens, cacheRead: stats.cacheRead, cacheWrite: stats.cacheWrite, durationMs: stats.durationMs, error: error.message });
+               },
+               onCancel: (stats) => {
+                 requestLogService.complete(requestLogId, { status: "error", statusCode: 499, promptTokens: stats.promptTokens, completionTokens: stats.completionTokens, cacheRead: stats.cacheRead, cacheWrite: stats.cacheWrite, durationMs: stats.durationMs, error: "Client disconnected" });
+               },
+             });
            } catch (error: any) {
              failures.push(error.message); credentialService.markError(credential.id, error.message);
              if (provider.credential_mode !== "round_robin") break;

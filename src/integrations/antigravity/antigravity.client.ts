@@ -3,6 +3,7 @@ import { antigravityAuthService, discoverProject } from "./antigravity-auth.serv
 import { getImpersonationHeaders } from "./antigravity.headers";
 import { googleStreamToOpenAI, toGoogleBody } from "./antigravity.transform";
 import { filterAntigravityModels, isBlockedAntigravityModel } from "./antigravity.models";
+import { logger } from "../../logger";
 
 const ENDPOINT = "https://cloudcode-pa.googleapis.com/v1internal:streamGenerateContent?alt=sse";
 export type AntigravityQuota = { group_name: string; limit_name: string; remaining_fraction: number; used_percent: number; reset_at: string | null; reset_in: string | null; model_ids: string[] }[];
@@ -16,7 +17,9 @@ export async function antigravityResponses(body: any, model: string, credentialI
   let lastError: unknown;
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
+      const requestStarted = performance.now();
       response = await fetch(ENDPOINT, { method: "POST", headers, body: payload });
+      logger.debug("Antigravity response headers received", { model, attempt: attempt + 1, duration_ms: Math.round(performance.now() - requestStarted), status: response.status });
       if (response.status < 500) break;
       lastError = new Error(`Antigravity upstream returned ${response.status}`);
     } catch (error) {

@@ -1,4 +1,5 @@
 import { codexAuthService } from "./codex-auth.service";
+import { logger } from "../../logger";
 
 const CODEX_BASE_URL = "https://chatgpt.com/backend-api/codex";
 const CODEX_CLIENT_VERSION = process.env.CODEX_CLIENT_VERSION || "1.0.0";
@@ -227,11 +228,13 @@ export async function codexResponses(body: any, model: string, credentials?: { a
     ...(reasoning ? { reasoning } : {}),
     ...(text ? { text } : {}),
   };
+  const requestStarted = performance.now();
   const response = await fetch("https://chatgpt.com/backend-api/codex/responses", {
     method: "POST",
     headers: { Authorization: `Bearer ${token}`, "chatgpt-account-id": accountId || "", "OpenAI-Beta": "responses=experimental", originator: "codex_cli_rs", session_id: crypto.randomUUID(), Accept: "text/event-stream", "Content-Type": "application/json" },
     body: JSON.stringify(requestBody),
   });
+  logger.debug("Codex response headers received", { model, duration_ms: Math.round(performance.now() - requestStarted), status: response.status });
   if (!response.ok) {
     const text = await response.text();
     if (response.status === 429 && text.includes("usage_limit_reached")) throw new Error("Codex usage limit reached");
@@ -248,46 +251,59 @@ export function codexStreamToOpenAI(response: Response, model: string) {
   const id = `chatcmpl-${crypto.randomUUID()}`;
   const tools = new Map<number, { id?: string; name?: string }>();
   let buffer = "";
+  const streamStarted = performance.now();
+  let firstDeltaLogged = false;
 
   return new Response(new ReadableStream({
     async start(controller) {
       const emit = (chunk: any) => controller.enqueue(encoder.encode(`data: ${JSON.stringify(chunk)}\n\n`));
+      const processEvent = (event: string) => {
+        const raw = event
+          .split(/\r\n|\r|\n/)
+          .filter((line) => line.startsWith("data:"))
+          .map((line) => line.slice(5).replace(/^ /, ""))
+          .join("\n")
+          .trim();
+        if (!raw || raw === "[DONE]") return;
+        let data: any;
+        try { data = JSON.parse(raw); } catch { return; }
+        if (!firstDeltaLogged && typeof data.type === "string" && data.type.endsWith(".delta")) {
+          firstDeltaLogged = true;
+          logger.debug("Codex first stream delta received", { model, duration_ms: Math.round(performance.now() - streamStarted), event_type: data.type });
+        }
+        const base = { id, object: "chat.completion.chunk", created: Math.floor(Date.now() / 1000), model };
+        if (data.type === "response.output_text.delta") {
+          emit({ ...base, choices: [{ index: 0, delta: { content: data.delta ?? "" }, finish_reason: null }] });
+        } else if (data.type === "response.reasoning_summary_text.delta" || data.type === "response.reasoning_text.delta" || data.type === "response.reasoning.delta") {
+          emit({ ...base, choices: [{ index: 0, delta: { reasoning_content: data.delta ?? "" }, finish_reason: null }] });
+        } else if (data.type === "response.output_item.added" && data.item?.type === "function_call") {
+          const index = Number(data.output_index ?? 0);
+          tools.set(index, { id: data.item.call_id ?? data.item.id, name: data.item.name });
+          emit({ ...base, choices: [{ index: 0, delta: { tool_calls: [{ index, id: data.item.call_id ?? data.item.id, type: "function", function: { name: data.item.name, arguments: "" } }] }, finish_reason: null }] });
+        } else if (data.type === "response.function_call_arguments.delta") {
+          const index = Number(data.output_index ?? 0);
+          const tool = tools.get(index);
+          emit({ ...base, choices: [{ index: 0, delta: { tool_calls: [{ index, ...(tool?.id ? { id: tool.id } : {}), type: "function", function: { ...(tool?.name ? { name: tool.name } : {}), arguments: data.delta ?? "" } }] }, finish_reason: null }] });
+        } else if (data.type === "response.completed") {
+          const status = data.response?.status;
+          const finish = status === "incomplete" ? "length" : tools.size ? "tool_calls" : "stop";
+          const usage = data.response?.usage;
+          emit({ ...base, choices: [{ index: 0, delta: {}, finish_reason: finish }], ...(usage ? { usage: { prompt_tokens: usage.input_tokens ?? 0, completion_tokens: usage.output_tokens ?? 0, total_tokens: usage.total_tokens ?? 0, ...(usage.input_tokens_details ? { prompt_tokens_details: usage.input_tokens_details } : {}), ...(usage.prompt_tokens_details ? { prompt_tokens_details: usage.prompt_tokens_details } : {}), ...(usage.cache_read_input_tokens !== undefined ? { cache_read_input_tokens: usage.cache_read_input_tokens } : {}), ...(usage.cached_input_tokens !== undefined ? { cached_input_tokens: usage.cached_input_tokens } : {}), ...(usage.cached_tokens !== undefined ? { cached_tokens: usage.cached_tokens } : {}) } } : {}) });
+        } else if (data.type === "response.failed" || data.type === "error") {
+          emit({ error: { message: data.error?.message ?? data.message ?? "Codex response failed" } });
+        }
+      };
       try {
         while (true) {
           const { done, value } = await reader.read();
           buffer += decoder.decode(value ?? new Uint8Array(), { stream: !done });
-          const events = buffer.split("\n\n");
+          const events = buffer.split(/\r\n\r\n|\n\n|\r\r/);
           buffer = events.pop() ?? "";
-          for (const event of events) {
-            const line = event.split("\n").find((item) => item.startsWith("data:"));
-            if (!line) continue;
-            const raw = line.slice(5).trim();
-            if (!raw || raw === "[DONE]") continue;
-            let data: any;
-            try { data = JSON.parse(raw); } catch { continue; }
-            const base = { id, object: "chat.completion.chunk", created: Math.floor(Date.now() / 1000), model };
-            if (data.type === "response.output_text.delta") {
-              emit({ ...base, choices: [{ index: 0, delta: { content: data.delta ?? "" }, finish_reason: null }] });
-            } else if (data.type === "response.reasoning_summary_text.delta" || data.type === "response.reasoning_text.delta" || data.type === "response.reasoning.delta") {
-              emit({ ...base, choices: [{ index: 0, delta: { reasoning_content: data.delta ?? "" }, finish_reason: null }] });
-            } else if (data.type === "response.output_item.added" && data.item?.type === "function_call") {
-              const index = Number(data.output_index ?? 0);
-              tools.set(index, { id: data.item.call_id ?? data.item.id, name: data.item.name });
-              emit({ ...base, choices: [{ index: 0, delta: { tool_calls: [{ index, id: data.item.call_id ?? data.item.id, type: "function", function: { name: data.item.name, arguments: "" } }] }, finish_reason: null }] });
-            } else if (data.type === "response.function_call_arguments.delta") {
-              const index = Number(data.output_index ?? 0);
-              const tool = tools.get(index);
-              emit({ ...base, choices: [{ index: 0, delta: { tool_calls: [{ index, ...(tool?.id ? { id: tool.id } : {}), type: "function", function: { ...(tool?.name ? { name: tool.name } : {}), arguments: data.delta ?? "" } }] }, finish_reason: null }] });
-            } else if (data.type === "response.completed") {
-              const status = data.response?.status;
-              const finish = status === "incomplete" ? "length" : tools.size ? "tool_calls" : "stop";
-              const usage = data.response?.usage;
-              emit({ ...base, choices: [{ index: 0, delta: {}, finish_reason: finish }], ...(usage ? { usage: { prompt_tokens: usage.input_tokens ?? 0, completion_tokens: usage.output_tokens ?? 0, total_tokens: usage.total_tokens ?? 0, ...(usage.input_tokens_details ? { prompt_tokens_details: usage.input_tokens_details } : {}), ...(usage.prompt_tokens_details ? { prompt_tokens_details: usage.prompt_tokens_details } : {}), ...(usage.cache_read_input_tokens !== undefined ? { cache_read_input_tokens: usage.cache_read_input_tokens } : {}), ...(usage.cached_input_tokens !== undefined ? { cached_input_tokens: usage.cached_input_tokens } : {}), ...(usage.cached_tokens !== undefined ? { cached_tokens: usage.cached_tokens } : {}) } } : {}) });
-            } else if (data.type === "response.failed" || data.type === "error") {
-              emit({ error: { message: data.error?.message ?? data.message ?? "Codex response failed" } });
-            }
+          for (const event of events) processEvent(event);
+          if (done) {
+            if (buffer.trim()) processEvent(buffer);
+            break;
           }
-          if (done) break;
         }
         controller.enqueue(encoder.encode("data: [DONE]\n\n"));
       } catch (error: any) {
