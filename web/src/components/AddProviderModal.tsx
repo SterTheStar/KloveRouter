@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import AvatarUpload from "./AvatarUpload";
 import { antigravity, codex, providers } from "../api/client";
@@ -105,12 +106,53 @@ const openAiCompatiblePresets = [
 
 const presetLogos: Record<string, string> = { agnes: agnesLogo, blueminds: bluemindsLogo, orcarouter: orcaRouterLogo, nousportal: nousPortalLogo, mistral: mistralLogo, "nvidia-nim": nvidiaLogo, openrouter: openRouterLogo, "together-ai": togetherLogo, "fireworks-ai": fireworksLogo, groq: groqLogo, cerebras: cerebrasLogo, "google-ai-studio": googleAiStudioLogo, deepseek: deepSeekLogo, xai: xaiLogo, cohere: cohereLogo, ai21: ai21Logo, "moonshot-kimi": moonshotLogo, minimax: minimaxLogo, stepfun: stepfunLogo, "tencent-hunyuan": tencentHunyuanLogo, "zhipu-glm": zhipuLogo, "nebius-ai-studio": nebiusLogo, "novita-ai": novitaLogo, deepinfra: deepinfraLogo, siliconflow: siliconflowLogo, parasail: parasailLogo, "friendli-ai": friendliLogo, sambanova: sambanovaLogo, baseten: basetenLogo, replicate: replicateLogo, "hugging-face": huggingfaceLogo, requesty: requestyLogo, portkey: portkeyLogo, opencode: opencodeLogo };
 
+const providerDescriptions: Record<string, string> = {
+  openai: "OpenAI's hosted models through the familiar Chat Completions API.",
+  antigravity: "Google account access to Gemini models through Klove's Antigravity integration.",
+  anthropic: "Anthropic's native Messages API for Claude models, reasoning, and tool use.",
+  codex: "ChatGPT OAuth access for OpenAI Codex models with account-based usage limits.",
+  blueminds: "An OpenAI-compatible gateway for accessing hosted language models through BlueMinds.",
+  agnes: "An AI model hub exposing hosted models through an OpenAI-compatible API.",
+  orcarouter: "A model routing platform that provides access to multiple providers through one API.",
+  nousportal: "Nous Research's inference endpoint for open models and Nous-developed releases.",
+  mistral: "Mistral AI's API for efficient open and commercial models, including multilingual and code models.",
+  "nvidia-nim": "NVIDIA-hosted NIM endpoints for production inference across language and multimodal models.",
+  openrouter: "A unified gateway that routes requests across many model providers and open models.",
+  "together-ai": "Fast hosted inference for open models, with support for chat, vision, reasoning, and fine-tuning.",
+  "fireworks-ai": "Serverless and dedicated inference for open models, including structured output and tool calling.",
+  groq: "High-speed inference for selected open models, built around Groq's low-latency hardware.",
+  cerebras: "Real-time inference for open models, focused on very high throughput and low response latency.",
+  "google-ai-studio": "Google's Gemini API with an OpenAI-compatible endpoint for rapid model experimentation.",
+  deepseek: "DeepSeek's API for general language, coding, and reasoning models at competitive inference costs.",
+  xai: "xAI's API for Grok models, including general-purpose and reasoning capabilities.",
+  cohere: "Cohere's platform for language generation, embeddings, reranking, and enterprise AI applications.",
+  ai21: "AI21's language model platform for text generation, long-context work, and developer applications.",
+  "moonshot-kimi": "Moonshot AI's API for Kimi models, known for multilingual work and long-context conversations.",
+  minimax: "MiniMax's API for language, multimodal, and creative generation models.",
+  stepfun: "StepFun's model API for Chinese and multilingual language tasks, reasoning, and agent workflows.",
+  "tencent-hunyuan": "Tencent Cloud's Hunyuan models for Chinese-language, multimodal, and enterprise workloads.",
+  "zhipu-glm": "Zhipu AI's GLM platform for Chinese and multilingual generation, reasoning, and tool use.",
+  "nebius-ai-studio": "Nebius AI Studio's hosted inference for open models with developer-focused API access.",
+  "novita-ai": "An API platform for affordable inference across a broad catalog of open-source models.",
+  deepinfra: "Serverless inference for open models, with a broad catalog and simple OpenAI-compatible access.",
+  siliconflow: "A model-serving platform offering fast, cost-conscious inference for open and Chinese models.",
+  parasail: "Hosted inference for open models with an OpenAI-compatible API and production-oriented endpoints.",
+  "friendli-ai": "Low-latency serving for generative AI models, with serverless and dedicated deployment options.",
+  sambanova: "Enterprise AI inference powered by SambaNova systems, with APIs for selected open models.",
+  baseten: "A deployment platform for running and scaling custom and open-source models in production.",
+  replicate: "A model platform for running a wide range of open-source and community AI models by API.",
+  "hugging-face": "Hugging Face's router for accessing models from its open machine-learning ecosystem.",
+  requesty: "A unified AI router that connects applications to multiple model providers through one API.",
+  portkey: "An AI gateway for routing, observability, fallbacks, and governance across model providers.",
+  opencode: "OpenCode Zen's curated gateway for accessing supported models through an OpenAI-compatible API.",
+};
+
 const providerTypes = [
   {
     id: "openai",
     protocol: "openai" as const,
     name: "OpenAI Compatible",
-    description: "OpenAI-compatible chat completions API",
+    description: providerDescriptions.openai,
     logo: openAiLogo,
     placeholder: "https://api.openai.com/v1",
     preset: false,
@@ -119,7 +161,7 @@ const providerTypes = [
     id: "antigravity",
     protocol: "antigravity" as const,
     name: "Google Antigravity",
-    description: "Google account OAuth with internal Gemini API translation",
+    description: providerDescriptions.antigravity,
     logo: antigravityLogo,
     placeholder: "https://cloudcode-pa.googleapis.com",
     preset: false,
@@ -128,7 +170,7 @@ const providerTypes = [
     id: "anthropic",
     protocol: "anthropic" as const,
     name: "Anthropic",
-    description: "Native Anthropic Messages API",
+    description: providerDescriptions.anthropic,
     logo: anthropicLogo,
     placeholder: "https://api.anthropic.com",
     preset: false,
@@ -137,7 +179,7 @@ const providerTypes = [
     id: "codex",
     protocol: "codex" as const,
     name: "OpenAI Codex",
-    description: "Unofficial ChatGPT OAuth integration using Codex limits",
+    description: providerDescriptions.codex,
     logo: codexLogo,
     placeholder: "https://chatgpt.com/backend-api/codex",
     preset: false,
@@ -146,7 +188,7 @@ const providerTypes = [
     id,
     protocol: "openai" as const,
     name,
-    description: "OpenAI-compatible API provider",
+    description: providerDescriptions[id],
     logo: presetLogos[id] || endpointFavicon(placeholder),
     placeholder,
     preset: true,
@@ -256,7 +298,10 @@ export default function AddProviderModal({ isOpen, onClose, onSuccess }: { isOpe
                   }}
                 />
                 <div className="min-w-0">
-                  <div className="font-medium">{type.name}</div>
+                  <div className="flex items-center gap-2">
+                    <div className="font-medium">{type.name}</div>
+                    {(type.protocol === "codex" || type.protocol === "antigravity") && <Badge variant="outline">OAuth</Badge>}
+                  </div>
                   <div className="text-xs text-muted-foreground">{type.description}</div>
                 </div>
               </button>
