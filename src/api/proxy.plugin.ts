@@ -5,7 +5,7 @@ import { modelService } from "../services/model.service";
 import { usageService } from "../services/usage.service";
 import { createOpenAIClient, parseModelName } from "../clients/openai";
 import { createAnthropicMessage, createAnthropicStream, splitAnthropicMessages, toOpenAICompletion } from "../clients/anthropic";
-import { codexResponses } from "../integrations/codex";
+import { codexResponses, codexStreamToOpenAI } from "../integrations/codex";
 import { credentialService } from "../services/credential.service";
 import { logger } from "../logger";
 import { antigravityResponses } from "../integrations/antigravity";
@@ -277,7 +277,7 @@ export const proxyPlugin = (app: Elysia) =>
         if (provider.protocol === "codex") {
           try {
             const start = performance.now();
-            const response = await codexResponses(body, parsed.modelId, credential);
+            const response = codexStreamToOpenAI(await codexResponses(body, parsed.modelId, credential), parsed.modelId);
             const modelRecord = modelService.findByProviderAndModel(provider.id, parsed.modelId);
             return recordSseUsageResponse(response, (promptTokens, completionTokens, durationMs, generationDurationMs) => {
               usageService.record(provider.id, modelRecord?.id ?? parsed.modelId, parsed.modelId, promptTokens, completionTokens, durationMs, generationDurationMs);

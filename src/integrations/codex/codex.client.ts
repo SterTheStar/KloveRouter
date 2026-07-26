@@ -114,24 +114,114 @@ export async function codexModels() {
 }
 
 
+function toResponsesContent(content: any, role: "user" | "assistant") {
+  if (typeof content === "string") return [{ type: role === "assistant" ? "output_text" : "input_text", text: content }];
+  if (!Array.isArray(content)) return [{ type: role === "assistant" ? "output_text" : "input_text", text: String(content ?? "") }];
+  return content.flatMap((part: any) => {
+    if (part.type === "text" || part.type === "input_text") return [{ type: role === "assistant" ? "output_text" : "input_text", text: part.text ?? "" }];
+    if (part.type === "image_url" && role === "user") return [{ type: "input_image", image_url: part.image_url?.url ?? part.image_url }];
+    if (part.type === "input_image" && role === "user") return [part];
+    return [];
+  });
+}
+
+function toResponsesInput(messages: any[] = []) {
+  const callIds = new Map<string, string>();
+  const responseCallId = (value: unknown) => {
+    const original = String(value ?? "");
+    if (original.startsWith("fc_")) return original;
+    const existing = callIds.get(original);
+    if (existing) return existing;
+    const id = `fc_${crypto.randomUUID().replace(/-/g, "")}`;
+    callIds.set(original, id);
+    return id;
+  };
+  const input: any[] = [];
+  const instructions: string[] = [];
+  for (const message of messages) {
+    if (message.role === "system" || message.role === "developer") {
+      const content = typeof message.content === "string" ? message.content : toResponsesContent(message.content, "user").map((part) => part.text ?? "").join("\n");
+      if (content) instructions.push(content);
+      continue;
+    }
+    if (message.role === "assistant" && Array.isArray(message.tool_calls)) {
+      const text = toResponsesContent(message.content, "assistant");
+      input.push(...(text.length ? [{ role: "assistant", content: text }] : []), ...message.tool_calls.map((call: any) => ({
+        type: "function_call",
+        id: responseCallId(call.id),
+        call_id: responseCallId(call.id),
+        name: call.function?.name,
+        arguments: call.function?.arguments ?? "{}",
+      })));
+      continue;
+    }
+    if (message.role === "tool") {
+      input.push({
+        type: "function_call_output",
+        call_id: responseCallId(message.tool_call_id),
+        output: typeof message.content === "string" ? message.content : JSON.stringify(message.content ?? ""),
+      });
+      continue;
+    }
+    if (message.role === "user" || message.role === "assistant") {
+      input.push({ role: message.role, ...(message.name ? { name: message.name } : {}), content: toResponsesContent(message.content, message.role) });
+    }
+  }
+  return { input, instructions: instructions.join("\n\n") };
+}
+
+function toResponsesTools(tools: any[] = []) {
+  return tools.map((tool) => {
+    if (tool?.type === "function" && tool.function) {
+      return {
+        type: "function",
+        name: tool.function.name,
+        description: tool.function.description ?? "",
+        parameters: tool.function.parameters ?? { type: "object", properties: {} },
+        strict: tool.function.strict ?? tool.strict ?? false,
+      };
+    }
+    return tool;
+  });
+}
+
+function toResponsesToolChoice(choice: any) {
+  if (choice === "auto" || choice === "none" || choice === "required") return choice;
+  if (choice?.type === "function" && choice.function?.name) return { type: "function", name: choice.function.name };
+  if (choice?.type === "function" && choice.name) return { type: "function", name: choice.name };
+  return choice;
+}
+
+function toResponsesTextFormat(format: any) {
+  if (!format) return undefined;
+  if (format.type === "text") return { format: { type: "text" } };
+  if (format.type === "json_object") return { format: { type: "json_object" } };
+  if (format.type === "json_schema" && format.json_schema) {
+    return { format: { type: "json_schema", name: format.json_schema.name, description: format.json_schema.description, schema: format.json_schema.schema, strict: format.json_schema.strict ?? true } };
+  }
+  return undefined;
+}
+
 export async function codexResponses(body: any, model: string, credentials?: { access_token?: string | null; account_id?: string | null }) {
   const legacySession = credentials && !credentials.access_token && credentials.account_id === null;
   const token = legacySession ? await codexAuthService.accessToken() : credentials ? credentials.access_token : await codexAuthService.accessToken();
   const accountId = legacySession ? await codexAuthService.accountId() : credentials ? credentials.account_id : await codexAuthService.accountId();
   if (!token) throw new Error("Codex account is not authenticated");
+  const converted = body.input ? { input: body.input, instructions: body.instructions ?? "" } : toResponsesInput(body.messages);
+  const text = toResponsesTextFormat(body.response_format);
   const requestBody = {
     model,
-    input: body.input ?? body.messages,
-    instructions: body.instructions ?? "",
+    input: converted.input,
+    instructions: converted.instructions,
     store: body.store ?? false,
     stream: true,
-    tools: body.tools ?? [],
-    ...(body.tool_choice !== undefined ? { tool_choice: body.tool_choice } : {}),
+    ...(body.tools?.length ? { tools: toResponsesTools(body.tools) } : {}),
+    ...(body.tool_choice !== undefined ? { tool_choice: toResponsesToolChoice(body.tool_choice) } : {}),
     ...(body.parallel_tool_calls !== undefined ? { parallel_tool_calls: body.parallel_tool_calls } : {}),
     ...(body.temperature !== undefined ? { temperature: body.temperature } : {}),
     ...(body.top_p !== undefined ? { top_p: body.top_p } : {}),
     ...(body.max_output_tokens !== undefined ? { max_output_tokens: body.max_output_tokens } : {}),
-    ...(body.reasoning_effort !== undefined ? { reasoning_effort: body.reasoning_effort } : {}),
+    ...(text ? { text } : {}),
   };
   const response = await fetch("https://chatgpt.com/backend-api/codex/responses", {
     method: "POST",
@@ -144,6 +234,61 @@ export async function codexResponses(body: any, model: string, credentials?: { a
     throw new Error(text || `Codex request failed (${response.status})`);
   }
   return response;
+}
+
+export function codexStreamToOpenAI(response: Response, model: string) {
+  const reader = response.body?.getReader();
+  if (!reader) throw new Error("Codex returned an empty response");
+  const decoder = new TextDecoder();
+  const encoder = new TextEncoder();
+  const id = `chatcmpl-${crypto.randomUUID()}`;
+  const tools = new Map<number, { id?: string; name?: string }>();
+  let buffer = "";
+
+  return new Response(new ReadableStream({
+    async start(controller) {
+      const emit = (chunk: any) => controller.enqueue(encoder.encode(`data: ${JSON.stringify(chunk)}\n\n`));
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          buffer += decoder.decode(value ?? new Uint8Array(), { stream: !done });
+          const events = buffer.split("\n\n");
+          buffer = events.pop() ?? "";
+          for (const event of events) {
+            const line = event.split("\n").find((item) => item.startsWith("data:"));
+            if (!line) continue;
+            const raw = line.slice(5).trim();
+            if (!raw || raw === "[DONE]") continue;
+            let data: any;
+            try { data = JSON.parse(raw); } catch { continue; }
+            const base = { id, object: "chat.completion.chunk", created: Math.floor(Date.now() / 1000), model };
+            if (data.type === "response.output_text.delta") {
+              emit({ ...base, choices: [{ index: 0, delta: { content: data.delta ?? "" }, finish_reason: null }] });
+            } else if (data.type === "response.output_item.added" && data.item?.type === "function_call") {
+              const index = Number(data.output_index ?? 0);
+              tools.set(index, { id: data.item.call_id ?? data.item.id, name: data.item.name });
+              emit({ ...base, choices: [{ index: 0, delta: { tool_calls: [{ index, id: data.item.call_id ?? data.item.id, type: "function", function: { name: data.item.name, arguments: "" } }] }, finish_reason: null }] });
+            } else if (data.type === "response.function_call_arguments.delta") {
+              const index = Number(data.output_index ?? 0);
+              const tool = tools.get(index);
+              emit({ ...base, choices: [{ index: 0, delta: { tool_calls: [{ index, ...(tool?.id ? { id: tool.id } : {}), type: "function", function: { ...(tool?.name ? { name: tool.name } : {}), arguments: data.delta ?? "" } }] }, finish_reason: null }] });
+            } else if (data.type === "response.completed") {
+              const status = data.response?.status;
+              const finish = status === "incomplete" ? "length" : tools.size ? "tool_calls" : "stop";
+              const usage = data.response?.usage;
+              emit({ ...base, choices: [{ index: 0, delta: {}, finish_reason: finish }], ...(usage ? { usage: { prompt_tokens: usage.input_tokens ?? 0, completion_tokens: usage.output_tokens ?? 0, total_tokens: usage.total_tokens ?? 0 } } : {}) });
+            } else if (data.type === "response.failed" || data.type === "error") {
+              emit({ error: { message: data.error?.message ?? data.message ?? "Codex response failed" } });
+            }
+          }
+          if (done) break;
+        }
+        controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+      } catch (error: any) {
+        emit({ error: { message: error.message } });
+      } finally { controller.close(); }
+    },
+  }), { headers: { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", Connection: "keep-alive" } });
 }
 
 export async function codexTest(model: string, credentials?: { access_token?: string | null; account_id?: string | null }) {
