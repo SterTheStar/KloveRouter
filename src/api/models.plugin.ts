@@ -190,7 +190,7 @@ export const modelsPlugin = (app: Elysia) =>
               max_tokens: 10,
             });
         const durationMs = Math.round(performance.now() - start);
-        const reply = (completion.choices?.[0]?.message?.content ?? "").trim();
+        const reply = typeof completion.choices?.[0]?.message?.content === "string" ? completion.choices[0].message.content.trim() : "";
 
         return {
           success: true,

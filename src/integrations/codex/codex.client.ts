@@ -119,10 +119,24 @@ export async function codexResponses(body: any, model: string, credentials?: { a
   const token = legacySession ? await codexAuthService.accessToken() : credentials ? credentials.access_token : await codexAuthService.accessToken();
   const accountId = legacySession ? await codexAuthService.accountId() : credentials ? credentials.account_id : await codexAuthService.accountId();
   if (!token) throw new Error("Codex account is not authenticated");
+  const requestBody = {
+    model,
+    input: body.input ?? body.messages,
+    instructions: body.instructions ?? "",
+    store: body.store ?? false,
+    stream: true,
+    tools: body.tools ?? [],
+    ...(body.tool_choice !== undefined ? { tool_choice: body.tool_choice } : {}),
+    ...(body.parallel_tool_calls !== undefined ? { parallel_tool_calls: body.parallel_tool_calls } : {}),
+    ...(body.temperature !== undefined ? { temperature: body.temperature } : {}),
+    ...(body.top_p !== undefined ? { top_p: body.top_p } : {}),
+    ...(body.max_output_tokens !== undefined ? { max_output_tokens: body.max_output_tokens } : {}),
+    ...(body.reasoning_effort !== undefined ? { reasoning_effort: body.reasoning_effort } : {}),
+  };
   const response = await fetch("https://chatgpt.com/backend-api/codex/responses", {
     method: "POST",
     headers: { Authorization: `Bearer ${token}`, "chatgpt-account-id": accountId || "", "OpenAI-Beta": "responses=experimental", originator: "codex_cli_rs", session_id: crypto.randomUUID(), Accept: "text/event-stream", "Content-Type": "application/json" },
-    body: JSON.stringify({ model, input: body.messages, instructions: "", store: false, stream: true, tools: body.tools ?? [] }),
+    body: JSON.stringify(requestBody),
   });
   if (!response.ok) {
     const text = await response.text();

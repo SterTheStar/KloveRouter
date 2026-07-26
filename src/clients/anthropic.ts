@@ -9,7 +9,7 @@ export type AnthropicResponse = {
   id: string;
   type: "message";
   role: "assistant";
-  content: { type: string; text?: string }[];
+  content: { type: string; text?: string; id?: string; name?: string; input?: unknown }[];
   model: string;
   stop_reason: string | null;
   usage?: { input_tokens?: number; output_tokens?: number };
@@ -74,6 +74,14 @@ export async function createAnthropicStream(
 
 export function toOpenAICompletion(response: AnthropicResponse) {
   const text = response.content?.filter((block) => block.type === "text").map((block) => block.text ?? "").join("") ?? "";
+  const toolCalls = response.content?.filter((block) => block.type === "tool_use").map((block, index) => ({
+    index,
+    id: block.id ?? `call_${crypto.randomUUID()}`,
+    type: "function",
+    function: { name: block.name ?? "", arguments: JSON.stringify(block.input ?? {}) },
+  })) ?? [];
+  const message: Record<string, unknown> = { role: "assistant", content: text || null };
+  if (toolCalls.length) message.tool_calls = toolCalls;
   const promptTokens = response.usage?.input_tokens ?? 0;
   const completionTokens = response.usage?.output_tokens ?? 0;
   return {
@@ -81,7 +89,7 @@ export function toOpenAICompletion(response: AnthropicResponse) {
     object: "chat.completion",
     created: Math.floor(Date.now() / 1000),
     model: response.model,
-    choices: [{ index: 0, message: { role: "assistant", content: text }, finish_reason: response.stop_reason ?? "stop" }],
+    choices: [{ index: 0, message, finish_reason: toolCalls.length ? "tool_calls" : response.stop_reason ?? "stop" }],
     usage: { prompt_tokens: promptTokens, completion_tokens: completionTokens, total_tokens: promptTokens + completionTokens },
   };
 }

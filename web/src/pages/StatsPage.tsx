@@ -36,10 +36,11 @@ export default function StatsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [days, setDays] = useState(30);
+  const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async () => {
     try {
-      setLoading(true);
+       setLoading(true);
       const [ov, bp, bm, dl] = await Promise.all([
         stats.overview(days),
         stats.byProvider(days),
@@ -60,6 +61,30 @@ export default function StatsPage() {
 
   useEffect(() => { load(); }, [load]);
 
+  useEffect(() => {
+    const interval = window.setInterval(async () => {
+      try {
+        setRefreshing(true);
+        const [ov, bp, bm, dl] = await Promise.all([
+          stats.overview(days),
+          stats.byProvider(days),
+          stats.byModel(days),
+          stats.daily(days),
+        ]);
+        setOverview(ov);
+        setByProvider(bp);
+        setByModel(bm);
+        setDaily(dl);
+        setError(null);
+      } catch (e: any) {
+        setError(e.message);
+      } finally {
+        setRefreshing(false);
+      }
+    }, 5000);
+    return () => window.clearInterval(interval);
+  }, [days]);
+
   const groupedByProvider = useMemo(() => {
     const groups: Record<string, StatsByModel[]> = {};
     for (const m of byModel) {
@@ -76,7 +101,7 @@ export default function StatsPage() {
   return (
     <div className="w-full space-y-6 p-6">
       <div className="flex items-center justify-between gap-4">
-        <h1 className="font-heading text-2xl font-semibold tracking-tight">Usage statistics</h1>
+        <div className="flex items-center gap-2"><h1 className="font-heading text-2xl font-semibold tracking-tight">Usage statistics</h1>{refreshing && <LoaderCircle className="size-4 animate-spin text-muted-foreground" aria-label="Refreshing statistics" />}</div>
         <div className="flex gap-1">
           {daysOptions.map((d) => (
             <Button key={d} variant={days === d ? "default" : "outline"} size="sm" onClick={() => setDays(d)}>

@@ -9,6 +9,7 @@ export interface UsageLog {
   tokens_completion: number;
   tokens_total: number;
   duration_ms: number;
+  generation_duration_ms: number;
   created_at: string;
 }
 
@@ -54,14 +55,15 @@ export const usageService = {
     modelName: string,
     tokensPrompt: number,
     tokensCompletion: number,
-    durationMs: number
+    durationMs: number,
+    generationDurationMs = durationMs,
   ): UsageLog {
     const db = getDb();
     const id = crypto.randomUUID();
     const total = tokensPrompt + tokensCompletion;
     db.query(
-      `INSERT INTO usage_log (id, provider_id, model_id, model_name, tokens_prompt, tokens_completion, tokens_total, duration_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-    ).run(id, providerId, modelId, modelName, tokensPrompt, tokensCompletion, total, durationMs);
+      `INSERT INTO usage_log (id, provider_id, model_id, model_name, tokens_prompt, tokens_completion, tokens_total, duration_ms, generation_duration_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(id, providerId, modelId, modelName, tokensPrompt, tokensCompletion, total, durationMs, generationDurationMs);
     return db.query("SELECT * FROM usage_log WHERE id = ?").get(id) as UsageLog;
   },
 
@@ -71,7 +73,7 @@ export const usageService = {
       .query(
         `SELECT
            COUNT(*) as total_requests,
-           COALESCE(SUM(tokens_total), 0) as total_tokens,
+            COALESCE(SUM(tokens_completion), 0) as total_tokens,
            COALESCE(SUM(tokens_prompt), 0) as total_tokens_prompt,
            COALESCE(SUM(tokens_completion), 0) as total_tokens_completion,
            COALESCE(CAST(SUM(tokens_total) AS REAL) / MAX(COUNT(*), 1), 0) as avg_tokens_per_request,
@@ -115,8 +117,8 @@ export const usageService = {
            COALESCE(SUM(u.tokens_prompt), 0) as tokens_prompt,
            COALESCE(SUM(u.tokens_completion), 0) as tokens_completion,
            COALESCE(CAST(SUM(u.duration_ms) AS REAL) / MAX(COUNT(*), 1), 0) as avg_duration_ms,
-           CASE WHEN SUM(u.duration_ms) > 0
-             THEN CAST(SUM(u.tokens_total) AS REAL) / (CAST(SUM(u.duration_ms) AS REAL) / 1000.0)
+            CASE WHEN SUM(u.generation_duration_ms) > 0
+              THEN CAST(SUM(u.tokens_completion) AS REAL) / (CAST(SUM(u.generation_duration_ms) AS REAL) / 1000.0)
              ELSE NULL
            END as tps
          FROM usage_log u
@@ -151,13 +153,13 @@ export const usageService = {
         `SELECT
            COUNT(*) as requests,
            COALESCE(SUM(tokens_total), 0) as total_tokens,
-           COALESCE(SUM(duration_ms), 0) as total_duration_ms
+            COALESCE(SUM(generation_duration_ms), 0) as total_generation_duration_ms
          FROM usage_log
-         WHERE model_id = ? AND duration_ms > 0`
+          WHERE model_id = ? AND generation_duration_ms > 0`
       )
-      .get(modelId) as { requests: number; total_tokens: number; total_duration_ms: number } | undefined;
-    if (!row || row.requests === 0 || row.total_duration_ms === 0) return null;
-    return row.total_tokens / (row.total_duration_ms / 1000.0);
+      .get(modelId) as { requests: number; total_generation_duration_ms: number; total_tokens: number } | undefined;
+    if (!row || row.requests === 0 || row.total_generation_duration_ms === 0) return null;
+    return row.total_tokens / (row.total_generation_duration_ms / 1000.0);
   },
 
   getAllModelTps(): { model_id: string; tps: number | null }[] {
@@ -166,12 +168,12 @@ export const usageService = {
       .query(
         `SELECT
            model_id,
-           CASE WHEN SUM(duration_ms) > 0
-             THEN CAST(SUM(tokens_total) AS REAL) / (CAST(SUM(duration_ms) AS REAL) / 1000.0)
+            CASE WHEN SUM(generation_duration_ms) > 0
+              THEN CAST(SUM(tokens_completion) AS REAL) / (CAST(SUM(generation_duration_ms) AS REAL) / 1000.0)
              ELSE NULL
            END as tps
          FROM usage_log
-         WHERE duration_ms > 0
+          WHERE generation_duration_ms > 0
          GROUP BY model_id`
       )
       .all() as { model_id: string; tps: number | null }[];

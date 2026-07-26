@@ -77,6 +77,7 @@ export function initSchema(db: Database): void {
       tokens_completion INTEGER NOT NULL DEFAULT 0,
       tokens_total      INTEGER NOT NULL DEFAULT 0,
       duration_ms       INTEGER NOT NULL DEFAULT 0,
+      generation_duration_ms INTEGER NOT NULL DEFAULT 0,
       created_at        TEXT NOT NULL DEFAULT (datetime('now')),
       FOREIGN KEY (provider_id) REFERENCES providers(id) ON DELETE CASCADE
     );
@@ -114,6 +115,9 @@ export function initSchema(db: Database): void {
 
   const apiKeyCols = db.query("PRAGMA table_info(api_keys)").all() as { name: string }[];
   if (!apiKeyCols.find((c) => c.name === "key_secret")) db.exec("ALTER TABLE api_keys ADD COLUMN key_secret TEXT");
+
+  const usageCols = db.query("PRAGMA table_info(usage_log)").all() as { name: string }[];
+  if (!usageCols.find((c) => c.name === "generation_duration_ms")) db.exec("ALTER TABLE usage_log ADD COLUMN generation_duration_ms INTEGER NOT NULL DEFAULT 0");
 
   const providerRows = db.query("SELECT id, api_key, protocol FROM providers WHERE api_key IS NOT NULL AND api_key != ''").all() as { id: string; api_key: string; protocol: string }[];
   for (const provider of providerRows) {
