@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { codexStreamToOpenAI } from "./codex.client";
+import { codexModels, codexStreamToOpenAI } from "./codex.client";
 
 const encoder = new TextEncoder();
 
@@ -60,5 +60,28 @@ describe("codexStreamToOpenAI", () => {
     ]), "gpt-test");
 
     expect(await response.text()).toContain('"content":"last"');
+  });
+});
+
+describe("codexModels", () => {
+  test("uses the selected SQLite credential instead of the legacy session", async () => {
+    const originalFetch = globalThis.fetch;
+    let authorization = "";
+    let accountId = "";
+    globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const headers = new Headers(init?.headers);
+      authorization = headers.get("authorization") ?? "";
+      accountId = headers.get("chatgpt-account-id") ?? "";
+      return Response.json({ models: [{ slug: "gpt-test", display_name: "GPT Test" }] });
+    }) as typeof fetch;
+
+    try {
+      const models = await codexModels({ access_token: "sqlite-token", account_id: "sqlite-account" });
+      expect(authorization).toBe("Bearer sqlite-token");
+      expect(accountId).toBe("sqlite-account");
+      expect(models[0]?.id).toBe("gpt-test");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
 });

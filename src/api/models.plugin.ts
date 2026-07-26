@@ -65,7 +65,9 @@ export const modelsPlugin = (app: Elysia) =>
 
       try {
          if (provider.protocol === "codex") {
-          const available = await codexModels();
+          const credential = credentialService.select(provider.id, provider.credential_mode, provider.fixed_credential_id) || credentialService.select(provider.id, "round_robin");
+          if (!credential) { set.status = 503; return { error: "No active Codex account" }; }
+          const available = await codexModels(credential);
           for (const model of available) {
             modelService.upsert({
               provider_id: id,

@@ -77,16 +77,15 @@ export async function codexConsumeResetCredit(creditId?: string, credentials?: C
   return data;
 }
 
-export async function codexModels() {
-  const token = await codexAuthService.accessToken();
-  const accountId = await codexAuthService.accountId();
+export async function codexModels(credentials?: CodexCredentials) {
+  const selected = requiredCredentials(credentials ?? { access_token: await codexAuthService.accessToken(), account_id: await codexAuthService.accountId() });
   const url = new URL(`${CODEX_BASE_URL}/models`);
   url.searchParams.set("client_version", CODEX_CLIENT_VERSION);
 
   const response = await fetch(url, {
     headers: {
-      Authorization: `Bearer ${token}`,
-      "chatgpt-account-id": accountId || "",
+      Authorization: `Bearer ${selected.access_token}`,
+      "chatgpt-account-id": selected.account_id || "",
       originator: "codex_cli_rs",
       Accept: "application/json",
     },
