@@ -74,7 +74,7 @@ function AntigravityQuotaSummary({ quotas }: { quotas: AntigravityQuota[] }) {
       </Tooltip>)}
     </div>
     <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-      {(showAll ? sorted : sorted.slice(0, 8)).map((quota, index) => <span key={`${quota.limit_name}-legend-${index}`} className="flex max-w-40 items-center gap-1.5"><span className={`size-2 shrink-0 rounded-full ${quotaColor(quota.group_name)}`} /><span className="truncate" title={quota.group_name}>{quota.group_name}</span></span>)}
+       {(showAll ? sorted : sorted.slice(0, 8)).map((quota, index) => <Tooltip key={`${quota.limit_name}-legend-${index}`}><TooltipTrigger render={<span className="flex max-w-40 cursor-help items-center gap-1.5"><span className={`size-2 shrink-0 rounded-full ${quotaColor(quota.group_name)}`} /><span className="truncate">{quota.group_name}</span></span>} /><TooltipContent>{quota.group_name}</TooltipContent></Tooltip>)}
       {sorted.length > 8 && <button type="button" className="font-medium text-foreground underline decoration-muted-foreground underline-offset-2 hover:decoration-foreground" onClick={() => setShowAll((value) => !value)}>{showAll ? "Show less" : `+${sorted.length - 8} more`}</button>}
     </div>
   </div>;

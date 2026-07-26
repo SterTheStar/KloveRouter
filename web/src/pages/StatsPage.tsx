@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import type { ReactNode } from "react";
 import { RiLoader4Line as LoaderCircle, RiExchangeLine as ExchangeLine, RiNumbersLine as NumbersLine, RiSpeedLine as SpeedLine, RiTimeLine as TimeLine } from "@remixicon/react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -6,9 +7,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { stats } from "../api/client";
 import type { StatsOverview, StatsByProvider, StatsByModel, DailyStats } from "../types";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell, Legend } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as ChartTooltip, ResponsiveContainer, AreaChart, Area, PieChart, Pie, Cell } from "recharts";
 
 const COLORS = ["#5BCEFA", "#F5A9B8", "#FFD700", "#80C080", "#FF8C42", "#A78BFA", "#F472B6", "#34D399"];
+const AXIS = { fontSize: 11, fill: "currentColor" };
 
 function formatNumber(n: number): string {
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + "M";
@@ -24,6 +26,18 @@ function formatDuration(ms: number): string {
 function formatDate(value: string): string {
   const date = new Date(`${value}T00:00:00`);
   return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+function ChartTooltipContent({ active, payload, label }: any) {
+  if (!active || !payload?.length) return null;
+  return <div className="rounded-lg border border-border bg-popover px-3 py-2 text-xs text-popover-foreground shadow-md">
+    {label !== undefined && <div className="mb-1 font-medium">{typeof label === "string" && /^\d{4}-\d{2}-\d{2}$/.test(label) ? formatDate(label) : label}</div>}
+    <div className="space-y-1">{payload.map((item: any, index: number) => <div key={`${item.dataKey ?? item.name}-${index}`} className="flex items-center justify-between gap-5"><span className="text-muted-foreground">{item.name ?? item.dataKey}</span><span className="font-mono font-medium">{typeof item.value === "number" ? item.value.toLocaleString() : item.value}</span></div>)}</div>
+  </div>;
+}
+
+function ChartPanel({ title, description, children, className = "" }: { title: string; description: string; children: ReactNode; className?: string }) {
+  return <Card className={`overflow-hidden ${className}`}><CardHeader className="border-b bg-muted/20"><CardTitle>{title}</CardTitle><div className="text-xs text-muted-foreground">{description}</div></CardHeader><CardContent className="pt-5">{children}</CardContent></Card>;
 }
 
 const statCards = [
@@ -135,78 +149,67 @@ export default function StatsPage() {
       )}
 
       {daily.length > 0 && (
-        <Card>
-          <CardHeader><CardTitle>Daily usage</CardTitle></CardHeader>
-          <CardContent>
+        <ChartPanel title="Daily usage" description="Token volume over the selected period" className="min-h-[22rem]">
             <div className="h-72">
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={daily}>
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                   <XAxis dataKey="date" tickFormatter={formatDate} tick={{ fontSize: 12 }} className="text-muted-foreground" interval="preserveStartEnd" minTickGap={24} />
-                  <YAxis tick={{ fontSize: 12 }} className="text-muted-foreground" />
-                  <Tooltip />
-                  <Line type="monotone" dataKey="tokens_total" stroke="#5BCEFA" strokeWidth={2} name="Tokens" dot={false} />
-                </LineChart>
+                <AreaChart data={daily} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
+                  <defs><linearGradient id="tokensGradient" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#5BCEFA" stopOpacity={0.35} /><stop offset="100%" stopColor="#5BCEFA" stopOpacity={0} /></linearGradient></defs>
+                  <CartesianGrid vertical={false} strokeDasharray="4 4" className="stroke-border/60" />
+                  <XAxis dataKey="date" tickFormatter={formatDate} tick={AXIS} axisLine={false} tickLine={false} interval="preserveStartEnd" minTickGap={24} />
+                  <YAxis tick={AXIS} axisLine={false} tickLine={false} tickFormatter={formatNumber} width={48} />
+                   <ChartTooltip content={<ChartTooltipContent />} />
+                  <Area type="monotone" dataKey="tokens_total" stroke="#5BCEFA" strokeWidth={2.5} fill="url(#tokensGradient)" name="Tokens" dot={false} activeDot={{ r: 4, strokeWidth: 2, fill: "var(--popover)" }} />
+                </AreaChart>
               </ResponsiveContainer>
             </div>
-          </CardContent>
-        </Card>
+        </ChartPanel>
       )}
 
       {byProvider.length > 0 && (
-        <Card>
-          <CardHeader><CardTitle>By provider</CardTitle></CardHeader>
-          <CardContent>
+        <ChartPanel title="By provider" description="Token volume grouped by provider">
             <div className="h-72">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={byProvider}>
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                   <XAxis dataKey="provider_name" tick={{ fontSize: 12 }} className="text-muted-foreground" interval={0} angle={-20} textAnchor="end" height={55} />
-                  <YAxis tick={{ fontSize: 12 }} className="text-muted-foreground" />
-                  <Tooltip />
-                  <Bar dataKey="tokens_total" name="Tokens" radius={[6, 6, 0, 0]}>
+                <BarChart data={byProvider} margin={{ top: 8, right: 8, left: -18, bottom: 8 }}>
+                  <CartesianGrid vertical={false} strokeDasharray="4 4" className="stroke-border/60" />
+                   <XAxis dataKey="provider_name" tick={AXIS} axisLine={false} tickLine={false} interval={0} angle={-20} textAnchor="end" height={55} />
+                  <YAxis tick={AXIS} axisLine={false} tickLine={false} tickFormatter={formatNumber} width={48} />
+                   <ChartTooltip content={<ChartTooltipContent />} />
+                  <Bar dataKey="tokens_total" name="Tokens" radius={[8, 8, 2, 2]} maxBarSize={56}>
                     {byProvider.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
             </div>
-          </CardContent>
-        </Card>
+        </ChartPanel>
       )}
 
       {byProvider.length > 0 && (
         <div className="grid gap-6 md:grid-cols-2">
-          <Card>
-            <CardHeader><CardTitle>Token share</CardTitle></CardHeader>
-            <CardContent>
+          <ChartPanel title="Token share" description="Share of total tokens by provider">
               <div className="h-64">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
-                    <Pie data={byProvider} dataKey="tokens_total" nameKey="provider_name" cx="50%" cy="50%" outerRadius={80} label={({ name, percent }: any) => `${name} ${(percent * 100).toFixed(0)}%`}>
+                    <Pie data={byProvider} dataKey="tokens_total" nameKey="provider_name" cx="50%" cy="50%" innerRadius={56} outerRadius={88} paddingAngle={3} stroke="var(--card)" strokeWidth={3} label={({ name, percent }: any) => `${name} ${(percent * 100).toFixed(0)}%`}>
                       {byProvider.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
                     </Pie>
-                    <Tooltip />
+                     <ChartTooltip content={<ChartTooltipContent />} />
                   </PieChart>
                 </ResponsiveContainer>
               </div>
-            </CardContent>
-          </Card>
+          </ChartPanel>
 
-          <Card>
-            <CardHeader><CardTitle>Requests by provider</CardTitle></CardHeader>
-            <CardContent>
+          <ChartPanel title="Requests by provider" description="Request distribution by provider">
               <div className="h-64">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
-                    <Pie data={byProvider} dataKey="requests" nameKey="provider_name" cx="50%" cy="50%" outerRadius={80} label={({ name, percent }: any) => `${name} ${(percent * 100).toFixed(0)}%`}>
+                    <Pie data={byProvider} dataKey="requests" nameKey="provider_name" cx="50%" cy="50%" innerRadius={56} outerRadius={88} paddingAngle={3} stroke="var(--card)" strokeWidth={3} label={({ name, percent }: any) => `${name} ${(percent * 100).toFixed(0)}%`}>
                       {byProvider.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
                     </Pie>
-                    <Tooltip />
+                     <ChartTooltip content={<ChartTooltipContent />} />
                   </PieChart>
                 </ResponsiveContainer>
               </div>
-            </CardContent>
-          </Card>
+          </ChartPanel>
         </div>
       )}
 
