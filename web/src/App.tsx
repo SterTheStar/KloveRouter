@@ -10,6 +10,7 @@ import ApiKeysPage from "./pages/ApiKeysPage";
 import SettingsPage from "./pages/SettingsPage";
 import ModelsPage from "./pages/ModelsPage";
 import StatsPage from "./pages/StatsPage";
+import UsageLimitsPage from "./pages/UsageLimitsPage";
 import type { Page } from "./types";
 
 export default function App() {
@@ -52,6 +53,7 @@ export default function App() {
           )}
           {currentPage === "models" && <ModelsPage />}
           {currentPage === "stats" && <StatsPage />}
+          {currentPage === "usage" && <UsageLimitsPage />}
           {currentPage === "keys" && <ApiKeysPage />}
           {currentPage === "settings" && <SettingsPage darkMode={darkMode} onThemeChange={setDarkMode} />}
         </main>

@@ -101,6 +101,9 @@ export const codex = {
   logout: () => request<{ authenticated: boolean }>("/api/codex/logout", { method: "POST" }),
   refresh: () => request<{ authenticated: boolean }>("/api/codex/refresh", { method: "POST" }),
   models: () => request<{ id: string; object: string; owned_by: string }[]>("/api/codex/models"),
+  usage: () => request<import("../types").CodexUsage>("/api/codex/usage"),
+  resetCredits: () => request<unknown>("/api/codex/reset-credits"),
+  consumeResetCredit: (credit_id?: string) => request<unknown>("/api/codex/reset-credits/consume", { method: "POST", body: JSON.stringify({ credit_id }) }),
 };
 
 // Models

@@ -77,6 +77,19 @@ export interface DailyStats {
   tokens_total: number;
 }
 
+export interface CodexUsageWindow {
+  used_percent?: number;
+  limit_window_seconds?: number;
+  reset_after_seconds?: number;
+  reset_at?: number;
+}
+
+export interface CodexUsage {
+  plan_type?: string;
+  rate_limit?: { allowed?: boolean; limit_reached?: boolean; primary_window?: CodexUsageWindow | null; secondary_window?: CodexUsageWindow | null };
+  credits?: { has_credits?: boolean; unlimited?: boolean; balance?: string | number };
+}
+
 export type Page =
   | "dashboard"
   | "models"

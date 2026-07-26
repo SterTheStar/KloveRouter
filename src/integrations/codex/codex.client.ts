@@ -2,6 +2,8 @@ import { codexAuthService } from "./codex-auth.service";
 
 const CODEX_BASE_URL = "https://chatgpt.com/backend-api/codex";
 const CODEX_CLIENT_VERSION = process.env.CODEX_CLIENT_VERSION || "1.0.0";
+const CODEX_USAGE_URL = "https://chatgpt.com/backend-api/wham/usage";
+const CODEX_RESET_CREDITS_URL = "https://chatgpt.com/backend-api/wham/rate-limit-reset-credits";
 
 type CodexModel = {
   slug?: string;
@@ -9,6 +11,63 @@ type CodexModel = {
   visibility?: string;
   supported_in_api?: boolean;
 };
+
+export type CodexUsage = {
+  plan_type?: string;
+  rate_limit?: {
+    allowed?: boolean;
+    limit_reached?: boolean;
+    primary_window?: CodexUsageWindow | null;
+    secondary_window?: CodexUsageWindow | null;
+  };
+  credits?: { has_credits?: boolean; unlimited?: boolean; balance?: string | number };
+  spend_control?: unknown;
+  rate_limit_reached_type?: unknown;
+};
+
+export type CodexUsageWindow = {
+  used_percent?: number;
+  limit_window_seconds?: number;
+  reset_after_seconds?: number;
+  reset_at?: number;
+};
+
+function codexHeaders(token: string, accountId: string | null) {
+  return {
+    Authorization: `Bearer ${token}`,
+    ...(accountId ? { "ChatGPT-Account-Id": accountId } : {}),
+    "User-Agent": "codex-cli",
+    Accept: "application/json",
+  };
+}
+
+export async function codexUsage(): Promise<CodexUsage> {
+  const token = await codexAuthService.accessToken();
+  const response = await fetch(CODEX_USAGE_URL, { headers: codexHeaders(token, await codexAuthService.accountId()) });
+  const data = await response.json().catch(() => null);
+  if (!response.ok) throw new Error(data?.detail || data?.message || `Codex usage request failed (${response.status})`);
+  return data as CodexUsage;
+}
+
+export async function codexResetCredits() {
+  const token = await codexAuthService.accessToken();
+  const response = await fetch(CODEX_RESET_CREDITS_URL, { headers: codexHeaders(token, await codexAuthService.accountId()) });
+  const data = await response.json().catch(() => null);
+  if (!response.ok) throw new Error(data?.detail || data?.message || `Codex reset credits request failed (${response.status})`);
+  return data;
+}
+
+export async function codexConsumeResetCredit(creditId?: string) {
+  const token = await codexAuthService.accessToken();
+  const response = await fetch(`${CODEX_RESET_CREDITS_URL}/consume`, {
+    method: "POST",
+    headers: { ...codexHeaders(token, await codexAuthService.accountId()), "Content-Type": "application/json" },
+    body: JSON.stringify({ redeem_request_id: crypto.randomUUID(), ...(creditId ? { credit_id: creditId } : {}) }),
+  });
+  const data = await response.json().catch(() => null);
+  if (!response.ok) throw new Error(data?.detail || data?.message || `Codex reset credit request failed (${response.status})`);
+  return data;
+}
 
 export async function codexModels() {
   const token = await codexAuthService.accessToken();
