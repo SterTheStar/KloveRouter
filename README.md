@@ -1,5 +1,5 @@
 <div align="center">
-  <h1><img src="web/src/assets/klove-mark.svg" width="56" height="56" align="center" alt="Klove logo" /> Klove</h1>
+  <img src="web/src/assets/klove-wordmark.svg" width="290" height="96" alt="Klove" />
   <p>
     Route OpenAI-compatible traffic, manage OAuth providers, rotate credentials,<br />
     and understand usage from one focused control plane.
