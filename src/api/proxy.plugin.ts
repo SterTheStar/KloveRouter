@@ -1,6 +1,6 @@
 import { Elysia, t } from "elysia";
 import { keyService } from "../services/key.service";
-import { providerService } from "../services/provider.service";
+import { providerPrefix, providerService } from "../services/provider.service";
 import { modelService } from "../services/model.service";
 import { usageService } from "../services/usage.service";
 import { createOpenAIClient, parseModelName } from "../clients/openai";
@@ -102,10 +102,10 @@ export const proxyPlugin = (app: Elysia) =>
         data: models.map((m) => {
           const provider = providers.find((p) => p.id === m.provider_id);
           return {
-            id: provider ? `${provider.name}/${m.model_id}` : m.model_id,
+            id: provider ? `${providerPrefix(provider.name)}/${m.model_id}` : m.model_id,
             object: "model",
             created: Math.floor(new Date(m.created_at).getTime() / 1000),
-            owned_by: provider?.name ?? "unknown",
+            owned_by: provider?.name.toLowerCase() ?? "unknown",
           };
         }),
       };

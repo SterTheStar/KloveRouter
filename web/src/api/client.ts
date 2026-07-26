@@ -167,6 +167,8 @@ export const apiKeys = {
       method: "POST",
       body: JSON.stringify({ name }),
     }),
+  secret: (id: string) =>
+    request<{ secret: string }>(`/api/keys/${id}/secret`),
   remove: (id: string) =>
     request<{ success: boolean }>(`/api/keys/${id}`, {
       method: "DELETE",

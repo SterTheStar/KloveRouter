@@ -57,6 +57,7 @@ export function initSchema(db: Database): void {
       id          TEXT PRIMARY KEY,
       name        TEXT NOT NULL,
       key_hash    TEXT NOT NULL,
+      key_secret  TEXT,
       prefix      TEXT NOT NULL,
       is_active   INTEGER NOT NULL DEFAULT 1,
       created_at  TEXT NOT NULL DEFAULT (datetime('now'))
@@ -110,6 +111,9 @@ export function initSchema(db: Database): void {
   for (const [name, sql] of credentialMigrations) {
     if (!credentialCols.find((c) => c.name === name)) db.exec(sql);
   }
+
+  const apiKeyCols = db.query("PRAGMA table_info(api_keys)").all() as { name: string }[];
+  if (!apiKeyCols.find((c) => c.name === "key_secret")) db.exec("ALTER TABLE api_keys ADD COLUMN key_secret TEXT");
 
   const providerRows = db.query("SELECT id, api_key, protocol FROM providers WHERE api_key IS NOT NULL AND api_key != ''").all() as { id: string; api_key: string; protocol: string }[];
   for (const provider of providerRows) {

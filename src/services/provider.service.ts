@@ -64,6 +64,10 @@ function defaultProviderAvatar(protocol: Provider["protocol"]): string | null {
   return null;
 }
 
+export function providerPrefix(name: string): string {
+  return name.toLowerCase().replace(/\s+/g, "");
+}
+
 function toPublic(p: Provider): ProviderPublic {
   return {
     id: p.id,
@@ -104,8 +108,8 @@ export const providerService = {
   findByName(name: string): Provider | null {
     const db = getDb();
     return db
-      .query("SELECT * FROM providers WHERE name = ?")
-      .get(name) as Provider | null;
+      .query("SELECT * FROM providers WHERE LOWER(REPLACE(name, ' ', '')) = LOWER(?)")
+      .get(providerPrefix(name.trim())) as Provider | null;
   },
 
   create(input: CreateProviderInput): ProviderPublic {

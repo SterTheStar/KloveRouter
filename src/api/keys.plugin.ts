@@ -13,7 +13,7 @@ export const keysPlugin = (app: Elysia) =>
         return {
           ...result.record,
           raw_key: result.key,
-          warning: "Save this key now. It will not be shown again.",
+          warning: "Store this key securely. You can reveal it later from the API keys page.",
         };
       },
       {
@@ -22,6 +22,19 @@ export const keysPlugin = (app: Elysia) =>
         }),
       }
     )
+    .get("/api/keys/:id/secret", ({ params: { id }, set }) => {
+      const key = keyService.findById(id);
+      if (!key) {
+        set.status = 404;
+        return { error: "API key not found" };
+      }
+      const secret = keyService.reveal(id);
+      if (!secret) {
+        set.status = 410;
+        return { error: "This API key cannot be revealed because its secret is unavailable." };
+      }
+      return { secret };
+    })
     .delete("/api/keys/:id", ({ params: { id }, set }) => {
       const removed = keyService.remove(id);
       if (!removed) {

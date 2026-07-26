@@ -1,9 +1,11 @@
 import { getDb } from "../db/connection";
+import { decryptSecret, encryptSecret } from "./secret.service";
 
 export interface ApiKey {
   id: string;
   name: string;
   key_hash: string;
+  key_secret: string | null;
   prefix: string;
   is_active: number;
   created_at: string;
@@ -58,11 +60,16 @@ export const keyService = {
     });
 
     db.query(
-      "INSERT INTO api_keys (id, name, key_hash, prefix) VALUES (?, ?, ?, ?)"
-    ).run(id, name, hash, prefix);
+      "INSERT INTO api_keys (id, name, key_hash, key_secret, prefix) VALUES (?, ?, ?, ?, ?)"
+    ).run(id, name, hash, encryptSecret(rawKey), prefix);
 
     const record = toPublic(this.findById(id)!);
     return { key: rawKey, record };
+  },
+
+  reveal(id: string): string | null {
+    const record = this.findById(id);
+    return record ? decryptSecret(record.key_secret) : null;
   },
 
   remove(id: string): boolean {

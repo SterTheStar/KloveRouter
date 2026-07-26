@@ -27,6 +27,10 @@ const app = new Elysia()
   .onAfterHandle(requestHooks.onAfterHandle)
   .onError(requestHooks.onError)
   .use(cors())
+  .get("/api", () => ({
+    name: "KloveRouter API",
+    status: "ok",
+  }))
   .use(
     jwt({
       secret: config.jwtSecret,

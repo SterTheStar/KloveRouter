@@ -45,6 +45,7 @@ import requestyLogo from "../assets/providers/requesty.ico";
 import parasailLogo from "../assets/providers/parasail.png";
 import replicateLogo from "../assets/providers/replicate.png";
 import portkeyLogo from "../assets/providers/portkey.png";
+import opencodeLogo from "../assets/providers/opencode.png";
 
 function endpointFavicon(endpoint: string) {
   try {
@@ -99,9 +100,10 @@ const openAiCompatiblePresets = [
   ["hugging-face", "Hugging Face Inference", "https://router.huggingface.co/v1"],
   ["requesty", "Requesty", "https://router.requesty.ai/v1"],
   ["portkey", "Portkey AI Gateway", "https://api.portkey.ai/v1"],
+  ["opencode", "OpenCode Zen", "https://opencode.ai/zen/v1"],
 ] as const;
 
-const presetLogos: Record<string, string> = { agnes: agnesLogo, blueminds: bluemindsLogo, orcarouter: orcaRouterLogo, nousportal: nousPortalLogo, mistral: mistralLogo, "nvidia-nim": nvidiaLogo, openrouter: openRouterLogo, "together-ai": togetherLogo, "fireworks-ai": fireworksLogo, groq: groqLogo, cerebras: cerebrasLogo, "google-ai-studio": googleAiStudioLogo, deepseek: deepSeekLogo, xai: xaiLogo, cohere: cohereLogo, ai21: ai21Logo, "moonshot-kimi": moonshotLogo, minimax: minimaxLogo, stepfun: stepfunLogo, "tencent-hunyuan": tencentHunyuanLogo, "zhipu-glm": zhipuLogo, "nebius-ai-studio": nebiusLogo, "novita-ai": novitaLogo, deepinfra: deepinfraLogo, siliconflow: siliconflowLogo, parasail: parasailLogo, "friendli-ai": friendliLogo, sambanova: sambanovaLogo, baseten: basetenLogo, replicate: replicateLogo, "hugging-face": huggingfaceLogo, requesty: requestyLogo, portkey: portkeyLogo };
+const presetLogos: Record<string, string> = { agnes: agnesLogo, blueminds: bluemindsLogo, orcarouter: orcaRouterLogo, nousportal: nousPortalLogo, mistral: mistralLogo, "nvidia-nim": nvidiaLogo, openrouter: openRouterLogo, "together-ai": togetherLogo, "fireworks-ai": fireworksLogo, groq: groqLogo, cerebras: cerebrasLogo, "google-ai-studio": googleAiStudioLogo, deepseek: deepSeekLogo, xai: xaiLogo, cohere: cohereLogo, ai21: ai21Logo, "moonshot-kimi": moonshotLogo, minimax: minimaxLogo, stepfun: stepfunLogo, "tencent-hunyuan": tencentHunyuanLogo, "zhipu-glm": zhipuLogo, "nebius-ai-studio": nebiusLogo, "novita-ai": novitaLogo, deepinfra: deepinfraLogo, siliconflow: siliconflowLogo, parasail: parasailLogo, "friendli-ai": friendliLogo, sambanova: sambanovaLogo, baseten: basetenLogo, replicate: replicateLogo, "hugging-face": huggingfaceLogo, requesty: requestyLogo, portkey: portkeyLogo, opencode: opencodeLogo };
 
 const providerTypes = [
   {

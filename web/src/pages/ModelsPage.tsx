@@ -211,7 +211,7 @@ export default function ModelsPage() {
                     {!isCollapsed && models.map((model) => {
                       const tps = tpsMap[model.id];
                       const result = testResult[model.id];
-                      const fullModelId = `${model.provider_name}/${model.model_id}`;
+                      const fullModelId = `${model.provider_name.toLowerCase().replace(/\s+/g, "")}/${model.model_id}`;
                       return (
                         <TableRow key={model.id}>
                           <TableCell className="font-mono text-xs">{fullModelId}</TableCell>
