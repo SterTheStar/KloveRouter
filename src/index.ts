@@ -74,7 +74,7 @@ const protectedApp = new Elysia()
 
 app.use(protectedApp as any);
 
-// OAuth uses the fixed localhost callback URL, while the listener is reachable on all interfaces.
+// OAuth callback listener is reachable on all network interfaces.
 new Elysia().use(codexPublicPlugin).use(antigravityPublicPlugin).listen({ port: 1455, hostname: "0.0.0.0" });
 
 // Serve frontend in production
@@ -118,4 +118,4 @@ const version = "1.0.0";
 
 logger.badge("KLOVE", `v${version} · https://github.com/SterTheStar/KloveRouter`);
 logger.success("Server running", { panel: `http://0.0.0.0:${config.port}`, api: `http://0.0.0.0:${config.port}/api` });
-logger.info("Codex callback listener", { address: "http://localhost:1455/auth/callback" });
+logger.info("Codex callback listener", { address: "http://0.0.0.0:1455/auth/callback" });

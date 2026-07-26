@@ -9,7 +9,7 @@
     <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5.x-3178C6?logo=typescript&logoColor=white" />
     <img alt="React" src="https://img.shields.io/badge/React-19-149ECA?logo=react&logoColor=white" />
     <img alt="Elysia" src="https://img.shields.io/badge/Elysia-1.x-7C3AED" />
-    <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/License-Klove%20Noncommercial%20Share--Alike-6B7280" /></a>
+    <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/License-Klove%20NC--SA-6B7280" /></a>
     <img alt="Last commit" src="https://img.shields.io/github/last-commit/SterTheStar/KloveRouter?logo=github&color=171717" />
   </p>
 </div>
@@ -17,26 +17,6 @@
 ## Overview
 
 Klove provides a single OpenAI-compatible endpoint in front of API-key and OAuth-backed AI providers. It combines request routing with a private administration panel for providers, models, credentials, pricing, usage, quotas, and request-level diagnostics.
-
-| Layer | Role |
-| --- | --- |
-| Clients | Applications, IDEs, agents, and scripts using the OpenAI Chat Completions interface. |
-| Klove gateway | Normalizes requests, selects credentials, streams responses, and records usage. |
-| Providers | OpenAI-compatible APIs, Anthropic Messages, Codex OAuth, and Google Antigravity OAuth. |
-
-## Highlights
-
-| Capability | Description |
-| --- | --- |
-| Unified API | Exposes models through `POST /v1/chat/completions` and `GET /v1/models`. |
-| Provider routing | Uses stable provider-prefixed model IDs to route each request. |
-| Credential rotation | Supports fixed credentials and resilient round-robin selection with cooldowns. |
-| OAuth integrations | Connects Codex and Google Antigravity accounts without placing tokens in client applications. |
-| Streaming | Converts provider-native streams to OpenAI-compatible SSE with reasoning and tool-call deltas. |
-| Observability | Records request status, account, client IP, latency, throughput, tokens, cache usage, and estimated cost. |
-| Pricing | Stores editable per-model pricing tiers for input, output, cache reads, and cache writes. |
-| Operations | Displays model availability, OAuth quota windows, usage history, and per-provider statistics. |
-| Private control plane | Protects the panel with password authentication and encrypts provider credentials at rest. |
 
 ## Supported Protocols
 
@@ -96,14 +76,14 @@ Open [http://localhost:3000](http://localhost:3000). The initial password is tak
 
 ### OAuth Callback
 
-Codex and Antigravity use a callback listener on port `1455`:
+Codex and Antigravity use a callback listener bound to `0.0.0.0` on port `1455`:
 
 ```text
-http://localhost:1455/auth/callback
-http://localhost:1455/antigravity/callback
+http://0.0.0.0:1455/auth/callback
+http://0.0.0.0:1455/antigravity/callback
 ```
 
-The callback URLs intentionally remain on `localhost` for provider compatibility. Allow local access to port `1455` while completing OAuth authentication.
+The listener accepts connections on every network interface. Make port `1455` reachable from the machine or network completing OAuth authentication.
 
 ## Development
 
@@ -163,7 +143,7 @@ Back up the SQLite database and encryption key together. An encrypted database c
 
 ## License
 
-Klove is source-available under the [Klove Noncommercial Share-Alike License 1.0.0](LICENSE), a modified form of PolyForm Noncommercial 1.0.0.
+Klove is source-available under the [Klove NC-SA License 1.0.0](LICENSE), where NC means Noncommercial and SA means Share-Alike. It is a modified form of PolyForm Noncommercial 1.0.0.
 
 - Noncommercial use, study, modification, and redistribution are permitted.
 - Copies, forks, and derivative works must provide their complete source code under the same license.
@@ -171,21 +151,6 @@ Klove is source-available under the [Klove Noncommercial Share-Alike License 1.0
 - Commercial use requires a separate written license from the licensor.
 
 This license includes noncommercial restrictions and is therefore not an OSI-approved open-source license.
-
-## Project Structure
-
-```text
-src/
-  api/              HTTP routes and protocol gateway
-  clients/          Provider API clients
-  db/               SQLite connection and schema
-  integrations/     Codex and Antigravity integrations
-  services/         Models, credentials, usage, and logs
-web/src/
-  components/       Shared interface components
-  pages/            Control-panel pages
-  api/              Browser API client
-```
 
 <div align="center">
   <h2>Support</h2>
