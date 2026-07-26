@@ -20,8 +20,13 @@ import type { UserProfile } from "./types";
 export default function App() {
   const { isAuth, loading, error, login, logout } = useAuth();
   const [currentPage, setCurrentPage] = useState<Page>("dashboard");
-  const [selectedProviderId, setSelectedProviderId] = useState<string | null>(null);
-  const [profile, setProfile] = useState<UserProfile>({ name: "User", avatar: null });
+  const [selectedProviderId, setSelectedProviderId] = useState<string | null>(
+    null,
+  );
+  const [profile, setProfile] = useState<UserProfile>({
+    name: "User",
+    avatar: null,
+  });
   const [darkMode, setDarkMode] = useState(() => {
     return localStorage.getItem("klove_theme") !== "light";
   });
@@ -31,7 +36,13 @@ export default function App() {
     localStorage.setItem("klove_theme", darkMode ? "dark" : "light");
   }, [darkMode]);
 
-  useEffect(() => { if (isAuth) settings.profile().then(setProfile).catch(() => undefined); }, [isAuth]);
+  useEffect(() => {
+    if (isAuth)
+      settings
+        .profile()
+        .then(setProfile)
+        .catch(() => undefined);
+  }, [isAuth]);
 
   const handleNavigate = (page: Page, providerId?: string) => {
     if (page === "provider-detail" && providerId) {
@@ -44,28 +55,52 @@ export default function App() {
   };
 
   if (loading) {
-    return <div className="flex min-h-svh items-center justify-center"><LoaderCircle className="size-6 animate-spin text-muted-foreground" /></div>;
+    return (
+      <div className="flex min-h-svh items-center justify-center">
+        <LoaderCircle className="size-6 animate-spin text-muted-foreground" />
+      </div>
+    );
   }
 
-  if (!isAuth) return <LoginPage onLogin={login} error={error} loading={loading} />;
+  if (!isAuth)
+    return <LoginPage onLogin={login} error={error} loading={loading} />;
 
   return (
-    <ToastProvider><TooltipProvider>
-      <div className="flex min-h-svh bg-background text-foreground">
-         <Sidebar currentPage={currentPage} onNavigate={(page) => handleNavigate(page)} onLogout={logout} profile={profile} />
-        <main className="min-w-0 flex-1 overflow-auto">
-          {currentPage === "dashboard" && <DashboardPage onNavigate={handleNavigate} />}
-          {currentPage === "provider-detail" && selectedProviderId && (
-            <ProviderDetailPage providerId={selectedProviderId} onBack={() => handleNavigate("dashboard")} />
-          )}
-          {currentPage === "models" && <ModelsPage />}
-          {currentPage === "stats" && <StatsPage />}
-          {currentPage === "usage" && <UsageLimitsPage />}
-          {currentPage === "request-logs" && <RequestLogsPage />}
-          {currentPage === "keys" && <ApiKeysPage />}
-           {currentPage === "settings" && <SettingsPage darkMode={darkMode} onThemeChange={setDarkMode} profile={profile} onProfileChange={setProfile} />}
-        </main>
-      </div>
-    </TooltipProvider></ToastProvider>
+    <ToastProvider>
+      <TooltipProvider>
+        <div className="flex min-h-svh bg-background text-foreground">
+          <Sidebar
+            currentPage={currentPage}
+            onNavigate={(page) => handleNavigate(page)}
+            onLogout={logout}
+            profile={profile}
+          />
+          <main className="min-w-0 flex-1 overflow-auto">
+            {currentPage === "dashboard" && (
+              <DashboardPage onNavigate={handleNavigate} />
+            )}
+            {currentPage === "provider-detail" && selectedProviderId && (
+              <ProviderDetailPage
+                providerId={selectedProviderId}
+                onBack={() => handleNavigate("dashboard")}
+              />
+            )}
+            {currentPage === "models" && <ModelsPage />}
+            {currentPage === "stats" && <StatsPage />}
+            {currentPage === "usage" && <UsageLimitsPage />}
+            {currentPage === "request-logs" && <RequestLogsPage />}
+            {currentPage === "keys" && <ApiKeysPage />}
+            {currentPage === "settings" && (
+              <SettingsPage
+                darkMode={darkMode}
+                onThemeChange={setDarkMode}
+                profile={profile}
+                onProfileChange={setProfile}
+              />
+            )}
+          </main>
+        </div>
+      </TooltipProvider>
+    </ToastProvider>
   );
 }

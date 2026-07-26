@@ -25,7 +25,13 @@ interface Props {
   isToggling?: boolean;
 }
 
-export default function ProviderCard({ provider, onToggle, onEdit, onDelete, isToggling }: Props) {
+export default function ProviderCard({
+  provider,
+  onToggle,
+  onEdit,
+  onDelete,
+  isToggling,
+}: Props) {
   return (
     <Card
       size="sm"
@@ -41,11 +47,17 @@ export default function ProviderCard({ provider, onToggle, onEdit, onDelete, isT
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <Avatar className="size-12">
-              <AvatarImage src={provider.avatar ?? undefined} onError={(event) => {
-                const fallback = rootFavicon(provider.base_url);
-                if (fallback && event.currentTarget.src !== fallback) event.currentTarget.src = fallback;
-              }} />
-              <AvatarFallback>{provider.name.charAt(0).toUpperCase()}</AvatarFallback>
+              <AvatarImage
+                src={provider.avatar ?? undefined}
+                onError={(event) => {
+                  const fallback = rootFavicon(provider.base_url);
+                  if (fallback && event.currentTarget.src !== fallback)
+                    event.currentTarget.src = fallback;
+                }}
+              />
+              <AvatarFallback>
+                {provider.name.charAt(0).toUpperCase()}
+              </AvatarFallback>
             </Avatar>
             <div>
               <div className="font-medium">{provider.name}</div>
@@ -54,7 +66,10 @@ export default function ProviderCard({ provider, onToggle, onEdit, onDelete, isT
               </Badge>
             </div>
           </div>
-          <div className="flex items-center gap-1" onClick={(event) => event.stopPropagation()}>
+          <div
+            className="flex items-center gap-1"
+            onClick={(event) => event.stopPropagation()}
+          >
             <Switch
               checked={provider.is_active === 1}
               onCheckedChange={() => onToggle(provider.id)}

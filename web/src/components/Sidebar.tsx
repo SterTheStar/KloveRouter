@@ -1,4 +1,13 @@
-import { RiDashboardLine as DashboardLine, RiKey2Line as Key2Line, RiLogoutBoxRLine as LogoutBoxRLine, RiBubbleChartLine as BubbleChartLine, RiBarChartBoxLine as BarChartBoxLine, RiPulseLine as PulseLine, RiFileList3Line as FileListLine, RiSettings4Line as Settings4Line } from "@remixicon/react";
+import {
+  RiDashboardLine as DashboardLine,
+  RiKey2Line as Key2Line,
+  RiLogoutBoxRLine as LogoutBoxRLine,
+  RiBubbleChartLine as BubbleChartLine,
+  RiBarChartBoxLine as BarChartBoxLine,
+  RiPulseLine as PulseLine,
+  RiFileList3Line as FileListLine,
+  RiSettings4Line as Settings4Line,
+} from "@remixicon/react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import type { Page } from "../types";
@@ -16,26 +25,124 @@ const items = [
 
 function BuyMeACoffeeButton() {
   const srcDoc = `<!doctype html><html><head><meta charset="utf-8"><style>html,body{width:228px;height:48px;margin:0;background:transparent;overflow:hidden}body{display:flex;justify-content:center}.bmc-btn{min-width:228px!important;width:228px!important;height:48px!important;border-radius:10px!important;padding:0 16px!important}.bmc-btn svg{height:27px!important}.bmc-btn-text{font-size:20px!important}</style></head><body><script type="text/javascript" src="https://cdnjs.buymeacoffee.com/1.0.0/button.prod.min.js" data-name="bmc-button" data-slug="sterzinhab9" data-color="#FFDD00" data-emoji="" data-font="Poppins" data-text="Buy me a coffee" data-outline-color="#000000" data-font-color="#000000" data-coffee-color="#ffffff"></script></body></html>`;
-  return <div className="mb-3 flex h-12 w-full items-start justify-center overflow-hidden rounded-xl"><iframe title="Buy me a coffee" className="block h-12 w-[228px] shrink-0 rounded-xl border-0" sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox" srcDoc={srcDoc} /></div>;
+  return (
+    <div className="mb-3 flex h-12 w-full items-start justify-center overflow-hidden rounded-xl">
+      <iframe
+        title="Buy me a coffee"
+        className="block h-12 w-[228px] shrink-0 rounded-xl border-0"
+        sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"
+        srcDoc={srcDoc}
+      />
+    </div>
+  );
 }
 
-export default function Sidebar({ currentPage, onNavigate, onLogout, profile }: {
-  currentPage: Page; onNavigate: (page: Page) => void; onLogout: () => void; profile: UserProfile;
+export default function Sidebar({
+  currentPage,
+  onNavigate,
+  onLogout,
+  profile,
+}: {
+  currentPage: Page;
+  onNavigate: (page: Page) => void;
+  onLogout: () => void;
+  profile: UserProfile;
 }) {
   return (
     <aside className="hidden sticky top-0 h-svh w-64 shrink-0 flex-col border-r bg-sidebar text-sidebar-foreground md:flex">
       <div className="flex h-16 items-center justify-center gap-3 px-5">
-        <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" className="size-8 text-foreground"><g id="SVGRepo_bgCarrier" stroke-width="0"></g><g id="SVGRepo_tracerCarrier" stroke-linecap="round" stroke-linejoin="round"></g><g id="SVGRepo_iconCarrier"> <path d="M5.6906 6.00001L3.16512 1.62576C4.50811 0.605527 6.18334 0 8 0C8.37684 0 8.74759 0.0260554 9.11056 0.076463L5.6906 6.00001Z" fill="currentColor"></path> <path d="M5.11325 9L1.69363 3.07705C0.632438 4.43453 0 6.14341 0 8C0 8.33866 0.0210434 8.67241 0.0618939 9H5.11325Z" fill="currentColor"></path> <path d="M4.89635 15.3757C2.93947 14.5512 1.37925 12.9707 0.581517 11H7.42265L4.89635 15.3757Z" fill="currentColor"></path> <path d="M8 16C7.62316 16 7.25241 15.9739 6.88944 15.9235L10.3094 10L12.8349 14.3742C11.4919 15.3945 9.81666 16 8 16Z" fill="currentColor"></path> <path d="M16 8C16 9.85659 15.3676 11.5655 14.3064 12.9229L10.8868 7H15.9381C15.979 7.32759 16 7.66134 16 8Z" fill="currentColor"></path> <path d="M11.1036 0.624326C13.0605 1.44877 14.6208 3.02927 15.4185 5H8.57735L11.1036 0.624326Z" fill="currentColor"></path> </g></svg>
-        <span className="text-2xl" style={{ fontFamily: "'Playwrite NZ Basic', cursive" }}>Klove</span>
+        <svg
+          viewBox="0 0 16 16"
+          fill="none"
+          xmlns="http://www.w3.org/2000/svg"
+          className="size-8 text-foreground"
+        >
+          <g id="SVGRepo_bgCarrier" stroke-width="0"></g>
+          <g
+            id="SVGRepo_tracerCarrier"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          ></g>
+          <g id="SVGRepo_iconCarrier">
+            {" "}
+            <path
+              d="M5.6906 6.00001L3.16512 1.62576C4.50811 0.605527 6.18334 0 8 0C8.37684 0 8.74759 0.0260554 9.11056 0.076463L5.6906 6.00001Z"
+              fill="currentColor"
+            ></path>{" "}
+            <path
+              d="M5.11325 9L1.69363 3.07705C0.632438 4.43453 0 6.14341 0 8C0 8.33866 0.0210434 8.67241 0.0618939 9H5.11325Z"
+              fill="currentColor"
+            ></path>{" "}
+            <path
+              d="M4.89635 15.3757C2.93947 14.5512 1.37925 12.9707 0.581517 11H7.42265L4.89635 15.3757Z"
+              fill="currentColor"
+            ></path>{" "}
+            <path
+              d="M8 16C7.62316 16 7.25241 15.9739 6.88944 15.9235L10.3094 10L12.8349 14.3742C11.4919 15.3945 9.81666 16 8 16Z"
+              fill="currentColor"
+            ></path>{" "}
+            <path
+              d="M16 8C16 9.85659 15.3676 11.5655 14.3064 12.9229L10.8868 7H15.9381C15.979 7.32759 16 7.66134 16 8Z"
+              fill="currentColor"
+            ></path>{" "}
+            <path
+              d="M11.1036 0.624326C13.0605 1.44877 14.6208 3.02927 15.4185 5H8.57735L11.1036 0.624326Z"
+              fill="currentColor"
+            ></path>{" "}
+          </g>
+        </svg>
+        <span
+          className="text-2xl"
+          style={{ fontFamily: "'Playwrite NZ Basic', cursive" }}
+        >
+          Klove
+        </span>
       </div>
       <nav className="flex-1 overflow-y-auto space-y-1 p-3">
         {items.map(({ page, label, icon: Icon }) => (
-          <Button key={page} size="lg" variant={currentPage === page ? "secondary" : "ghost"} className="w-full justify-start gap-3" onClick={() => onNavigate(page)}>
-            <Icon className="size-5" />{label}
+          <Button
+            key={page}
+            size="lg"
+            variant={currentPage === page ? "secondary" : "ghost"}
+            className="w-full justify-start gap-3"
+            onClick={() => onNavigate(page)}
+          >
+            <Icon className="size-5" />
+            {label}
           </Button>
         ))}
       </nav>
-      <div className="p-3"><BuyMeACoffeeButton /><div className="flex w-full items-center gap-2 rounded-xl bg-sidebar-accent/70 p-3 ring-1 ring-sidebar-border/60"><button type="button" className="flex min-w-0 flex-1 items-center gap-3 rounded-md text-left" onClick={() => onNavigate("settings")}><Avatar className="size-10"><AvatarImage src={profile.avatar ?? undefined} /><AvatarFallback>{profile.name.charAt(0).toUpperCase()}</AvatarFallback></Avatar><span className="min-w-0 flex-1 truncate text-sm font-medium">{profile.name}</span></button><Button type="button" size="icon-sm" variant="ghost" className="shrink-0 text-muted-foreground hover:text-destructive" onClick={onLogout} title="Logout" aria-label="Logout"><LogoutBoxRLine className="size-4" /></Button></div></div>
+      <div className="p-3">
+        <BuyMeACoffeeButton />
+        <div className="flex w-full items-center gap-2 rounded-xl bg-sidebar-accent/70 p-3 ring-1 ring-sidebar-border/60">
+          <button
+            type="button"
+            className="flex min-w-0 flex-1 items-center gap-3 rounded-md text-left"
+            onClick={() => onNavigate("settings")}
+          >
+            <Avatar className="size-10">
+              <AvatarImage src={profile.avatar ?? undefined} />
+              <AvatarFallback>
+                {profile.name.charAt(0).toUpperCase()}
+              </AvatarFallback>
+            </Avatar>
+            <span className="min-w-0 flex-1 truncate text-sm font-medium">
+              {profile.name}
+            </span>
+          </button>
+          <Button
+            type="button"
+            size="icon-sm"
+            variant="ghost"
+            className="shrink-0 text-muted-foreground hover:text-destructive"
+            onClick={onLogout}
+            title="Logout"
+            aria-label="Logout"
+          >
+            <LogoutBoxRLine className="size-4" />
+          </Button>
+        </div>
+      </div>
     </aside>
   );
 }

@@ -7,10 +7,18 @@ const BLOCKED_EXACT = new Set([
 ]);
 
 export function isBlockedAntigravityModel(modelId: string): boolean {
-  const normalized = modelId.trim().toLowerCase().replace(/^models\//, "");
-  return BLOCKED_EXACT.has(normalized) || normalized.includes("gemini-3.6-flash-tiered");
+  const normalized = modelId
+    .trim()
+    .toLowerCase()
+    .replace(/^models\//, "");
+  return (
+    BLOCKED_EXACT.has(normalized) ||
+    normalized.includes("gemini-3.6-flash-tiered")
+  );
 }
 
-export function filterAntigravityModels<T extends { id: string }>(models: T[]): T[] {
+export function filterAntigravityModels<T extends { id: string }>(
+  models: T[],
+): T[] {
   return models.filter((model) => !isBlockedAntigravityModel(model.id));
 }

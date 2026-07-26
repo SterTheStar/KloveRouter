@@ -13,14 +13,15 @@ export const keysPlugin = (app: Elysia) =>
         return {
           ...result.record,
           raw_key: result.key,
-          warning: "Store this key securely. You can reveal it later from the API keys page.",
+          warning:
+            "Store this key securely. You can reveal it later from the API keys page.",
         };
       },
       {
         body: t.Object({
           name: t.String({ minLength: 1 }),
         }),
-      }
+      },
     )
     .get("/api/keys/:id/secret", ({ params: { id }, set }) => {
       const key = keyService.findById(id);
@@ -31,7 +32,10 @@ export const keysPlugin = (app: Elysia) =>
       const secret = keyService.reveal(id);
       if (!secret) {
         set.status = 410;
-        return { error: "This API key cannot be revealed because its secret is unavailable." };
+        return {
+          error:
+            "This API key cannot be revealed because its secret is unavailable.",
+        };
       }
       return { secret };
     })

@@ -36,7 +36,7 @@ const app = new Elysia()
     jwt({
       secret: config.jwtSecret,
       name: "jwt",
-    })
+    }),
   )
   // Public routes
   .use(authPlugin)
@@ -75,7 +75,10 @@ const protectedApp = new Elysia()
 app.use(protectedApp as any);
 
 // OAuth callback listener is reachable on all network interfaces.
-new Elysia().use(codexPublicPlugin).use(antigravityPublicPlugin).listen({ port: 1455, hostname: "0.0.0.0" });
+new Elysia()
+  .use(codexPublicPlugin)
+  .use(antigravityPublicPlugin)
+  .listen({ port: 1455, hostname: "0.0.0.0" });
 
 // Serve frontend in production
 if (!config.isDev) {
@@ -84,24 +87,35 @@ if (!config.isDev) {
     staticPlugin({
       assets: "./web/dist",
       prefix: "/",
-    })
+    }),
   );
 
   // Catch-all: serve index.html for SPA routing
   const indexPath = Bun.file("./web/dist/index.html");
   if (await indexPath.exists()) {
-    app.get("/*", () => new Response(indexPath, {
-      headers: { "Content-Type": "text/html" },
-    }));
+    app.get(
+      "/*",
+      () =>
+        new Response(indexPath, {
+          headers: { "Content-Type": "text/html" },
+        }),
+    );
   }
 }
 
 app.listen({ port: config.port, hostname: "0.0.0.0" });
 
-const b = "\x1b[1m", r = "\x1b[0m";
-const blue = "\x1b[38;2;91;206;250m", pink = "\x1b[38;2;245;169;184m", white = "\x1b[97m", dim = "\x1b[2m";
-const green = "\x1b[38;2;80;200;120m", cyan = "\x1b[38;2;0;200;200m", yellow = "\x1b[38;2;255;200;50m";
-const bgBlue = "\x1b[48;2;91;206;250m", bgGreen = "\x1b[48;2;80;200;120m";
+const b = "\x1b[1m",
+  r = "\x1b[0m";
+const blue = "\x1b[38;2;91;206;250m",
+  pink = "\x1b[38;2;245;169;184m",
+  white = "\x1b[97m",
+  dim = "\x1b[2m";
+const green = "\x1b[38;2;80;200;120m",
+  cyan = "\x1b[38;2;0;200;200m",
+  yellow = "\x1b[38;2;255;200;50m";
+const bgBlue = "\x1b[48;2;91;206;250m",
+  bgGreen = "\x1b[48;2;80;200;120m";
 
 function badge(text: string, color: string) {
   return `${color}${white}${b} ${text} ${r}`;
@@ -116,6 +130,14 @@ ${b}${blue} /_/ |_/_/\\____/|___/\\___/${r}
 `;
 const version = "1.0.0";
 
-logger.badge("KLOVE", `v${version} · https://github.com/SterTheStar/KloveRouter`);
-logger.success("Server running", { panel: `http://0.0.0.0:${config.port}`, api: `http://0.0.0.0:${config.port}/api` });
-logger.info("Codex callback listener", { address: "http://0.0.0.0:1455/auth/callback" });
+logger.badge(
+  "KLOVE",
+  `v${version} · https://github.com/SterTheStar/KloveRouter`,
+);
+logger.success("Server running", {
+  panel: `http://0.0.0.0:${config.port}`,
+  api: `http://0.0.0.0:${config.port}/api`,
+});
+logger.info("Codex callback listener", {
+  address: "http://0.0.0.0:1455/auth/callback",
+});

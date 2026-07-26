@@ -73,18 +73,47 @@ export const usageService = {
     const total = tokensPrompt + tokensCompletion;
     const cacheRead = details.cacheRead ?? 0;
     const cacheWrite = details.cacheWrite ?? 0;
-    const tier = db.query("SELECT * FROM model_pricing_tiers WHERE model_id = ? AND threshold_tokens <= ? ORDER BY threshold_tokens DESC LIMIT 1").get(modelId, tokensPrompt) as { input_per_million: number; output_per_million: number; cache_read_per_million: number; cache_write_per_million: number } | null;
+    const tier = db
+      .query(
+        "SELECT * FROM model_pricing_tiers WHERE model_id = ? AND threshold_tokens <= ? ORDER BY threshold_tokens DESC LIMIT 1",
+      )
+      .get(modelId, tokensPrompt) as {
+      input_per_million: number;
+      output_per_million: number;
+      cache_read_per_million: number;
+      cache_write_per_million: number;
+    } | null;
     const uncachedPrompt = Math.max(0, tokensPrompt - cacheRead);
-    const estimatedCost = tier ? (uncachedPrompt * tier.input_per_million + tokensCompletion * tier.output_per_million + cacheRead * tier.cache_read_per_million + cacheWrite * tier.cache_write_per_million) / 1_000_000 : 0;
+    const estimatedCost = tier
+      ? (uncachedPrompt * tier.input_per_million +
+          tokensCompletion * tier.output_per_million +
+          cacheRead * tier.cache_read_per_million +
+          cacheWrite * tier.cache_write_per_million) /
+        1_000_000
+      : 0;
     db.query(
-      `INSERT INTO usage_log (id, provider_id, model_id, model_name, tokens_prompt, tokens_completion, tokens_cache_read, tokens_cache_write, tokens_total, estimated_cost_usd, duration_ms, generation_duration_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).run(id, providerId, modelId, modelName, tokensPrompt, tokensCompletion, cacheRead, cacheWrite, total, estimatedCost, durationMs, generationDurationMs);
+      `INSERT INTO usage_log (id, provider_id, model_id, model_name, tokens_prompt, tokens_completion, tokens_cache_read, tokens_cache_write, tokens_total, estimated_cost_usd, duration_ms, generation_duration_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      id,
+      providerId,
+      modelId,
+      modelName,
+      tokensPrompt,
+      tokensCompletion,
+      cacheRead,
+      cacheWrite,
+      total,
+      estimatedCost,
+      durationMs,
+      generationDurationMs,
+    );
     return db.query("SELECT * FROM usage_log WHERE id = ?").get(id) as UsageLog;
   },
 
   getOverview(days: number = 30): StatsOverview {
     const db = getDb();
-    const dateFilter = days > 0 ? "WHERE created_at >= datetime('now', ? || ' days')" : "";
+    const dateFilter =
+      days > 0 ? "WHERE created_at >= datetime('now', ? || ' days')" : "";
     const row = db
       .query(
         `SELECT
@@ -97,7 +126,7 @@ export const usageService = {
            COALESCE(CAST(SUM(tokens_total) AS REAL) / MAX(COUNT(*), 1), 0) as avg_tokens_per_request,
            COALESCE(CAST(SUM(duration_ms) AS REAL) / MAX(COUNT(*), 1), 0) as avg_duration_ms
           FROM usage_log
-          ${dateFilter}`
+          ${dateFilter}`,
       )
       .get(...(days > 0 ? [`-${days}`] : [])) as StatsOverview;
     return row;
@@ -105,7 +134,8 @@ export const usageService = {
 
   getByProvider(days: number = 30): StatsByProvider[] {
     const db = getDb();
-    const dateFilter = days > 0 ? "WHERE u.created_at >= datetime('now', ? || ' days')" : "";
+    const dateFilter =
+      days > 0 ? "WHERE u.created_at >= datetime('now', ? || ' days')" : "";
     return db
       .query(
         `SELECT
@@ -118,14 +148,15 @@ export const usageService = {
          JOIN providers p ON p.id = u.provider_id
           ${dateFilter}
          GROUP BY u.provider_id
-         ORDER BY tokens_total DESC`
+         ORDER BY tokens_total DESC`,
       )
       .all(...(days > 0 ? [`-${days}`] : [])) as StatsByProvider[];
   },
 
   getByModel(days: number = 30): StatsByModel[] {
     const db = getDb();
-    const dateFilter = days > 0 ? "WHERE u.created_at >= datetime('now', ? || ' days')" : "";
+    const dateFilter =
+      days > 0 ? "WHERE u.created_at >= datetime('now', ? || ' days')" : "";
     return db
       .query(
         `SELECT
@@ -148,14 +179,15 @@ export const usageService = {
          JOIN providers p ON p.id = u.provider_id
           ${dateFilter}
          GROUP BY u.model_id, u.model_name
-         ORDER BY tokens_total DESC`
+         ORDER BY tokens_total DESC`,
       )
       .all(...(days > 0 ? [`-${days}`] : [])) as StatsByModel[];
   },
 
   getDailyStats(days: number = 30): DailyStats[] {
     const db = getDb();
-    const dateFilter = days > 0 ? "WHERE created_at >= datetime('now', ? || ' days')" : "";
+    const dateFilter =
+      days > 0 ? "WHERE created_at >= datetime('now', ? || ' days')" : "";
     return db
       .query(
         `SELECT
@@ -166,7 +198,7 @@ export const usageService = {
          FROM usage_log
           ${dateFilter}
          GROUP BY DATE(created_at)
-         ORDER BY date ASC`
+         ORDER BY date ASC`,
       )
       .all(...(days > 0 ? [`-${days}`] : [])) as DailyStats[];
   },
@@ -180,10 +212,17 @@ export const usageService = {
            COALESCE(SUM(tokens_total), 0) as total_tokens,
             COALESCE(SUM(generation_duration_ms), 0) as total_generation_duration_ms
          FROM usage_log
-          WHERE model_id = ? AND generation_duration_ms > 0`
+          WHERE model_id = ? AND generation_duration_ms > 0`,
       )
-      .get(modelId) as { requests: number; total_generation_duration_ms: number; total_tokens: number } | undefined;
-    if (!row || row.requests === 0 || row.total_generation_duration_ms === 0) return null;
+      .get(modelId) as
+      | {
+          requests: number;
+          total_generation_duration_ms: number;
+          total_tokens: number;
+        }
+      | undefined;
+    if (!row || row.requests === 0 || row.total_generation_duration_ms === 0)
+      return null;
     return row.total_tokens / (row.total_generation_duration_ms / 1000.0);
   },
 
@@ -199,7 +238,7 @@ export const usageService = {
            END as tps
          FROM usage_log
           WHERE generation_duration_ms > 0
-         GROUP BY model_id`
+         GROUP BY model_id`,
       )
       .all() as { model_id: string; tps: number | null }[];
   },

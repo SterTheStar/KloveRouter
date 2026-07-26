@@ -119,8 +119,17 @@ export interface CodexUsageWindow {
 
 export interface CodexUsage {
   plan_type?: string;
-  rate_limit?: { allowed?: boolean; limit_reached?: boolean; primary_window?: CodexUsageWindow | null; secondary_window?: CodexUsageWindow | null };
-  credits?: { has_credits?: boolean; unlimited?: boolean; balance?: string | number };
+  rate_limit?: {
+    allowed?: boolean;
+    limit_reached?: boolean;
+    primary_window?: CodexUsageWindow | null;
+    secondary_window?: CodexUsageWindow | null;
+  };
+  credits?: {
+    has_credits?: boolean;
+    unlimited?: boolean;
+    balance?: string | number;
+  };
 }
 
 export interface AntigravityQuota {

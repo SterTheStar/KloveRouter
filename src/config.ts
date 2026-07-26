@@ -4,6 +4,9 @@ export const config = {
   dbPath: process.env.DB_PATH || "./data/klove.db",
   defaultPassword: process.env.DEFAULT_PASSWORD || "klove123",
   isDev: process.env.NODE_ENV !== "production",
-  encryptionKey: process.env.KLOVE_ENCRYPTION_KEY || process.env.JWT_SECRET || "klove-credential-encryption-key-change-in-production",
+  encryptionKey:
+    process.env.KLOVE_ENCRYPTION_KEY ||
+    process.env.JWT_SECRET ||
+    "klove-credential-encryption-key-change-in-production",
   logLevel: process.env.LOG_LEVEL || "info",
 };

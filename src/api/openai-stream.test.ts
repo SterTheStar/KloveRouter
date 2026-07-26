@@ -6,7 +6,9 @@ const details = () => ({ cacheRead: 0, cacheWrite: 0 });
 describe("openAIStreamResponse", () => {
   test("forwards chunks immediately and measures from the first semantic delta", async () => {
     let release!: () => void;
-    const blocked = new Promise<void>((resolve) => { release = resolve; });
+    const blocked = new Promise<void>((resolve) => {
+      release = resolve;
+    });
     let clock = 10;
     let completed: OpenAIStreamStats | undefined;
     const stream = {
@@ -16,17 +18,42 @@ describe("openAIStreamResponse", () => {
         yield { choices: [{ delta: { content: "hello" } }] };
         await blocked;
         clock = 80;
-        yield { choices: [], usage: { prompt_tokens: 4, completion_tokens: 2 } };
+        yield {
+          choices: [],
+          usage: { prompt_tokens: 4, completion_tokens: 2 },
+        };
       },
     };
-    const response = openAIStreamResponse(stream, { start: 0, tokenDetails: details, now: () => clock, onComplete: (stats) => { completed = stats; }, onError: () => {}, onCancel: () => {} });
+    const response = openAIStreamResponse(stream, {
+      start: 0,
+      tokenDetails: details,
+      now: () => clock,
+      onComplete: (stats) => {
+        completed = stats;
+      },
+      onError: () => {},
+      onCancel: () => {},
+    });
     const reader = response.body!.getReader();
 
-    expect(new TextDecoder().decode((await reader.read()).value)).toContain('"role":"assistant"');
-    expect(new TextDecoder().decode((await reader.read()).value)).toContain('"content":"hello"');
+    expect(new TextDecoder().decode((await reader.read()).value)).toContain(
+      '"role":"assistant"',
+    );
+    expect(new TextDecoder().decode((await reader.read()).value)).toContain(
+      '"content":"hello"',
+    );
     release();
-    while (!(await reader.read()).done) { /* Drain the stream. */ }
-    expect(completed).toEqual({ promptTokens: 4, completionTokens: 2, cacheRead: 0, cacheWrite: 0, durationMs: 80, generationDurationMs: 50 });
+    while (!(await reader.read()).done) {
+      /* Drain the stream. */
+    }
+    expect(completed).toEqual({
+      promptTokens: 4,
+      completionTokens: 2,
+      cacheRead: 0,
+      cacheWrite: 0,
+      durationMs: 80,
+      generationDurationMs: 50,
+    });
   });
 
   test("emits an error and DONE and records a body failure", async () => {
@@ -37,7 +64,16 @@ describe("openAIStreamResponse", () => {
         throw new Error("upstream disconnected");
       },
     };
-    const response = openAIStreamResponse(stream, { start: 0, tokenDetails: details, now: () => 10, onComplete: () => {}, onError: (error) => { recorded = error.message; }, onCancel: () => {} });
+    const response = openAIStreamResponse(stream, {
+      start: 0,
+      tokenDetails: details,
+      now: () => 10,
+      onComplete: () => {},
+      onError: (error) => {
+        recorded = error.message;
+      },
+      onCancel: () => {},
+    });
     const text = await response.text();
 
     expect(recorded).toBe("upstream disconnected");
@@ -51,7 +87,17 @@ describe("openAIStreamResponse", () => {
         yield { choices: [{ delta: { content: "ok" } }] };
       },
     };
-    const response = openAIStreamResponse(stream, { start: 0, tokenDetails: details, onComplete: () => { throw new Error("database unavailable"); }, onError: () => { throw new Error("must not be called"); }, onCancel: () => {} });
+    const response = openAIStreamResponse(stream, {
+      start: 0,
+      tokenDetails: details,
+      onComplete: () => {
+        throw new Error("database unavailable");
+      },
+      onError: () => {
+        throw new Error("must not be called");
+      },
+      onCancel: () => {},
+    });
     const text = await response.text();
 
     expect(text).toEndWith("data: [DONE]\n\n");
@@ -65,7 +111,15 @@ describe("openAIStreamResponse", () => {
         throw new Error("upstream disconnected");
       },
     };
-    const response = openAIStreamResponse(stream, { start: 0, tokenDetails: details, onComplete: () => {}, onError: () => { throw new Error("database unavailable"); }, onCancel: () => {} });
+    const response = openAIStreamResponse(stream, {
+      start: 0,
+      tokenDetails: details,
+      onComplete: () => {},
+      onError: () => {
+        throw new Error("database unavailable");
+      },
+      onCancel: () => {},
+    });
     const text = await response.text();
 
     expect(text).toContain('"message":"upstream disconnected"');
@@ -75,7 +129,10 @@ describe("openAIStreamResponse", () => {
 
   test.each([
     ["refusal", { refusal: "I cannot help with that" }],
-    ["legacy function call", { function_call: { name: "lookup", arguments: "{}" } }],
+    [
+      "legacy function call",
+      { function_call: { name: "lookup", arguments: "{}" } },
+    ],
   ])("measures %s as a semantic delta", async (_name, delta) => {
     let clock = 40;
     let completed: OpenAIStreamStats | undefined;
@@ -85,7 +142,16 @@ describe("openAIStreamResponse", () => {
         clock = 90;
       },
     };
-    const response = openAIStreamResponse(stream, { start: 0, tokenDetails: details, now: () => clock, onComplete: (stats) => { completed = stats; }, onError: () => {}, onCancel: () => {} });
+    const response = openAIStreamResponse(stream, {
+      start: 0,
+      tokenDetails: details,
+      now: () => clock,
+      onComplete: (stats) => {
+        completed = stats;
+      },
+      onError: () => {},
+      onCancel: () => {},
+    });
 
     await response.text();
     expect(completed?.generationDurationMs).toBe(50);
@@ -93,7 +159,9 @@ describe("openAIStreamResponse", () => {
 
   test("aborts the SDK stream when the client cancels", async () => {
     let release!: () => void;
-    const blocked = new Promise<void>((resolve) => { release = resolve; });
+    const blocked = new Promise<void>((resolve) => {
+      release = resolve;
+    });
     const sdkController = new AbortController();
     let cancelled = false;
     const stream = {
@@ -103,7 +171,15 @@ describe("openAIStreamResponse", () => {
         await blocked;
       },
     };
-    const response = openAIStreamResponse(stream, { start: 0, tokenDetails: details, onComplete: () => {}, onError: () => {}, onCancel: () => { cancelled = true; } });
+    const response = openAIStreamResponse(stream, {
+      start: 0,
+      tokenDetails: details,
+      onComplete: () => {},
+      onError: () => {},
+      onCancel: () => {
+        cancelled = true;
+      },
+    });
     const reader = response.body!.getReader();
     await reader.read();
     await reader.cancel();

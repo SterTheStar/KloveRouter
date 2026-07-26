@@ -20,12 +20,12 @@ Klove provides a single OpenAI-compatible endpoint in front of API-key and OAuth
 
 ## Supported Protocols
 
-| Protocol | Authentication | Notes |
-| --- | --- | --- |
-| OpenAI-compatible | API key | Chat completions, streaming, tools, usage, and cache metadata. |
-| Anthropic | API key | Native Messages conversion, tools, thinking, and prompt-cache accounting. |
-| Codex | OAuth | Responses API conversion, reasoning summaries, tools, usage, and account rotation. |
-| Antigravity | Google OAuth | Gemini, Claude, and GPT-family routing with thinking, quotas, tools, and model aliases. |
+| Protocol          | Authentication | Notes                                                                                   |
+| ----------------- | -------------- | --------------------------------------------------------------------------------------- |
+| OpenAI-compatible | API key        | Chat completions, streaming, tools, usage, and cache metadata.                          |
+| Anthropic         | API key        | Native Messages conversion, tools, thinking, and prompt-cache accounting.               |
+| Codex             | OAuth          | Responses API conversion, reasoning summaries, tools, usage, and account rotation.      |
+| Antigravity       | Google OAuth   | Gemini, Claude, and GPT-family routing with thinking, quotas, tools, and model aliases. |
 
 ## Quick Start
 
@@ -61,15 +61,15 @@ Open [http://localhost:3000](http://localhost:3000). The initial password is tak
 
 ## Configuration
 
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `PORT` | `3000` | Panel and API port. The server listens on `0.0.0.0`. |
-| `DB_PATH` | `./data/klove.db` | SQLite database path. |
-| `DEFAULT_PASSWORD` | `klove123` | Password seeded on the first database initialization. |
-| `JWT_SECRET` | Development fallback | Signs panel sessions and acts as an encryption fallback. |
-| `KLOVE_ENCRYPTION_KEY` | `JWT_SECRET` | Encrypts provider credentials stored in SQLite. |
-| `LOG_LEVEL` | `info` | Set to `debug` for credential-selection diagnostics. |
-| `NODE_ENV` | Development | Use `production` to serve the built frontend from Bun. |
+| Variable               | Default              | Purpose                                                  |
+| ---------------------- | -------------------- | -------------------------------------------------------- |
+| `PORT`                 | `3000`               | Panel and API port. The server listens on `0.0.0.0`.     |
+| `DB_PATH`              | `./data/klove.db`    | SQLite database path.                                    |
+| `DEFAULT_PASSWORD`     | `klove123`           | Password seeded on the first database initialization.    |
+| `JWT_SECRET`           | Development fallback | Signs panel sessions and acts as an encryption fallback. |
+| `KLOVE_ENCRYPTION_KEY` | `JWT_SECRET`         | Encrypts provider credentials stored in SQLite.          |
+| `LOG_LEVEL`            | `info`               | Set to `debug` for credential-selection diagnostics.     |
+| `NODE_ENV`             | Development          | Use `production` to serve the built frontend from Bun.   |
 
 > [!IMPORTANT]
 > Set unique values for `DEFAULT_PASSWORD`, `JWT_SECRET`, and `KLOVE_ENCRYPTION_KEY` before exposing Klove outside a trusted network.

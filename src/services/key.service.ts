@@ -32,14 +32,18 @@ function toPublic(k: ApiKey): ApiKeyPublic {
 export const keyService = {
   findAll(): ApiKeyPublic[] {
     const db = getDb();
-    return (db
-      .query("SELECT * FROM api_keys ORDER BY created_at DESC")
-      .all() as ApiKey[]).map(toPublic);
+    return (
+      db
+        .query("SELECT * FROM api_keys ORDER BY created_at DESC")
+        .all() as ApiKey[]
+    ).map(toPublic);
   },
 
   findById(id: string): ApiKey | null {
     const db = getDb();
-    return db.query("SELECT * FROM api_keys WHERE id = ?").get(id) as ApiKey | null;
+    return db
+      .query("SELECT * FROM api_keys WHERE id = ?")
+      .get(id) as ApiKey | null;
   },
 
   findByPrefix(prefix: string): ApiKey | null {
@@ -60,7 +64,7 @@ export const keyService = {
     });
 
     db.query(
-      "INSERT INTO api_keys (id, name, key_hash, key_secret, prefix) VALUES (?, ?, ?, ?, ?)"
+      "INSERT INTO api_keys (id, name, key_hash, key_secret, prefix) VALUES (?, ?, ?, ?, ?)",
     ).run(id, name, hash, encryptSecret(rawKey), prefix);
 
     const record = toPublic(this.findById(id)!);

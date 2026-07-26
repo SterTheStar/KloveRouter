@@ -1,26 +1,215 @@
 import { credentialService } from "../../services/credential.service";
 import { logger } from "../../logger";
 import { generateFingerprint } from "./antigravity.headers";
-import type { GoogleTokenResponse, DeviceFingerprint } from "./antigravity.types";
+import type {
+  GoogleTokenResponse,
+  DeviceFingerprint,
+} from "./antigravity.types";
 
-const CLIENT_ID = "1071006060591-tmhssin2h21lcre235vtolojh4g403ep.apps.googleusercontent.com";
+const CLIENT_ID =
+  "1071006060591-tmhssin2h21lcre235vtolojh4g403ep.apps.googleusercontent.com";
 const CLIENT_SECRET = "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";
 const AUTH = "https://accounts.google.com/o/oauth2/v2/auth";
 const TOKEN = "https://oauth2.googleapis.com/token";
 const CALLBACK = "http://localhost:1455/antigravity/callback";
-const SCOPES = ["https://www.googleapis.com/auth/cloud-platform", "https://www.googleapis.com/auth/userinfo.email", "https://www.googleapis.com/auth/userinfo.profile", "https://www.googleapis.com/auth/cclog", "https://www.googleapis.com/auth/experimentsandconfigs"];
-const pending = new Map<string, { credentialId: string; state: string; verifier: string; createdAt: number }>();
+const SCOPES = [
+  "https://www.googleapis.com/auth/cloud-platform",
+  "https://www.googleapis.com/auth/userinfo.email",
+  "https://www.googleapis.com/auth/userinfo.profile",
+  "https://www.googleapis.com/auth/cclog",
+  "https://www.googleapis.com/auth/experimentsandconfigs",
+];
+const pending = new Map<
+  string,
+  { credentialId: string; state: string; verifier: string; createdAt: number }
+>();
 
-function base64Url(bytes: Uint8Array) { return Buffer.from(bytes).toString("base64url"); }
+function base64Url(bytes: Uint8Array) {
+  return Buffer.from(bytes).toString("base64url");
+}
 
-async function exchange(body: URLSearchParams) { const res = await fetch(TOKEN, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body }); const data = await res.json().catch(() => null); if (!res.ok) throw new Error(data?.error_description || data?.error || `Google OAuth failed (${res.status})`); return data as GoogleTokenResponse; }
-async function userInfo(token: string) { const res = await fetch("https://www.googleapis.com/oauth2/v2/userinfo", { headers: { Authorization: `Bearer ${token}` } }); if (!res.ok) throw new Error("Failed to fetch Google account"); return await res.json() as { email?: string; name?: string }; }
-export async function discoverProject(token: string) { for (const ideType of ["VSCODE", "JETBRAINS", "CLOUD_SHELL", "IDE_UNSPECIFIED"]) { const res = await fetch("https://cloudcode-pa.googleapis.com/v1internal:loadCodeAssist", { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", "User-Agent": "antigravity/2.0.1" }, body: JSON.stringify({ metadata: { ideType, platform: "PLATFORM_UNSPECIFIED", pluginType: "GEMINI" } }) }); if (res.ok) { const data = await res.json().catch(() => null); const project = data?.cloudaicompanionProject; const id = typeof project === "string" ? project : project?.id; if (id) return id; } } return null; }
+async function exchange(body: URLSearchParams) {
+  const res = await fetch(TOKEN, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body,
+  });
+  const data = await res.json().catch(() => null);
+  if (!res.ok)
+    throw new Error(
+      data?.error_description ||
+        data?.error ||
+        `Google OAuth failed (${res.status})`,
+    );
+  return data as GoogleTokenResponse;
+}
+async function userInfo(token: string) {
+  const res = await fetch("https://www.googleapis.com/oauth2/v2/userinfo", {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error("Failed to fetch Google account");
+  return (await res.json()) as { email?: string; name?: string };
+}
+export async function discoverProject(token: string) {
+  for (const ideType of [
+    "VSCODE",
+    "JETBRAINS",
+    "CLOUD_SHELL",
+    "IDE_UNSPECIFIED",
+  ]) {
+    const res = await fetch(
+      "https://cloudcode-pa.googleapis.com/v1internal:loadCodeAssist",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+          "User-Agent": "antigravity/2.0.1",
+        },
+        body: JSON.stringify({
+          metadata: {
+            ideType,
+            platform: "PLATFORM_UNSPECIFIED",
+            pluginType: "GEMINI",
+          },
+        }),
+      },
+    );
+    if (res.ok) {
+      const data = await res.json().catch(() => null);
+      const project = data?.cloudaicompanionProject;
+      const id = typeof project === "string" ? project : project?.id;
+      if (id) return id;
+    }
+  }
+  return null;
+}
 
 export const antigravityAuthService = {
-  async startLogin(credentialId: string) { const credential = credentialService.findById(credentialId); if (!credential || credential.kind !== "antigravity") throw new Error("Antigravity credential not found"); const now = Date.now(); for (const [key, login] of pending) if (login.credentialId === credentialId || now - login.createdAt > 10 * 60_000) pending.delete(key); const verifier = base64Url(crypto.getRandomValues(new Uint8Array(48))); const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier)); const state = crypto.randomUUID(); for (const [key, login] of pending) if (login.credentialId === credentialId) pending.delete(key); pending.set(state, { credentialId, state, verifier, createdAt: now }); const params = new URLSearchParams({ client_id: CLIENT_ID, redirect_uri: CALLBACK, response_type: "code", scope: SCOPES.join(" "), access_type: "offline", prompt: "consent", state, code_challenge: base64Url(new Uint8Array(digest)), code_challenge_method: "S256" }); return { auth_url: `${AUTH}?${params}`, warning: "Unofficial Google Antigravity integration using internal Cloud Code endpoints." }; },
-  async completeLogin(code: string, state: string, expectedCredentialId?: string) { const login = pending.get(state); if (!login || Date.now() - login.createdAt > 10 * 60_000) { pending.delete(state); throw new Error("Invalid or expired OAuth state"); } if (expectedCredentialId && login.credentialId !== expectedCredentialId) throw new Error("OAuth state does not belong to this credential"); const credential = credentialService.findById(login.credentialId); if (!credential || credential.kind !== "antigravity") throw new Error("Antigravity credential not found"); pending.delete(state); const token = await exchange(new URLSearchParams({ client_id: CLIENT_ID, client_secret: CLIENT_SECRET, redirect_uri: CALLBACK, grant_type: "authorization_code", code, code_verifier: login.verifier })); if (!token.refresh_token) throw new Error("Google did not return a refresh token; revoke access and try again"); const info = await userInfo(token.access_token); const projectId = await discoverProject(token.access_token); const fp = generateFingerprint(info.email ?? login.credentialId); credentialService.update(login.credentialId, { label: info.email || "Google account", access_token: token.access_token, refresh_token: token.refresh_token, id_token: token.id_token ?? null, email: info.email ?? null, project_id: projectId, expires_at: Date.now() + token.expires_in * 1000, fingerprint_json: JSON.stringify(fp) }); logger.success("Antigravity account authenticated", { credential_id: login.credentialId, project_id: projectId }); return credentialService.status(login.credentialId); },
-  async ensure(credentialId: string) { const credential = credentialService.findById(credentialId); if (!credential || credential.kind !== "antigravity" || !credential.refresh_token) throw new Error("Antigravity account is not authenticated"); if (credential.access_token && (!credential.expires_at || credential.expires_at > Date.now() + 60_000)) return credential; const token = await exchange(new URLSearchParams({ client_id: CLIENT_ID, client_secret: CLIENT_SECRET, grant_type: "refresh_token", refresh_token: credential.refresh_token })); return credentialService.findById(credentialService.update(credentialId, { access_token: token.access_token, refresh_token: token.refresh_token ?? credential.refresh_token, expires_at: Date.now() + token.expires_in * 1000 })?.id ?? credentialId)!; },
-  fingerprint(credential: any): DeviceFingerprint { try { return credential.fingerprint_json ? JSON.parse(credential.fingerprint_json) : generateFingerprint(credential.email || credential.id); } catch { return generateFingerprint(credential.email || credential.id); } },
+  async startLogin(credentialId: string) {
+    const credential = credentialService.findById(credentialId);
+    if (!credential || credential.kind !== "antigravity")
+      throw new Error("Antigravity credential not found");
+    const now = Date.now();
+    for (const [key, login] of pending)
+      if (
+        login.credentialId === credentialId ||
+        now - login.createdAt > 10 * 60_000
+      )
+        pending.delete(key);
+    const verifier = base64Url(crypto.getRandomValues(new Uint8Array(48)));
+    const digest = await crypto.subtle.digest(
+      "SHA-256",
+      new TextEncoder().encode(verifier),
+    );
+    const state = crypto.randomUUID();
+    for (const [key, login] of pending)
+      if (login.credentialId === credentialId) pending.delete(key);
+    pending.set(state, { credentialId, state, verifier, createdAt: now });
+    const params = new URLSearchParams({
+      client_id: CLIENT_ID,
+      redirect_uri: CALLBACK,
+      response_type: "code",
+      scope: SCOPES.join(" "),
+      access_type: "offline",
+      prompt: "consent",
+      state,
+      code_challenge: base64Url(new Uint8Array(digest)),
+      code_challenge_method: "S256",
+    });
+    return {
+      auth_url: `${AUTH}?${params}`,
+      warning:
+        "Unofficial Google Antigravity integration using internal Cloud Code endpoints.",
+    };
+  },
+  async completeLogin(
+    code: string,
+    state: string,
+    expectedCredentialId?: string,
+  ) {
+    const login = pending.get(state);
+    if (!login || Date.now() - login.createdAt > 10 * 60_000) {
+      pending.delete(state);
+      throw new Error("Invalid or expired OAuth state");
+    }
+    if (expectedCredentialId && login.credentialId !== expectedCredentialId)
+      throw new Error("OAuth state does not belong to this credential");
+    const credential = credentialService.findById(login.credentialId);
+    if (!credential || credential.kind !== "antigravity")
+      throw new Error("Antigravity credential not found");
+    pending.delete(state);
+    const token = await exchange(
+      new URLSearchParams({
+        client_id: CLIENT_ID,
+        client_secret: CLIENT_SECRET,
+        redirect_uri: CALLBACK,
+        grant_type: "authorization_code",
+        code,
+        code_verifier: login.verifier,
+      }),
+    );
+    if (!token.refresh_token)
+      throw new Error(
+        "Google did not return a refresh token; revoke access and try again",
+      );
+    const info = await userInfo(token.access_token);
+    const projectId = await discoverProject(token.access_token);
+    const fp = generateFingerprint(info.email ?? login.credentialId);
+    credentialService.update(login.credentialId, {
+      label: info.email || "Google account",
+      access_token: token.access_token,
+      refresh_token: token.refresh_token,
+      id_token: token.id_token ?? null,
+      email: info.email ?? null,
+      project_id: projectId,
+      expires_at: Date.now() + token.expires_in * 1000,
+      fingerprint_json: JSON.stringify(fp),
+    });
+    logger.success("Antigravity account authenticated", {
+      credential_id: login.credentialId,
+      project_id: projectId,
+    });
+    return credentialService.status(login.credentialId);
+  },
+  async ensure(credentialId: string) {
+    const credential = credentialService.findById(credentialId);
+    if (
+      !credential ||
+      credential.kind !== "antigravity" ||
+      !credential.refresh_token
+    )
+      throw new Error("Antigravity account is not authenticated");
+    if (
+      credential.access_token &&
+      (!credential.expires_at || credential.expires_at > Date.now() + 60_000)
+    )
+      return credential;
+    const token = await exchange(
+      new URLSearchParams({
+        client_id: CLIENT_ID,
+        client_secret: CLIENT_SECRET,
+        grant_type: "refresh_token",
+        refresh_token: credential.refresh_token,
+      }),
+    );
+    return credentialService.findById(
+      credentialService.update(credentialId, {
+        access_token: token.access_token,
+        refresh_token: token.refresh_token ?? credential.refresh_token,
+        expires_at: Date.now() + token.expires_in * 1000,
+      })?.id ?? credentialId,
+    )!;
+  },
+  fingerprint(credential: any): DeviceFingerprint {
+    try {
+      return credential.fingerprint_json
+        ? JSON.parse(credential.fingerprint_json)
+        : generateFingerprint(credential.email || credential.id);
+    } catch {
+      return generateFingerprint(credential.email || credential.id);
+    }
+  },
 };
-export const ANTIGRAVITY_CALLBACK_HTML = "<!doctype html><html><body><h1>Google Antigravity connected</h1><p>You can close this window.</p></body></html>";
+export const ANTIGRAVITY_CALLBACK_HTML =
+  "<!doctype html><html><body><h1>Google Antigravity connected</h1><p>You can close this window.</p></body></html>";

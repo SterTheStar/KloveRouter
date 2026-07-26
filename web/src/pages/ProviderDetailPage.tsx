@@ -1168,7 +1168,7 @@ export default function ProviderDetailPage({
         )}
       </Card>
       <Dialog open={syncOpen} onOpenChange={setSyncOpen}>
-        <DialogContent>
+        <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>Synchronize provider models</DialogTitle>
             <DialogDescription>
@@ -1177,38 +1177,23 @@ export default function ProviderDetailPage({
             </DialogDescription>
           </DialogHeader>
           {syncPreview && (
-            <div className="grid gap-3 sm:grid-cols-3">
-              <div className="rounded-lg border p-3">
-                <div className="text-2xl font-semibold">
-                  {syncPreview.models_found}
-                </div>
-                <div className="text-xs text-muted-foreground">
-                  Models found
-                </div>
-              </div>
-              <div className="rounded-lg border p-3">
-                <div className="text-2xl font-semibold">
-                  {syncPreview.existing_models}
-                </div>
-                <div className="text-xs text-muted-foreground">
-                  Already configured
-                </div>
-              </div>
-              <div className="rounded-lg border p-3">
-                <div className="text-2xl font-semibold">
-                  {syncPreview.models_to_add}
-                </div>
-                <div className="text-xs text-muted-foreground">
-                  New models to add
-                </div>
-              </div>
-            </div>
-          )}
-          {syncPreview && (
-            <p className="text-xs text-muted-foreground">
-              Free model subset: {syncPreview.free_models_found} found,{" "}
-              {syncPreview.free_existing_models} already configured,{" "}
-              {syncPreview.free_models_to_add} new.
+            <p className="text-sm text-muted-foreground">
+              <strong className="font-semibold text-foreground">
+                {syncPreview.models_found}
+              </strong>{" "}
+              models found, including <strong className="font-semibold text-foreground">
+                {syncPreview.models_to_add}
+              </strong>{" "}
+              new and <strong className="font-semibold text-foreground">
+                {syncPreview.existing_models}
+              </strong>{" "}
+              already configured; <strong className="font-semibold text-foreground">
+                {syncPreview.free_models_found}
+              </strong>{" "}
+              are free, including <strong className="font-semibold text-foreground">
+                {syncPreview.free_models_to_add}
+              </strong>{" "}
+              new.
             </p>
           )}
           <DialogFooter>

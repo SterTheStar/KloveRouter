@@ -144,46 +144,85 @@ export function initSchema(db: Database): void {
   `);
 
   // Migrate existing tables: add avatar column if missing
-  const cols = db
-    .query("PRAGMA table_info(providers)")
-    .all() as { name: string }[];
+  const cols = db.query("PRAGMA table_info(providers)").all() as {
+    name: string;
+  }[];
   if (!cols.find((c) => c.name === "avatar")) {
     db.exec("ALTER TABLE providers ADD COLUMN avatar TEXT");
   }
   if (!cols.find((c) => c.name === "protocol")) {
-    db.exec("ALTER TABLE providers ADD COLUMN protocol TEXT NOT NULL DEFAULT 'openai'");
+    db.exec(
+      "ALTER TABLE providers ADD COLUMN protocol TEXT NOT NULL DEFAULT 'openai'",
+    );
   }
   if (!cols.find((c) => c.name === "credential_mode")) {
-    db.exec("ALTER TABLE providers ADD COLUMN credential_mode TEXT NOT NULL DEFAULT 'fixed'");
+    db.exec(
+      "ALTER TABLE providers ADD COLUMN credential_mode TEXT NOT NULL DEFAULT 'fixed'",
+    );
   }
   if (!cols.find((c) => c.name === "fixed_credential_id")) {
     db.exec("ALTER TABLE providers ADD COLUMN fixed_credential_id TEXT");
   }
 
-  const credentialCols = db.query("PRAGMA table_info(provider_credentials)").all() as { name: string }[];
+  const credentialCols = db
+    .query("PRAGMA table_info(provider_credentials)")
+    .all() as { name: string }[];
   const credentialMigrations: Array<[string, string]> = [
     ["email", "ALTER TABLE provider_credentials ADD COLUMN email TEXT"],
-    ["project_id", "ALTER TABLE provider_credentials ADD COLUMN project_id TEXT"],
-    ["managed_project_id", "ALTER TABLE provider_credentials ADD COLUMN managed_project_id TEXT"],
-    ["expires_at", "ALTER TABLE provider_credentials ADD COLUMN expires_at INTEGER"],
-    ["fingerprint_json", "ALTER TABLE provider_credentials ADD COLUMN fingerprint_json TEXT"],
-    ["quota_json", "ALTER TABLE provider_credentials ADD COLUMN quota_json TEXT"],
+    [
+      "project_id",
+      "ALTER TABLE provider_credentials ADD COLUMN project_id TEXT",
+    ],
+    [
+      "managed_project_id",
+      "ALTER TABLE provider_credentials ADD COLUMN managed_project_id TEXT",
+    ],
+    [
+      "expires_at",
+      "ALTER TABLE provider_credentials ADD COLUMN expires_at INTEGER",
+    ],
+    [
+      "fingerprint_json",
+      "ALTER TABLE provider_credentials ADD COLUMN fingerprint_json TEXT",
+    ],
+    [
+      "quota_json",
+      "ALTER TABLE provider_credentials ADD COLUMN quota_json TEXT",
+    ],
   ];
   for (const [name, sql] of credentialMigrations) {
     if (!credentialCols.find((c) => c.name === name)) db.exec(sql);
   }
 
-  const apiKeyCols = db.query("PRAGMA table_info(api_keys)").all() as { name: string }[];
-  if (!apiKeyCols.find((c) => c.name === "key_secret")) db.exec("ALTER TABLE api_keys ADD COLUMN key_secret TEXT");
+  const apiKeyCols = db.query("PRAGMA table_info(api_keys)").all() as {
+    name: string;
+  }[];
+  if (!apiKeyCols.find((c) => c.name === "key_secret"))
+    db.exec("ALTER TABLE api_keys ADD COLUMN key_secret TEXT");
 
-  const usageCols = db.query("PRAGMA table_info(usage_log)").all() as { name: string }[];
+  const usageCols = db.query("PRAGMA table_info(usage_log)").all() as {
+    name: string;
+  }[];
   const usageMigrations: Array<[string, string]> = [
-    ["generation_duration_ms", "ALTER TABLE usage_log ADD COLUMN generation_duration_ms INTEGER NOT NULL DEFAULT 0"],
-    ["tokens_cache_read", "ALTER TABLE usage_log ADD COLUMN tokens_cache_read INTEGER NOT NULL DEFAULT 0"],
-    ["tokens_cache_write", "ALTER TABLE usage_log ADD COLUMN tokens_cache_write INTEGER NOT NULL DEFAULT 0"],
-    ["estimated_cost_usd", "ALTER TABLE usage_log ADD COLUMN estimated_cost_usd REAL NOT NULL DEFAULT 0"],
+    [
+      "generation_duration_ms",
+      "ALTER TABLE usage_log ADD COLUMN generation_duration_ms INTEGER NOT NULL DEFAULT 0",
+    ],
+    [
+      "tokens_cache_read",
+      "ALTER TABLE usage_log ADD COLUMN tokens_cache_read INTEGER NOT NULL DEFAULT 0",
+    ],
+    [
+      "tokens_cache_write",
+      "ALTER TABLE usage_log ADD COLUMN tokens_cache_write INTEGER NOT NULL DEFAULT 0",
+    ],
+    [
+      "estimated_cost_usd",
+      "ALTER TABLE usage_log ADD COLUMN estimated_cost_usd REAL NOT NULL DEFAULT 0",
+    ],
   ];
-  for (const [name, sql] of usageMigrations) if (!usageCols.find((c) => c.name === name)) db.exec(sql);
+  for (const [name, sql] of usageMigrations)
+    if (!usageCols.find((c) => c.name === name)) db.exec(sql);
 
   // Seed editable pricing for the built-in Codex OAuth models once.
   const codexPricingDefaults = [
@@ -194,36 +233,62 @@ export function initSchema(db: Database): void {
     ["gpt-5.6-sol", 5, 30, 0.5],
     ["gpt-5.6-terra", 2.5, 15, 0.25],
   ] as const;
-  for (const [modelName, inputPrice, outputPrice, cachePrice] of codexPricingDefaults) {
-    const models = db.query(
-      `SELECT m.id FROM models m JOIN providers p ON p.id = m.provider_id
+  for (const [
+    modelName,
+    inputPrice,
+    outputPrice,
+    cachePrice,
+  ] of codexPricingDefaults) {
+    const models = db
+      .query(
+        `SELECT m.id FROM models m JOIN providers p ON p.id = m.provider_id
        WHERE p.protocol = 'codex' AND lower(m.model_id) = ?
-         AND NOT EXISTS (SELECT 1 FROM model_pricing_tiers t WHERE t.model_id = m.id)`
-    ).all(modelName) as { id: string }[];
-    for (const model of models) db.query(
-      "INSERT INTO model_pricing_tiers (id, model_id, threshold_tokens, input_per_million, output_per_million, cache_read_per_million, cache_write_per_million) VALUES (?, ?, 0, ?, ?, ?, 0)"
-    ).run(crypto.randomUUID(), model.id, inputPrice, outputPrice, cachePrice);
+         AND NOT EXISTS (SELECT 1 FROM model_pricing_tiers t WHERE t.model_id = m.id)`,
+      )
+      .all(modelName) as { id: string }[];
+    for (const model of models)
+      db.query(
+        "INSERT INTO model_pricing_tiers (id, model_id, threshold_tokens, input_per_million, output_per_million, cache_read_per_million, cache_write_per_million) VALUES (?, ?, 0, ?, ?, ?, 0)",
+      ).run(crypto.randomUUID(), model.id, inputPrice, outputPrice, cachePrice);
   }
   const antigravityPricingDefaults = [
-    ["claude-opus-4-6-thinking", 15, 75, 1.5], ["claude-sonnet-4-6", 3, 15, 0.3],
-    ["gemini-2.5-flash", 0.3, 2.5, 0.03], ["gemini-2.5-flash-lite", 0.1, 0.4, 0.01],
-    ["gemini-2.5-flash-thinking", 0.3, 2.5, 0.03], ["gemini-2.5-pro", 1.25, 10, 0.125],
-    ["gemini-3-flash", 0.9, 5.4, 0.09], ["gemini-3-flash-agent", 0.9, 5.4, 0.09],
-    ["gemini-3.1-flash-image", 0.3, 2.5, 0.03], ["gemini-3.1-flash-lite", 0.1, 0.4, 0.01],
-    ["gemini-3.1-pro-high", 2, 12, 0.2], ["gemini-3.1-pro-low", 2, 12, 0.2], ["gemini-pro-agent", 2, 12, 0.2],
-    ["gemini-3.5-flash-extra-low", 1.5, 9, 0.15], ["gemini-3.5-flash-low", 1.5, 9, 0.15],
-    ["gemini-3.6-flash-high", 1.5, 7.5, 0.15], ["gemini-3.6-flash-medium", 1.5, 7.5, 0.15], ["gemini-3.6-flash-low", 1.5, 7.5, 0.15],
+    ["claude-opus-4-6-thinking", 15, 75, 1.5],
+    ["claude-sonnet-4-6", 3, 15, 0.3],
+    ["gemini-2.5-flash", 0.3, 2.5, 0.03],
+    ["gemini-2.5-flash-lite", 0.1, 0.4, 0.01],
+    ["gemini-2.5-flash-thinking", 0.3, 2.5, 0.03],
+    ["gemini-2.5-pro", 1.25, 10, 0.125],
+    ["gemini-3-flash", 0.9, 5.4, 0.09],
+    ["gemini-3-flash-agent", 0.9, 5.4, 0.09],
+    ["gemini-3.1-flash-image", 0.3, 2.5, 0.03],
+    ["gemini-3.1-flash-lite", 0.1, 0.4, 0.01],
+    ["gemini-3.1-pro-high", 2, 12, 0.2],
+    ["gemini-3.1-pro-low", 2, 12, 0.2],
+    ["gemini-pro-agent", 2, 12, 0.2],
+    ["gemini-3.5-flash-extra-low", 1.5, 9, 0.15],
+    ["gemini-3.5-flash-low", 1.5, 9, 0.15],
+    ["gemini-3.6-flash-high", 1.5, 7.5, 0.15],
+    ["gemini-3.6-flash-medium", 1.5, 7.5, 0.15],
+    ["gemini-3.6-flash-low", 1.5, 7.5, 0.15],
     ["gpt-oss-120b-medium", 0.09, 0.36, 0],
   ] as const;
-  for (const [modelName, inputPrice, outputPrice, cachePrice] of antigravityPricingDefaults) {
-    const models = db.query(
-      `SELECT m.id FROM models m JOIN providers p ON p.id = m.provider_id
+  for (const [
+    modelName,
+    inputPrice,
+    outputPrice,
+    cachePrice,
+  ] of antigravityPricingDefaults) {
+    const models = db
+      .query(
+        `SELECT m.id FROM models m JOIN providers p ON p.id = m.provider_id
        WHERE p.protocol = 'antigravity' AND replace(lower(m.model_id), 'googleantigravity/', '') = ?
-         AND NOT EXISTS (SELECT 1 FROM model_pricing_tiers t WHERE t.model_id = m.id)`
-    ).all(modelName) as { id: string }[];
-    for (const model of models) db.query(
-      "INSERT INTO model_pricing_tiers (id, model_id, threshold_tokens, input_per_million, output_per_million, cache_read_per_million, cache_write_per_million) VALUES (?, ?, 0, ?, ?, ?, 0)"
-    ).run(crypto.randomUUID(), model.id, inputPrice, outputPrice, cachePrice);
+         AND NOT EXISTS (SELECT 1 FROM model_pricing_tiers t WHERE t.model_id = m.id)`,
+      )
+      .all(modelName) as { id: string }[];
+    for (const model of models)
+      db.query(
+        "INSERT INTO model_pricing_tiers (id, model_id, threshold_tokens, input_per_million, output_per_million, cache_read_per_million, cache_write_per_million) VALUES (?, ?, 0, ?, ?, ?, 0)",
+      ).run(crypto.randomUUID(), model.id, inputPrice, outputPrice, cachePrice);
   }
 
   // Fill costs for request logs created before cost calculation was wired in.
@@ -247,18 +312,47 @@ export function initSchema(db: Database): void {
     WHERE estimated_cost_usd = 0 AND tokens_total > 0
   `);
 
-  const rotationCols = db.query("PRAGMA table_info(provider_credential_rotation)").all() as { name: string }[];
-  if (!rotationCols.find((c) => c.name === "request_sequence")) db.exec("ALTER TABLE provider_credential_rotation ADD COLUMN request_sequence INTEGER NOT NULL DEFAULT 0");
-  const cooldownCols = db.query("PRAGMA table_info(provider_credential_cooldown)").all() as { name: string }[];
-  if (!cooldownCols.find((c) => c.name === "cooldown_until_sequence")) db.exec("ALTER TABLE provider_credential_cooldown ADD COLUMN cooldown_until_sequence INTEGER NOT NULL DEFAULT 0");
+  const rotationCols = db
+    .query("PRAGMA table_info(provider_credential_rotation)")
+    .all() as { name: string }[];
+  if (!rotationCols.find((c) => c.name === "request_sequence"))
+    db.exec(
+      "ALTER TABLE provider_credential_rotation ADD COLUMN request_sequence INTEGER NOT NULL DEFAULT 0",
+    );
+  const cooldownCols = db
+    .query("PRAGMA table_info(provider_credential_cooldown)")
+    .all() as { name: string }[];
+  if (!cooldownCols.find((c) => c.name === "cooldown_until_sequence"))
+    db.exec(
+      "ALTER TABLE provider_credential_cooldown ADD COLUMN cooldown_until_sequence INTEGER NOT NULL DEFAULT 0",
+    );
 
-  const providerRows = db.query("SELECT id, api_key, protocol FROM providers WHERE api_key IS NOT NULL AND api_key != ''").all() as { id: string; api_key: string; protocol: string }[];
+  const providerRows = db
+    .query(
+      "SELECT id, api_key, protocol FROM providers WHERE api_key IS NOT NULL AND api_key != ''",
+    )
+    .all() as { id: string; api_key: string; protocol: string }[];
   for (const provider of providerRows) {
-    const existing = db.query("SELECT id FROM provider_credentials WHERE provider_id = ? LIMIT 1").get(provider.id);
+    const existing = db
+      .query(
+        "SELECT id FROM provider_credentials WHERE provider_id = ? LIMIT 1",
+      )
+      .get(provider.id);
     if (!existing) {
       const credentialId = crypto.randomUUID();
-      db.query("INSERT INTO provider_credentials (id, provider_id, label, kind, secret, is_active) VALUES (?, ?, ?, ?, ?, 1)").run(credentialId, provider.id, provider.protocol === "codex" ? "Codex session" : "Default API key", provider.protocol === "codex" ? "codex" : "api_key", provider.api_key);
-      db.query("UPDATE providers SET fixed_credential_id = ? WHERE id = ?").run(credentialId, provider.id);
+      db.query(
+        "INSERT INTO provider_credentials (id, provider_id, label, kind, secret, is_active) VALUES (?, ?, ?, ?, ?, 1)",
+      ).run(
+        credentialId,
+        provider.id,
+        provider.protocol === "codex" ? "Codex session" : "Default API key",
+        provider.protocol === "codex" ? "codex" : "api_key",
+        provider.api_key,
+      );
+      db.query("UPDATE providers SET fixed_credential_id = ? WHERE id = ?").run(
+        credentialId,
+        provider.id,
+      );
     }
   }
 
@@ -274,7 +368,7 @@ export function initSchema(db: Database): void {
     });
     db.query("INSERT INTO settings (key, value) VALUES (?, ?)").run(
       "panel_password",
-      hash
+      hash,
     );
   }
 }
