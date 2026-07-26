@@ -18,18 +18,11 @@
 
 Klove provides a single OpenAI-compatible endpoint in front of API-key and OAuth-backed AI providers. It combines request routing with a private administration panel for providers, models, credentials, pricing, usage, quotas, and request-level diagnostics.
 
-```text
-Application / IDE
-       |
-       |  OpenAI Chat Completions
-       v
-     Klove
-       |
-       +-- OpenAI-compatible APIs
-       +-- Anthropic Messages API
-       +-- Codex OAuth
-       +-- Google Antigravity OAuth
-```
+| Layer | Role |
+| --- | --- |
+| Clients | Applications, IDEs, agents, and scripts using the OpenAI Chat Completions interface. |
+| Klove gateway | Normalizes requests, selects credentials, streams responses, and records usage. |
+| Providers | OpenAI-compatible APIs, Anthropic Messages, Codex OAuth, and Google Antigravity OAuth. |
 
 ## Highlights
 
