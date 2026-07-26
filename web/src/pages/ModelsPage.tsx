@@ -10,10 +10,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { DropdownMenu, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuLabel, DropdownMenuGroup } from "@/components/ui/dropdown-menu";
 import { models, stats } from "../api/client";
 import type { ModelWithProvider } from "../types";
+import { useToast } from "../components/ui/toast";
 
 type SourceFilter = "all" | "manual" | "synced";
 
 export default function ModelsPage() {
+  const { success, error: notifyError } = useToast();
   const [list, setList] = useState<ModelWithProvider[]>([]);
   const [tpsMap, setTpsMap] = useState<Record<string, number | null>>({});
   const [loading, setLoading] = useState(true);
@@ -104,8 +106,10 @@ export default function ModelsPage() {
     try {
       const result = await models.test(modelId);
       setTestResult((prev) => ({ ...prev, [modelId]: result.success ? "success" : "error" }));
+      result.success ? success("Model test passed") : notifyError("Model test failed", "The provider did not return a successful response.");
     } catch {
       setTestResult((prev) => ({ ...prev, [modelId]: "error" }));
+      notifyError("Model test failed", "Could not reach the provider.");
     } finally {
       setTestingId(null);
     }

@@ -17,8 +17,10 @@ import EditModelModal from "../components/EditModelModal";
 import ConfirmDialog from "../components/ConfirmDialog";
 import { antigravity, codex, providers, models as modelsApi } from "../api/client";
 import type { Model, Provider, ProviderCredential } from "../types";
+import { useToast } from "../components/ui/toast";
 
 export default function ProviderDetailPage({ providerId, onBack }: { providerId: string; onBack: () => void }) {
+  const { success: notifySuccess, error: notifyError } = useToast();
   const [provider, setProvider] = useState<Provider | null>(null);
   const [list, setList] = useState<Model[]>([]);
   const [loading, setLoading] = useState(true);
@@ -70,7 +72,7 @@ export default function ProviderDetailPage({ providerId, onBack }: { providerId:
       setProvider(current); setList(models); setName(current.name); setBaseUrl(current.base_url); setAvatar(current.avatar);
       setConnectedAccount(providerCredentials.find((credential) => credential.kind === "codex" && credential.account_id)?.account_id ?? account?.account_id ?? null);
       setCredentials(providerCredentials);
-    } catch (e: any) { setError(e.message); } finally { setLoading(false); }
+    } catch (e: any) { setError(e.message); notifyError("Could not load provider", e.message); } finally { setLoading(false); }
   }, [providerId]);
 
   useEffect(() => { load(); }, [load]);
@@ -78,13 +80,13 @@ export default function ProviderDetailPage({ providerId, onBack }: { providerId:
   const save = async () => {
     setSaving(true);
     try { const updated = await providers.update(providerId, { name, base_url: baseUrl, avatar }); setProvider(updated); setSuccess("Provider updated."); }
-    catch (e: any) { setError(e.message); } finally { setSaving(false); }
+     catch (e: any) { setError(e.message); notifyError("Could not update provider", e.message); } finally { setSaving(false); }
   };
 
   const sync = async () => {
     setSyncing(true);
     try { const result = await modelsApi.sync(providerId); await load(); setSuccess(result.message); }
-    catch (e: any) { setError(e.message); } finally { setSyncing(false); }
+     catch (e: any) { setError(e.message); notifyError("Could not sync models", e.message); } finally { setSyncing(false); }
   };
 
   const addOAuthAccount = async () => {
@@ -98,11 +100,11 @@ export default function ProviderDetailPage({ providerId, onBack }: { providerId:
       const started = Date.now();
       const poll = window.setInterval(async () => {
         try {
-          if ((await providers.credentialStatus(providerId, credential.id)).authenticated) { window.clearInterval(poll); setCredentialAction(false); setSuccess("Codex account connected."); await load(); }
-          else if (Date.now() - started > 5 * 60_000) { window.clearInterval(poll); setCredentialAction(false); setError("Codex login timed out."); }
+           if ((await providers.credentialStatus(providerId, credential.id)).authenticated) { window.clearInterval(poll); setCredentialAction(false); setSuccess("Codex account connected."); notifySuccess("Account connected"); await load(); }
+           else if (Date.now() - started > 5 * 60_000) { window.clearInterval(poll); setCredentialAction(false); setError("Codex login timed out."); notifyError("Login timed out"); }
         } catch { /* keep polling during browser login */ }
       }, 1500);
-    } catch (e: any) { setError(e.message); setCredentialAction(false); }
+    } catch (e: any) { setError(e.message); notifyError("Could not connect account", e.message); setCredentialAction(false); }
   };
 
   const logoutCodex = async () => {
@@ -111,11 +113,11 @@ export default function ProviderDetailPage({ providerId, onBack }: { providerId:
     try {
       await providers.disconnectCredential(providerId, logoutCredentialId);
       setLogoutOpen(false); setLogoutCredentialId(null); setSuccess("Codex account disconnected. The account was kept."); await load();
-    } catch (e: any) { setError(e.message); } finally { setAuthAction(null); }
+     } catch (e: any) { setError(e.message); notifyError("Could not disconnect account", e.message); } finally { setAuthAction(null); }
   };
 
   const setCredentialMode = async (mode: "fixed" | "round_robin", fixedId?: string | null) => {
-    try { const updated = await providers.update(providerId, { credential_mode: mode, fixed_credential_id: fixedId ?? null }); setProvider(updated); } catch (e: any) { setError(e.message); }
+     try { const updated = await providers.update(providerId, { credential_mode: mode, fixed_credential_id: fixedId ?? null }); setProvider(updated); notifySuccess("Credential selection updated"); } catch (e: any) { setError(e.message); notifyError("Could not update credential selection", e.message); }
   };
 
   const addApiKey = async () => {
@@ -128,12 +130,12 @@ export default function ProviderDetailPage({ providerId, onBack }: { providerId:
       if (newKeyLabelRef.current) newKeyLabelRef.current.value = "";
       if (newKeySecretRef.current) newKeySecretRef.current.value = "";
       setShowAddKey(false); setSuccess("API key added."); await load();
-    } catch (e: any) { setError(e.message); } finally { setAddingKey(false); }
+     } catch (e: any) { setError(e.message); notifyError("Could not add API key", e.message); } finally { setAddingKey(false); }
   };
 
   const removeApiKey = async (credentialId: string) => {
     try { await providers.removeCredential(providerId, credentialId); setSuccess("API key removed."); await load(); }
-    catch (e: any) { setError(e.message); }
+     catch (e: any) { setError(e.message); notifyError("Could not remove API key", e.message); }
   };
 
   const toggleApiKeyVisibility = async (credential: ProviderCredential) => {
@@ -143,18 +145,28 @@ export default function ProviderDetailPage({ providerId, onBack }: { providerId:
     }
     setLoadingSecretId(credential.id);
     try { const result = await providers.credentialSecret(providerId, credential.id); setRevealedKeys((current) => ({ ...current, [credential.id]: result.secret || "" })); }
-    catch (e: any) { setError(e.message); }
+     catch (e: any) { setError(e.message); notifyError("Could not reveal API key", e.message); }
     finally { setLoadingSecretId(null); }
   };
 
-  const copy = (value: string) => navigator.clipboard?.writeText(value);
+  const copy = async (value: string, label = "Copied to clipboard") => {
+    try {
+      if (!navigator.clipboard) throw new Error("Clipboard access is unavailable.");
+      await navigator.clipboard.writeText(value);
+      notifySuccess(label);
+    } catch (e: any) {
+      notifyError("Could not copy", e.message || "Clipboard access was denied.");
+    }
+  };
   const testModel = async (id: string) => {
     setTestingId(id);
     try {
       const result = await modelsApi.test(id);
-      setTestResult((prev) => ({ ...prev, [id]: result.success ? "success" : "error" }));
-    } catch {
-      setTestResult((prev) => ({ ...prev, [id]: "error" }));
+       setTestResult((prev) => ({ ...prev, [id]: result.success ? "success" : "error" }));
+       result.success ? notifySuccess("Model test passed") : notifyError("Model test failed", "The provider did not return a successful response.");
+     } catch {
+       setTestResult((prev) => ({ ...prev, [id]: "error" }));
+       notifyError("Model test failed", "Could not reach the provider.");
     }
     setTestingId(null);
   };

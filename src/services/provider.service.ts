@@ -69,6 +69,8 @@ function toPublic(p: Provider): ProviderPublic {
     id: p.id,
     name: p.name,
     base_url: p.base_url,
+    // OpenAI-compatible presets intentionally use the endpoint's favicon,
+    // rather than the generic OpenAI logo. Custom uploaded avatars still win.
     avatar: p.avatar ?? defaultProviderAvatar(p.protocol) ?? getFaviconUrl(p.base_url),
     protocol: p.protocol ?? "openai",
     credential_mode: p.credential_mode ?? "fixed",

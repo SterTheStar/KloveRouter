@@ -12,6 +12,7 @@ import ModelsPage from "./pages/ModelsPage";
 import StatsPage from "./pages/StatsPage";
 import UsageLimitsPage from "./pages/UsageLimitsPage";
 import type { Page } from "./types";
+import { ToastProvider } from "./components/ui/toast";
 
 export default function App() {
   const { isAuth, loading, error, login, logout } = useAuth();
@@ -43,7 +44,7 @@ export default function App() {
   if (!isAuth) return <LoginPage onLogin={login} error={error} loading={loading} />;
 
   return (
-    <TooltipProvider>
+    <ToastProvider><TooltipProvider>
       <div className="flex min-h-svh bg-background text-foreground">
         <Sidebar currentPage={currentPage} onNavigate={(page) => handleNavigate(page)} onLogout={logout} />
         <main className="min-w-0 flex-1 overflow-auto">
@@ -58,6 +59,6 @@ export default function App() {
           {currentPage === "settings" && <SettingsPage darkMode={darkMode} onThemeChange={setDarkMode} />}
         </main>
       </div>
-    </TooltipProvider>
+    </TooltipProvider></ToastProvider>
   );
 }
