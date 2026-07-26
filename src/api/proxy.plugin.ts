@@ -55,8 +55,10 @@ function tokenDetails(usage: any) {
   };
 }
 
-function clientIp(request: Request, headers: Record<string, string | undefined>) {
-  return headers["x-forwarded-for"]?.split(",")[0]?.trim() || headers["x-real-ip"] || request.headers.get("cf-connecting-ip") || "unknown";
+function clientIp(request: Request, headers: Record<string, string | undefined>, server?: { requestIP?: (request: Request) => { address?: string } | null }) {
+  const forwarded = headers["x-forwarded-for"]?.split(",")[0]?.trim();
+  const direct = server?.requestIP?.(request)?.address;
+  return forwarded || headers["x-real-ip"] || request.headers.get("cf-connecting-ip") || direct || "unknown";
 }
 
 function anthropicStreamResponse(
@@ -220,7 +222,7 @@ export const proxyPlugin = (app: Elysia) =>
     })
     .post(
       "/v1/chat/completions",
-      async ({ body, set, headers, request }) => {
+      async ({ body, set, headers, request, server }) => {
         if (!body || typeof body !== "object" || typeof body.model !== "string" || !Array.isArray(body.messages)) {
           set.status = 400;
           return { error: "Invalid request", message: "model and messages are required" };
@@ -257,7 +259,7 @@ export const proxyPlugin = (app: Elysia) =>
           return { error: "Model blocked", message: `Model "${parsed.modelId}" is not available through Antigravity` };
          }
 
-         const requestLogId = requestLogService.start({ providerId: provider.id, providerName: provider.name, modelName: parsed.modelId, clientIp: clientIp(request, headers), requesterName: apiKey.name });
+         const requestLogId = requestLogService.start({ providerId: provider.id, providerName: provider.name, modelName: parsed.modelId, clientIp: clientIp(request, headers, server as any), requesterName: apiKey.name });
 
         const requestSequence = provider.credential_mode === "round_robin" ? credentialService.beginRequest(provider.id) : undefined;
         let credential = credentialService.select(provider.id, provider.credential_mode, provider.fixed_credential_id, requestSequence) || credentialService.select(provider.id, "round_robin", null, requestSequence);
