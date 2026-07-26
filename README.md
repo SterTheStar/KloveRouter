@@ -1,7 +1,5 @@
 <div align="center">
-  <img src="web/src/assets/klove-mark.svg" width="88" height="88" alt="Klove logo" />
-  <h1>Klove</h1>
-  <p><strong>A private, observable AI gateway for every model provider.</strong></p>
+  <h1><img src="web/src/assets/klove-mark.svg" width="56" height="56" align="center" alt="Klove logo" /> Klove</h1>
   <p>
     Route OpenAI-compatible traffic, manage OAuth providers, rotate credentials,<br />
     and understand usage from one focused control plane.
@@ -11,6 +9,7 @@
     <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5.x-3178C6?logo=typescript&logoColor=white" />
     <img alt="React" src="https://img.shields.io/badge/React-19-149ECA?logo=react&logoColor=white" />
     <img alt="Elysia" src="https://img.shields.io/badge/Elysia-1.x-7C3AED" />
+    <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/License-Klove%20Noncommercial%20Share--Alike-6B7280" /></a>
     <img alt="Last commit" src="https://img.shields.io/github/last-commit/SterTheStar/KloveRouter?logo=github&color=171717" />
   </p>
 </div>
@@ -169,6 +168,17 @@ Reasoning-capable providers expose streamed thinking through `choices[].delta.re
 
 Back up the SQLite database and encryption key together. An encrypted database cannot be recovered without the key used to write it.
 
+## License
+
+Klove is source-available under the [Klove Noncommercial Share-Alike License 1.0.0](LICENSE), a modified form of PolyForm Noncommercial 1.0.0.
+
+- Noncommercial use, study, modification, and redistribution are permitted.
+- Copies, forks, and derivative works must provide their complete source code under the same license.
+- Public network deployments must publish the corresponding source for the deployed version.
+- Commercial use requires a separate written license from the licensor.
+
+This license includes noncommercial restrictions and is therefore not an OSI-approved open-source license.
+
 ## Project Structure
 
 ```text
@@ -184,12 +194,11 @@ web/src/
   api/              Browser API client
 ```
 
-## Support
-
-If Klove is useful to you, consider supporting its development:
-
-<a href="https://www.buymeacoffee.com/sterzinhab9"><img src="https://img.buymeacoffee.com/button-api/?text=Buy%20me%20a%20coffee&emoji=&slug=sterzinhab9&button_colour=FFDD00&font_colour=000000&font_family=Poppins&outline_colour=000000&coffee_colour=ffffff" alt="Buy me a coffee" /></a>
-
 <div align="center">
-  Made by <a href="https://github.com/SterTheStar">Esther</a> with &lt;3
+  <h2>Support</h2>
+  <p>If Klove is useful to you, consider supporting its development.</p>
+  <p>
+    <a href="https://www.buymeacoffee.com/sterzinhab9"><img height="50" src="https://img.buymeacoffee.com/button-api/?text=Buy%20me%20a%20coffee&emoji=&slug=sterzinhab9&button_colour=FFDD00&font_colour=000000&font_family=Poppins&outline_colour=000000&coffee_colour=ffffff" alt="Buy me a coffee" /></a>
+  </p>
+  <p><sub>Made by <a href="https://github.com/SterTheStar">Esther</a> with &lt;3</sub></p>
 </div>
