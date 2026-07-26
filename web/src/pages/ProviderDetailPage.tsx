@@ -211,6 +211,17 @@ export default function ProviderDetailPage({ providerId, onBack }: { providerId:
     finally { setLoadingSecretId(null); }
   };
 
+  const copyCredentialSecret = async (credential: ProviderCredential) => {
+    setLoadingSecretId(credential.id);
+    try {
+      const secret = revealedKeys[credential.id] ?? (await providers.credentialSecret(providerId, credential.id)).secret;
+      if (!secret) throw new Error("This credential has no API key");
+      await copy(secret, "API key copied");
+    } catch (e: any) {
+      setError(e.message); notifyError("Could not copy API key", e.message);
+    } finally { setLoadingSecretId(null); }
+  };
+
   const copy = async (value: string, label = "Copied to clipboard") => {
     try {
       if (!navigator.clipboard) throw new Error("Clipboard access is unavailable.");
@@ -297,7 +308,7 @@ export default function ProviderDetailPage({ providerId, onBack }: { providerId:
               <div className="space-y-3">
                 <div className="flex items-center justify-between gap-3"><Label>API keys</Label><Button variant="outline" size="sm" onClick={() => setShowAddKey((value) => !value)}>{showAddKey ? <CloseCircle className="size-4" /> : <Add className="size-4" />}{showAddKey ? "Cancel" : "Add key"}</Button></div>
                 <div className="space-y-2">
-                    {credentials.filter((credential) => credential.kind === "api_key").length ? credentials.filter((credential) => credential.kind === "api_key").map((credential) => { const revealed = revealedKeys[credential.id]; return <div key={credential.id} className="grid items-center gap-2 border-b border-border/60 py-2 last:border-b-0 md:grid-cols-[minmax(8rem,0.65fr)_minmax(0,1.8fr)_auto]"><Input value={credential.label} readOnly aria-label={`${credential.label} label`} className="h-9 bg-background" /><div className="relative"><Input value={revealed ?? credential.masked_secret ?? "Hidden key"} readOnly type="text" aria-label={`${credential.label} secret`} className="h-9 bg-background pr-24 font-mono" /><div className="absolute right-1 top-1/2 flex -translate-y-1/2 gap-0.5"><Button variant="ghost" size="icon" className="size-8" onClick={() => toggleApiKeyVisibility(credential)} disabled={loadingSecretId === credential.id} title={revealed === undefined ? "Reveal API key" : "Hide API key"}>{revealed === undefined ? <Eye className="size-4" /> : <EyeOff className="size-4" />}</Button><Button variant="ghost" size="icon" className="size-8" onClick={() => navigator.clipboard?.writeText(revealed ?? credential.masked_secret ?? "")} title="Copy API key"><Copy className="size-4" /></Button></div></div><Button variant="destructive" size="icon" className="size-9" onClick={() => removeApiKey(credential.id)} title="Remove API key"><Trash2 className="size-4" /></Button></div>; }) : <div className="text-xs text-muted-foreground">No API keys configured.</div>}
+                    {credentials.filter((credential) => credential.kind === "api_key").length ? credentials.filter((credential) => credential.kind === "api_key").map((credential) => { const revealed = revealedKeys[credential.id]; return <div key={credential.id} className="grid items-center gap-2 border-b border-border/60 py-2 last:border-b-0 md:grid-cols-[minmax(8rem,0.65fr)_minmax(0,1.8fr)_auto]"><Input value={credential.label} readOnly aria-label={`${credential.label} label`} className="h-9 bg-background" /><div className="relative"><Input value={revealed ?? credential.masked_secret ?? "Hidden key"} readOnly type="text" aria-label={`${credential.label} secret`} className="h-9 bg-background pr-24 font-mono" /><div className="absolute right-1 top-1/2 flex -translate-y-1/2 gap-0.5"><Button variant="ghost" size="icon" className="size-8" onClick={() => toggleApiKeyVisibility(credential)} disabled={loadingSecretId === credential.id} title={revealed === undefined ? "Reveal API key" : "Hide API key"}>{revealed === undefined ? <Eye className="size-4" /> : <EyeOff className="size-4" />}</Button><Button variant="ghost" size="icon" className="size-8" onClick={() => copyCredentialSecret(credential)} disabled={loadingSecretId === credential.id} title="Copy API key"><Copy className="size-4" /></Button></div></div><Button variant="destructive" size="icon" className="size-9" onClick={() => removeApiKey(credential.id)} title="Remove API key"><Trash2 className="size-4" /></Button></div>; }) : <div className="text-xs text-muted-foreground">No API keys configured.</div>}
                 </div>
                 {showAddKey && <div className="grid gap-2 rounded-md border border-dashed p-3 md:grid-cols-[1fr_1.5fr_auto]"><Input ref={newKeyLabelRef} placeholder="Key label" /><Input ref={newKeySecretRef} type="password" placeholder="sk-..." /><Button onClick={addApiKey} disabled={addingKey}>{addingKey ? <LoaderCircle className="size-4 animate-spin" /> : <><Add className="size-4" />Add key</>}</Button></div>}
               </div>
