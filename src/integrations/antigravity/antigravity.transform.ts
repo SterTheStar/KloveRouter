@@ -119,7 +119,7 @@ export function toGoogleBody(body: any, projectId: string, sessionId = crypto.ra
   if (body.top_p !== undefined) generationConfig.topP = body.top_p;
   if (body.top_k !== undefined) generationConfig.topK = body.top_k;
   if (body.stop !== undefined) generationConfig.stopSequences = Array.isArray(body.stop) ? body.stop : [body.stop];
-  if (/gemini/i.test(body.model)) {
+  if (/gemini|claude|gpt|thinking/i.test(body.model)) {
     const effort = body.reasoning?.effort ?? body.reasoning_effort;
     const thinkingConfig: any = { includeThoughts: true };
     if (effort && /gemini-2\.5/i.test(body.model)) thinkingConfig.thinkingBudget = ({ minimal: 512, low: 1024, medium: 8192, high: 16000, xhigh: 24576, max: 24576 } as Record<string, number>)[effort] ?? 8192;
