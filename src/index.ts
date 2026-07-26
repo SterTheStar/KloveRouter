@@ -74,8 +74,8 @@ const protectedApp = new Elysia()
 
 app.use(protectedApp as any);
 
-// Codex OAuth requires the fixed localhost callback registered by Codex.
-new Elysia().use(codexPublicPlugin).use(antigravityPublicPlugin).listen(1455);
+// OAuth uses the fixed localhost callback URL, while the listener is reachable on all interfaces.
+new Elysia().use(codexPublicPlugin).use(antigravityPublicPlugin).listen({ port: 1455, hostname: "0.0.0.0" });
 
 // Serve frontend in production
 if (!config.isDev) {
@@ -96,7 +96,7 @@ if (!config.isDev) {
   }
 }
 
-app.listen(config.port);
+app.listen({ port: config.port, hostname: "0.0.0.0" });
 
 const b = "\x1b[1m", r = "\x1b[0m";
 const blue = "\x1b[38;2;91;206;250m", pink = "\x1b[38;2;245;169;184m", white = "\x1b[97m", dim = "\x1b[2m";
@@ -117,5 +117,5 @@ ${b}${blue} /_/ |_/_/\\____/|___/\\___/${r}
 const version = "1.0.0";
 
 logger.badge("KLOVE", `v${version} · https://github.com/SterTheStar/KloveRouter`);
-logger.success("Server running", { panel: `http://localhost:${config.port}`, api: `http://localhost:${config.port}/api` });
+logger.success("Server running", { panel: `http://0.0.0.0:${config.port}`, api: `http://0.0.0.0:${config.port}/api` });
 logger.info("Codex callback listener", { address: "http://localhost:1455/auth/callback" });
