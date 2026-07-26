@@ -8,7 +8,7 @@
     "dev:frontend": "bun --cwd web dev",
     "dev": "bun entry.ts",
     "build": "bun --cwd web build",
-    "start": "NODE_ENV=production bun src/index.ts",
+    "start": "bun index.ts",
     "postinstall": "cd web && bun install"
   },
   "dependencies": {
