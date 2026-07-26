@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
@@ -65,6 +66,11 @@ export default function ProviderDetailPage({ providerId, onBack }: { providerId:
   const [logoutOpen, setLogoutOpen] = useState(false);
   const [logoutCredentialId, setLogoutCredentialId] = useState<string | null>(null);
   const [routingSaving, setRoutingSaving] = useState(false);
+  const [manualOAuth, setManualOAuth] = useState<{ protocol: "codex" | "antigravity"; credentialId: string; authUrl: string } | null>(null);
+  const [callbackUrl, setCallbackUrl] = useState("");
+  const [completingOAuth, setCompletingOAuth] = useState(false);
+  const oauthPollRef = useRef<number | null>(null);
+  const oauthFinishedRef = useRef(false);
 
   const routableCredentials = useMemo(() => credentials.filter((credential) => {
     if (!credential.is_active) return false;
@@ -83,7 +89,8 @@ export default function ProviderDetailPage({ providerId, onBack }: { providerId:
     } catch (e: any) { setError(e.message); notifyError("Could not load provider", e.message); } finally { setLoading(false); }
   }, [providerId]);
 
-  useEffect(() => { load(); }, [load]);
+  const clearOAuthPoll = () => { if (oauthPollRef.current !== null) { window.clearInterval(oauthPollRef.current); oauthPollRef.current = null; } };
+  useEffect(() => { load(); return () => clearOAuthPoll(); }, [load]);
 
   const save = async () => {
     setSaving(true);
@@ -97,23 +104,67 @@ export default function ProviderDetailPage({ providerId, onBack }: { providerId:
      catch (e: any) { setError(e.message); notifyError("Could not sync models", e.message); } finally { setSyncing(false); }
   };
 
+  const waitForOAuth = (protocol: "codex" | "antigravity", credentialId: string) => {
+    const started = Date.now();
+    oauthFinishedRef.current = false;
+    clearOAuthPoll();
+    oauthPollRef.current = window.setInterval(async () => {
+      try {
+        const status = await providers.credentialStatus(providerId, credentialId);
+        if (oauthFinishedRef.current) return;
+        if (status.authenticated) { oauthFinishedRef.current = true; clearOAuthPoll(); setManualOAuth(null); setCredentialAction(false); setSuccess(`${protocol === "antigravity" ? "Google Antigravity" : "Codex"} account connected.`); notifySuccess("Account connected"); await load(); }
+        else if (Date.now() - started > 5 * 60_000) { clearOAuthPoll(); setCredentialAction(false); setError("OAuth login timed out. Restart the login and paste its callback URL."); notifyError("Login timed out"); }
+      } catch { /* Keep polling during browser login. */ }
+    }, 1500);
+  };
+
   const addOAuthAccount = async () => {
     if (!provider) return;
+    const isAntigravity = provider.protocol === "antigravity";
+    const popup = window.open("about:blank", isAntigravity ? "klove-antigravity-login" : "klove-codex-login", "popup,width=520,height=720");
+    let createdCredentialId: string | null = null;
     setCredentialAction(true); setError(null);
     try {
-      const isAntigravity = provider.protocol === "antigravity";
       const credential = await providers.addCredential(providerId, { label: `${isAntigravity ? "Google" : "Codex"} account ${credentials.length + 1}`, kind: isAntigravity ? "antigravity" : "codex" });
+      createdCredentialId = credential.id;
       const result = isAntigravity ? await antigravity.login(credential.id) : await codex.login(credential.id);
-      window.open(result.auth_url, isAntigravity ? "klove-antigravity-login" : "klove-codex-login", "popup,width=520,height=720");
-      const started = Date.now();
-      const poll = window.setInterval(async () => {
-        try {
-           if ((await providers.credentialStatus(providerId, credential.id)).authenticated) { window.clearInterval(poll); setCredentialAction(false); setSuccess("Codex account connected."); notifySuccess("Account connected"); await load(); }
-           else if (Date.now() - started > 5 * 60_000) { window.clearInterval(poll); setCredentialAction(false); setError("Codex login timed out."); notifyError("Login timed out"); }
-        } catch { /* keep polling during browser login */ }
-      }, 1500);
-    } catch (e: any) { setError(e.message); notifyError("Could not connect account", e.message); setCredentialAction(false); }
+      if (popup) popup.location.href = result.auth_url;
+      const protocol = isAntigravity ? "antigravity" : "codex";
+      setManualOAuth({ protocol, credentialId: credential.id, authUrl: result.auth_url }); setCallbackUrl("");
+      waitForOAuth(protocol, credential.id);
+    } catch (e: any) { popup?.close(); if (createdCredentialId) await providers.removeCredential(providerId, createdCredentialId).catch(() => {}); setError(e.message); notifyError("Could not connect account", e.message); setCredentialAction(false); }
   };
+
+  const completeOAuthManually = async () => {
+    if (!manualOAuth || oauthFinishedRef.current || !callbackUrl.trim()) return;
+    setCompletingOAuth(true); setError(null);
+    try {
+      if (manualOAuth.protocol === "codex") await codex.completeLogin(callbackUrl.trim(), manualOAuth.credentialId);
+      else await antigravity.completeLogin(callbackUrl.trim(), manualOAuth.credentialId);
+      oauthFinishedRef.current = true;
+      clearOAuthPoll(); setManualOAuth(null); setCallbackUrl(""); setCredentialAction(false); setSuccess(`${manualOAuth.protocol === "codex" ? "Codex" : "Google Antigravity"} account connected.`); notifySuccess("Account connected"); await load();
+    } catch (e: any) {
+      try {
+        if ((await providers.credentialStatus(providerId, manualOAuth.credentialId)).authenticated) { oauthFinishedRef.current = true; clearOAuthPoll(); setManualOAuth(null); setCallbackUrl(""); setCredentialAction(false); await load(); return; }
+      } catch { /* Report the original completion error. */ }
+      setError(e.message); notifyError("Could not complete OAuth", e.message);
+    } finally { setCompletingOAuth(false); }
+  };
+
+  const restartOAuth = async () => {
+    if (!manualOAuth) return;
+    const popup = window.open("about:blank", manualOAuth.protocol === "codex" ? "klove-codex-login" : "klove-antigravity-login", "popup,width=520,height=720");
+    setCompletingOAuth(true); setError(null); setCallbackUrl("");
+    try {
+      const result = manualOAuth.protocol === "codex" ? await codex.login(manualOAuth.credentialId) : await antigravity.login(manualOAuth.credentialId);
+      if (popup) popup.location.href = result.auth_url;
+      setManualOAuth({ ...manualOAuth, authUrl: result.auth_url });
+      waitForOAuth(manualOAuth.protocol, manualOAuth.credentialId);
+    } catch (e: any) { popup?.close(); setError(e.message); notifyError("Could not restart OAuth", e.message); }
+    finally { setCompletingOAuth(false); }
+  };
+
+  const cancelManualOAuth = () => { oauthFinishedRef.current = true; clearOAuthPoll(); const credentialId = manualOAuth?.credentialId; setManualOAuth(null); setCallbackUrl(""); setCredentialAction(false); if (credentialId) void providers.removeCredential(providerId, credentialId).then(() => load()).catch(() => {}); };
 
   const logoutCodex = async () => {
     if (!logoutCredentialId) return;
@@ -265,7 +316,14 @@ export default function ProviderDetailPage({ providerId, onBack }: { providerId:
             <div className="space-y-2">{credentials.filter((credential) => (credential.kind === "codex" || credential.kind === "antigravity") && (credential.account_id || credential.email)).map((credential) => <button key={credential.id} type="button" className={`flex w-full items-center justify-between rounded-md border p-3 text-left text-sm ${logoutCredentialId === credential.id ? "border-primary bg-muted" : "hover:bg-muted/50"}`} onClick={() => setLogoutCredentialId(credential.id)}><span><span className="block">{credential.label}</span><span className="font-mono text-xs text-muted-foreground">{credential.kind === "antigravity" ? credential.id : credential.account_id || credential.project_id}</span></span>{logoutCredentialId === credential.id && <Check className="size-4" />}</button>)}</div>
            <DialogFooter><Button variant="outline" onClick={() => setLogoutOpen(false)}>Cancel</Button><Button variant="destructive" onClick={logoutCodex} disabled={!logoutCredentialId || authAction !== null}>{authAction === "logout" ? "Logging out..." : "Log out"}</Button></DialogFooter>
          </DialogContent>
-       </Dialog>
+        </Dialog>
+        <Dialog open={!!manualOAuth} onOpenChange={(open) => { if (!open) cancelManualOAuth(); }}>
+          <DialogContent>
+            <DialogHeader><DialogTitle>Complete OAuth login</DialogTitle><DialogDescription>If the browser stopped at localhost, copy the complete URL from its address bar and paste it below. You can also wait for automatic completion.</DialogDescription></DialogHeader>
+            <div className="space-y-2"><div className="flex items-center justify-between gap-3"><Label htmlFor="manual-oauth-callback">Callback URL</Label>{manualOAuth && <a href={manualOAuth.authUrl} target="_blank" rel="noreferrer" className="text-xs font-medium text-primary underline underline-offset-4">Open authorization page</a>}</div><Textarea id="manual-oauth-callback" className="min-h-28 font-mono text-xs" value={callbackUrl} onChange={(event) => setCallbackUrl(event.target.value)} placeholder={`http://localhost:1455/${manualOAuth?.protocol === "codex" ? "auth" : "antigravity"}/callback?code=...&state=...`} /></div>
+            <DialogFooter><Button variant="outline" onClick={cancelManualOAuth}>Cancel</Button><Button variant="outline" onClick={restartOAuth} disabled={completingOAuth}>Restart login</Button><Button onClick={completeOAuthManually} disabled={completingOAuth || !callbackUrl.trim()}>{completingOAuth ? "Completing..." : "Complete login"}</Button></DialogFooter>
+          </DialogContent>
+        </Dialog>
        <AddModelModal isOpen={addOpen} onClose={() => setAddOpen(false)} onSuccess={load} providerId={providerId} />
       <EditModelModal isOpen={!!editTarget} model={editTarget} onClose={() => setEditTarget(null)} onSuccess={load} />
       <ConfirmDialog open={!!deleteTarget} title="Delete model" message={`Remove ${deleteTarget?.model_id}?`} confirmLabel="Delete" onConfirm={async () => { if (!deleteTarget) return; await modelsApi.remove(deleteTarget.id); setList((items) => items.filter((item) => item.id !== deleteTarget.id)); setDeleteTarget(null); }} onCancel={() => setDeleteTarget(null)} />

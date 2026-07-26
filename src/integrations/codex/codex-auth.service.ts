@@ -67,19 +67,28 @@ export const codexAuthService = {
     if (!credentialId) throw new Error("A Codex credential is required");
     const credential = credentialService.findById(credentialId);
     if (!credential || credential.kind !== "codex") throw new Error("Codex credential not found");
+    const now = Date.now();
+    for (const [key, login] of pending) if (login.credentialId === credentialId || now - login.createdAt > 10 * 60_000) pending.delete(key);
     const verifier = base64Url(crypto.getRandomValues(new Uint8Array(48)));
     const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier));
     const challenge = base64Url(new Uint8Array(digest));
     const state = base64Url(crypto.getRandomValues(new Uint8Array(32)));
-    pending.set(state, { state, verifier, createdAt: Date.now(), credentialId });
+    for (const [key, login] of pending) if (login.credentialId === credentialId) pending.delete(key);
+    pending.set(state, { state, verifier, createdAt: now, credentialId });
     const params = new URLSearchParams({ response_type: "code", client_id: CLIENT_ID, redirect_uri: CALLBACK, scope: "openid profile email offline_access", code_challenge: challenge, code_challenge_method: "S256", id_token_add_organizations: "true", codex_cli_simplified_flow: "true", state });
     return { auth_url: `${ISSUER}/oauth/authorize?${params}`, warning: "Unofficial OAuth integration. Do not share your Codex credentials or auth.json." };
   },
 
-  async completeLogin(code: string, state: string) {
+  async completeLogin(code: string, state: string, expectedCredentialId?: string) {
     const login = pending.get(state);
+    if (!login || Date.now() - login.createdAt > 10 * 60_000) {
+      pending.delete(state);
+      throw new Error("Invalid or expired OAuth state");
+    }
+    if (expectedCredentialId && login.credentialId !== expectedCredentialId) throw new Error("OAuth state does not belong to this credential");
+    const credential = login.credentialId ? credentialService.findById(login.credentialId) : null;
+    if (login.credentialId && (!credential || credential.kind !== "codex")) throw new Error("Codex credential not found");
     pending.delete(state);
-    if (!login || Date.now() - login.createdAt > 10 * 60_000) throw new Error("Invalid or expired OAuth state");
     const body = new URLSearchParams({ grant_type: "authorization_code", code, redirect_uri: CALLBACK, client_id: CLIENT_ID, code_verifier: login.verifier });
     const response = await fetch(`${ISSUER}/oauth/token`, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body });
     const data = await response.json().catch(() => null);

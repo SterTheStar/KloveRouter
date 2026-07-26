@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { RiSearchLine as Search, RiArrowLeftSLine as ArrowLeft } from "@remixicon/react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Textarea } from "@/components/ui/textarea";
 import AvatarUpload from "./AvatarUpload";
 import { antigravity, codex, providers } from "../api/client";
 import { useToast } from "./ui/toast";
@@ -201,10 +202,67 @@ export default function AddProviderModal({ isOpen, onClose, onSuccess }: { isOpe
   const [selectedType, setSelectedType] = useState<typeof providerTypes[number] | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [name, setName] = useState(""); const [baseUrl, setBaseUrl] = useState(""); const [apiKey, setApiKey] = useState(""); const [avatar, setAvatar] = useState<string | null>(null); const [loading, setLoading] = useState(false); const [error, setError] = useState<string | null>(null);
+  const [pendingOAuth, setPendingOAuth] = useState<{ protocol: "codex" | "antigravity"; providerId: string; credentialId: string; authUrl: string } | null>(null);
+  const [callbackUrl, setCallbackUrl] = useState("");
+  const [completingOAuth, setCompletingOAuth] = useState(false);
+  const pollRef = useRef<number | null>(null);
+  const oauthFinishedRef = useRef(false);
 
-  const reset = () => { setName(""); setBaseUrl(""); setApiKey(""); setAvatar(null); setError(null); setStep("select"); setSelectedType(null); setSearchQuery(""); };
+  const clearPoll = () => { if (pollRef.current !== null) { window.clearInterval(pollRef.current); pollRef.current = null; } };
+  useEffect(() => () => clearPoll(), []);
 
-  const close = () => { if (loading) return; reset(); onClose(); };
+  const reset = () => { clearPoll(); setName(""); setBaseUrl(""); setApiKey(""); setAvatar(null); setError(null); setStep("select"); setSelectedType(null); setSearchQuery(""); setPendingOAuth(null); setCallbackUrl(""); setCompletingOAuth(false); setLoading(false); };
+
+  const close = () => { if (loading && !pendingOAuth) return; oauthFinishedRef.current = true; const orphan = pendingOAuth; reset(); onClose(); if (orphan) void providers.remove(orphan.providerId).catch(() => {}); };
+
+  const finishOAuth = (protocol: "codex" | "antigravity") => {
+    if (oauthFinishedRef.current) return;
+    oauthFinishedRef.current = true;
+    clearPoll();
+    success("Account connected", protocol === "codex" ? "Codex is ready to use." : "Google Antigravity is ready to use.");
+    onSuccess();
+    reset();
+    onClose();
+  };
+
+  const waitForOAuth = (protocol: "codex" | "antigravity", providerId: string, credentialId: string, authUrl: string) => {
+    oauthFinishedRef.current = false;
+    setPendingOAuth({ protocol, providerId, credentialId, authUrl });
+    const started = Date.now();
+    clearPoll();
+    pollRef.current = window.setInterval(async () => {
+      try {
+        if (!oauthFinishedRef.current && (await providers.credentialStatus(providerId, credentialId)).authenticated) finishOAuth(protocol);
+        else if (Date.now() - started > 5 * 60_000) { clearPoll(); setLoading(false); setError("OAuth login timed out. Start a new login and paste its callback URL."); }
+      } catch { /* Keep polling during browser login. */ }
+    }, 1500);
+  };
+
+  const completeOAuthManually = async () => {
+    if (!pendingOAuth || oauthFinishedRef.current || !callbackUrl.trim()) return setError("Paste the complete localhost callback URL.");
+    setCompletingOAuth(true); setError(null);
+    try {
+      if (pendingOAuth.protocol === "codex") await codex.completeLogin(callbackUrl.trim(), pendingOAuth.credentialId);
+      else await antigravity.completeLogin(callbackUrl.trim(), pendingOAuth.credentialId);
+      finishOAuth(pendingOAuth.protocol);
+    } catch (e: any) {
+      try {
+        if ((await providers.credentialStatus(pendingOAuth.providerId, pendingOAuth.credentialId)).authenticated) return finishOAuth(pendingOAuth.protocol);
+      } catch { /* Report the original completion error. */ }
+      setError(e.message); notifyError("Could not complete OAuth", e.message);
+    } finally { setCompletingOAuth(false); }
+  };
+
+  const restartOAuth = async () => {
+    if (!pendingOAuth) return;
+    const popup = window.open("about:blank", pendingOAuth.protocol === "codex" ? "klove-codex-login" : "klove-antigravity-login", "popup,width=520,height=720");
+    setLoading(true); setError(null); setCallbackUrl("");
+    try {
+      const result = pendingOAuth.protocol === "codex" ? await codex.login(pendingOAuth.credentialId) : await antigravity.login(pendingOAuth.credentialId);
+      if (popup) popup.location.href = result.auth_url;
+      waitForOAuth(pendingOAuth.protocol, pendingOAuth.providerId, pendingOAuth.credentialId, result.auth_url);
+    } catch (e: any) { popup?.close(); setLoading(false); setError(e.message); notifyError("Could not restart OAuth", e.message); }
+  };
 
   const selectType = (type: typeof providerTypes[number]) => {
     setSelectedType(type);
@@ -223,18 +281,23 @@ export default function AddProviderModal({ isOpen, onClose, onSuccess }: { isOpe
   };
 
   const connectAntigravity = async () => {
+    const popup = window.open("about:blank", "klove-antigravity-login", "popup,width=520,height=720");
+    let createdProviderId: string | null = null;
     setLoading(true); setError(null);
     try {
       const provider = await providers.create({ name: name.trim() || "antigravity", base_url: baseUrl || "https://cloudcode-pa.googleapis.com", protocol: "antigravity", avatar: avatar || antigravityLogo });
+      createdProviderId = provider.id;
       const credential = (await providers.credentials(provider.id))[0];
       if (!credential) throw new Error("Unable to create Google credential");
       const result = await antigravity.login(credential.id);
-      window.open(result.auth_url, "klove-antigravity-login", "popup,width=520,height=720");
-      const started = Date.now(); const poll = window.setInterval(async () => { try { if ((await providers.credentialStatus(provider.id, credential.id)).authenticated) { window.clearInterval(poll); onSuccess(); close(); } else if (Date.now() - started > 5 * 60_000) { window.clearInterval(poll); setLoading(false); setError("Google login timed out."); } } catch {} }, 1500);
-    } catch (e: any) { setError(e.message); notifyError("Could not connect Google", e.message); setLoading(false); }
+      if (popup) popup.location.href = result.auth_url;
+      waitForOAuth("antigravity", provider.id, credential.id, result.auth_url);
+    } catch (e: any) { popup?.close(); if (createdProviderId) await providers.remove(createdProviderId).catch(() => {}); setError(e.message); notifyError("Could not connect Google", e.message); setLoading(false); }
   };
 
   const connectCodex = async () => {
+    const popup = window.open("about:blank", "klove-codex-login", "popup,width=520,height=720");
+    let createdProviderId: string | null = null;
     setLoading(true); setError(null);
     try {
       const provider = await providers.create({
@@ -244,27 +307,16 @@ export default function AddProviderModal({ isOpen, onClose, onSuccess }: { isOpe
         protocol: "codex",
         avatar: avatar || openAiLogo,
       });
+      createdProviderId = provider.id;
       const credentials = await providers.credentials(provider.id);
       const credential = credentials[0];
       if (!credential) throw new Error("Unable to create Codex credential");
       const result = await codex.login(credential.id);
-      window.open(result.auth_url, "klove-codex-login", "popup,width=520,height=720");
-      const started = Date.now();
-      const poll = window.setInterval(async () => {
-        try {
-          const status = await providers.credentialStatus(provider.id, credential.id);
-          if (status.authenticated) {
-            window.clearInterval(poll);
-            onSuccess();
-            close();
-          } else if (Date.now() - started > 5 * 60_000) {
-            window.clearInterval(poll);
-            setLoading(false);
-            setError("Codex login timed out.");
-          }
-        } catch { /* keep polling during browser login */ }
-      }, 1500);
+      if (popup) popup.location.href = result.auth_url;
+      waitForOAuth("codex", provider.id, credential.id, result.auth_url);
     } catch (e: any) {
+      popup?.close();
+      if (createdProviderId) await providers.remove(createdProviderId).catch(() => {});
       setError(e.message);
       notifyError("Could not connect Codex", e.message);
       setLoading(false);
@@ -326,9 +378,10 @@ export default function AddProviderModal({ isOpen, onClose, onSuccess }: { isOpe
             <div className="space-y-2"><Label htmlFor="provider-name">Provider name</Label><Input id="provider-name" value={name} onChange={(e) => setName(e.target.value)} placeholder={selectedType?.id} /></div>
             <div className="space-y-2"><Label htmlFor="provider-url">Base URL</Label><Input id="provider-url" value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} placeholder={selectedType?.placeholder} /></div>
              {selectedType?.protocol !== "codex" && selectedType?.protocol !== "antigravity" && <div className="space-y-2"><Label htmlFor="provider-key">API key</Label><Input id="provider-key" type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder="sk-..." /></div>}
-            {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
+             {pendingOAuth && <div className="space-y-2 rounded-lg border border-dashed p-3"><div className="flex items-center justify-between gap-3"><Label htmlFor="oauth-callback-url">Complete OAuth manually</Label><a href={pendingOAuth.authUrl} target="_blank" rel="noreferrer" className="text-xs font-medium text-primary underline underline-offset-4">Open authorization page</a></div><Textarea id="oauth-callback-url" className="min-h-24 font-mono text-xs" value={callbackUrl} onChange={(e) => setCallbackUrl(e.target.value)} placeholder={`http://localhost:1455/${pendingOAuth.protocol === "codex" ? "auth" : "antigravity"}/callback?code=...&state=...`} /><p className="text-xs text-muted-foreground">If the localhost page did not open, copy its complete URL from the browser address bar and paste it here. The automatic login remains active.</p></div>}
+             {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
           </div>
-           <DialogFooter><Button variant="outline" onClick={close} disabled={loading}>Cancel</Button>{selectedType?.protocol === "codex" ? <Button onClick={connectCodex} disabled={loading}>{loading ? "Opening login..." : "Connect Codex"}</Button> : selectedType?.protocol === "antigravity" ? <Button onClick={connectAntigravity} disabled={loading}>{loading ? "Opening login..." : "Connect Google"}</Button> : <Button onClick={submit} disabled={loading}>{loading ? "Saving..." : "Save provider"}</Button>}</DialogFooter>
+            <DialogFooter><Button variant="outline" onClick={close}>Cancel</Button>{pendingOAuth ? <><Button variant="outline" onClick={restartOAuth} disabled={completingOAuth}>Restart login</Button><Button onClick={completeOAuthManually} disabled={completingOAuth || !callbackUrl.trim()}>{completingOAuth ? "Completing..." : "Complete login"}</Button></> : selectedType?.protocol === "codex" ? <Button onClick={connectCodex} disabled={loading}>{loading ? "Opening login..." : "Connect Codex"}</Button> : selectedType?.protocol === "antigravity" ? <Button onClick={connectAntigravity} disabled={loading}>{loading ? "Opening login..." : "Connect Google"}</Button> : <Button onClick={submit} disabled={loading}>{loading ? "Saving..." : "Save provider"}</Button>}</DialogFooter>
         </>
       )}
     </DialogContent>

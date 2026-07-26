@@ -42,7 +42,6 @@ const app = new Elysia()
   .use(authPlugin)
   .use(codexPublicPlugin)
   .use(antigravityPublicPlugin)
-  .use(antigravityUsagePlugin)
   .use(proxyPlugin);
 
 // Protected routes (require JWT)
@@ -70,6 +69,7 @@ const protectedApp = new Elysia()
   .use(settingsPlugin)
   .use(statsPlugin)
   .use(requestLogsPlugin)
+  .use(antigravityUsagePlugin)
   .use(codexPlugin);
 
 app.use(protectedApp as any);

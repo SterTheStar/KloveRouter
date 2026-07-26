@@ -108,6 +108,7 @@ export const providers = {
 export const codex = {
   status: () => request<{ authenticated: boolean; account_id: string | null; auth_path: string; last_refresh: string | null; warning: string }>("/api/codex/status"),
   login: (credential_id: string) => request<{ auth_url: string; warning: string }>("/api/codex/login", { method: "POST", body: JSON.stringify({ credential_id }) }),
+  completeLogin: (callback_url: string, credential_id: string) => request<{ authenticated: boolean; account_id?: string | null; email?: string | null; project_id?: string | null }>("/api/codex/login/complete", { method: "POST", body: JSON.stringify({ callback_url, credential_id }) }),
   logout: () => request<{ authenticated: boolean }>("/api/codex/logout", { method: "POST" }),
   refresh: () => request<{ authenticated: boolean }>("/api/codex/refresh", { method: "POST" }),
   models: () => request<{ id: string; object: string; owned_by: string }[]>("/api/codex/models"),
@@ -117,6 +118,7 @@ export const codex = {
 };
 export const antigravity = {
   login: (credential_id: string) => request<{ auth_url: string; warning: string }>("/api/antigravity/login", { method: "POST", body: JSON.stringify({ credential_id }) }),
+  completeLogin: (callback_url: string, credential_id: string) => request<{ authenticated: boolean; account_id?: string | null; email?: string | null; project_id?: string | null }>("/api/antigravity/login/complete", { method: "POST", body: JSON.stringify({ callback_url, credential_id }) }),
   usage: (credential_id: string) => request<import("../types").AntigravityQuota[]>(`/api/antigravity/usage?credential_id=${encodeURIComponent(credential_id)}`),
 };
 

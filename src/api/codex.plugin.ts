@@ -4,6 +4,7 @@ import { logger } from "../logger";
 import { credentialService } from "../services/credential.service";
 import { ANTIGRAVITY_CALLBACK_HTML, antigravityAuthService } from "../integrations/antigravity";
 import { antigravityUsage } from "../integrations/antigravity";
+import { parseManualOAuthCallback } from "../integrations/oauth-callback";
 
 export const codexPublicPlugin = (app: Elysia) =>
   app.get("/auth/callback", async ({ query, set }) => {
@@ -35,6 +36,14 @@ export const codexPlugin = (app: Elysia) =>
     .get("/api/codex/status", () => codexAuthService.status())
     .post("/api/codex/login", ({ body }) => codexAuthService.startLogin(body.credential_id), { body: t.Object({ credential_id: t.String() }) })
     .post("/api/antigravity/login", ({ body }) => antigravityAuthService.startLogin(body.credential_id), { body: t.Object({ credential_id: t.String() }) })
+    .post("/api/codex/login/complete", async ({ body, set }) => {
+      try { const { code, state } = parseManualOAuthCallback(body.callback_url, "codex"); return await codexAuthService.completeLogin(code, state, body.credential_id); }
+      catch (error: any) { set.status = 400; return { error: error.message }; }
+    }, { body: t.Object({ callback_url: t.String({ minLength: 1, maxLength: 4096 }), credential_id: t.String({ minLength: 1 }) }) })
+    .post("/api/antigravity/login/complete", async ({ body, set }) => {
+      try { const { code, state } = parseManualOAuthCallback(body.callback_url, "antigravity"); return await antigravityAuthService.completeLogin(code, state, body.credential_id); }
+      catch (error: any) { set.status = 400; return { error: error.message }; }
+    }, { body: t.Object({ callback_url: t.String({ minLength: 1, maxLength: 4096 }), credential_id: t.String({ minLength: 1 }) }) })
     .post("/api/codex/logout", () => codexAuthService.logout())
     .post("/api/codex/refresh", () => codexAuthService.refresh())
     .get("/api/codex/usage", async ({ query, set }) => {
