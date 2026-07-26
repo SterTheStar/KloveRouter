@@ -32,6 +32,10 @@ function requestId() {
 }
 
 export const requestLogService = {
+  cleanupStale() {
+    getDb().query("UPDATE request_logs SET status = 'error', status_code = 499, error_message = 'Client disconnected or request timed out', completed_at = datetime('now') WHERE status = 'pending' AND created_at < datetime('now', '-30 minutes')").run();
+  },
+
   start(input: { providerId: string; providerName: string; modelName: string; clientIp?: string | null; requesterName?: string | null }) {
     const id = requestId();
     getDb().query("INSERT INTO request_logs (id, provider_id, provider_name, model_name, client_ip, requester_name) VALUES (?, ?, ?, ?, ?, ?)").run(id, input.providerId, input.providerName, input.modelName, input.clientIp ?? null, input.requesterName ?? null);
@@ -57,11 +61,12 @@ export const requestLogService = {
       ).get(request.provider_id, request.model_name, prompt) as { input_per_million: number; output_per_million: number; cache_read_per_million: number; cache_write_per_million: number } | null : null;
       cost = tier ? (Math.max(0, prompt - cacheRead) * tier.input_per_million + completion * tier.output_per_million + cacheRead * tier.cache_read_per_million + cacheWrite * tier.cache_write_per_million) / 1_000_000 : 0;
     }
-    db.query("UPDATE request_logs SET status = ?, status_code = ?, tokens_prompt = ?, tokens_completion = ?, tokens_cache_read = ?, tokens_cache_write = ?, tokens_total = ?, estimated_cost_usd = ?, duration_ms = ?, tps = ?, error_message = ?, completed_at = datetime('now') WHERE id = ?").run(input.status ?? "success", input.statusCode ?? 200, prompt, completion, cacheRead, cacheWrite, prompt + completion, cost ?? 0, input.durationMs ?? null, input.tps ?? (input.durationMs && input.durationMs > 0 ? completion / (input.durationMs / 1000) : null), input.error ?? null, id);
+    db.query("UPDATE request_logs SET status = ?, status_code = ?, tokens_prompt = ?, tokens_completion = ?, tokens_cache_read = ?, tokens_cache_write = ?, tokens_total = ?, estimated_cost_usd = ?, duration_ms = ?, tps = ?, error_message = ?, completed_at = datetime('now') WHERE id = ? AND status = 'pending'").run(input.status ?? "success", input.statusCode ?? 200, prompt, completion, cacheRead, cacheWrite, prompt + completion, cost ?? 0, input.durationMs ?? null, input.tps ?? (input.durationMs && input.durationMs > 0 ? completion / (input.durationMs / 1000) : null), input.error ?? null, id);
   },
 
   list(input: { limit?: number; offset?: number; status?: string; provider?: string; search?: string } = {}) {
     const db = getDb();
+    this.cleanupStale();
     const limit = Math.min(Math.max(input.limit ?? 50, 1), 200);
     const offset = Math.max(input.offset ?? 0, 0);
     const clauses: string[] = [];
