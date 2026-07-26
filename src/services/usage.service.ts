@@ -84,6 +84,7 @@ export const usageService = {
 
   getOverview(days: number = 30): StatsOverview {
     const db = getDb();
+    const dateFilter = days > 0 ? "WHERE created_at >= datetime('now', ? || ' days')" : "";
     const row = db
       .query(
         `SELECT
@@ -95,15 +96,16 @@ export const usageService = {
             COALESCE(SUM(tokens_cache_read), 0) as total_tokens_cache,
            COALESCE(CAST(SUM(tokens_total) AS REAL) / MAX(COUNT(*), 1), 0) as avg_tokens_per_request,
            COALESCE(CAST(SUM(duration_ms) AS REAL) / MAX(COUNT(*), 1), 0) as avg_duration_ms
-         FROM usage_log
-         WHERE created_at >= datetime('now', ? || ' days')`
+          FROM usage_log
+          ${dateFilter}`
       )
-      .get(`-${days}`) as StatsOverview;
+      .get(...(days > 0 ? [`-${days}`] : [])) as StatsOverview;
     return row;
   },
 
   getByProvider(days: number = 30): StatsByProvider[] {
     const db = getDb();
+    const dateFilter = days > 0 ? "WHERE u.created_at >= datetime('now', ? || ' days')" : "";
     return db
       .query(
         `SELECT
@@ -114,15 +116,16 @@ export const usageService = {
             ,COALESCE(SUM(u.estimated_cost_usd), 0) as estimated_cost_usd
          FROM usage_log u
          JOIN providers p ON p.id = u.provider_id
-         WHERE u.created_at >= datetime('now', ? || ' days')
+          ${dateFilter}
          GROUP BY u.provider_id
          ORDER BY tokens_total DESC`
       )
-      .all(`-${days}`) as StatsByProvider[];
+      .all(...(days > 0 ? [`-${days}`] : [])) as StatsByProvider[];
   },
 
   getByModel(days: number = 30): StatsByModel[] {
     const db = getDb();
+    const dateFilter = days > 0 ? "WHERE u.created_at >= datetime('now', ? || ' days')" : "";
     return db
       .query(
         `SELECT
@@ -143,15 +146,16 @@ export const usageService = {
            END as tps
          FROM usage_log u
          JOIN providers p ON p.id = u.provider_id
-         WHERE u.created_at >= datetime('now', ? || ' days')
+          ${dateFilter}
          GROUP BY u.model_id, u.model_name
          ORDER BY tokens_total DESC`
       )
-      .all(`-${days}`) as StatsByModel[];
+      .all(...(days > 0 ? [`-${days}`] : [])) as StatsByModel[];
   },
 
   getDailyStats(days: number = 30): DailyStats[] {
     const db = getDb();
+    const dateFilter = days > 0 ? "WHERE created_at >= datetime('now', ? || ' days')" : "";
     return db
       .query(
         `SELECT
@@ -160,11 +164,11 @@ export const usageService = {
             COALESCE(SUM(tokens_total), 0) as tokens_total
             ,COALESCE(SUM(estimated_cost_usd), 0) as estimated_cost_usd
          FROM usage_log
-         WHERE created_at >= datetime('now', ? || ' days')
+          ${dateFilter}
          GROUP BY DATE(created_at)
          ORDER BY date ASC`
       )
-      .all(`-${days}`) as DailyStats[];
+      .all(...(days > 0 ? [`-${days}`] : [])) as DailyStats[];
   },
 
   getModelTps(modelId: string): number | null {

@@ -177,14 +177,14 @@ export const apiKeys = {
 
 // Stats
 export const stats = {
-  overview: (days = 30) =>
-    request<import("../types").StatsOverview>(`/api/stats/overview?days=${days}`),
-  byProvider: (days = 30) =>
-    request<import("../types").StatsByProvider[]>(`/api/stats/by-provider?days=${days}`),
-  byModel: (days = 30) =>
-    request<import("../types").StatsByModel[]>(`/api/stats/by-model?days=${days}`),
-  daily: (days = 30) =>
-    request<import("../types").DailyStats[]>(`/api/stats/daily?days=${days}`),
+  overview: (days: number | null = 30) =>
+    request<import("../types").StatsOverview>(`/api/stats/overview?days=${days ?? 0}`),
+  byProvider: (days: number | null = 30) =>
+    request<import("../types").StatsByProvider[]>(`/api/stats/by-provider?days=${days ?? 0}`),
+  byModel: (days: number | null = 30) =>
+    request<import("../types").StatsByModel[]>(`/api/stats/by-model?days=${days ?? 0}`),
+  daily: (days: number | null = 30) =>
+    request<import("../types").DailyStats[]>(`/api/stats/daily?days=${days ?? 0}`),
   tps: () =>
     request<{ model_id: string; tps: number | null }[]>("/api/stats/tps"),
 };

@@ -60,7 +60,7 @@ export default function StatsPage() {
   const [daily, setDaily] = useState<DailyStats[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [days, setDays] = useState(30);
+  const [days, setDays] = useState<number | null>(30);
   const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async () => {
@@ -119,7 +119,7 @@ export default function StatsPage() {
     return groups;
   }, [byModel]);
 
-  const daysOptions = [7, 30, 90];
+  const daysOptions: { label: string; value: number | null }[] = [{ label: "7d", value: 7 }, { label: "30d", value: 30 }, { label: "90d", value: 90 }, { label: "Total", value: null }];
 
   if (loading) return <div className="flex justify-center p-12"><LoaderCircle className="size-5 animate-spin text-muted-foreground" /></div>;
 
@@ -128,9 +128,9 @@ export default function StatsPage() {
       <div className="flex items-center justify-between gap-4">
         <div className="flex items-center gap-2"><h1 className="font-heading text-2xl font-semibold tracking-tight">Usage statistics</h1>{refreshing && <LoaderCircle className="size-4 animate-spin text-muted-foreground" aria-label="Refreshing statistics" />}</div>
         <div className="flex gap-1">
-          {daysOptions.map((d) => (
-            <Button key={d} variant={days === d ? "default" : "outline"} size="sm" onClick={() => setDays(d)}>
-              {d}d
+           {daysOptions.map(({ label, value }) => (
+             <Button key={label} variant={days === value ? "default" : "outline"} size="sm" onClick={() => setDays(value)}>
+               {label}
             </Button>
           ))}
         </div>
