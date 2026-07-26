@@ -53,6 +53,11 @@ function isQuotaError(error: unknown) {
   return /429|quota|resource_exhausted|too many requests|rate.?limit/i.test(message);
 }
 
+function isModelNotFoundError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  return /"code"\s*:\s*404|\bNOT_FOUND\b|requested entity was not found/i.test(message);
+}
+
 function tokenDetails(usage: any) {
   return {
     cacheRead: Number(usage?.prompt_tokens_details?.cached_tokens ?? usage?.input_tokens_details?.cached_tokens ?? usage?.cache_read_input_tokens ?? usage?.cache_read_tokens ?? usage?.cachedContentTokenCount ?? usage?.cached_content_token_count ?? usage?.cached_tokens ?? 0),
@@ -341,6 +346,15 @@ export const proxyPlugin = (app: Elysia) =>
                  const usage = usageService.record(provider.id, modelRecord?.id ?? parsed.modelId, parsed.modelId, promptTokens, completionTokens, durationMs, generationDurationMs, details); requestLogService.complete(requestLogId, { promptTokens, completionTokens, cacheRead: details?.cacheRead, cacheWrite: details?.cacheWrite, cost: usage.estimated_cost_usd, durationMs });
               }, start);
             } catch (error: any) {
+              if (isModelNotFoundError(error)) {
+                failures.push(error.message);
+                if (provider.credential_mode !== "round_robin") break;
+                const next = credentialService.select(provider.id, "round_robin", null, requestSequence);
+                if (!next || attempted.has(next.id)) break;
+                credential = next;
+                requestLogService.setCredential(requestLogId, credential);
+                continue;
+              }
               credentialService.markError(credential.id, error.message);
               failures.push(error.message);
               if (provider.credential_mode !== "round_robin") {
@@ -358,11 +372,12 @@ export const proxyPlugin = (app: Elysia) =>
             }
           }
           const allQuotaLimited = failures.length > 0 && failures.every((message) => isQuotaError(message));
-          const statusCode = allQuotaLimited ? 429 : failures.length ? 502 : 503; requestLogService.complete(requestLogId, { status: "error", statusCode, error: failures.at(-1) }); set.status = statusCode;
+          const allNotFound = failures.length > 0 && failures.every((message) => isModelNotFoundError(message));
+          const statusCode = allNotFound ? 404 : allQuotaLimited ? 429 : failures.length ? 502 : 503; requestLogService.complete(requestLogId, { status: "error", statusCode, error: failures.at(-1) }); set.status = statusCode;
           return {
-            error: allQuotaLimited ? "Antigravity quota exhausted" : "Antigravity request failed",
+            error: allNotFound ? "Antigravity model not found" : allQuotaLimited ? "Antigravity quota exhausted" : "Antigravity request failed",
             message: failures.length
-              ? `All ${attempted.size} available Antigravity credential${attempted.size === 1 ? "" : "s"} failed. ${failures.at(-1)}`
+              ? allNotFound ? `Model "${parsed.modelId}" was not found for the available Antigravity accounts.` : `All ${attempted.size} available Antigravity credential${attempted.size === 1 ? "" : "s"} failed. ${failures.at(-1)}`
               : "No credential is currently available for this request.",
           };
         }

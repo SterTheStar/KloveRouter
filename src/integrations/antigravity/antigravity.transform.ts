@@ -1,4 +1,11 @@
-function modelId(model: string) { return model.toLowerCase().replace(/^antigravity-/, "").replace(/-(low|medium|high)$/i, ""); }
+function modelId(model: string) { return model.toLowerCase().replace(/^antigravity-/, ""); }
+function modelReasoningEffort(model: string) {
+  const normalized = model.toLowerCase();
+  if (normalized.includes("gemini-3.5-flash-extra-low")) return "low";
+  if (normalized.includes("gemini-3.5-flash-low")) return "medium";
+  if (normalized.includes("gemini-3-flash-agent") || normalized.includes("gemini-pro-agent")) return "high";
+  return normalized.match(/-(low|medium|high)$/)?.[1];
+}
 function textValue(value: any): string {
   if (typeof value === "string") return value;
   if (value && typeof value === "object") return String(value.text ?? value.value ?? value.content ?? "");
@@ -120,10 +127,10 @@ export function toGoogleBody(body: any, projectId: string, sessionId = crypto.ra
   if (body.top_k !== undefined) generationConfig.topK = body.top_k;
   if (body.stop !== undefined) generationConfig.stopSequences = Array.isArray(body.stop) ? body.stop : [body.stop];
   if (/gemini|claude|gpt|thinking/i.test(body.model)) {
-    const effort = body.reasoning?.effort ?? body.reasoning_effort;
+    const effort = modelReasoningEffort(body.model) ?? body.reasoning?.effort ?? body.reasoning_effort;
     const thinkingConfig: any = { includeThoughts: true };
     if (effort && /gemini-2\.5/i.test(body.model)) thinkingConfig.thinkingBudget = ({ minimal: 512, low: 1024, medium: 8192, high: 16000, xhigh: 24576, max: 24576 } as Record<string, number>)[effort] ?? 8192;
-    else if (effort && /gemini-3/i.test(body.model)) thinkingConfig.thinkingLevel = effort === "xhigh" || effort === "max" ? "high" : effort;
+    else if (effort) thinkingConfig.thinkingLevel = effort === "xhigh" || effort === "max" ? "high" : effort;
     generationConfig.thinkingConfig = thinkingConfig;
   }
   const request: any = { contents, generationConfig, sessionId };
@@ -137,6 +144,6 @@ export function googleEventToOpenAI(data: any, model: string, id: string) {
   const value = data.response ?? data; const candidate = value.candidates?.[0]; const parts = candidate?.content?.parts ?? []; const delta: any = {};
   for (const part of parts) { if (part.text) delta[part.thought ? "reasoning_content" : "content"] = `${delta[part.thought ? "reasoning_content" : "content"] ?? ""}${part.text}`; if (part.functionCall) delta.tool_calls = [{ index: 0, id: encodeFunctionCallId(part.functionCall.id, part.functionCall.name, part.thoughtSignature ?? part.thought_signature ?? part.functionCall.thoughtSignature ?? part.functionCall.thought_signature), type: "function", function: { name: part.functionCall.name, arguments: JSON.stringify(part.functionCall.args ?? {}) } }]; }
   const reason = candidate?.finishReason; const finish_reason = reason === "STOP" ? "stop" : reason === "MAX_TOKENS" ? "length" : reason ? "stop" : null;
-  const usageMetadata = value.usageMetadata; return { id, object: "chat.completion.chunk", created: Math.floor(Date.now() / 1000), model, choices: [{ index: 0, delta, finish_reason }], ...(usageMetadata ? { usage: { prompt_tokens: usageMetadata.promptTokenCount ?? 0, completion_tokens: usageMetadata.candidatesTokenCount ?? 0, total_tokens: usageMetadata.totalTokenCount ?? 0 } } : {}) };
+  const usageMetadata = value.usageMetadata; return { id, object: "chat.completion.chunk", created: Math.floor(Date.now() / 1000), model, choices: [{ index: 0, delta, finish_reason }], ...(usageMetadata ? { usage: { prompt_tokens: usageMetadata.promptTokenCount ?? 0, completion_tokens: usageMetadata.candidatesTokenCount ?? 0, total_tokens: usageMetadata.totalTokenCount ?? 0, prompt_tokens_details: { cached_tokens: usageMetadata.cachedContentTokenCount ?? 0 } } } : {}) };
 }
 export function googleStreamToOpenAI(response: Response, model: string, id: string) { const reader = response.body?.getReader(); if (!reader) throw new Error("Antigravity returned an empty stream"); const decoder = new TextDecoder(); const encoder = new TextEncoder(); let buffer = ""; return new Response(new ReadableStream({ async start(controller) { const emit = (data: any) => controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`)); try { while (true) { const { done, value } = await reader.read(); buffer += decoder.decode(value ?? new Uint8Array(), { stream: !done }); const lines = buffer.split("\n"); buffer = lines.pop() ?? ""; for (const line of lines) { const raw = line.trim().replace(/^data:\s*/, ""); if (!raw || raw === "[DONE]") continue; try { const event = googleEventToOpenAI(JSON.parse(raw), model, id); if (event.choices[0].delta.content || event.choices[0].delta.reasoning_content || event.choices[0].delta.tool_calls || event.choices[0].finish_reason) emit(event); } catch {} } if (done) break; } emit({ id, object: "chat.completion.chunk", created: Math.floor(Date.now() / 1000), model, choices: [{ index: 0, delta: {}, finish_reason: "stop" }] }); } catch (error: any) { emit({ error: { message: error?.message ?? "Antigravity stream disconnected" } }); } finally { controller.enqueue(encoder.encode("data: [DONE]\n\n")); controller.close(); } } }), { headers: { "Content-Type": "text/event-stream; charset=utf-8", "Cache-Control": "no-cache, no-transform", Connection: "keep-alive", "X-Accel-Buffering": "no" } }); }
