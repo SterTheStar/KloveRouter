@@ -8,10 +8,25 @@ export interface Provider {
   created_at: string;
   updated_at: string;
   api_key?: string;
+  credential_mode?: "fixed" | "round_robin";
+  fixed_credential_id?: string | null;
 }
 
 export interface ProviderDetail extends Provider {
   api_key: string;
+}
+
+export interface ProviderCredential {
+  id: string;
+  provider_id: string;
+  label: string;
+  kind: "api_key" | "codex";
+  account_id: string | null;
+  masked_secret: string | null;
+  is_active: number;
+  last_used_at: string | null;
+  last_error: string | null;
+  created_at: string;
 }
 
 export interface Model {

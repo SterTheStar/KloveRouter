@@ -41,27 +41,34 @@ function codexHeaders(token: string, accountId: string | null) {
   };
 }
 
-export async function codexUsage(): Promise<CodexUsage> {
-  const token = await codexAuthService.accessToken();
-  const response = await fetch(CODEX_USAGE_URL, { headers: codexHeaders(token, await codexAuthService.accountId()) });
+type CodexCredentials = { access_token?: string | null; account_id?: string | null };
+
+function requiredCredentials(credentials?: CodexCredentials) {
+  if (!credentials?.access_token) throw new Error("Codex account is not authenticated");
+  return credentials;
+}
+
+export async function codexUsage(credentials?: CodexCredentials): Promise<CodexUsage> {
+  const selected = requiredCredentials(credentials ?? { access_token: await codexAuthService.accessToken(), account_id: await codexAuthService.accountId() });
+  const response = await fetch(CODEX_USAGE_URL, { headers: codexHeaders(selected.access_token!, selected.account_id ?? null) });
   const data = await response.json().catch(() => null);
   if (!response.ok) throw new Error(data?.detail || data?.message || `Codex usage request failed (${response.status})`);
   return data as CodexUsage;
 }
 
-export async function codexResetCredits() {
-  const token = await codexAuthService.accessToken();
-  const response = await fetch(CODEX_RESET_CREDITS_URL, { headers: codexHeaders(token, await codexAuthService.accountId()) });
+export async function codexResetCredits(credentials?: CodexCredentials) {
+  const selected = requiredCredentials(credentials ?? { access_token: await codexAuthService.accessToken(), account_id: await codexAuthService.accountId() });
+  const response = await fetch(CODEX_RESET_CREDITS_URL, { headers: codexHeaders(selected.access_token!, selected.account_id ?? null) });
   const data = await response.json().catch(() => null);
   if (!response.ok) throw new Error(data?.detail || data?.message || `Codex reset credits request failed (${response.status})`);
   return data;
 }
 
-export async function codexConsumeResetCredit(creditId?: string) {
-  const token = await codexAuthService.accessToken();
+export async function codexConsumeResetCredit(creditId?: string, credentials?: CodexCredentials) {
+  const selected = requiredCredentials(credentials ?? { access_token: await codexAuthService.accessToken(), account_id: await codexAuthService.accountId() });
   const response = await fetch(`${CODEX_RESET_CREDITS_URL}/consume`, {
     method: "POST",
-    headers: { ...codexHeaders(token, await codexAuthService.accountId()), "Content-Type": "application/json" },
+    headers: { ...codexHeaders(selected.access_token!, selected.account_id ?? null), "Content-Type": "application/json" },
     body: JSON.stringify({ redeem_request_id: crypto.randomUUID(), ...(creditId ? { credit_id: creditId } : {}) }),
   });
   const data = await response.json().catch(() => null);
@@ -107,9 +114,11 @@ export async function codexModels() {
 }
 
 
-export async function codexResponses(body: any, model: string) {
-  const token = await codexAuthService.accessToken();
-  const accountId = await codexAuthService.accountId();
+export async function codexResponses(body: any, model: string, credentials?: { access_token?: string | null; account_id?: string | null }) {
+  const legacySession = credentials && !credentials.access_token && credentials.account_id === null;
+  const token = legacySession ? await codexAuthService.accessToken() : credentials ? credentials.access_token : await codexAuthService.accessToken();
+  const accountId = legacySession ? await codexAuthService.accountId() : credentials ? credentials.account_id : await codexAuthService.accountId();
+  if (!token) throw new Error("Codex account is not authenticated");
   const response = await fetch("https://chatgpt.com/backend-api/codex/responses", {
     method: "POST",
     headers: { Authorization: `Bearer ${token}`, "chatgpt-account-id": accountId || "", "OpenAI-Beta": "responses=experimental", originator: "codex_cli_rs", session_id: crypto.randomUUID(), Accept: "text/event-stream", "Content-Type": "application/json" },
@@ -123,10 +132,10 @@ export async function codexResponses(body: any, model: string) {
   return response;
 }
 
-export async function codexTest(model: string) {
+export async function codexTest(model: string, credentials?: { access_token?: string | null; account_id?: string | null }) {
   const response = await codexResponses({
     messages: [{ role: "user", content: "Say 'ok' and nothing else." }],
-  }, model);
+  }, model, credentials);
   const text = await response.text();
   const reply: string[] = [];
 

@@ -1,4 +1,5 @@
 import { getDb } from "../db/connection";
+import type { CredentialMode } from "./credential.service";
 
 export interface Provider {
   id: string;
@@ -7,6 +8,8 @@ export interface Provider {
   api_key: string;
   avatar: string | null;
   protocol: "openai" | "anthropic" | "codex";
+  credential_mode: CredentialMode;
+  fixed_credential_id: string | null;
   is_active: number;
   created_at: string;
   updated_at: string;
@@ -18,6 +21,8 @@ export interface ProviderPublic {
   base_url: string;
   avatar: string | null;
   protocol: "openai" | "anthropic" | "codex";
+  credential_mode: CredentialMode;
+  fixed_credential_id: string | null;
   is_active: number;
   created_at: string;
   updated_at: string;
@@ -29,6 +34,8 @@ export type CreateProviderInput = {
   api_key: string;
   avatar?: string;
   protocol?: "openai" | "anthropic" | "codex";
+  credential_mode?: CredentialMode;
+  fixed_credential_id?: string | null;
 };
 
 export type UpdateProviderInput = {
@@ -37,6 +44,8 @@ export type UpdateProviderInput = {
   api_key?: string;
   avatar?: string | null;
   protocol?: "openai" | "anthropic" | "codex";
+  credential_mode?: CredentialMode;
+  fixed_credential_id?: string | null;
   is_active?: number;
 };
 
@@ -56,6 +65,8 @@ function toPublic(p: Provider): ProviderPublic {
     base_url: p.base_url,
     avatar: p.avatar ?? getFaviconUrl(p.base_url),
     protocol: p.protocol ?? "openai",
+    credential_mode: p.credential_mode ?? "fixed",
+    fixed_credential_id: p.fixed_credential_id ?? null,
     is_active: p.is_active,
     created_at: p.created_at,
     updated_at: p.updated_at,
@@ -95,6 +106,9 @@ export const providerService = {
     db.query(
       "INSERT INTO providers (id, name, base_url, api_key, avatar, protocol) VALUES (?, ?, ?, ?, ?, ?)"
     ).run(id, input.name, input.base_url.replace(/\/+$/, ""), input.api_key, input.avatar ?? null, input.protocol ?? "openai");
+    const credentialId = crypto.randomUUID();
+    db.query("INSERT INTO provider_credentials (id, provider_id, label, kind, secret) VALUES (?, ?, ?, ?, ?)").run(credentialId, id, input.protocol === "codex" ? "Codex session" : "Default API key", input.protocol === "codex" ? "codex" : "api_key", input.api_key);
+    db.query("UPDATE providers SET fixed_credential_id = ? WHERE id = ?").run(credentialId, id);
     return this.findPublicById(id)!;
   },
 
@@ -117,6 +131,7 @@ export const providerService = {
     if (input.api_key !== undefined) {
       updates.push("api_key = ?");
       values.push(input.api_key);
+      db.query("UPDATE provider_credentials SET secret = ?, updated_at = datetime('now') WHERE provider_id = ? AND id = COALESCE((SELECT fixed_credential_id FROM providers WHERE id = ?), id) AND kind = 'api_key'").run(input.api_key, id, id);
     }
     if (input.avatar !== undefined) {
       updates.push("avatar = ?");
@@ -126,6 +141,8 @@ export const providerService = {
       updates.push("protocol = ?");
       values.push(input.protocol);
     }
+    if (input.credential_mode !== undefined) { updates.push("credential_mode = ?"); values.push(input.credential_mode); }
+    if (input.fixed_credential_id !== undefined) { updates.push("fixed_credential_id = ?"); values.push(input.fixed_credential_id); }
     if (input.is_active !== undefined) {
       updates.push("is_active = ?");
       values.push(input.is_active);

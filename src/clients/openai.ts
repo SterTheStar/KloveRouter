@@ -1,10 +1,10 @@
 import OpenAI from "openai";
 import type { Provider } from "../services/provider.service";
 
-export function createOpenAIClient(provider: Provider): OpenAI {
+export function createOpenAIClient(provider: Provider, apiKey = provider.api_key): OpenAI {
   return new OpenAI({
     baseURL: provider.base_url,
-    apiKey: provider.api_key,
+    apiKey,
   });
 }
 

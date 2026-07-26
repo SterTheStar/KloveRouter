@@ -65,27 +65,26 @@ export default function AddProviderModal({ isOpen, onClose, onSuccess }: { isOpe
   const connectCodex = async () => {
     setLoading(true); setError(null);
     try {
-      const result = await codex.login();
+      const provider = await providers.create({
+        name: name.trim() || "codex",
+        base_url: baseUrl || "https://chatgpt.com/backend-api/codex",
+        api_key: "codex-session",
+        protocol: "codex",
+        avatar: avatar || undefined,
+      });
+      const credentials = await providers.credentials(provider.id);
+      const credential = credentials[0];
+      if (!credential) throw new Error("Unable to create Codex credential");
+      const result = await codex.login(credential.id);
       window.open(result.auth_url, "klove-codex-login", "popup,width=520,height=720");
       const started = Date.now();
       const poll = window.setInterval(async () => {
         try {
-          const status = await codex.status();
+          const status = await providers.credentialStatus(provider.id, credential.id);
           if (status.authenticated) {
             window.clearInterval(poll);
-            try {
-              await providers.create({
-                name: "codex",
-                base_url: "https://chatgpt.com/backend-api/codex",
-                api_key: "codex-session",
-                protocol: "codex",
-              });
-              onSuccess();
-              close();
-            } catch (error: any) {
-              setLoading(false);
-              setError(error.message);
-            }
+            onSuccess();
+            close();
           } else if (Date.now() - started > 5 * 60_000) {
             window.clearInterval(poll);
             setLoading(false);

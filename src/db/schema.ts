@@ -10,6 +10,8 @@ export function initSchema(db: Database): void {
       api_key     TEXT NOT NULL,
       avatar      TEXT,
       protocol    TEXT NOT NULL DEFAULT 'openai',
+      credential_mode TEXT NOT NULL DEFAULT 'fixed',
+      fixed_credential_id TEXT,
       is_active   INTEGER NOT NULL DEFAULT 1,
       created_at  TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
@@ -25,6 +27,24 @@ export function initSchema(db: Database): void {
       created_at    TEXT NOT NULL DEFAULT (datetime('now')),
       FOREIGN KEY (provider_id) REFERENCES providers(id) ON DELETE CASCADE,
       UNIQUE(provider_id, model_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS provider_credentials (
+      id TEXT PRIMARY KEY,
+      provider_id TEXT NOT NULL,
+      label TEXT NOT NULL,
+      kind TEXT NOT NULL DEFAULT 'api_key',
+      secret TEXT,
+      access_token TEXT,
+      refresh_token TEXT,
+      id_token TEXT,
+      account_id TEXT,
+      is_active INTEGER NOT NULL DEFAULT 1,
+      last_used_at TEXT,
+      last_error TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (provider_id) REFERENCES providers(id) ON DELETE CASCADE
     );
 
     CREATE TABLE IF NOT EXISTS api_keys (
@@ -64,6 +84,22 @@ export function initSchema(db: Database): void {
   }
   if (!cols.find((c) => c.name === "protocol")) {
     db.exec("ALTER TABLE providers ADD COLUMN protocol TEXT NOT NULL DEFAULT 'openai'");
+  }
+  if (!cols.find((c) => c.name === "credential_mode")) {
+    db.exec("ALTER TABLE providers ADD COLUMN credential_mode TEXT NOT NULL DEFAULT 'fixed'");
+  }
+  if (!cols.find((c) => c.name === "fixed_credential_id")) {
+    db.exec("ALTER TABLE providers ADD COLUMN fixed_credential_id TEXT");
+  }
+
+  const providerRows = db.query("SELECT id, api_key, protocol FROM providers WHERE api_key IS NOT NULL AND api_key != ''").all() as { id: string; api_key: string; protocol: string }[];
+  for (const provider of providerRows) {
+    const existing = db.query("SELECT id FROM provider_credentials WHERE provider_id = ? LIMIT 1").get(provider.id);
+    if (!existing) {
+      const credentialId = crypto.randomUUID();
+      db.query("INSERT INTO provider_credentials (id, provider_id, label, kind, secret, is_active) VALUES (?, ?, ?, ?, ?, 1)").run(credentialId, provider.id, provider.protocol === "codex" ? "Codex session" : "Default API key", provider.protocol === "codex" ? "codex" : "api_key", provider.api_key);
+      db.query("UPDATE providers SET fixed_credential_id = ? WHERE id = ?").run(credentialId, provider.id);
+    }
   }
 
   // Seed default password if not exists

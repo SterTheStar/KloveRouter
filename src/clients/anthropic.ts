@@ -20,10 +20,10 @@ function endpoint(provider: Provider): string {
   return baseUrl.endsWith("/v1") ? `${baseUrl}/messages` : `${baseUrl}/v1/messages`;
 }
 
-function headers(provider: Provider): Record<string, string> {
+function headers(provider: Provider, apiKey = provider.api_key): Record<string, string> {
   return {
     "Content-Type": "application/json",
-    "x-api-key": provider.api_key,
+    "x-api-key": apiKey,
     "anthropic-version": "2023-06-01",
   };
 }
@@ -40,11 +40,12 @@ export function splitAnthropicMessages(messages: AnthropicMessage[]) {
 
 export async function createAnthropicMessage(
   provider: Provider,
-  payload: Record<string, unknown>
+  payload: Record<string, unknown>,
+  apiKey?: string
 ): Promise<AnthropicResponse> {
   const response = await fetch(endpoint(provider), {
     method: "POST",
-    headers: headers(provider),
+    headers: headers(provider, apiKey),
     body: JSON.stringify(payload),
   });
   const data = await response.json().catch(() => null);
@@ -56,11 +57,12 @@ export async function createAnthropicMessage(
 
 export async function createAnthropicStream(
   provider: Provider,
-  payload: Record<string, unknown>
+  payload: Record<string, unknown>,
+  apiKey?: string
 ): Promise<Response> {
   const response = await fetch(endpoint(provider), {
     method: "POST",
-    headers: headers(provider),
+    headers: headers(provider, apiKey),
     body: JSON.stringify({ ...payload, stream: true }),
   });
   if (!response.ok) {

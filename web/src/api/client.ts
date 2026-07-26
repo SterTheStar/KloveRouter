@@ -65,7 +65,7 @@ export const providers = {
   list: () => request<import("../types").Provider[]>("/api/providers"),
   get: (id: string) =>
     request<import("../types").ProviderDetail>(`/api/providers/${id}`),
-  create: (data: { name: string; base_url: string; api_key: string; avatar?: string; protocol?: "openai" | "anthropic" | "codex" }) =>
+  create: (data: { name: string; base_url: string; api_key?: string; avatar?: string; protocol?: "openai" | "anthropic" | "codex" }) =>
     request<import("../types").Provider>("/api/providers", {
       method: "POST",
       body: JSON.stringify(data),
@@ -78,6 +78,8 @@ export const providers = {
       api_key?: string;
       avatar?: string | null;
       protocol?: "openai" | "anthropic" | "codex";
+      credential_mode?: "fixed" | "round_robin";
+      fixed_credential_id?: string | null;
       is_active?: number;
     }
   ) =>
@@ -93,17 +95,24 @@ export const providers = {
     request<import("../types").Provider>(`/api/providers/${id}/toggle`, {
       method: "POST",
     }),
+  credentials: (id: string) => request<import("../types").ProviderCredential[]>(`/api/providers/${id}/credentials`),
+  addCredential: (id: string, data: { label: string; kind?: "api_key" | "codex"; secret?: string; access_token?: string; refresh_token?: string; id_token?: string; account_id?: string }) => request<import("../types").ProviderCredential>(`/api/providers/${id}/credentials`, { method: "POST", body: JSON.stringify(data) }),
+  updateCredential: (id: string, credentialId: string, data: { label?: string; secret?: string; is_active?: number }) => request<import("../types").ProviderCredential>(`/api/providers/${id}/credentials/${credentialId}`, { method: "PUT", body: JSON.stringify(data) }),
+  removeCredential: (id: string, credentialId: string) => request<{ success: boolean }>(`/api/providers/${id}/credentials/${credentialId}`, { method: "DELETE" }),
+  credentialStatus: (id: string, credentialId: string) => request<{ authenticated: boolean; account_id: string | null }>(`/api/providers/${id}/credentials/${credentialId}/status`),
+  disconnectCredential: (id: string, credentialId: string) => request<import("../types").ProviderCredential>(`/api/providers/${id}/credentials/${credentialId}/disconnect`, { method: "POST" }),
+  importLegacyCredential: (id: string, credentialId: string) => request<import("../types").ProviderCredential>(`/api/providers/${id}/credentials/${credentialId}/import-legacy`, { method: "POST" }),
 };
 
 export const codex = {
   status: () => request<{ authenticated: boolean; account_id: string | null; auth_path: string; last_refresh: string | null; warning: string }>("/api/codex/status"),
-  login: () => request<{ auth_url: string; warning: string }>("/api/codex/login", { method: "POST" }),
+  login: (credential_id: string) => request<{ auth_url: string; warning: string }>("/api/codex/login", { method: "POST", body: JSON.stringify({ credential_id }) }),
   logout: () => request<{ authenticated: boolean }>("/api/codex/logout", { method: "POST" }),
   refresh: () => request<{ authenticated: boolean }>("/api/codex/refresh", { method: "POST" }),
   models: () => request<{ id: string; object: string; owned_by: string }[]>("/api/codex/models"),
-  usage: () => request<import("../types").CodexUsage>("/api/codex/usage"),
-  resetCredits: () => request<unknown>("/api/codex/reset-credits"),
-  consumeResetCredit: (credit_id?: string) => request<unknown>("/api/codex/reset-credits/consume", { method: "POST", body: JSON.stringify({ credit_id }) }),
+  usage: (credential_id: string) => request<import("../types").CodexUsage>(`/api/codex/usage?credential_id=${encodeURIComponent(credential_id)}`),
+  resetCredits: (credential_id: string) => request<unknown>(`/api/codex/reset-credits?credential_id=${encodeURIComponent(credential_id)}`),
+  consumeResetCredit: (credential_id: string, credit_id?: string) => request<unknown>("/api/codex/reset-credits/consume", { method: "POST", body: JSON.stringify({ credential_id, credit_id }) }),
 };
 
 // Models

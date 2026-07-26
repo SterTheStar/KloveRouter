@@ -4,6 +4,7 @@ import { cors } from "@elysiajs/cors";
 import { staticPlugin } from "@elysiajs/static";
 import { config } from "./config";
 import { getDb } from "./db/connection";
+import { logger, requestHooks } from "./logger";
 import {
   authPlugin,
   providersPlugin,
@@ -20,6 +21,9 @@ import {
 getDb();
 
 const app = new Elysia()
+  .onRequest(requestHooks.onRequest)
+  .onAfterHandle(requestHooks.onAfterHandle)
+  .onError(requestHooks.onError)
   .use(cors())
   .use(
     jwt({
@@ -35,7 +39,7 @@ const app = new Elysia()
 // Protected routes (require JWT)
 const protectedApp = new Elysia()
   .guard({
-    async beforeHandle({ jwt, headers, set }) {
+    async beforeHandle({ jwt, headers, set }: any) {
       const auth = headers.authorization;
       if (!auth || !auth.startsWith("Bearer ")) {
         set.status = 401;
@@ -102,11 +106,6 @@ ${b}${blue} /_/ |_/_/\\____/|___/\\___/${r}
 `;
 const version = "1.0.0";
 
-console.log(ascii);
-console.log(`     ${b}${white}Klove${r} ${dim}v${version}${r} ${dim}by Esther${r}`);
-console.log(`     ${dim}https://github.com/SterTheStar/KloveRouter${r}`);
-console.log();
-console.log(`     ${badge("UP", bgGreen)} ${green}${b}Server running${r}`);
-console.log(`     ${badge("WEB", bgBlue)} ${cyan}${b}Panel${r}     http://localhost:${config.port}`);
-console.log(`     ${badge("API", bgBlue)} ${yellow}${b}API${r}      http://localhost:${config.port}/api`);
-console.log();
+logger.badge("KLOVE", `v${version} · https://github.com/SterTheStar/KloveRouter`);
+logger.success("Server running", { panel: `http://localhost:${config.port}`, api: `http://localhost:${config.port}/api` });
+logger.info("Codex callback listener", { address: "http://localhost:1455/auth/callback" });

@@ -1,5 +1,7 @@
 import { Elysia, t } from "elysia";
 import { CODEX_CALLBACK_HTML, codexAuthService, codexConsumeResetCredit, codexModels, codexResetCredits, codexUsage } from "../integrations/codex";
+import { logger } from "../logger";
+import { credentialService } from "../services/credential.service";
 
 export const codexPublicPlugin = (app: Elysia) =>
   app.get("/auth/callback", async ({ query, set }) => {
@@ -9,6 +11,7 @@ export const codexPublicPlugin = (app: Elysia) =>
         return "Missing OAuth code or state";
       }
       await codexAuthService.completeLogin(query.code, query.state);
+      logger.success("Codex OAuth callback completed");
       return new Response(CODEX_CALLBACK_HTML, { headers: { "Content-Type": "text/html" } });
     } catch (error: any) {
       set.status = 400;
@@ -19,16 +22,16 @@ export const codexPublicPlugin = (app: Elysia) =>
 export const codexPlugin = (app: Elysia) =>
   app
     .get("/api/codex/status", () => codexAuthService.status())
-    .post("/api/codex/login", () => codexAuthService.startLogin())
+    .post("/api/codex/login", ({ body }) => codexAuthService.startLogin(body.credential_id), { body: t.Object({ credential_id: t.String() }) })
     .post("/api/codex/logout", () => codexAuthService.logout())
     .post("/api/codex/refresh", () => codexAuthService.refresh())
-    .get("/api/codex/usage", async ({ set }) => {
-      try { return await codexUsage(); } catch (error: any) { set.status = 502; return { error: error.message }; }
-    })
-    .get("/api/codex/reset-credits", async ({ set }) => {
-      try { return await codexResetCredits(); } catch (error: any) { set.status = 502; return { error: error.message }; }
-    })
+    .get("/api/codex/usage", async ({ query, set }) => {
+      try { const credential = credentialService.findById(query.credential_id); if (!credential) throw new Error("Codex credential not found"); return await codexUsage(credential); } catch (error: any) { set.status = 502; return { error: error.message }; }
+    }, { query: t.Object({ credential_id: t.String() }) })
+    .get("/api/codex/reset-credits", async ({ query, set }) => {
+      try { const credential = credentialService.findById(query.credential_id); if (!credential) throw new Error("Codex credential not found"); return await codexResetCredits(credential); } catch (error: any) { set.status = 502; return { error: error.message }; }
+    }, { query: t.Object({ credential_id: t.String() }) })
     .post("/api/codex/reset-credits/consume", async ({ body, set }) => {
-      try { return await codexConsumeResetCredit(body.credit_id); } catch (error: any) { set.status = 502; return { error: error.message }; }
-    }, { body: t.Object({ credit_id: t.Optional(t.String()) }) })
+      try { const credential = credentialService.findById(body.credential_id); if (!credential) throw new Error("Codex credential not found"); return await codexConsumeResetCredit(body.credit_id, credential); } catch (error: any) { set.status = 502; return { error: error.message }; }
+    }, { body: t.Object({ credential_id: t.String(), credit_id: t.Optional(t.String()) }) })
     .get("/api/codex/models", async () => codexModels());

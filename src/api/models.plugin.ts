@@ -4,6 +4,7 @@ import { providerService } from "../services/provider.service";
 import { createOpenAIClient } from "../clients/openai";
 import { createAnthropicMessage, toOpenAICompletion } from "../clients/anthropic";
 import { codexModels, codexTest } from "../integrations/codex";
+import { credentialService } from "../services/credential.service";
 
 export const modelsPlugin = (app: Elysia) =>
   app
@@ -140,17 +141,24 @@ export const modelsPlugin = (app: Elysia) =>
         return { error: "Provider not found or inactive" };
       }
 
+      let credential: ReturnType<typeof credentialService.select> = null;
       try {
         const start = performance.now();
+        credential = credentialService.select(provider.id, provider.credential_mode, provider.fixed_credential_id) || credentialService.select(provider.id, "round_robin");
+        if (!credential) {
+          set.status = 503;
+          return { success: false, error: "No active provider credential" };
+        }
+        const credentialProvider = { ...provider, api_key: credential.secret || provider.api_key };
         const completion = provider.protocol === "codex"
-          ? { choices: [{ message: { content: await codexTest(model.model_id) } }], usage: null }
+          ? { choices: [{ message: { content: await codexTest(model.model_id, credential) } }], usage: null }
           : provider.protocol === "anthropic"
-          ? toOpenAICompletion(await createAnthropicMessage(provider, {
+          ? toOpenAICompletion(await createAnthropicMessage(credentialProvider, {
               model: model.model_id,
               max_tokens: 10,
               messages: [{ role: "user", content: "Say 'ok' and nothing else." }],
-            }))
-          : await createOpenAIClient(provider).chat.completions.create({
+            }, credential.secret ?? undefined))
+          : await createOpenAIClient(credentialProvider).chat.completions.create({
               model: model.model_id,
               messages: [{ role: "user", content: "Say 'ok' and nothing else." }],
               max_tokens: 10,
@@ -165,6 +173,7 @@ export const modelsPlugin = (app: Elysia) =>
           usage: completion.usage ?? null,
         };
       } catch (error: any) {
+        if (credential) credentialService.markError(credential.id, error.message || "Test failed");
         set.status = 502;
         return {
           success: false,

@@ -1,11 +1,12 @@
 import { Elysia, t } from "elysia";
 import { getDb } from "../db/connection";
+import { logger } from "../logger";
 
 export const authPlugin = (app: Elysia) =>
   app
     .post(
       "/api/auth/login",
-      async ({ body, jwt, set }) => {
+       async ({ body, jwt, set }: any) => {
         const db = getDb();
         const row = db
           .query("SELECT value FROM settings WHERE key = ?")
@@ -23,7 +24,8 @@ export const authPlugin = (app: Elysia) =>
         }
 
         const token = await jwt.sign({ role: "admin" });
-        return { token };
+         logger.success("Panel login accepted");
+         return { token };
       },
       {
         body: t.Object({
@@ -31,7 +33,7 @@ export const authPlugin = (app: Elysia) =>
         }),
       }
     )
-    .get("/api/auth/verify", async ({ jwt, headers, set }) => {
+     .get("/api/auth/verify", async ({ jwt, headers, set }: any) => {
       const auth = headers.authorization;
       if (!auth || !auth.startsWith("Bearer ")) {
         set.status = 401;
@@ -42,5 +44,6 @@ export const authPlugin = (app: Elysia) =>
         set.status = 401;
         return { error: "Invalid token", valid: false };
       }
-      return { valid: true, role: payload.role };
+       logger.debug("Panel token verified", { role: payload.role });
+       return { valid: true, role: payload.role };
     });

@@ -6,6 +6,8 @@ import { usageService } from "../services/usage.service";
 import { createOpenAIClient, parseModelName } from "../clients/openai";
 import { createAnthropicMessage, createAnthropicStream, splitAnthropicMessages, toOpenAICompletion } from "../clients/anthropic";
 import { codexResponses } from "../integrations/codex";
+import { credentialService } from "../services/credential.service";
+import { logger } from "../logger";
 
 function anthropicPayload(body: any, modelId: string, stream = false) {
   const messages = splitAnthropicMessages(body.messages);
@@ -136,8 +138,14 @@ export const proxyPlugin = (app: Elysia) =>
           };
         }
 
-        // OpenAI-compatible providers use the SDK; Anthropic uses its native Messages API.
-        const client = provider.protocol === "anthropic" ? null : createOpenAIClient(provider);
+        const credential = credentialService.select(provider.id, provider.credential_mode, provider.fixed_credential_id) || credentialService.select(provider.id, "round_robin");
+        if (!credential) {
+          set.status = 503;
+          return { error: "No active provider credential", message: `Provider "${provider.name}" has no active credential` };
+        }
+        const credentialProvider = { ...provider, api_key: credential.secret || provider.api_key };
+        logger.debug("Credential selected", { provider: provider.name, mode: provider.credential_mode, credential_id: credential.id, kind: credential.kind });
+        const client = provider.protocol === "anthropic" ? null : createOpenAIClient(credentialProvider);
 
         // Build request payload for the provider
         const payload: any = {
@@ -160,7 +168,7 @@ export const proxyPlugin = (app: Elysia) =>
             const start = performance.now();
             const modelRecord = modelService.findByProviderAndModel(provider.id, parsed.modelId);
             if (body.stream) {
-              const response = await createAnthropicStream(provider, anthropicPayload(body, parsed.modelId));
+              const response = await createAnthropicStream(credentialProvider, anthropicPayload(body, parsed.modelId), credential.secret ?? undefined);
               return anthropicStreamResponse(
                 response,
                 (promptTokens, completionTokens, durationMs) => {
@@ -171,7 +179,7 @@ export const proxyPlugin = (app: Elysia) =>
               );
             }
 
-            const completion = await createAnthropicMessage(provider, anthropicPayload(body, parsed.modelId));
+            const completion = await createAnthropicMessage(credentialProvider, anthropicPayload(body, parsed.modelId), credential.secret ?? undefined);
             usageService.record(
               provider.id,
               modelRecord?.id ?? parsed.modelId,
@@ -189,9 +197,10 @@ export const proxyPlugin = (app: Elysia) =>
 
         if (provider.protocol === "codex") {
           try {
-            const response = await codexResponses(body, parsed.modelId);
+            const response = await codexResponses(body, parsed.modelId, credential);
             return response;
           } catch (error: any) {
+            credentialService.markError(credential.id, error.message);
             set.status = error.message.includes("limit") ? 429 : 502;
             return { error: "Codex request failed", message: error.message };
           }
@@ -260,7 +269,8 @@ export const proxyPlugin = (app: Elysia) =>
             );
           }
 
-          return completion;
+            credentialService.clearError(credential.id);
+            return completion;
         } catch (error: any) {
           set.status = 502;
           return {
