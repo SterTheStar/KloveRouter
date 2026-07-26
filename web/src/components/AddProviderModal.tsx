@@ -6,9 +6,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import AvatarUpload from "./AvatarUpload";
-import { codex, providers } from "../api/client";
+import { antigravity, codex, providers } from "../api/client";
 import openAiLogo from "../assets/providers/openai.svg";
 import anthropicLogo from "../assets/providers/anthropic.png";
+import antigravityLogo from "../assets/providers/antigravity.png";
 
 const providerTypes = [
   {
@@ -18,6 +19,14 @@ const providerTypes = [
     description: "OpenAI-compatible chat completions API",
     logo: openAiLogo,
     placeholder: "https://api.openai.com/v1",
+  },
+  {
+    id: "antigravity",
+    protocol: "antigravity" as const,
+    name: "Google Antigravity",
+    description: "Google account OAuth with internal Gemini API translation",
+    logo: antigravityLogo,
+    placeholder: "https://cloudcode-pa.googleapis.com",
   },
   {
     id: "anthropic",
@@ -54,12 +63,24 @@ export default function AddProviderModal({ isOpen, onClose, onSuccess }: { isOpe
   };
 
   const submit = async () => {
-    if (selectedType?.protocol === "codex") {
+    if (selectedType?.protocol === "codex" || selectedType?.protocol === "antigravity") {
       return setError("Connect your Codex account before adding this provider.");
     }
     if (!name || !baseUrl || !apiKey) return setError("All fields are required.");
     setLoading(true); setError(null);
     try { await providers.create({ name, base_url: baseUrl, api_key: apiKey, protocol: selectedType?.protocol, avatar: avatar || undefined }); onSuccess(); close(); } catch (e: any) { setError(e.message); } finally { setLoading(false); }
+  };
+
+  const connectAntigravity = async () => {
+    setLoading(true); setError(null);
+    try {
+      const provider = await providers.create({ name: name.trim() || "antigravity", base_url: baseUrl || "https://cloudcode-pa.googleapis.com", protocol: "antigravity", avatar: avatar || antigravityLogo });
+      const credential = (await providers.credentials(provider.id))[0];
+      if (!credential) throw new Error("Unable to create Google credential");
+      const result = await antigravity.login(credential.id);
+      window.open(result.auth_url, "klove-antigravity-login", "popup,width=520,height=720");
+      const started = Date.now(); const poll = window.setInterval(async () => { try { if ((await providers.credentialStatus(provider.id, credential.id)).authenticated) { window.clearInterval(poll); onSuccess(); close(); } else if (Date.now() - started > 5 * 60_000) { window.clearInterval(poll); setLoading(false); setError("Google login timed out."); } } catch {} }, 1500);
+    } catch (e: any) { setError(e.message); setLoading(false); }
   };
 
   const connectCodex = async () => {
@@ -70,7 +91,7 @@ export default function AddProviderModal({ isOpen, onClose, onSuccess }: { isOpe
         base_url: baseUrl || "https://chatgpt.com/backend-api/codex",
         api_key: "codex-session",
         protocol: "codex",
-        avatar: avatar || undefined,
+        avatar: avatar || openAiLogo,
       });
       const credentials = await providers.credentials(provider.id);
       const credential = credentials[0];
@@ -140,14 +161,14 @@ export default function AddProviderModal({ isOpen, onClose, onSuccess }: { isOpe
             </div>
           </DialogHeader>
           <div className="space-y-4">
-            {selectedType?.protocol === "codex" && <Alert><AlertDescription><strong>Unofficial OAuth:</strong> Klove uses private Codex/ChatGPT endpoints and your local Codex session. It may stop working without notice and limits are controlled by OpenAI.</AlertDescription></Alert>}
+             {(selectedType?.protocol === "codex" || selectedType?.protocol === "antigravity") && <Alert><AlertDescription><strong>OAuth integration:</strong> Klove stores the account tokens encrypted in SQLite and uses private provider endpoints.</AlertDescription></Alert>}
             <AvatarUpload value={avatar} name={name} onChange={setAvatar} />
             <div className="space-y-2"><Label htmlFor="provider-name">Provider name</Label><Input id="provider-name" value={name} onChange={(e) => setName(e.target.value)} placeholder={selectedType?.id} /></div>
             <div className="space-y-2"><Label htmlFor="provider-url">Base URL</Label><Input id="provider-url" value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} placeholder={selectedType?.placeholder} /></div>
-            {selectedType?.protocol !== "codex" && <div className="space-y-2"><Label htmlFor="provider-key">API key</Label><Input id="provider-key" type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder="sk-..." /></div>}
+             {selectedType?.protocol !== "codex" && selectedType?.protocol !== "antigravity" && <div className="space-y-2"><Label htmlFor="provider-key">API key</Label><Input id="provider-key" type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder="sk-..." /></div>}
             {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
           </div>
-          <DialogFooter><Button variant="outline" onClick={close} disabled={loading}>Cancel</Button>{selectedType?.protocol === "codex" ? <Button onClick={connectCodex} disabled={loading}>{loading ? "Opening login..." : "Connect Codex"}</Button> : <Button onClick={submit} disabled={loading}>{loading ? "Saving..." : "Save provider"}</Button>}</DialogFooter>
+           <DialogFooter><Button variant="outline" onClick={close} disabled={loading}>Cancel</Button>{selectedType?.protocol === "codex" ? <Button onClick={connectCodex} disabled={loading}>{loading ? "Opening login..." : "Connect Codex"}</Button> : selectedType?.protocol === "antigravity" ? <Button onClick={connectAntigravity} disabled={loading}>{loading ? "Opening login..." : "Connect Google"}</Button> : <Button onClick={submit} disabled={loading}>{loading ? "Saving..." : "Save provider"}</Button>}</DialogFooter>
         </>
       )}
     </DialogContent>

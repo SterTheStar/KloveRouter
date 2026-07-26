@@ -39,6 +39,12 @@ export function initSchema(db: Database): void {
       refresh_token TEXT,
       id_token TEXT,
       account_id TEXT,
+      email TEXT,
+      project_id TEXT,
+      managed_project_id TEXT,
+      expires_at INTEGER,
+      fingerprint_json TEXT,
+      quota_json TEXT,
       is_active INTEGER NOT NULL DEFAULT 1,
       last_used_at TEXT,
       last_error TEXT,
@@ -90,6 +96,19 @@ export function initSchema(db: Database): void {
   }
   if (!cols.find((c) => c.name === "fixed_credential_id")) {
     db.exec("ALTER TABLE providers ADD COLUMN fixed_credential_id TEXT");
+  }
+
+  const credentialCols = db.query("PRAGMA table_info(provider_credentials)").all() as { name: string }[];
+  const credentialMigrations: Array<[string, string]> = [
+    ["email", "ALTER TABLE provider_credentials ADD COLUMN email TEXT"],
+    ["project_id", "ALTER TABLE provider_credentials ADD COLUMN project_id TEXT"],
+    ["managed_project_id", "ALTER TABLE provider_credentials ADD COLUMN managed_project_id TEXT"],
+    ["expires_at", "ALTER TABLE provider_credentials ADD COLUMN expires_at INTEGER"],
+    ["fingerprint_json", "ALTER TABLE provider_credentials ADD COLUMN fingerprint_json TEXT"],
+    ["quota_json", "ALTER TABLE provider_credentials ADD COLUMN quota_json TEXT"],
+  ];
+  for (const [name, sql] of credentialMigrations) {
+    if (!credentialCols.find((c) => c.name === name)) db.exec(sql);
   }
 
   const providerRows = db.query("SELECT id, api_key, protocol FROM providers WHERE api_key IS NOT NULL AND api_key != ''").all() as { id: string; api_key: string; protocol: string }[];

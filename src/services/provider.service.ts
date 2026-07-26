@@ -7,7 +7,7 @@ export interface Provider {
   base_url: string;
   api_key: string;
   avatar: string | null;
-  protocol: "openai" | "anthropic" | "codex";
+  protocol: "openai" | "anthropic" | "codex" | "antigravity";
   credential_mode: CredentialMode;
   fixed_credential_id: string | null;
   is_active: number;
@@ -20,7 +20,7 @@ export interface ProviderPublic {
   name: string;
   base_url: string;
   avatar: string | null;
-  protocol: "openai" | "anthropic" | "codex";
+  protocol: "openai" | "anthropic" | "codex" | "antigravity";
   credential_mode: CredentialMode;
   fixed_credential_id: string | null;
   is_active: number;
@@ -33,7 +33,7 @@ export type CreateProviderInput = {
   base_url: string;
   api_key: string;
   avatar?: string;
-  protocol?: "openai" | "anthropic" | "codex";
+  protocol?: "openai" | "anthropic" | "codex" | "antigravity";
   credential_mode?: CredentialMode;
   fixed_credential_id?: string | null;
 };
@@ -43,7 +43,7 @@ export type UpdateProviderInput = {
   base_url?: string;
   api_key?: string;
   avatar?: string | null;
-  protocol?: "openai" | "anthropic" | "codex";
+  protocol?: "openai" | "anthropic" | "codex" | "antigravity";
   credential_mode?: CredentialMode;
   fixed_credential_id?: string | null;
   is_active?: number;
@@ -58,12 +58,18 @@ function getFaviconUrl(baseUrl: string): string | null {
   }
 }
 
+function defaultProviderAvatar(protocol: Provider["protocol"]): string | null {
+  if (protocol === "antigravity") return "https://antigravity.google/assets/image/brand/antigravity-icon__full-color.png";
+  if (protocol === "codex") return "https://openai.com/favicon.ico";
+  return null;
+}
+
 function toPublic(p: Provider): ProviderPublic {
   return {
     id: p.id,
     name: p.name,
     base_url: p.base_url,
-    avatar: p.avatar ?? getFaviconUrl(p.base_url),
+    avatar: p.avatar ?? defaultProviderAvatar(p.protocol) ?? getFaviconUrl(p.base_url),
     protocol: p.protocol ?? "openai",
     credential_mode: p.credential_mode ?? "fixed",
     fixed_credential_id: p.fixed_credential_id ?? null,
@@ -105,9 +111,9 @@ export const providerService = {
     const id = crypto.randomUUID();
     db.query(
       "INSERT INTO providers (id, name, base_url, api_key, avatar, protocol) VALUES (?, ?, ?, ?, ?, ?)"
-    ).run(id, input.name, input.base_url.replace(/\/+$/, ""), input.api_key, input.avatar ?? null, input.protocol ?? "openai");
+    ).run(id, input.name, input.base_url.replace(/\/+$/, ""), input.api_key, input.avatar ?? defaultProviderAvatar(input.protocol ?? "openai"), input.protocol ?? "openai");
     const credentialId = crypto.randomUUID();
-    db.query("INSERT INTO provider_credentials (id, provider_id, label, kind, secret) VALUES (?, ?, ?, ?, ?)").run(credentialId, id, input.protocol === "codex" ? "Codex session" : "Default API key", input.protocol === "codex" ? "codex" : "api_key", input.api_key);
+     db.query("INSERT INTO provider_credentials (id, provider_id, label, kind, secret) VALUES (?, ?, ?, ?, ?)").run(credentialId, id, input.protocol === "codex" ? "Codex session" : input.protocol === "antigravity" ? "Google account" : "Default API key", input.protocol === "codex" ? "codex" : input.protocol === "antigravity" ? "antigravity" : "api_key", input.protocol === "antigravity" ? null : input.api_key);
     db.query("UPDATE providers SET fixed_credential_id = ? WHERE id = ?").run(credentialId, id);
     return this.findPublicById(id)!;
   },

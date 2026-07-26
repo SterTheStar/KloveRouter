@@ -5,6 +5,8 @@ import { createOpenAIClient } from "../clients/openai";
 import { createAnthropicMessage, toOpenAICompletion } from "../clients/anthropic";
 import { codexModels, codexTest } from "../integrations/codex";
 import { credentialService } from "../services/credential.service";
+import { antigravityModels, antigravityTest, isBlockedAntigravityModel } from "../integrations/antigravity";
+import { logger } from "../logger";
 
 export const modelsPlugin = (app: Elysia) =>
   app
@@ -27,12 +29,16 @@ export const modelsPlugin = (app: Elysia) =>
           set.status = 404;
           return { error: "Provider not found" };
         }
-        const model = modelService.create({
+      if (provider.protocol === "antigravity" && isBlockedAntigravityModel(body.model_id)) {
+        set.status = 400;
+        return { error: "This model is blocked for Antigravity" };
+      }
+      const model = modelService.create({
           provider_id: id,
           model_id: body.model_id,
           display_name: body.display_name,
           is_manual: 1,
-        });
+      });
         return model;
       },
       {
@@ -50,7 +56,7 @@ export const modelsPlugin = (app: Elysia) =>
       }
 
       try {
-        if (provider.protocol === "codex") {
+         if (provider.protocol === "codex") {
           const available = await codexModels();
           for (const model of available) {
             modelService.upsert({
@@ -64,18 +70,31 @@ export const modelsPlugin = (app: Elysia) =>
             success: true,
             models_found: available.length,
             message: `Synced ${available.length} Codex models from ${provider.name}`,
-          };
-        }
+           };
+         }
 
-        const url = provider.protocol === "anthropic"
+         if (provider.protocol === "antigravity") {
+           const credential = credentialService.select(provider.id, provider.credential_mode, provider.fixed_credential_id) || credentialService.select(provider.id, "round_robin");
+           if (!credential) { set.status = 503; return { error: "No active Antigravity account" }; }
+           const available = await antigravityModels(credential);
+           for (const model of available) modelService.upsert({ provider_id: id, model_id: model.id, display_name: model.display_name, is_manual: 0 });
+           return { success: true, models_found: available.length, message: `Synced ${available.length} Antigravity models from ${provider.name}` };
+         }
+
+         const credential = credentialService.select(provider.id, provider.credential_mode, provider.fixed_credential_id) || credentialService.select(provider.id, "round_robin");
+         if (!credential?.secret) {
+           set.status = 503;
+           return { error: "No active API key configured", message: `Provider "${provider.name}" has no active API key` };
+         }
+         const url = provider.protocol === "anthropic"
           ? provider.base_url.replace(/\/+$/, "") + "/models"
           : provider.base_url.replace(/\/+$/, "") + "/models";
         const res = await fetch(url, {
           headers: {
             "Content-Type": "application/json",
             ...(provider.protocol === "anthropic"
-              ? { "x-api-key": provider.api_key, "anthropic-version": "2023-06-01" }
-              : { Authorization: `Bearer ${provider.api_key}` }),
+               ? { "x-api-key": credential.secret, "anthropic-version": "2023-06-01" }
+               : { Authorization: `Bearer ${credential.secret}` }),
           },
         });
 
@@ -122,6 +141,7 @@ export const modelsPlugin = (app: Elysia) =>
           message: `Synced ${added} models from ${provider.name}`,
         };
       } catch (error: any) {
+        logger.error("Model sync failed", { provider: provider.name, protocol: provider.protocol, error: error.message });
         set.status = 502;
         return {
           error: "Failed to sync models",
@@ -149,10 +169,16 @@ export const modelsPlugin = (app: Elysia) =>
           set.status = 503;
           return { success: false, error: "No active provider credential" };
         }
-        const credentialProvider = { ...provider, api_key: credential.secret || provider.api_key };
-        const completion = provider.protocol === "codex"
-          ? { choices: [{ message: { content: await codexTest(model.model_id, credential) } }], usage: null }
-          : provider.protocol === "anthropic"
+         const credentialProvider = { ...provider, api_key: credential.secret ?? "" };
+         if (provider.protocol === "antigravity" && isBlockedAntigravityModel(model.model_id)) {
+           set.status = 400;
+           return { success: false, error: "This model is blocked for Antigravity" };
+         }
+         const completion = provider.protocol === "codex"
+           ? { choices: [{ message: { content: await codexTest(model.model_id, credential) } }], usage: null }
+           : provider.protocol === "antigravity"
+           ? { choices: [{ message: { content: await antigravityTest(model.model_id, credential) } }], usage: null }
+           : provider.protocol === "anthropic"
           ? toOpenAICompletion(await createAnthropicMessage(credentialProvider, {
               model: model.model_id,
               max_tokens: 10,

@@ -1,4 +1,5 @@
 import { getDb } from "../db/connection";
+import { isBlockedAntigravityModel } from "../integrations/antigravity/antigravity.models";
 
 export interface Model {
   id: string;
@@ -42,37 +43,42 @@ export const modelService = {
 
   findByProvider(providerId: string): Model[] {
     const db = getDb();
-    return db
-      .query(
-        "SELECT * FROM models WHERE provider_id = ? ORDER BY model_id ASC"
-      )
-      .all(providerId) as Model[];
+    return db.query(
+      `SELECT m.* FROM models m
+       JOIN providers p ON p.id = m.provider_id
+       WHERE m.provider_id = ?
+         AND NOT (p.protocol = 'antigravity' AND lower(m.model_id) IN ('chat_20706', 'chat_23310', 'tab_flash_lite_preview', 'tab_jump_flash_lite_preview', 'tab_flash_lite_previewtab_jump_flash_lite_preview'))
+         AND NOT (p.protocol = 'antigravity' AND lower(m.model_id) LIKE '%gemini-3.6-flash-tiered%')
+       ORDER BY m.model_id ASC`
+    ).all(providerId) as Model[];
   },
 
   findAllActive(): Model[] {
     const db = getDb();
-    return db
-      .query(
+    return db.query(
         `SELECT m.* FROM models m
          JOIN providers p ON p.id = m.provider_id
          WHERE m.is_active = 1 AND p.is_active = 1
+           AND NOT (p.protocol = 'antigravity' AND lower(m.model_id) IN ('chat_20706', 'chat_23310', 'tab_flash_lite_preview', 'tab_jump_flash_lite_preview', 'tab_flash_lite_previewtab_jump_flash_lite_preview'))
+           AND NOT (p.protocol = 'antigravity' AND lower(m.model_id) LIKE '%gemini-3.6-flash-tiered%')
          ORDER BY m.model_id ASC`
-      )
-      .all() as Model[];
+      ).all() as Model[];
   },
 
   findAllActiveWithProvider(): ModelWithProvider[] {
     const db = getDb();
     const models = db
       .query(
-        `SELECT m.*, p.name as provider_name, p.avatar as provider_avatar, p.base_url as provider_base_url FROM models m
+        `SELECT m.*, p.name as provider_name, p.avatar as provider_avatar, p.base_url as provider_base_url, p.protocol as provider_protocol FROM models m
          JOIN providers p ON p.id = m.provider_id
          WHERE m.is_active = 1 AND p.is_active = 1
          ORDER BY p.name ASC, m.model_id ASC`
       )
-      .all() as (ModelWithProvider & { provider_base_url: string })[];
+      .all() as (ModelWithProvider & { provider_base_url: string; provider_protocol: string })[];
 
-    return models.map(({ provider_base_url, ...model }) => ({
+    return models.filter((model) => !(
+      model.provider_protocol === "antigravity" && isBlockedAntigravityModel(model.model_id)
+    )).map(({ provider_base_url, provider_protocol, ...model }) => ({
       ...model,
       provider_avatar: providerAvatar(model.provider_avatar, provider_base_url),
     }));

@@ -8,6 +8,8 @@ import { createAnthropicMessage, createAnthropicStream, splitAnthropicMessages, 
 import { codexResponses } from "../integrations/codex";
 import { credentialService } from "../services/credential.service";
 import { logger } from "../logger";
+import { antigravityResponses } from "../integrations/antigravity";
+import { isBlockedAntigravityModel } from "../integrations/antigravity";
 
 function anthropicPayload(body: any, modelId: string, stream = false) {
   const messages = splitAnthropicMessages(body.messages);
@@ -138,12 +140,17 @@ export const proxyPlugin = (app: Elysia) =>
           };
         }
 
+        if (provider.protocol === "antigravity" && isBlockedAntigravityModel(parsed.modelId)) {
+          set.status = 403;
+          return { error: "Model blocked", message: `Model "${parsed.modelId}" is not available through Antigravity` };
+        }
+
         const credential = credentialService.select(provider.id, provider.credential_mode, provider.fixed_credential_id) || credentialService.select(provider.id, "round_robin");
         if (!credential) {
           set.status = 503;
           return { error: "No active provider credential", message: `Provider "${provider.name}" has no active credential` };
         }
-        const credentialProvider = { ...provider, api_key: credential.secret || provider.api_key };
+        const credentialProvider = { ...provider, api_key: credential.secret ?? "" };
         logger.debug("Credential selected", { provider: provider.name, mode: provider.credential_mode, credential_id: credential.id, kind: credential.kind });
         const client = provider.protocol === "anthropic" ? null : createOpenAIClient(credentialProvider);
 
@@ -204,6 +211,11 @@ export const proxyPlugin = (app: Elysia) =>
             set.status = error.message.includes("limit") ? 429 : 502;
             return { error: "Codex request failed", message: error.message };
           }
+        }
+
+        if (provider.protocol === "antigravity") {
+          try { return await antigravityResponses(body, parsed.modelId, credential); }
+          catch (error: any) { credentialService.markError(credential.id, error.message); set.status = error.message.includes("429") ? 429 : 502; return { error: "Antigravity request failed", message: error.message }; }
         }
 
         // Handle streaming

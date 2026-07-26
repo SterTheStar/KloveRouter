@@ -41,7 +41,7 @@ export const providersPlugin = (app: Elysia) =>
           base_url: t.String({ minLength: 1 }),
            api_key: t.Optional(t.String({ minLength: 1 })),
            avatar: t.Optional(t.String()),
-        protocol: t.Optional(t.Union([t.Literal("openai"), t.Literal("anthropic"), t.Literal("codex")])),
+         protocol: t.Optional(t.Union([t.Literal("openai"), t.Literal("anthropic"), t.Literal("codex"), t.Literal("antigravity")])),
         credential_mode: t.Optional(t.Union([t.Literal("fixed"), t.Literal("round_robin")])),
         fixed_credential_id: t.Optional(t.Union([t.String(), t.Null()])),
         }),
@@ -64,7 +64,7 @@ export const providersPlugin = (app: Elysia) =>
           base_url: t.Optional(t.String({ minLength: 1 })),
           api_key: t.Optional(t.String({ minLength: 1 })),
           avatar: t.Optional(t.Union([t.String(), t.Null()])),
-          protocol: t.Optional(t.Union([t.Literal("openai"), t.Literal("anthropic"), t.Literal("codex")])),
+           protocol: t.Optional(t.Union([t.Literal("openai"), t.Literal("anthropic"), t.Literal("codex"), t.Literal("antigravity")])),
           credential_mode: t.Optional(t.Union([t.Literal("fixed"), t.Literal("round_robin")])),
           fixed_credential_id: t.Optional(t.Union([t.String(), t.Null()])),
           is_active: t.Optional(t.Numeric()),
@@ -75,24 +75,34 @@ export const providersPlugin = (app: Elysia) =>
       if (!providerService.findById(id)) { set.status = 404; return { error: "Provider not found" }; }
       return credentialService.findAll(id);
     })
-    .get("/api/providers/:id/credentials/:credentialId/status", ({ params: { id, credentialId }, set }) => {
+     .get("/api/providers/:id/credentials/:credentialId/status", ({ params: { id, credentialId }, set }) => {
       const credential = credentialService.findById(credentialId);
       if (!credential || credential.provider_id !== id) { set.status = 404; return { error: "Credential not found" }; }
-      return credentialService.status(credentialId);
-    })
+       return credentialService.status(credentialId);
+     })
+     .get("/api/providers/:id/credentials/:credentialId/secret", ({ params: { id, credentialId }, set }) => {
+       const credential = credentialService.findById(credentialId);
+       if (!credential || credential.provider_id !== id || credential.kind !== "api_key") { set.status = 404; return { error: "API key not found" }; }
+       return { secret: credential.secret };
+     })
     .post("/api/providers/:id/credentials", ({ params: { id }, body, set }) => {
       if (!providerService.findById(id)) { set.status = 404; return { error: "Provider not found" }; }
       return credentialService.create({ ...body, provider_id: id, kind: body.kind ?? "api_key" });
-    }, { body: t.Object({ label: t.String({ minLength: 1 }), kind: t.Optional(t.Union([t.Literal("api_key"), t.Literal("codex")])), secret: t.Optional(t.String()), access_token: t.Optional(t.String()), refresh_token: t.Optional(t.String()), id_token: t.Optional(t.String()), account_id: t.Optional(t.String()) }) })
+     }, { body: t.Object({ label: t.String({ minLength: 1 }), kind: t.Optional(t.Union([t.Literal("api_key"), t.Literal("codex"), t.Literal("antigravity")])), secret: t.Optional(t.String()), access_token: t.Optional(t.String()), refresh_token: t.Optional(t.String()), id_token: t.Optional(t.String()), account_id: t.Optional(t.String()), email: t.Optional(t.String()), project_id: t.Optional(t.String()) }) })
     .put("/api/providers/:id/credentials/:credentialId", ({ params: { id, credentialId }, body, set }) => {
       const credential = credentialService.findById(credentialId);
       if (!credential || credential.provider_id !== id) { set.status = 404; return { error: "Credential not found" }; }
       return credentialService.update(credentialId, body);
     }, { body: t.Object({ label: t.Optional(t.String({ minLength: 1 })), secret: t.Optional(t.String()), is_active: t.Optional(t.Numeric()) }) })
-    .delete("/api/providers/:id/credentials/:credentialId", ({ params: { id, credentialId }, set }) => {
+     .delete("/api/providers/:id/credentials/:credentialId", ({ params: { id, credentialId }, set }) => {
       const credential = credentialService.findById(credentialId);
       if (!credential || credential.provider_id !== id) { set.status = 404; return { error: "Credential not found" }; }
-      return { success: credentialService.remove(credentialId) };
+       const removed = credentialService.remove(credentialId);
+       if (removed && (providerService.findById(id)?.protocol === "openai" || providerService.findById(id)?.protocol === "anthropic")) {
+         const remaining = credentialService.findAll(id).some((item) => item.kind === "api_key" && item.is_active);
+         if (!remaining) providerService.update(id, { api_key: "" });
+       }
+       return { success: removed };
     })
     .post("/api/providers/:id/credentials/:credentialId/import-legacy", async ({ params: { id, credentialId }, set }) => {
       const credential = credentialService.findById(credentialId);

@@ -65,7 +65,7 @@ export const providers = {
   list: () => request<import("../types").Provider[]>("/api/providers"),
   get: (id: string) =>
     request<import("../types").ProviderDetail>(`/api/providers/${id}`),
-  create: (data: { name: string; base_url: string; api_key?: string; avatar?: string; protocol?: "openai" | "anthropic" | "codex" }) =>
+   create: (data: { name: string; base_url: string; api_key?: string; avatar?: string; protocol?: "openai" | "anthropic" | "codex" | "antigravity" }) =>
     request<import("../types").Provider>("/api/providers", {
       method: "POST",
       body: JSON.stringify(data),
@@ -77,7 +77,7 @@ export const providers = {
       base_url?: string;
       api_key?: string;
       avatar?: string | null;
-      protocol?: "openai" | "anthropic" | "codex";
+       protocol?: "openai" | "anthropic" | "codex" | "antigravity";
       credential_mode?: "fixed" | "round_robin";
       fixed_credential_id?: string | null;
       is_active?: number;
@@ -96,10 +96,11 @@ export const providers = {
       method: "POST",
     }),
   credentials: (id: string) => request<import("../types").ProviderCredential[]>(`/api/providers/${id}/credentials`),
-  addCredential: (id: string, data: { label: string; kind?: "api_key" | "codex"; secret?: string; access_token?: string; refresh_token?: string; id_token?: string; account_id?: string }) => request<import("../types").ProviderCredential>(`/api/providers/${id}/credentials`, { method: "POST", body: JSON.stringify(data) }),
+   addCredential: (id: string, data: { label: string; kind?: "api_key" | "codex" | "antigravity"; secret?: string; access_token?: string; refresh_token?: string; id_token?: string; account_id?: string }) => request<import("../types").ProviderCredential>(`/api/providers/${id}/credentials`, { method: "POST", body: JSON.stringify(data) }),
   updateCredential: (id: string, credentialId: string, data: { label?: string; secret?: string; is_active?: number }) => request<import("../types").ProviderCredential>(`/api/providers/${id}/credentials/${credentialId}`, { method: "PUT", body: JSON.stringify(data) }),
   removeCredential: (id: string, credentialId: string) => request<{ success: boolean }>(`/api/providers/${id}/credentials/${credentialId}`, { method: "DELETE" }),
-  credentialStatus: (id: string, credentialId: string) => request<{ authenticated: boolean; account_id: string | null }>(`/api/providers/${id}/credentials/${credentialId}/status`),
+   credentialStatus: (id: string, credentialId: string) => request<{ authenticated: boolean; account_id: string | null; email?: string | null; project_id?: string | null }>(`/api/providers/${id}/credentials/${credentialId}/status`),
+   credentialSecret: (id: string, credentialId: string) => request<{ secret: string | null }>(`/api/providers/${id}/credentials/${credentialId}/secret`),
   disconnectCredential: (id: string, credentialId: string) => request<import("../types").ProviderCredential>(`/api/providers/${id}/credentials/${credentialId}/disconnect`, { method: "POST" }),
   importLegacyCredential: (id: string, credentialId: string) => request<import("../types").ProviderCredential>(`/api/providers/${id}/credentials/${credentialId}/import-legacy`, { method: "POST" }),
 };
@@ -113,6 +114,10 @@ export const codex = {
   usage: (credential_id: string) => request<import("../types").CodexUsage>(`/api/codex/usage?credential_id=${encodeURIComponent(credential_id)}`),
   resetCredits: (credential_id: string) => request<unknown>(`/api/codex/reset-credits?credential_id=${encodeURIComponent(credential_id)}`),
   consumeResetCredit: (credential_id: string, credit_id?: string) => request<unknown>("/api/codex/reset-credits/consume", { method: "POST", body: JSON.stringify({ credential_id, credit_id }) }),
+};
+export const antigravity = {
+  login: (credential_id: string) => request<{ auth_url: string; warning: string }>("/api/antigravity/login", { method: "POST", body: JSON.stringify({ credential_id }) }),
+  usage: (credential_id: string) => request<import("../types").AntigravityQuota[]>(`/api/antigravity/usage?credential_id=${encodeURIComponent(credential_id)}`),
 };
 
 // Models

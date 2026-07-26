@@ -4,8 +4,9 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { codex, providers } from "../api/client";
-import type { CodexUsage, CodexUsageWindow, Provider, ProviderCredential } from "../types";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { antigravity, codex, providers } from "../api/client";
+import type { AntigravityQuota, CodexUsage, CodexUsageWindow, Provider, ProviderCredential } from "../types";
 
 function windowLabel(window: CodexUsageWindow | null | undefined) {
   const seconds = window?.limit_window_seconds;
@@ -25,6 +26,60 @@ function UsageWindow({ title, value }: { title: string; value?: CodexUsageWindow
   return <div className="space-y-2"><div className="flex items-center justify-between gap-3 text-sm"><span>{title}</span><span className="font-medium">{used.toFixed(0)}% used</span></div><div className="h-2 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary transition-all" style={{ width: `${used}%` }} /></div><div className="text-xs text-muted-foreground">{windowLabel(value)} · {resetLabel(value?.reset_at)}</div></div>;
 }
 
+function quotaTone(used: number) {
+  if (used >= 90) return { bar: "bg-red-500", dot: "bg-red-500", text: "text-red-600 dark:text-red-400" };
+  if (used >= 70) return { bar: "bg-amber-500", dot: "bg-amber-500", text: "text-amber-600 dark:text-amber-400" };
+  return { bar: "bg-emerald-500", dot: "bg-emerald-500", text: "text-emerald-600 dark:text-emerald-400" };
+}
+
+const quotaPalette = [
+  "bg-blue-500", "bg-indigo-500", "bg-teal-500", "bg-orange-500",
+  "bg-pink-500", "bg-cyan-500", "bg-violet-500", "bg-lime-500",
+];
+
+function quotaColor(name: string) {
+  const normalized = name.toLowerCase();
+  if (normalized.includes("gemini")) return "bg-blue-500";
+  if (normalized.includes("claude") || normalized.includes("anthropic")) return "bg-violet-500";
+  if (normalized.includes("gpt")) return "bg-orange-500";
+  if (normalized.includes("image")) return "bg-pink-500";
+  let hash = 0;
+  for (const character of name) hash = (hash * 31 + character.charCodeAt(0)) | 0;
+  return quotaPalette[Math.abs(hash) % quotaPalette.length];
+}
+
+function AntigravityQuotaSummary({ quotas }: { quotas: AntigravityQuota[] }) {
+  const [showAll, setShowAll] = useState(false);
+  const isBlocked = (value: string) => { const normalized = value.toLowerCase(); return normalized === "chat_20706" || normalized === "chat_23310" || normalized.includes("tab_flash_lite_preview") || normalized.includes("tab_jump_flash_lite_preview") || normalized.includes("gemini-3.6-flash-tiered"); };
+  const visibleQuotas = quotas.filter((quota) => !isBlocked(quota.group_name) && !isBlocked(quota.limit_name) && !quota.model_ids.some(isBlocked));
+  const sorted = [...visibleQuotas].sort((a, b) => b.used_percent - a.used_percent);
+  const average = visibleQuotas.length ? Math.round(visibleQuotas.reduce((sum, quota) => sum + quota.used_percent, 0) / visibleQuotas.length) : 0;
+  const segments = sorted.map((quota) => ({
+    quota,
+    // A model's segment shrinks as its own remaining quota decreases. The
+    // other segments automatically reflow to use the available space.
+    weight: Math.max(0.02, quota.remaining_fraction),
+  }));
+  return <div className="space-y-3">
+    <div className="flex items-center justify-between text-sm"><span>Antigravity usage</span><span className="font-medium">{average}% average used</span></div>
+    <div className="flex h-3 w-full overflow-hidden rounded-full bg-muted" aria-label="Antigravity quota remaining by model">
+      {segments.map(({ quota, weight }, index) => <Tooltip key={`${quota.limit_name}-${index}`}>
+        <TooltipTrigger render={<div className={`${quotaColor(quota.group_name)} h-3 min-w-0 cursor-help border-r border-background/70 transition-[flex-grow,width] duration-500 first:rounded-l-full last:rounded-r-full last:border-r-0`} style={{ flexGrow: weight, flexBasis: 0 }} aria-label={`${quota.group_name}: ${quota.used_percent}% used`} />} />
+        <TooltipContent side="top" align="start" className="w-fit max-w-[min(420px,calc(100vw-2rem))] whitespace-normal p-3">
+          <div className="w-fit max-w-full space-y-2 overflow-hidden">
+            <div className="flex items-start gap-2"><span className={`mt-0.5 size-2 shrink-0 rounded-full ${quotaColor(quota.group_name)}`} /><div className="min-w-0 flex-1"><div className="break-words text-xs font-semibold">{quota.group_name}</div><div className="text-xs text-muted-foreground">{quota.used_percent}% used · {Math.round(quota.remaining_fraction * 100)}% remaining</div></div></div>
+            <div className="border-t border-background/20 pt-2 text-xs text-muted-foreground"><div className="break-words">Limit: {quota.limit_name}</div><div>{quota.reset_at ? `Resets ${new Date(quota.reset_at).toLocaleString()}` : quota.reset_in ? `Resets in ${quota.reset_in}` : "Reset time unavailable"}</div>{quota.model_ids.length > 0 && <div className="mt-1 max-h-20 overflow-y-auto break-all">Models: {quota.model_ids.slice(0, 8).join(", ")}{quota.model_ids.length > 8 ? ` +${quota.model_ids.length - 8} more` : ""}</div>}</div>
+          </div>
+        </TooltipContent>
+      </Tooltip>)}
+    </div>
+    <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+      {(showAll ? sorted : sorted.slice(0, 8)).map((quota, index) => <span key={`${quota.limit_name}-legend-${index}`} className="flex max-w-40 items-center gap-1.5"><span className={`size-2 shrink-0 rounded-full ${quotaColor(quota.group_name)}`} /><span className="truncate" title={quota.group_name}>{quota.group_name}</span></span>)}
+      {sorted.length > 8 && <button type="button" className="font-medium text-foreground underline decoration-muted-foreground underline-offset-2 hover:decoration-foreground" onClick={() => setShowAll((value) => !value)}>{showAll ? "Show less" : `+${sorted.length - 8} more`}</button>}
+    </div>
+  </div>;
+}
+
 function creditsFromPayload(payload: any): any[] {
   if (Array.isArray(payload)) return payload;
   if (Array.isArray(payload?.credits)) return payload.credits;
@@ -35,25 +90,30 @@ function creditsFromPayload(payload: any): any[] {
 }
 
 export default function UsageLimitsPage() {
-  const [accounts, setAccounts] = useState<{ provider: Provider; credential: ProviderCredential; usage: CodexUsage | null; credits: any[] }[]>([]);
+  const [accounts, setAccounts] = useState<{ provider: Provider; credential: ProviderCredential; usage: CodexUsage | null; credits: any[]; antigravityQuota: AntigravityQuota[] | null }[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [consuming, setConsuming] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const accountIdentity = (provider: Provider, credential: ProviderCredential) => provider.protocol === "antigravity"
+    ? credential.id
+    : credential.account_id || credential.label;
+
   const load = useCallback(async (refresh = false) => {
     try {
       refresh ? setRefreshing(true) : setLoading(true);
       const providerList = await providers.list();
-      const codexProviders = providerList.filter((provider) => provider.protocol === "codex");
-      const accountGroups = await Promise.all(codexProviders.map(async (provider) => {
-        const credentials = (await providers.credentials(provider.id)).filter((credential) => credential.kind === "codex" && credential.account_id);
+      const oauthProviders = providerList.filter((provider) => provider.protocol === "codex" || provider.protocol === "antigravity");
+      const accountGroups = await Promise.all(oauthProviders.map(async (provider) => {
+        const credentials = (await providers.credentials(provider.id)).filter((credential) => (credential.kind === "codex" && credential.account_id) || (credential.kind === "antigravity" && credential.email));
         return Promise.all(credentials.map(async (credential) => {
           try {
+            if (provider.protocol === "antigravity") return { provider, credential, usage: null, credits: [], antigravityQuota: await antigravity.usage(credential.id) };
             const [usageResult, creditResult] = await Promise.all([codex.usage(credential.id), codex.resetCredits(credential.id)]);
-            return { provider, credential, usage: usageResult, credits: creditsFromPayload(creditResult) };
+            return { provider, credential, usage: usageResult, credits: creditsFromPayload(creditResult), antigravityQuota: null };
           } catch {
-            return { provider, credential, usage: null, credits: [] };
+            return { provider, credential, usage: null, credits: [], antigravityQuota: null };
           }
         }));
       }));
@@ -77,7 +137,7 @@ export default function UsageLimitsPage() {
   return <div className="w-full space-y-6 p-6">
     <div className="flex items-center justify-between gap-4"><div><h1 className="font-heading text-2xl font-semibold tracking-tight">Usage limits</h1><p className="mt-1 text-sm text-muted-foreground">OAuth account limits and reset credits.</p></div><Button variant="outline" onClick={() => load(true)} disabled={refreshing}>{refreshing ? <LoaderCircle className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}Refresh</Button></div>
     {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
-    {!accounts.length ? <Card><CardContent className="p-10 text-center text-sm text-muted-foreground">No Codex OAuth accounts connected.</CardContent></Card> : <div className="grid gap-5 xl:grid-cols-2">{accounts.map(({ provider, credential, usage, credits }) => <Card key={credential.id}><CardHeader><div className="flex items-center justify-between gap-3"><div className="flex items-center gap-3"><Avatar className="size-11"><AvatarImage src={provider.avatar ?? undefined} /><AvatarFallback>{credential.label.charAt(0).toUpperCase()}</AvatarFallback></Avatar><div><CardTitle>{credential.label}</CardTitle><div className="text-xs text-muted-foreground">{credential.account_id} · {usage?.plan_type ?? "Codex OAuth account"}</div></div></div><Button size="sm" variant="outline" onClick={() => consume(credential.id, credits[0]?.id)} disabled={consuming || !credits.length}><ResetLine className="size-4" />{consuming ? "Using..." : `Reset credits (${credits.length})`}</Button></div></CardHeader><CardContent className="space-y-5"><UsageWindow title="Primary limit" value={usage?.rate_limit?.primary_window} /><UsageWindow title="Secondary limit" value={usage?.rate_limit?.secondary_window} /></CardContent></Card>)}</div>}
-    <p className="text-xs text-muted-foreground">Usage and reset credits use private Codex/ChatGPT endpoints and may be unavailable or change without notice.</p>
+     {!accounts.length ? <Card><CardContent className="p-10 text-center text-sm text-muted-foreground">No OAuth accounts connected.</CardContent></Card> : <div className="grid gap-5 xl:grid-cols-2">{accounts.map(({ provider, credential, usage, credits, antigravityQuota }) => <Card key={credential.id}><CardHeader><div className="flex items-center justify-between gap-3"><div className="flex items-center gap-3"><Avatar className="size-11"><AvatarImage src={provider.avatar ?? undefined} /><AvatarFallback>{(credential.email || credential.label).charAt(0).toUpperCase()}</AvatarFallback></Avatar><div><CardTitle>{provider.protocol === "antigravity" ? credential.email || credential.label : credential.label}</CardTitle><div className="text-xs text-muted-foreground">{accountIdentity(provider, credential)} · {provider.protocol === "antigravity" ? "Antigravity account" : usage?.plan_type ?? "Codex OAuth account"}</div></div></div>{provider.protocol === "codex" && <Button size="sm" variant="outline" onClick={() => consume(credential.id, credits[0]?.id)} disabled={consuming || !credits.length}><ResetLine className="size-4" />{consuming ? "Using..." : `Reset credits (${credits.length})`}</Button>}</div></CardHeader><CardContent className="space-y-5">{provider.protocol === "antigravity" ? (antigravityQuota?.length ? <AntigravityQuotaSummary quotas={antigravityQuota} /> : <div className="text-sm text-muted-foreground">No quota data returned.</div>) : <><UsageWindow title="Primary limit" value={usage?.rate_limit?.primary_window} /><UsageWindow title="Secondary limit" value={usage?.rate_limit?.secondary_window} /></>}</CardContent></Card>)}</div>}
+     <p className="text-xs text-muted-foreground">Usage data uses private Codex/ChatGPT and Google Cloud Code endpoints and may be unavailable or change without notice.</p>
   </div>;
 }

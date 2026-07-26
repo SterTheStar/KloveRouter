@@ -3,7 +3,7 @@ export interface Provider {
   name: string;
   base_url: string;
   avatar: string | null;
-  protocol: "openai" | "anthropic" | "codex";
+  protocol: "openai" | "anthropic" | "codex" | "antigravity";
   is_active: number;
   created_at: string;
   updated_at: string;
@@ -20,8 +20,10 @@ export interface ProviderCredential {
   id: string;
   provider_id: string;
   label: string;
-  kind: "api_key" | "codex";
+  kind: "api_key" | "codex" | "antigravity";
   account_id: string | null;
+  email?: string | null;
+  project_id?: string | null;
   masked_secret: string | null;
   is_active: number;
   last_used_at: string | null;
@@ -103,6 +105,16 @@ export interface CodexUsage {
   plan_type?: string;
   rate_limit?: { allowed?: boolean; limit_reached?: boolean; primary_window?: CodexUsageWindow | null; secondary_window?: CodexUsageWindow | null };
   credits?: { has_credits?: boolean; unlimited?: boolean; balance?: string | number };
+}
+
+export interface AntigravityQuota {
+  group_name: string;
+  limit_name: string;
+  remaining_fraction: number;
+  used_percent: number;
+  reset_at: string | null;
+  reset_in: string | null;
+  model_ids: string[];
 }
 
 export type Page =

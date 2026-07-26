@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { RiArrowLeftLine as ArrowLeft, RiCheckLine as Check, RiCloseLine as CloseLine, RiFileCopyLine as Copy, RiLoader4Line as LoaderCircle, RiLoginBoxLine as LoginIcon, RiLogoutBoxLine as LogoutIcon, RiPencilLine as Pencil, RiRefreshLine as RefreshCw, RiDeleteBinLine as Trash2, RiSearchLine as Search, RiPlayCircleLine as PlayCircleLine } from "@remixicon/react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { RiAddLine as Add, RiArrowLeftLine as ArrowLeft, RiCheckLine as Check, RiCloseCircleLine as CloseCircle, RiCloseLine as CloseLine, RiFileCopyLine as Copy, RiEyeLine as Eye, RiEyeOffLine as EyeOff, RiLoader4Line as LoaderCircle, RiLoginBoxLine as LoginIcon, RiLogoutBoxLine as LogoutIcon, RiPencilLine as Pencil, RiRefreshLine as RefreshCw, RiDeleteBinLine as Trash2, RiSearchLine as Search, RiPlayCircleLine as PlayCircleLine } from "@remixicon/react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -15,7 +15,7 @@ import AvatarUpload from "../components/AvatarUpload";
 import AddModelModal from "../components/AddModelModal";
 import EditModelModal from "../components/EditModelModal";
 import ConfirmDialog from "../components/ConfirmDialog";
-import { codex, providers, models as modelsApi } from "../api/client";
+import { antigravity, codex, providers, models as modelsApi } from "../api/client";
 import type { Model, Provider, ProviderCredential } from "../types";
 
 export default function ProviderDetailPage({ providerId, onBack }: { providerId: string; onBack: () => void }) {
@@ -48,7 +48,12 @@ export default function ProviderDetailPage({ providerId, onBack }: { providerId:
   const [success, setSuccess] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [baseUrl, setBaseUrl] = useState("");
-  const [apiKey, setApiKey] = useState("");
+  const newKeyLabelRef = useRef<HTMLInputElement>(null);
+  const newKeySecretRef = useRef<HTMLInputElement>(null);
+  const [addingKey, setAddingKey] = useState(false);
+  const [showAddKey, setShowAddKey] = useState(false);
+  const [revealedKeys, setRevealedKeys] = useState<Record<string, string>>({});
+  const [loadingSecretId, setLoadingSecretId] = useState<string | null>(null);
   const [connectedAccount, setConnectedAccount] = useState<string | null>(null);
   const [authAction, setAuthAction] = useState<"login" | "logout" | null>(null);
   const [avatar, setAvatar] = useState<string | null>(null);
@@ -62,7 +67,7 @@ export default function ProviderDetailPage({ providerId, onBack }: { providerId:
       setLoading(true);
       const [current, models, providerCredentials] = await Promise.all([providers.get(providerId), modelsApi.listByProvider(providerId), providers.credentials(providerId)]);
       const account = current.protocol === "codex" ? await codex.status() : null;
-      setProvider(current); setList(models); setName(current.name); setBaseUrl(current.base_url); setAvatar(current.avatar); setApiKey("");
+      setProvider(current); setList(models); setName(current.name); setBaseUrl(current.base_url); setAvatar(current.avatar);
       setConnectedAccount(providerCredentials.find((credential) => credential.kind === "codex" && credential.account_id)?.account_id ?? account?.account_id ?? null);
       setCredentials(providerCredentials);
     } catch (e: any) { setError(e.message); } finally { setLoading(false); }
@@ -72,7 +77,7 @@ export default function ProviderDetailPage({ providerId, onBack }: { providerId:
 
   const save = async () => {
     setSaving(true);
-    try { const updated = await providers.update(providerId, { name, base_url: baseUrl, avatar, ...(apiKey ? { api_key: apiKey } : {}) }); setProvider(updated); setApiKey(""); setSuccess("Provider updated."); }
+    try { const updated = await providers.update(providerId, { name, base_url: baseUrl, avatar }); setProvider(updated); setSuccess("Provider updated."); }
     catch (e: any) { setError(e.message); } finally { setSaving(false); }
   };
 
@@ -82,13 +87,14 @@ export default function ProviderDetailPage({ providerId, onBack }: { providerId:
     catch (e: any) { setError(e.message); } finally { setSyncing(false); }
   };
 
-  const addCodexAccount = async () => {
+  const addOAuthAccount = async () => {
     if (!provider) return;
     setCredentialAction(true); setError(null);
     try {
-      const credential = await providers.addCredential(providerId, { label: `Codex account ${credentials.length + 1}`, kind: "codex" });
-      const result = await codex.login(credential.id);
-      window.open(result.auth_url, "klove-codex-login", "popup,width=520,height=720");
+      const isAntigravity = provider.protocol === "antigravity";
+      const credential = await providers.addCredential(providerId, { label: `${isAntigravity ? "Google" : "Codex"} account ${credentials.length + 1}`, kind: isAntigravity ? "antigravity" : "codex" });
+      const result = isAntigravity ? await antigravity.login(credential.id) : await codex.login(credential.id);
+      window.open(result.auth_url, isAntigravity ? "klove-antigravity-login" : "klove-codex-login", "popup,width=520,height=720");
       const started = Date.now();
       const poll = window.setInterval(async () => {
         try {
@@ -110,6 +116,35 @@ export default function ProviderDetailPage({ providerId, onBack }: { providerId:
 
   const setCredentialMode = async (mode: "fixed" | "round_robin", fixedId?: string | null) => {
     try { const updated = await providers.update(providerId, { credential_mode: mode, fixed_credential_id: fixedId ?? null }); setProvider(updated); } catch (e: any) { setError(e.message); }
+  };
+
+  const addApiKey = async () => {
+    const label = newKeyLabelRef.current?.value.trim() ?? "";
+    const secret = newKeySecretRef.current?.value ?? "";
+    if (!label || !secret.trim()) { setError("Key label and value are required."); return; }
+    setAddingKey(true); setError(null);
+    try {
+      await providers.addCredential(providerId, { label, kind: "api_key", secret });
+      if (newKeyLabelRef.current) newKeyLabelRef.current.value = "";
+      if (newKeySecretRef.current) newKeySecretRef.current.value = "";
+      setShowAddKey(false); setSuccess("API key added."); await load();
+    } catch (e: any) { setError(e.message); } finally { setAddingKey(false); }
+  };
+
+  const removeApiKey = async (credentialId: string) => {
+    try { await providers.removeCredential(providerId, credentialId); setSuccess("API key removed."); await load(); }
+    catch (e: any) { setError(e.message); }
+  };
+
+  const toggleApiKeyVisibility = async (credential: ProviderCredential) => {
+    if (revealedKeys[credential.id] !== undefined) {
+      setRevealedKeys((current) => { const next = { ...current }; delete next[credential.id]; return next; });
+      return;
+    }
+    setLoadingSecretId(credential.id);
+    try { const result = await providers.credentialSecret(providerId, credential.id); setRevealedKeys((current) => ({ ...current, [credential.id]: result.secret || "" })); }
+    catch (e: any) { setError(e.message); }
+    finally { setLoadingSecretId(null); }
   };
 
   const copy = (value: string) => navigator.clipboard?.writeText(value);
@@ -137,23 +172,29 @@ export default function ProviderDetailPage({ providerId, onBack }: { providerId:
       {success && <Alert><Check className="size-4" /><AlertDescription>{success}</AlertDescription></Alert>}
 
       <Card>
-         <CardHeader className="flex flex-row items-center justify-between"><CardTitle>Connection settings</CardTitle><div className="flex flex-wrap justify-end gap-2">{provider.protocol === "codex" && <><Button variant="outline" onClick={addCodexAccount} disabled={credentialAction}>{credentialAction ? <LoaderCircle className="size-4 animate-spin" /> : <LoginIcon className="size-4" />}{credentials.some((credential) => credential.kind === "codex" && credential.account_id) ? "Add account" : "Connect account"}</Button>{credentials.some((credential) => credential.kind === "codex" && credential.account_id) && <Button variant="outline" onClick={() => setLogoutOpen(true)} disabled={authAction !== null}><LogoutIcon className="size-4" />Log out</Button>}</>}<Button variant="outline" onClick={sync} disabled={syncing}>{syncing ? <LoaderCircle className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}Sync models</Button><Button onClick={save} disabled={saving}>{saving ? "Saving..." : "Save changes"}</Button></div></CardHeader>
+          <CardHeader className="flex flex-row items-center justify-between"><CardTitle>Connection settings</CardTitle><div className="flex flex-wrap justify-end gap-2">{(provider.protocol === "codex" || provider.protocol === "antigravity") && <><Button variant="outline" onClick={addOAuthAccount} disabled={credentialAction}>{credentialAction ? <LoaderCircle className="size-4 animate-spin" /> : <LoginIcon className="size-4" />}Connect account</Button>{credentials.some((credential) => (credential.kind === "codex" || credential.kind === "antigravity") && (credential.account_id || credential.email)) && <Button variant="outline" onClick={() => setLogoutOpen(true)} disabled={authAction !== null}><LogoutIcon className="size-4" />Log out</Button>}</>}<Button variant="outline" onClick={sync} disabled={syncing}>{syncing ? <LoaderCircle className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}Sync models</Button><Button onClick={save} disabled={saving}>{saving ? "Saving..." : "Save changes"}</Button></div></CardHeader>
         <CardContent className="space-y-5">
           <AvatarUpload value={avatar} name={name} onChange={setAvatar} />
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2"><Label htmlFor="provider-name">Provider name</Label><Input id="provider-name" value={name} onChange={(e) => setName(e.target.value)} /></div>
             <div className="space-y-2"><Label htmlFor="provider-url">Base URL</Label><Input id="provider-url" value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} /></div>
           </div>
-            {provider.protocol === "codex" ? (
+             {(provider.protocol === "codex" || provider.protocol === "antigravity") ? (
              <div className="space-y-2">
                <Label>Connected accounts</Label>
                <div className="space-y-2 rounded-md border bg-muted/40 p-3 text-sm">
-                 {credentials.filter((credential) => credential.kind === "codex" && credential.account_id).length > 0 ? credentials.filter((credential) => credential.kind === "codex" && credential.account_id).map((credential) => <div key={credential.id} className="flex items-center justify-between gap-3"><span>{credential.label}</span><span className="font-mono text-xs text-muted-foreground">{credential.account_id}</span></div>) : <span className="text-muted-foreground">No Codex account connected</span>}
+                  {credentials.filter((credential) => (credential.kind === "codex" || credential.kind === "antigravity") && (credential.account_id || credential.email)).length > 0 ? credentials.filter((credential) => (credential.kind === "codex" || credential.kind === "antigravity") && (credential.account_id || credential.email)).map((credential) => <div key={credential.id} className="flex items-center justify-between gap-3"><span>{credential.label}</span><span className="font-mono text-xs text-muted-foreground">{credential.kind === "antigravity" ? credential.id : credential.account_id || credential.project_id}</span></div>) : <span className="text-muted-foreground">No account connected</span>}
                </div>
              </div>
-           ) : (
-             <div className="space-y-2"><Label htmlFor="provider-key">API key</Label><Input id="provider-key" type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder="Leave blank to keep current key" /></div>
-           )}
+            ) : (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between gap-3"><Label>API keys</Label><Button variant="outline" size="sm" onClick={() => setShowAddKey((value) => !value)}>{showAddKey ? <CloseCircle className="size-4" /> : <Add className="size-4" />}{showAddKey ? "Cancel" : "Add key"}</Button></div>
+                <div className="space-y-2">
+                    {credentials.filter((credential) => credential.kind === "api_key").length ? credentials.filter((credential) => credential.kind === "api_key").map((credential) => { const revealed = revealedKeys[credential.id]; return <div key={credential.id} className="grid items-center gap-2 border-b border-border/60 py-2 last:border-b-0 md:grid-cols-[minmax(8rem,0.65fr)_minmax(0,1.8fr)_auto]"><Input value={credential.label} readOnly aria-label={`${credential.label} label`} className="h-9 bg-background" /><div className="relative"><Input value={revealed ?? credential.masked_secret ?? "Hidden key"} readOnly type="text" aria-label={`${credential.label} secret`} className="h-9 bg-background pr-24 font-mono" /><div className="absolute right-1 top-1/2 flex -translate-y-1/2 gap-0.5"><Button variant="ghost" size="icon" className="size-8" onClick={() => toggleApiKeyVisibility(credential)} disabled={loadingSecretId === credential.id} title={revealed === undefined ? "Reveal API key" : "Hide API key"}>{revealed === undefined ? <Eye className="size-4" /> : <EyeOff className="size-4" />}</Button><Button variant="ghost" size="icon" className="size-8" onClick={() => navigator.clipboard?.writeText(revealed ?? credential.masked_secret ?? "")} title="Copy API key"><Copy className="size-4" /></Button></div></div><Button variant="destructive" size="icon" className="size-9" onClick={() => removeApiKey(credential.id)} title="Remove API key"><Trash2 className="size-4" /></Button></div>; }) : <div className="text-xs text-muted-foreground">No API keys configured.</div>}
+                </div>
+                {showAddKey && <div className="grid gap-2 rounded-md border border-dashed p-3 md:grid-cols-[1fr_1.5fr_auto]"><Input ref={newKeyLabelRef} placeholder="Key label" /><Input ref={newKeySecretRef} type="password" placeholder="sk-..." /><Button onClick={addApiKey} disabled={addingKey}>{addingKey ? <LoaderCircle className="size-4 animate-spin" /> : <><Add className="size-4" />Add key</>}</Button></div>}
+              </div>
+            )}
         </CardContent>
        </Card>
 
@@ -165,7 +206,7 @@ export default function ProviderDetailPage({ providerId, onBack }: { providerId:
        <Dialog open={logoutOpen} onOpenChange={(open) => { setLogoutOpen(open); if (!open) setLogoutCredentialId(null); }}>
          <DialogContent>
            <DialogHeader><DialogTitle>Log out Codex account</DialogTitle><DialogDescription>Select the account to disconnect. Other accounts will remain connected.</DialogDescription></DialogHeader>
-           <div className="space-y-2">{credentials.filter((credential) => credential.kind === "codex" && credential.account_id).map((credential) => <button key={credential.id} type="button" className={`flex w-full items-center justify-between rounded-md border p-3 text-left text-sm ${logoutCredentialId === credential.id ? "border-primary bg-muted" : "hover:bg-muted/50"}`} onClick={() => setLogoutCredentialId(credential.id)}><span><span className="block">{credential.label}</span><span className="font-mono text-xs text-muted-foreground">{credential.account_id}</span></span>{logoutCredentialId === credential.id && <Check className="size-4" />}</button>)}</div>
+            <div className="space-y-2">{credentials.filter((credential) => (credential.kind === "codex" || credential.kind === "antigravity") && (credential.account_id || credential.email)).map((credential) => <button key={credential.id} type="button" className={`flex w-full items-center justify-between rounded-md border p-3 text-left text-sm ${logoutCredentialId === credential.id ? "border-primary bg-muted" : "hover:bg-muted/50"}`} onClick={() => setLogoutCredentialId(credential.id)}><span><span className="block">{credential.label}</span><span className="font-mono text-xs text-muted-foreground">{credential.kind === "antigravity" ? credential.id : credential.account_id || credential.project_id}</span></span>{logoutCredentialId === credential.id && <Check className="size-4" />}</button>)}</div>
            <DialogFooter><Button variant="outline" onClick={() => setLogoutOpen(false)}>Cancel</Button><Button variant="destructive" onClick={logoutCodex} disabled={!logoutCredentialId || authAction !== null}>{authAction === "logout" ? "Logging out..." : "Log out"}</Button></DialogFooter>
          </DialogContent>
        </Dialog>

@@ -2,7 +2,7 @@ import { getDb } from "../db/connection";
 import { decryptSecret, encryptSecret } from "./secret.service";
 import { logger } from "../logger";
 
-export type CredentialKind = "api_key" | "codex";
+export type CredentialKind = "api_key" | "codex" | "antigravity";
 export type CredentialMode = "fixed" | "round_robin";
 
 export interface ProviderCredential {
@@ -15,6 +15,12 @@ export interface ProviderCredential {
   refresh_token: string | null;
   id_token: string | null;
   account_id: string | null;
+  email?: string | null;
+  project_id?: string | null;
+  managed_project_id?: string | null;
+  expires_at?: number | null;
+  fingerprint_json?: string | null;
+  quota_json?: string | null;
   is_active: number;
   last_used_at: string | null;
   last_error: string | null;
@@ -28,6 +34,9 @@ export interface ProviderCredentialPublic {
   label: string;
   kind: CredentialKind;
   account_id: string | null;
+  email?: string | null;
+  project_id?: string | null;
+  expires_at?: number | null;
   masked_secret: string | null;
   is_active: number;
   last_used_at: string | null;
@@ -48,6 +57,9 @@ function toPublic(credential: ProviderCredential): ProviderCredentialPublic {
     label: credential.label,
     kind: credential.kind,
     account_id: credential.account_id,
+    email: credential.email ?? null,
+    project_id: credential.project_id ?? null,
+    expires_at: credential.expires_at ?? null,
     masked_secret: mask(credential.secret ?? credential.account_id),
     is_active: credential.is_active,
     last_used_at: credential.last_used_at,
@@ -71,11 +83,27 @@ export const credentialService = {
   status(id: string) {
     const credential = this.findById(id);
     if (!credential) return null;
-    return { authenticated: Boolean(credential.access_token), account_id: credential.account_id };
+    return {
+      authenticated: Boolean(credential.access_token),
+      account_id: credential.account_id,
+      email: credential.email ?? null,
+      project_id: credential.project_id ?? null,
+    };
   },
 
   disconnect(id: string) {
-    return this.update(id, { access_token: null, refresh_token: null, id_token: null, account_id: null });
+    return this.update(id, {
+      access_token: null,
+      refresh_token: null,
+      id_token: null,
+      account_id: null,
+      email: null,
+      project_id: null,
+      managed_project_id: null,
+      expires_at: null,
+      fingerprint_json: null,
+      quota_json: null,
+    });
   },
 
   hasAuthenticatedCodexAccount() {
@@ -83,16 +111,16 @@ export const credentialService = {
     return Boolean(row);
   },
 
-  create(input: { provider_id: string; label: string; kind: CredentialKind; secret?: string; access_token?: string; refresh_token?: string; id_token?: string; account_id?: string }): ProviderCredentialPublic {
+  create(input: { provider_id: string; label: string; kind: CredentialKind; secret?: string; access_token?: string; refresh_token?: string; id_token?: string; account_id?: string; email?: string; project_id?: string; managed_project_id?: string; expires_at?: number; fingerprint_json?: string; quota_json?: string }): ProviderCredentialPublic {
     const id = crypto.randomUUID();
-    getDb().query("INSERT INTO provider_credentials (id, provider_id, label, kind, secret, access_token, refresh_token, id_token, account_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)").run(id, input.provider_id, input.label, input.kind, encryptSecret(input.secret), encryptSecret(input.access_token), encryptSecret(input.refresh_token), encryptSecret(input.id_token), input.account_id ?? null);
+    getDb().query("INSERT INTO provider_credentials (id, provider_id, label, kind, secret, access_token, refresh_token, id_token, account_id, email, project_id, managed_project_id, expires_at, fingerprint_json, quota_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").run(id, input.provider_id, input.label, input.kind, encryptSecret(input.secret), encryptSecret(input.access_token), encryptSecret(input.refresh_token), encryptSecret(input.id_token), input.account_id ?? null, input.email ?? null, input.project_id ?? null, input.managed_project_id ?? null, input.expires_at ?? null, input.fingerprint_json ?? null, input.quota_json ?? null);
     return toPublic(this.findById(id)!);
   },
 
-  update(id: string, input: { label?: string; secret?: string | null; is_active?: number; access_token?: string | null; refresh_token?: string | null; id_token?: string | null; account_id?: string | null }) {
+  update(id: string, input: { label?: string; secret?: string | null; is_active?: number; access_token?: string | null; refresh_token?: string | null; id_token?: string | null; account_id?: string | null; email?: string | null; project_id?: string | null; managed_project_id?: string | null; expires_at?: number | null; fingerprint_json?: string | null; quota_json?: string | null }) {
     const updates: string[] = [];
     const values: any[] = [];
-    for (const field of ["label", "secret", "is_active", "access_token", "refresh_token", "id_token", "account_id"] as const) {
+    for (const field of ["label", "secret", "is_active", "access_token", "refresh_token", "id_token", "account_id", "email", "project_id", "managed_project_id", "expires_at", "fingerprint_json", "quota_json"] as const) {
       if (input[field] !== undefined) { updates.push(`${field} = ?`); values.push(input[field]); }
     }
     if (!updates.length) return this.findById(id) ? toPublic(this.findById(id)!) : null;
@@ -109,7 +137,7 @@ export const credentialService = {
   select(providerId: string, mode: CredentialMode, fixedId?: string | null): ProviderCredential | null {
     const db = getDb();
     const provider = db.query("SELECT protocol FROM providers WHERE id = ?").get(providerId) as { protocol: string } | null;
-    const eligible = provider?.protocol === "codex" ? "kind = 'codex' AND access_token IS NOT NULL" : "kind = 'api_key' AND secret IS NOT NULL";
+    const eligible = provider?.protocol === "codex" ? "kind = 'codex' AND access_token IS NOT NULL" : provider?.protocol === "antigravity" ? "kind = 'antigravity' AND refresh_token IS NOT NULL" : "kind = 'api_key' AND secret IS NOT NULL";
     if (mode === "fixed" && fixedId) {
       const raw = db.query(`SELECT id FROM provider_credentials WHERE id = ? AND provider_id = ? AND is_active = 1 AND ${eligible}`).get(fixedId, providerId) as { id: string } | null;
       const row = raw ? this.findById(raw.id) : null;
