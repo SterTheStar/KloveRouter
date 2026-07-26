@@ -73,7 +73,7 @@ export const usageService = {
       .query(
         `SELECT
            COUNT(*) as total_requests,
-            COALESCE(SUM(tokens_completion), 0) as total_tokens,
+            COALESCE(SUM(tokens_total), 0) as total_tokens,
            COALESCE(SUM(tokens_prompt), 0) as total_tokens_prompt,
            COALESCE(SUM(tokens_completion), 0) as total_tokens_completion,
            COALESCE(CAST(SUM(tokens_total) AS REAL) / MAX(COUNT(*), 1), 0) as avg_tokens_per_request,

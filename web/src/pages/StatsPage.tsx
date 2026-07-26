@@ -21,6 +21,11 @@ function formatDuration(ms: number): string {
   return ms.toFixed(0) + "ms";
 }
 
+function formatDate(value: string): string {
+  const date = new Date(`${value}T00:00:00`);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
 const statCards = [
   { icon: ExchangeLine, title: "Requests", key: "total_requests" as const, format: (v: number) => formatNumber(v) },
   { icon: NumbersLine, title: "Total tokens", key: "total_tokens" as const, format: (v: number) => formatNumber(v) },
@@ -116,7 +121,7 @@ export default function StatsPage() {
       {overview && (
         <div className="grid grid-cols-4 gap-3">
           {statCards.map(({ icon: Icon, title, key, format }) => (
-            <div key={key} className="flex items-center gap-4 rounded-lg border p-5">
+            <div key={key} className="flex items-center gap-4 rounded-xl bg-card p-5 text-card-foreground ring-1 ring-foreground/10">
               <div className="flex size-10 shrink-0 items-center justify-center rounded-lg">
                 <Icon className="size-9 text-muted-foreground" />
               </div>
@@ -137,7 +142,7 @@ export default function StatsPage() {
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={daily}>
                   <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                  <XAxis dataKey="date" tick={{ fontSize: 12 }} className="text-muted-foreground" />
+                   <XAxis dataKey="date" tickFormatter={formatDate} tick={{ fontSize: 12 }} className="text-muted-foreground" interval="preserveStartEnd" minTickGap={24} />
                   <YAxis tick={{ fontSize: 12 }} className="text-muted-foreground" />
                   <Tooltip />
                   <Line type="monotone" dataKey="tokens_total" stroke="#5BCEFA" strokeWidth={2} name="Tokens" dot={false} />
@@ -156,7 +161,7 @@ export default function StatsPage() {
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={byProvider}>
                   <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                  <XAxis dataKey="provider_name" tick={{ fontSize: 12 }} className="text-muted-foreground" />
+                   <XAxis dataKey="provider_name" tick={{ fontSize: 12 }} className="text-muted-foreground" interval={0} angle={-20} textAnchor="end" height={55} />
                   <YAxis tick={{ fontSize: 12 }} className="text-muted-foreground" />
                   <Tooltip />
                   <Bar dataKey="tokens_total" name="Tokens" radius={[6, 6, 0, 0]}>
