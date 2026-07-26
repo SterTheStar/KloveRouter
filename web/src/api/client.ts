@@ -199,6 +199,8 @@ export const requestLogs = {
 
 // Settings
 export const settings = {
+  profile: () => request<{ name: string; avatar: string | null }>("/api/settings/profile"),
+  updateProfile: (data: { name: string; avatar: string | null }) => request<{ name: string; avatar: string | null }>("/api/settings/profile", { method: "PUT", body: JSON.stringify(data) }),
   changePassword: (current_password: string, new_password: string) =>
     request<{ success: boolean; message: string }>("/api/settings/password", {
       method: "PUT",

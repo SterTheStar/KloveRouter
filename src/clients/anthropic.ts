@@ -9,7 +9,7 @@ export type AnthropicResponse = {
   id: string;
   type: "message";
   role: "assistant";
-  content: { type: string; text?: string; id?: string; name?: string; input?: unknown }[];
+  content: { type: string; text?: string; thinking?: string; id?: string; name?: string; input?: unknown }[];
   model: string;
   stop_reason: string | null;
   usage?: { input_tokens?: number; output_tokens?: number; cache_read_input_tokens?: number; cache_creation_input_tokens?: number };
@@ -81,6 +81,8 @@ export function toOpenAICompletion(response: AnthropicResponse) {
     function: { name: block.name ?? "", arguments: JSON.stringify(block.input ?? {}) },
   })) ?? [];
   const message: Record<string, unknown> = { role: "assistant", content: text || null };
+  const reasoning = response.content?.filter((block) => block.type === "thinking").map((block) => block.thinking ?? "").join("") ?? "";
+  if (reasoning) message.reasoning_content = reasoning;
   if (toolCalls.length) message.tool_calls = toolCalls;
   const promptTokens = response.usage?.input_tokens ?? 0;
   const completionTokens = response.usage?.output_tokens ?? 0;

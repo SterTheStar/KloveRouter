@@ -14,11 +14,14 @@ import UsageLimitsPage from "./pages/UsageLimitsPage";
 import RequestLogsPage from "./pages/RequestLogsPage";
 import type { Page } from "./types";
 import { ToastProvider } from "./components/ui/toast";
+import { settings } from "./api/client";
+import type { UserProfile } from "./types";
 
 export default function App() {
   const { isAuth, loading, error, login, logout } = useAuth();
   const [currentPage, setCurrentPage] = useState<Page>("dashboard");
   const [selectedProviderId, setSelectedProviderId] = useState<string | null>(null);
+  const [profile, setProfile] = useState<UserProfile>({ name: "User", avatar: null });
   const [darkMode, setDarkMode] = useState(() => {
     return localStorage.getItem("klove_theme") !== "light";
   });
@@ -27,6 +30,8 @@ export default function App() {
     document.documentElement.classList.toggle("dark", darkMode);
     localStorage.setItem("klove_theme", darkMode ? "dark" : "light");
   }, [darkMode]);
+
+  useEffect(() => { if (isAuth) settings.profile().then(setProfile).catch(() => undefined); }, [isAuth]);
 
   const handleNavigate = (page: Page, providerId?: string) => {
     if (page === "provider-detail" && providerId) {
@@ -47,7 +52,7 @@ export default function App() {
   return (
     <ToastProvider><TooltipProvider>
       <div className="flex min-h-svh bg-background text-foreground">
-        <Sidebar currentPage={currentPage} onNavigate={(page) => handleNavigate(page)} onLogout={logout} />
+         <Sidebar currentPage={currentPage} onNavigate={(page) => handleNavigate(page)} onLogout={logout} profile={profile} />
         <main className="min-w-0 flex-1 overflow-auto">
           {currentPage === "dashboard" && <DashboardPage onNavigate={handleNavigate} />}
           {currentPage === "provider-detail" && selectedProviderId && (
@@ -58,7 +63,7 @@ export default function App() {
           {currentPage === "usage" && <UsageLimitsPage />}
           {currentPage === "request-logs" && <RequestLogsPage />}
           {currentPage === "keys" && <ApiKeysPage />}
-          {currentPage === "settings" && <SettingsPage darkMode={darkMode} onThemeChange={setDarkMode} />}
+           {currentPage === "settings" && <SettingsPage darkMode={darkMode} onThemeChange={setDarkMode} profile={profile} onProfileChange={setProfile} />}
         </main>
       </div>
     </TooltipProvider></ToastProvider>

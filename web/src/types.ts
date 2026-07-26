@@ -166,3 +166,8 @@ export interface RequestLog {
   created_at: string;
   completed_at: string | null;
 }
+
+export interface UserProfile {
+  name: string;
+  avatar: string | null;
+}

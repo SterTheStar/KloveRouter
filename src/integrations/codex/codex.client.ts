@@ -209,6 +209,9 @@ export async function codexResponses(body: any, model: string, credentials?: { a
   if (!token) throw new Error("Codex account is not authenticated");
   const converted = body.input ? { input: body.input, instructions: body.instructions ?? "" } : toResponsesInput(body.messages);
   const text = toResponsesTextFormat(body.response_format);
+  const reasoning = body.reasoning && typeof body.reasoning === "object"
+    ? { ...body.reasoning, summary: body.reasoning.summary ?? "auto" }
+    : { ...(body.reasoning_effort ? { effort: body.reasoning_effort } : {}), summary: "auto" };
   const requestBody = {
     model,
     input: converted.input,
@@ -221,6 +224,7 @@ export async function codexResponses(body: any, model: string, credentials?: { a
     ...(body.temperature !== undefined ? { temperature: body.temperature } : {}),
     ...(body.top_p !== undefined ? { top_p: body.top_p } : {}),
     ...(body.max_output_tokens !== undefined ? { max_output_tokens: body.max_output_tokens } : {}),
+    ...(reasoning ? { reasoning } : {}),
     ...(text ? { text } : {}),
   };
   const response = await fetch("https://chatgpt.com/backend-api/codex/responses", {
@@ -264,6 +268,8 @@ export function codexStreamToOpenAI(response: Response, model: string) {
             const base = { id, object: "chat.completion.chunk", created: Math.floor(Date.now() / 1000), model };
             if (data.type === "response.output_text.delta") {
               emit({ ...base, choices: [{ index: 0, delta: { content: data.delta ?? "" }, finish_reason: null }] });
+            } else if (data.type === "response.reasoning_summary_text.delta" || data.type === "response.reasoning_text.delta" || data.type === "response.reasoning.delta") {
+              emit({ ...base, choices: [{ index: 0, delta: { reasoning_content: data.delta ?? "" }, finish_reason: null }] });
             } else if (data.type === "response.output_item.added" && data.item?.type === "function_call") {
               const index = Number(data.output_index ?? 0);
               tools.set(index, { id: data.item.call_id ?? data.item.id, name: data.item.name });
@@ -276,7 +282,7 @@ export function codexStreamToOpenAI(response: Response, model: string) {
               const status = data.response?.status;
               const finish = status === "incomplete" ? "length" : tools.size ? "tool_calls" : "stop";
               const usage = data.response?.usage;
-              emit({ ...base, choices: [{ index: 0, delta: {}, finish_reason: finish }], ...(usage ? { usage: { prompt_tokens: usage.input_tokens ?? 0, completion_tokens: usage.output_tokens ?? 0, total_tokens: usage.total_tokens ?? 0 } } : {}) });
+              emit({ ...base, choices: [{ index: 0, delta: {}, finish_reason: finish }], ...(usage ? { usage: { prompt_tokens: usage.input_tokens ?? 0, completion_tokens: usage.output_tokens ?? 0, total_tokens: usage.total_tokens ?? 0, ...(usage.input_tokens_details ? { prompt_tokens_details: usage.input_tokens_details } : {}), ...(usage.prompt_tokens_details ? { prompt_tokens_details: usage.prompt_tokens_details } : {}), ...(usage.cache_read_input_tokens !== undefined ? { cache_read_input_tokens: usage.cache_read_input_tokens } : {}), ...(usage.cached_input_tokens !== undefined ? { cached_input_tokens: usage.cached_input_tokens } : {}), ...(usage.cached_tokens !== undefined ? { cached_tokens: usage.cached_tokens } : {}) } } : {}) });
             } else if (data.type === "response.failed" || data.type === "error") {
               emit({ error: { message: data.error?.message ?? data.message ?? "Codex response failed" } });
             }
@@ -288,7 +294,7 @@ export function codexStreamToOpenAI(response: Response, model: string) {
         emit({ error: { message: error.message } });
       } finally { controller.close(); }
     },
-  }), { headers: { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", Connection: "keep-alive" } });
+  }), { headers: { "Content-Type": "text/event-stream; charset=utf-8", "Cache-Control": "no-cache, no-transform", Connection: "keep-alive", "X-Accel-Buffering": "no" } });
 }
 
 export async function codexTest(model: string, credentials?: { access_token?: string | null; account_id?: string | null }) {

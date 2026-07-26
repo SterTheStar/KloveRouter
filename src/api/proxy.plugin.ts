@@ -14,11 +14,16 @@ import { requestLogService } from "../services/request-log.service";
 
 function anthropicPayload(body: any, modelId: string, stream = false) {
   const messages = splitAnthropicMessages(body.messages);
+  const effort = body.reasoning?.effort ?? body.reasoning_effort;
+  const maxTokens = body.max_tokens ?? body.max_completion_tokens ?? (effort && effort !== "none" ? 8192 : 1024);
+  const budgets: Record<string, number> = { minimal: 1024, low: 2048, medium: 4096, high: 6144, xhigh: 8192, max: 8192 };
+  const budget = effort && effort !== "none" && maxTokens > 1024 ? Math.min(budgets[effort] ?? 4096, maxTokens - 1) : undefined;
   return {
     model: modelId,
     messages: messages.messages,
     ...(messages.system ? { system: messages.system } : {}),
-    max_tokens: body.max_tokens ?? 1024,
+    max_tokens: maxTokens,
+    ...(body.thinking ? { thinking: body.thinking } : budget ? { thinking: { type: "enabled", budget_tokens: budget } } : {}),
     ...(body.temperature !== undefined ? { temperature: body.temperature } : {}),
     ...(body.top_p !== undefined ? { top_p: body.top_p } : {}),
     ...(body.stop !== undefined ? { stop_sequences: Array.isArray(body.stop) ? body.stop : [body.stop] } : {}),
@@ -31,7 +36,7 @@ function anthropicPayload(body: any, modelId: string, stream = false) {
 const forwardedChatFields = [
   "max_tokens", "max_completion_tokens", "temperature", "top_p", "n", "stop", "modalities", "prediction", "audio",
   "presence_penalty", "frequency_penalty", "logit_bias", "user", "tools", "tool_choice", "parallel_tool_calls",
-  "response_format", "seed", "service_tier", "reasoning_effort", "metadata", "store", "web_search_options",
+  "response_format", "seed", "service_tier", "reasoning", "reasoning_effort", "metadata", "store", "web_search_options",
   "stream_options", "logprobs", "top_logprobs", "functions", "function_call", "prompt_cache_key",
 ] as const;
 
@@ -50,8 +55,8 @@ function isQuotaError(error: unknown) {
 
 function tokenDetails(usage: any) {
   return {
-    cacheRead: Number(usage?.prompt_tokens_details?.cached_tokens ?? usage?.cache_read_input_tokens ?? usage?.cache_read_tokens ?? usage?.cachedContentTokenCount ?? 0),
-    cacheWrite: Number(usage?.cache_creation_input_tokens ?? usage?.cache_write_tokens ?? 0),
+    cacheRead: Number(usage?.prompt_tokens_details?.cached_tokens ?? usage?.input_tokens_details?.cached_tokens ?? usage?.cache_read_input_tokens ?? usage?.cache_read_tokens ?? usage?.cachedContentTokenCount ?? usage?.cached_content_token_count ?? usage?.cached_tokens ?? 0),
+    cacheWrite: Number(usage?.cache_creation_input_tokens ?? usage?.cache_creation_input_tokens_details?.cached_tokens ?? usage?.cache_write_tokens ?? usage?.cache_write_input_tokens ?? 0),
   };
 }
 
@@ -59,6 +64,15 @@ function clientIp(request: Request, headers: Record<string, string | undefined>,
   const forwarded = headers["x-forwarded-for"]?.split(",")[0]?.trim();
   const direct = server?.requestIP?.(request)?.address;
   return forwarded || headers["x-real-ip"] || request.headers.get("cf-connecting-ip") || direct || "unknown";
+}
+
+function streamingHeaders(headers?: HeadersInit) {
+  const result = new Headers(headers);
+  result.set("Content-Type", "text/event-stream; charset=utf-8");
+  result.set("Cache-Control", "no-cache, no-transform");
+  result.set("Connection", "keep-alive");
+  result.set("X-Accel-Buffering", "no");
+  return result;
 }
 
 function anthropicStreamResponse(
@@ -96,6 +110,9 @@ function anthropicStreamResponse(
             if (data.type === "message_start") {
               promptTokens = data.message?.usage?.input_tokens ?? 0;
               ({ cacheRead, cacheWrite } = tokenDetails(data.message?.usage));
+            } else if (data.type === "content_block_delta" && data.delta?.type === "thinking_delta") {
+              firstTokenAt ??= performance.now();
+              emit({ id: data.index ?? `chatcmpl-${Date.now()}`, object: "chat.completion.chunk", created: Math.floor(Date.now() / 1000), model, choices: [{ index, delta: { reasoning_content: data.delta.thinking ?? "" }, finish_reason: null }] });
             } else if (data.type === "content_block_delta" && data.delta?.text) {
               firstTokenAt ??= performance.now();
               emit({ id: data.index ?? `chatcmpl-${Date.now()}`, object: "chat.completion.chunk", created: Math.floor(Date.now() / 1000), model, choices: [{ index, delta: { content: data.delta.text }, finish_reason: null }] });
@@ -119,7 +136,7 @@ function anthropicStreamResponse(
         controller.close();
       }
     },
-  }), { headers: { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", Connection: "keep-alive" } });
+  }), { headers: streamingHeaders() });
 }
 
 function recordSseUsageResponse(
@@ -146,6 +163,7 @@ function recordSseUsageResponse(
   return new Response(new ReadableStream({
     async start(controller) {
       const encoder = new TextEncoder();
+      controller.enqueue(encoder.encode(": connected\n\n"));
       try {
         while (true) {
           const { done, value } = await reader.read();
@@ -183,7 +201,7 @@ function recordSseUsageResponse(
         controller.close();
       }
     },
-  }), { headers: response.headers });
+  }), { headers: streamingHeaders(response.headers) });
 }
 
 async function verifyApiKey(headers: Record<string, string | undefined>) {
@@ -397,11 +415,7 @@ export const proxyPlugin = (app: Elysia) =>
                 },
               }),
               {
-                headers: {
-                  "Content-Type": "text/event-stream",
-                  "Cache-Control": "no-cache",
-                  Connection: "keep-alive",
-                },
+                headers: streamingHeaders(),
               }
             );
            } catch (error: any) {
