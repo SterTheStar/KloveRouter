@@ -11,7 +11,20 @@ export async function antigravityResponses(body: any, model: string, credentialI
   let credential = await antigravityAuthService.ensure(credentialInput.id);
   if (!credential.project_id && credential.access_token) { const project = await discoverProject(credential.access_token); if (project) credential = credentialService.findById(credentialService.update(credential.id, { project_id: project })?.id ?? credential.id)!; }
   if (!credential.access_token || !credential.project_id) throw new Error("Antigravity account has no access token or project");
-  const fingerprint = antigravityAuthService.fingerprint(credential); const headers = getImpersonationHeaders(credential.access_token, fingerprint, model); const response = await fetch(ENDPOINT, { method: "POST", headers, body: JSON.stringify(toGoogleBody({ ...body, model }, credential.project_id)) });
+  const fingerprint = antigravityAuthService.fingerprint(credential); const headers = getImpersonationHeaders(credential.access_token, fingerprint, model); const payload = JSON.stringify(toGoogleBody({ ...body, model }, credential.project_id));
+  let response: Response | null = null;
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      response = await fetch(ENDPOINT, { method: "POST", headers, body: payload });
+      if (response.status < 500) break;
+      lastError = new Error(`Antigravity upstream returned ${response.status}`);
+    } catch (error) {
+      lastError = error;
+    }
+    if (attempt === 0) await Bun.sleep(350);
+  }
+  if (!response) throw new Error(lastError instanceof Error ? `Antigravity connection failed: ${lastError.message}` : "Antigravity connection failed");
   if (!response.ok) { const text = await response.text().catch(() => ""); throw new Error(text || `Antigravity request failed (${response.status})`); }
   return googleStreamToOpenAI(response, model, `chatcmpl-${crypto.randomUUID()}`);
 }

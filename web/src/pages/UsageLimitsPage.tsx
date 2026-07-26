@@ -40,43 +40,41 @@ const quotaPalette = [
 function quotaColor(name: string) {
   const normalized = name.toLowerCase();
   if (normalized.includes("gemini")) return "bg-blue-500";
-  if (normalized.includes("claude") || normalized.includes("anthropic")) return "bg-violet-500";
-  if (normalized.includes("gpt")) return "bg-orange-500";
+  if (normalized.includes("claude") || normalized.includes("anthropic") || normalized.includes("gpt")) return "bg-violet-500";
   if (normalized.includes("image")) return "bg-pink-500";
   let hash = 0;
   for (const character of name) hash = (hash * 31 + character.charCodeAt(0)) | 0;
   return quotaPalette[Math.abs(hash) % quotaPalette.length];
 }
 
+function quotaFamily(quota: AntigravityQuota) {
+  const value = `${quota.group_name} ${quota.limit_name} ${quota.model_ids.join(" ")}`.toLowerCase();
+  return value.includes("gemini") ? "gemini" : "claude-gpt";
+}
+
 function AntigravityQuotaSummary({ quotas }: { quotas: AntigravityQuota[] }) {
-  const [showAll, setShowAll] = useState(false);
   const isBlocked = (value: string) => { const normalized = value.toLowerCase(); return normalized === "chat_20706" || normalized === "chat_23310" || normalized.includes("tab_flash_lite_preview") || normalized.includes("tab_jump_flash_lite_preview") || normalized.includes("gemini-3.6-flash-tiered"); };
   const visibleQuotas = quotas.filter((quota) => !isBlocked(quota.group_name) && !isBlocked(quota.limit_name) && !quota.model_ids.some(isBlocked));
   const sorted = [...visibleQuotas].sort((a, b) => b.used_percent - a.used_percent);
-  const average = visibleQuotas.length ? Math.round(visibleQuotas.reduce((sum, quota) => sum + quota.used_percent, 0) / visibleQuotas.length) : 0;
-  const segments = sorted.map((quota) => ({
-    quota,
-    // A model's segment shrinks as its own remaining quota decreases. The
-    // other segments automatically reflow to use the available space.
-    weight: Math.max(0.02, quota.remaining_fraction),
-  }));
+  const families = [
+    { id: "gemini", label: "Gemini", quotas: sorted.filter((quota) => quotaFamily(quota) === "gemini"), color: "bg-blue-500" },
+    { id: "claude-gpt", label: "Claude / GPT", quotas: sorted.filter((quota) => quotaFamily(quota) === "claude-gpt"), color: "bg-violet-500" },
+  ].filter((family) => family.quotas.length > 0).map((family) => {
+    const used = Math.max(...family.quotas.map((quota) => quota.used_percent));
+    const remaining = Math.min(...family.quotas.map((quota) => quota.remaining_fraction));
+    return { ...family, used, remaining };
+  });
   return <div className="space-y-3">
-    <div className="flex items-center justify-between text-sm"><span>Antigravity usage</span><span className="font-medium">{average}% average used</span></div>
-    <div className="flex h-3 w-full overflow-hidden rounded-full bg-muted" aria-label="Antigravity quota remaining by model">
-      {segments.map(({ quota, weight }, index) => <Tooltip key={`${quota.limit_name}-${index}`}>
-        <TooltipTrigger render={<div className={`${quotaColor(quota.group_name)} h-3 min-w-0 cursor-help border-r border-background/70 transition-[flex-grow,width] duration-500 first:rounded-l-full last:rounded-r-full last:border-r-0`} style={{ flexGrow: weight, flexBasis: 0 }} aria-label={`${quota.group_name}: ${quota.used_percent}% used`} />} />
-        <TooltipContent side="top" align="start" className="w-fit max-w-[min(420px,calc(100vw-2rem))] whitespace-normal p-3">
-          <div className="w-fit max-w-full space-y-2 overflow-hidden">
-            <div className="flex items-start gap-2"><span className={`mt-0.5 size-2 shrink-0 rounded-full ${quotaColor(quota.group_name)}`} /><div className="min-w-0 flex-1"><div className="break-words text-xs font-semibold">{quota.group_name}</div><div className="text-xs text-muted-foreground">{quota.used_percent}% used · {Math.round(quota.remaining_fraction * 100)}% remaining</div></div></div>
-            <div className="border-t border-background/20 pt-2 text-xs text-muted-foreground"><div className="break-words">Limit: {quota.limit_name}</div><div>{quota.reset_at ? `Resets ${new Date(quota.reset_at).toLocaleString()}` : quota.reset_in ? `Resets in ${quota.reset_in}` : "Reset time unavailable"}</div>{quota.model_ids.length > 0 && <div className="mt-1 max-h-20 overflow-y-auto break-all">Models: {quota.model_ids.slice(0, 8).join(", ")}{quota.model_ids.length > 8 ? ` +${quota.model_ids.length - 8} more` : ""}</div>}</div>
-          </div>
-        </TooltipContent>
-      </Tooltip>)}
-    </div>
-    <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-       {(showAll ? sorted : sorted.slice(0, 8)).map((quota, index) => <Tooltip key={`${quota.limit_name}-legend-${index}`}><TooltipTrigger render={<span className="flex max-w-40 cursor-help items-center gap-1.5"><span className={`size-2 shrink-0 rounded-full ${quotaColor(quota.group_name)}`} /><span className="truncate">{quota.group_name}</span></span>} /><TooltipContent>{quota.group_name}</TooltipContent></Tooltip>)}
-      {sorted.length > 8 && <button type="button" className="font-medium text-foreground underline decoration-muted-foreground underline-offset-2 hover:decoration-foreground" onClick={() => setShowAll((value) => !value)}>{showAll ? "Show less" : `+${sorted.length - 8} more`}</button>}
-    </div>
+    <div className="space-y-5">{families.map((family) => <Tooltip key={family.id}>
+      <TooltipTrigger render={<div className="space-y-2 cursor-help" aria-label={`${family.label}: ${family.used}% used`} />}>
+        <div className="flex items-center justify-between gap-3 text-sm"><span>{family.label}</span><span className="font-medium">{family.used}% used</span></div>
+        <div className="h-2 overflow-hidden rounded-full bg-muted"><div className={`h-full rounded-full ${family.color} transition-all`} style={{ width: `${family.used}%` }} /></div>
+        <div className="text-xs text-muted-foreground">{Math.round(family.remaining * 100)}% remaining · {family.quotas.length} quota entr{family.quotas.length === 1 ? "y" : "ies"}</div>
+      </TooltipTrigger>
+      <TooltipContent side="top" className="w-fit max-w-[min(420px,calc(100vw-2rem))] whitespace-normal p-3">
+        <div className="w-fit max-w-full space-y-2 overflow-hidden"><div className="flex items-center gap-2"><span className={`size-2 shrink-0 rounded-full ${family.color}`} /><span className="text-xs font-semibold">{family.label}</span></div><div className="text-xs text-muted-foreground">{family.used}% used · {Math.round(family.remaining * 100)}% remaining</div><div className="border-t border-border pt-2 text-xs text-muted-foreground"><div className="max-h-24 overflow-y-auto break-all">Models: {[...new Set(family.quotas.flatMap((quota) => quota.model_ids))].join(", ")}</div></div></div>
+      </TooltipContent>
+    </Tooltip>)}</div>
   </div>;
 }
 

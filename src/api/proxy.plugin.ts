@@ -120,6 +120,7 @@ function recordSseUsageResponse(
 
   return new Response(new ReadableStream({
     async start(controller) {
+      const encoder = new TextEncoder();
       try {
         while (true) {
           const { done, value } = await reader.read();
@@ -148,8 +149,10 @@ function recordSseUsageResponse(
           if (done) break;
         }
         record();
-      } catch {
+      } catch (error: any) {
         record();
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ error: { message: error?.message ?? "Upstream stream disconnected" } })}\n\n`));
+        controller.enqueue(encoder.encode("data: [DONE]\n\n"));
       } finally {
         controller.close();
       }
