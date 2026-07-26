@@ -9,6 +9,16 @@ export interface Model {
   is_manual: number;
   is_active: number;
   created_at: string;
+  pricing_tiers?: PricingTier[];
+}
+
+export interface PricingTier {
+  id?: string;
+  threshold_tokens: number;
+  input_per_million: number;
+  output_per_million: number;
+  cache_read_per_million: number;
+  cache_write_per_million: number;
 }
 
 export interface ModelWithProvider extends Model {
@@ -21,7 +31,65 @@ export type CreateModelInput = {
   model_id: string;
   display_name?: string;
   is_manual?: number;
+  pricing_tiers?: PricingTier[];
 };
+
+const codexPricingDefaults: Record<string, PricingTier> = {
+  "gpt-5.4": { threshold_tokens: 0, input_per_million: 2.5, output_per_million: 15, cache_read_per_million: 0.25, cache_write_per_million: 0 },
+  "gpt-5.4-mini": { threshold_tokens: 0, input_per_million: 0.75, output_per_million: 4.5, cache_read_per_million: 0.075, cache_write_per_million: 0 },
+  "gpt-5.5": { threshold_tokens: 0, input_per_million: 5, output_per_million: 30, cache_read_per_million: 0.5, cache_write_per_million: 0 },
+  "gpt-5.6-luna": { threshold_tokens: 0, input_per_million: 1, output_per_million: 6, cache_read_per_million: 0.1, cache_write_per_million: 0 },
+  "gpt-5.6-sol": { threshold_tokens: 0, input_per_million: 5, output_per_million: 30, cache_read_per_million: 0.5, cache_write_per_million: 0 },
+  "gpt-5.6-terra": { threshold_tokens: 0, input_per_million: 2.5, output_per_million: 15, cache_read_per_million: 0.25, cache_write_per_million: 0 },
+};
+
+const antigravityPricingDefaults: Record<string, PricingTier> = {
+  "claude-opus-4-6-thinking": { threshold_tokens: 0, input_per_million: 15, output_per_million: 75, cache_read_per_million: 1.5, cache_write_per_million: 0 },
+  "claude-sonnet-4-6": { threshold_tokens: 0, input_per_million: 3, output_per_million: 15, cache_read_per_million: 0.3, cache_write_per_million: 0 },
+  "gemini-2.5-flash": { threshold_tokens: 0, input_per_million: 0.3, output_per_million: 2.5, cache_read_per_million: 0.03, cache_write_per_million: 0 },
+  "gemini-2.5-flash-lite": { threshold_tokens: 0, input_per_million: 0.1, output_per_million: 0.4, cache_read_per_million: 0.01, cache_write_per_million: 0 },
+  "gemini-2.5-flash-thinking": { threshold_tokens: 0, input_per_million: 0.3, output_per_million: 2.5, cache_read_per_million: 0.03, cache_write_per_million: 0 },
+  "gemini-2.5-pro": { threshold_tokens: 0, input_per_million: 1.25, output_per_million: 10, cache_read_per_million: 0.125, cache_write_per_million: 0 },
+  "gemini-3-flash": { threshold_tokens: 0, input_per_million: 0.9, output_per_million: 5.4, cache_read_per_million: 0.09, cache_write_per_million: 0 },
+  "gemini-3-flash-agent": { threshold_tokens: 0, input_per_million: 0.9, output_per_million: 5.4, cache_read_per_million: 0.09, cache_write_per_million: 0 },
+  "gemini-3.1-flash-image": { threshold_tokens: 0, input_per_million: 0.3, output_per_million: 2.5, cache_read_per_million: 0.03, cache_write_per_million: 0 },
+  "gemini-3.1-flash-lite": { threshold_tokens: 0, input_per_million: 0.1, output_per_million: 0.4, cache_read_per_million: 0.01, cache_write_per_million: 0 },
+  "gemini-3.1-pro-high": { threshold_tokens: 0, input_per_million: 2, output_per_million: 12, cache_read_per_million: 0.2, cache_write_per_million: 0 },
+  "gemini-3.1-pro-low": { threshold_tokens: 0, input_per_million: 2, output_per_million: 12, cache_read_per_million: 0.2, cache_write_per_million: 0 },
+  "gemini-pro-agent": { threshold_tokens: 0, input_per_million: 2, output_per_million: 12, cache_read_per_million: 0.2, cache_write_per_million: 0 },
+  "gemini-3.5-flash-extra-low": { threshold_tokens: 0, input_per_million: 1.5, output_per_million: 9, cache_read_per_million: 0.15, cache_write_per_million: 0 },
+  "gemini-3.5-flash-low": { threshold_tokens: 0, input_per_million: 1.5, output_per_million: 9, cache_read_per_million: 0.15, cache_write_per_million: 0 },
+  "gemini-3.6-flash-high": { threshold_tokens: 0, input_per_million: 1.5, output_per_million: 7.5, cache_read_per_million: 0.15, cache_write_per_million: 0 },
+  "gemini-3.6-flash-medium": { threshold_tokens: 0, input_per_million: 1.5, output_per_million: 7.5, cache_read_per_million: 0.15, cache_write_per_million: 0 },
+  "gemini-3.6-flash-low": { threshold_tokens: 0, input_per_million: 1.5, output_per_million: 7.5, cache_read_per_million: 0.15, cache_write_per_million: 0 },
+  "gpt-oss-120b-medium": { threshold_tokens: 0, input_per_million: 0.09, output_per_million: 0.36, cache_read_per_million: 0, cache_write_per_million: 0 },
+};
+
+function defaultPricing(providerId: string, modelId: string): PricingTier[] | undefined {
+  const db = getDb();
+  const provider = db.query("SELECT protocol FROM providers WHERE id = ?").get(providerId) as { protocol: string } | null;
+  if (provider?.protocol !== "codex" && provider?.protocol !== "antigravity") return undefined;
+  const normalizedModelId = modelId.trim().toLowerCase().replace(/^googleantigravity\//, "");
+  const tier = provider.protocol === "codex" ? codexPricingDefaults[normalizedModelId] : antigravityPricingDefaults[normalizedModelId];
+  return tier ? [{ ...tier }] : undefined;
+}
+
+function savePricing(modelId: string, tiers?: PricingTier[]) {
+  if (!tiers) return;
+  const db = getDb();
+  db.query("DELETE FROM model_pricing_tiers WHERE model_id = ?").run(modelId);
+  const unique = new Map<number, PricingTier>();
+  for (const tier of tiers) unique.set(Math.max(0, Math.floor(Number(tier.threshold_tokens) || 0)), tier);
+  for (const tier of [...unique.entries()].sort(([a], [b]) => a - b).map(([, tier]) => tier)) {
+    db.query("INSERT INTO model_pricing_tiers (id, model_id, threshold_tokens, input_per_million, output_per_million, cache_read_per_million, cache_write_per_million) VALUES (?, ?, ?, ?, ?, ?, ?)").run(crypto.randomUUID(), modelId, Math.max(0, Math.floor(Number(tier.threshold_tokens) || 0)), Number(tier.input_per_million) || 0, Number(tier.output_per_million) || 0, Number(tier.cache_read_per_million) || 0, Number(tier.cache_write_per_million) || 0);
+  }
+}
+
+function withPricing(model: Model | null): Model | null {
+  if (!model) return null;
+  const db = getDb();
+  return { ...model, pricing_tiers: db.query("SELECT id, threshold_tokens, input_per_million, output_per_million, cache_read_per_million, cache_write_per_million FROM model_pricing_tiers WHERE model_id = ? ORDER BY threshold_tokens ASC").all(model.id) as PricingTier[] };
+}
 
 function providerAvatar(avatar: string | null, baseUrl: string): string | null {
   if (avatar) return avatar;
@@ -36,9 +104,9 @@ function providerAvatar(avatar: string | null, baseUrl: string): string | null {
 export const modelService = {
   findByProviderAndModel(providerId: string, modelId: string): Model | null {
     const db = getDb();
-    return db
+    return withPricing(db
       .query("SELECT * FROM models WHERE provider_id = ? AND model_id = ?")
-      .get(providerId, modelId) as Model | null;
+      .get(providerId, modelId) as Model | null);
   },
 
   findByProvider(providerId: string): Model[] {
@@ -50,7 +118,7 @@ export const modelService = {
          AND NOT (p.protocol = 'antigravity' AND lower(m.model_id) IN ('chat_20706', 'chat_23310', 'tab_flash_lite_preview', 'tab_jump_flash_lite_preview', 'tab_flash_lite_previewtab_jump_flash_lite_preview'))
          AND NOT (p.protocol = 'antigravity' AND lower(m.model_id) LIKE '%gemini-3.6-flash-tiered%')
        ORDER BY m.model_id ASC`
-    ).all(providerId) as Model[];
+    ).all(providerId).map((model) => withPricing(model as Model)!) as Model[];
   },
 
   findAllActive(): Model[] {
@@ -80,17 +148,19 @@ export const modelService = {
       model.provider_protocol === "antigravity" && isBlockedAntigravityModel(model.model_id)
     )).map(({ provider_base_url, provider_protocol, ...model }) => ({
       ...model,
+      pricing_tiers: withPricing(model)?.pricing_tiers,
       provider_avatar: providerAvatar(model.provider_avatar, provider_base_url),
     }));
   },
 
   findById(id: string): Model | null {
     const db = getDb();
-    return db.query("SELECT * FROM models WHERE id = ?").get(id) as Model | null;
+    return withPricing(db.query("SELECT * FROM models WHERE id = ?").get(id) as Model | null);
   },
 
   upsert(input: CreateModelInput): Model {
     const db = getDb();
+    const pricingTiers = input.pricing_tiers ?? defaultPricing(input.provider_id, input.model_id);
     const existing = db
       .query("SELECT * FROM models WHERE provider_id = ? AND model_id = ?")
       .get(input.provider_id, input.model_id) as Model | null;
@@ -99,6 +169,8 @@ export const modelService = {
       db.query(
         "UPDATE models SET is_manual = ?, display_name = ?, is_active = 1, created_at = datetime('now') WHERE id = ?"
       ).run(input.is_manual ?? 0, input.display_name ?? null, existing.id);
+      const hasPricing = Boolean(db.query("SELECT 1 FROM model_pricing_tiers WHERE model_id = ? LIMIT 1").get(existing.id));
+      if (input.pricing_tiers || !hasPricing) savePricing(existing.id, pricingTiers);
       return this.findById(existing.id)!;
     }
 
@@ -112,6 +184,7 @@ export const modelService = {
       input.display_name ?? null,
       input.is_manual ?? 0
     );
+    savePricing(id, pricingTiers);
     return this.findById(id)!;
   },
 
@@ -130,7 +203,7 @@ export const modelService = {
 
   update(
     id: string,
-    input: { model_id?: string; display_name?: string | null }
+    input: { model_id?: string; display_name?: string | null; pricing_tiers?: PricingTier[] }
   ): Model | null {
     const db = getDb();
     const existing = this.findById(id);
@@ -147,6 +220,7 @@ export const modelService = {
       updates.push("display_name = ?");
       values.push(input.display_name);
     }
+    savePricing(id, input.pricing_tiers);
 
     if (updates.length === 0) return existing;
 

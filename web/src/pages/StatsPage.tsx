@@ -18,6 +18,10 @@ function formatNumber(n: number): string {
   return n.toLocaleString();
 }
 
+function formatCost(value: number): string {
+  return `$${value.toFixed(value < 0.01 && value > 0 ? 4 : 2)}`;
+}
+
 function formatDuration(ms: number): string {
   if (ms >= 1000) return (ms / 1000).toFixed(1) + "s";
   return ms.toFixed(0) + "ms";
@@ -43,8 +47,10 @@ function ChartPanel({ title, description, children, className = "" }: { title: s
 const statCards = [
   { icon: ExchangeLine, title: "Requests", key: "total_requests" as const, format: (v: number) => formatNumber(v) },
   { icon: NumbersLine, title: "Total tokens", key: "total_tokens" as const, format: (v: number) => formatNumber(v) },
+  { icon: NumbersLine, title: "Cached tokens", key: "total_tokens_cache" as const, format: (v: number) => formatNumber(v) },
   { icon: SpeedLine, title: "Avg tokens/req", key: "avg_tokens_per_request" as const, format: (v: number) => formatNumber(Math.round(v)) },
   { icon: TimeLine, title: "Avg duration", key: "avg_duration_ms" as const, format: (v: number) => formatDuration(v) },
+  { icon: NumbersLine, title: "Estimated cost", key: "estimated_cost_usd" as const, format: (v: number) => formatCost(v) },
 ];
 
 export default function StatsPage() {
@@ -133,7 +139,7 @@ export default function StatsPage() {
       {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
 
       {overview && (
-        <div className="grid grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-6">
           {statCards.map(({ icon: Icon, title, key, format }) => (
             <div key={key} className="flex items-center gap-4 rounded-xl bg-card p-5 text-card-foreground ring-1 ring-foreground/10">
               <div className="flex size-10 shrink-0 items-center justify-center rounded-lg">
@@ -226,7 +232,9 @@ export default function StatsPage() {
                   <th className="p-3 font-medium">Model</th>
                   <th className="p-3 font-medium">Provider</th>
                   <th className="p-3 font-medium text-right">Requests</th>
-                  <th className="p-3 font-medium text-right">Tokens</th>
+                   <th className="p-3 font-medium text-right">Tokens</th>
+                   <th className="p-3 font-medium text-right">Cache</th>
+                   <th className="p-3 font-medium text-right">Est. cost</th>
                   <th className="p-3 font-medium text-right">Avg duration</th>
                   <th className="p-3 font-medium text-right">TPS</th>
                 </tr>
@@ -238,6 +246,8 @@ export default function StatsPage() {
                     <td className="p-3">{m.provider_name}</td>
                     <td className="p-3 text-right">{formatNumber(m.requests)}</td>
                     <td className="p-3 text-right">{formatNumber(m.tokens_total)}</td>
+                    <td className="p-3 text-right">{formatNumber(m.tokens_cache_read)}</td>
+                    <td className="p-3 text-right font-medium">{formatCost(m.estimated_cost_usd)}</td>
                     <td className="p-3 text-right">{formatDuration(m.avg_duration_ms)}</td>
                     <td className="p-3 text-right font-mono text-xs">{m.tps !== null ? m.tps.toFixed(1) : "—"}</td>
                   </tr>

@@ -94,11 +94,52 @@ export function initSchema(db: Database): void {
       model_name        TEXT NOT NULL,
       tokens_prompt     INTEGER NOT NULL DEFAULT 0,
       tokens_completion INTEGER NOT NULL DEFAULT 0,
+      tokens_cache_read INTEGER NOT NULL DEFAULT 0,
+      tokens_cache_write INTEGER NOT NULL DEFAULT 0,
       tokens_total      INTEGER NOT NULL DEFAULT 0,
+      estimated_cost_usd REAL NOT NULL DEFAULT 0,
       duration_ms       INTEGER NOT NULL DEFAULT 0,
       generation_duration_ms INTEGER NOT NULL DEFAULT 0,
       created_at        TEXT NOT NULL DEFAULT (datetime('now')),
       FOREIGN KEY (provider_id) REFERENCES providers(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS model_pricing_tiers (
+      id TEXT PRIMARY KEY,
+      model_id TEXT NOT NULL,
+      threshold_tokens INTEGER NOT NULL DEFAULT 0,
+      input_per_million REAL NOT NULL DEFAULT 0,
+      output_per_million REAL NOT NULL DEFAULT 0,
+      cache_read_per_million REAL NOT NULL DEFAULT 0,
+      cache_write_per_million REAL NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (model_id) REFERENCES models(id) ON DELETE CASCADE,
+      UNIQUE(model_id, threshold_tokens)
+    );
+
+    CREATE TABLE IF NOT EXISTS request_logs (
+      id TEXT PRIMARY KEY,
+      provider_id TEXT,
+      provider_name TEXT NOT NULL,
+      model_name TEXT NOT NULL,
+      client_ip TEXT,
+      requester_name TEXT,
+      credential_label TEXT,
+      credential_identity TEXT,
+      status TEXT NOT NULL DEFAULT 'pending',
+      status_code INTEGER,
+      tokens_prompt INTEGER NOT NULL DEFAULT 0,
+      tokens_completion INTEGER NOT NULL DEFAULT 0,
+      tokens_cache_read INTEGER NOT NULL DEFAULT 0,
+      tokens_cache_write INTEGER NOT NULL DEFAULT 0,
+      tokens_total INTEGER NOT NULL DEFAULT 0,
+      estimated_cost_usd REAL NOT NULL DEFAULT 0,
+      tps REAL,
+      duration_ms INTEGER,
+      error_message TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      completed_at TEXT,
+      FOREIGN KEY (provider_id) REFERENCES providers(id) ON DELETE SET NULL
     );
   `);
 
@@ -136,7 +177,54 @@ export function initSchema(db: Database): void {
   if (!apiKeyCols.find((c) => c.name === "key_secret")) db.exec("ALTER TABLE api_keys ADD COLUMN key_secret TEXT");
 
   const usageCols = db.query("PRAGMA table_info(usage_log)").all() as { name: string }[];
-  if (!usageCols.find((c) => c.name === "generation_duration_ms")) db.exec("ALTER TABLE usage_log ADD COLUMN generation_duration_ms INTEGER NOT NULL DEFAULT 0");
+  const usageMigrations: Array<[string, string]> = [
+    ["generation_duration_ms", "ALTER TABLE usage_log ADD COLUMN generation_duration_ms INTEGER NOT NULL DEFAULT 0"],
+    ["tokens_cache_read", "ALTER TABLE usage_log ADD COLUMN tokens_cache_read INTEGER NOT NULL DEFAULT 0"],
+    ["tokens_cache_write", "ALTER TABLE usage_log ADD COLUMN tokens_cache_write INTEGER NOT NULL DEFAULT 0"],
+    ["estimated_cost_usd", "ALTER TABLE usage_log ADD COLUMN estimated_cost_usd REAL NOT NULL DEFAULT 0"],
+  ];
+  for (const [name, sql] of usageMigrations) if (!usageCols.find((c) => c.name === name)) db.exec(sql);
+
+  // Seed editable pricing for the built-in Codex OAuth models once.
+  const codexPricingDefaults = [
+    ["gpt-5.4", 2.5, 15, 0.25],
+    ["gpt-5.4-mini", 0.75, 4.5, 0.075],
+    ["gpt-5.5", 5, 30, 0.5],
+    ["gpt-5.6-luna", 1, 6, 0.1],
+    ["gpt-5.6-sol", 5, 30, 0.5],
+    ["gpt-5.6-terra", 2.5, 15, 0.25],
+  ] as const;
+  for (const [modelName, inputPrice, outputPrice, cachePrice] of codexPricingDefaults) {
+    const models = db.query(
+      `SELECT m.id FROM models m JOIN providers p ON p.id = m.provider_id
+       WHERE p.protocol = 'codex' AND lower(m.model_id) = ?
+         AND NOT EXISTS (SELECT 1 FROM model_pricing_tiers t WHERE t.model_id = m.id)`
+    ).all(modelName) as { id: string }[];
+    for (const model of models) db.query(
+      "INSERT INTO model_pricing_tiers (id, model_id, threshold_tokens, input_per_million, output_per_million, cache_read_per_million, cache_write_per_million) VALUES (?, ?, 0, ?, ?, ?, 0)"
+    ).run(crypto.randomUUID(), model.id, inputPrice, outputPrice, cachePrice);
+  }
+  const antigravityPricingDefaults = [
+    ["claude-opus-4-6-thinking", 15, 75, 1.5], ["claude-sonnet-4-6", 3, 15, 0.3],
+    ["gemini-2.5-flash", 0.3, 2.5, 0.03], ["gemini-2.5-flash-lite", 0.1, 0.4, 0.01],
+    ["gemini-2.5-flash-thinking", 0.3, 2.5, 0.03], ["gemini-2.5-pro", 1.25, 10, 0.125],
+    ["gemini-3-flash", 0.9, 5.4, 0.09], ["gemini-3-flash-agent", 0.9, 5.4, 0.09],
+    ["gemini-3.1-flash-image", 0.3, 2.5, 0.03], ["gemini-3.1-flash-lite", 0.1, 0.4, 0.01],
+    ["gemini-3.1-pro-high", 2, 12, 0.2], ["gemini-3.1-pro-low", 2, 12, 0.2], ["gemini-pro-agent", 2, 12, 0.2],
+    ["gemini-3.5-flash-extra-low", 1.5, 9, 0.15], ["gemini-3.5-flash-low", 1.5, 9, 0.15],
+    ["gemini-3.6-flash-high", 1.5, 7.5, 0.15], ["gemini-3.6-flash-medium", 1.5, 7.5, 0.15], ["gemini-3.6-flash-low", 1.5, 7.5, 0.15],
+    ["gpt-oss-120b-medium", 0.09, 0.36, 0],
+  ] as const;
+  for (const [modelName, inputPrice, outputPrice, cachePrice] of antigravityPricingDefaults) {
+    const models = db.query(
+      `SELECT m.id FROM models m JOIN providers p ON p.id = m.provider_id
+       WHERE p.protocol = 'antigravity' AND replace(lower(m.model_id), 'googleantigravity/', '') = ?
+         AND NOT EXISTS (SELECT 1 FROM model_pricing_tiers t WHERE t.model_id = m.id)`
+    ).all(modelName) as { id: string }[];
+    for (const model of models) db.query(
+      "INSERT INTO model_pricing_tiers (id, model_id, threshold_tokens, input_per_million, output_per_million, cache_read_per_million, cache_write_per_million) VALUES (?, ?, 0, ?, ?, ?, 0)"
+    ).run(crypto.randomUUID(), model.id, inputPrice, outputPrice, cachePrice);
+  }
 
   const rotationCols = db.query("PRAGMA table_info(provider_credential_rotation)").all() as { name: string }[];
   if (!rotationCols.find((c) => c.name === "request_sequence")) db.exec("ALTER TABLE provider_credential_rotation ADD COLUMN request_sequence INTEGER NOT NULL DEFAULT 0");

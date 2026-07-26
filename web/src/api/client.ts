@@ -126,7 +126,7 @@ export const models = {
     request<import("../types").ModelWithProvider[]>("/api/models"),
   listByProvider: (providerId: string) =>
     request<import("../types").Model[]>(`/api/providers/${providerId}/models`),
-  create: (providerId: string, data: { model_id: string; display_name?: string }) =>
+  create: (providerId: string, data: { model_id: string; display_name?: string; pricing_tiers?: import("../types").PricingTier[] }) =>
     request<import("../types").Model>(`/api/providers/${providerId}/models`, {
       method: "POST",
       body: JSON.stringify(data),
@@ -140,7 +140,7 @@ export const models = {
     request<import("../types").Model>(`/api/models/${id}/toggle`, {
       method: "PUT",
     }),
-  update: (id: string, data: { model_id?: string; display_name?: string | null }) =>
+  update: (id: string, data: { model_id?: string; display_name?: string | null; pricing_tiers?: import("../types").PricingTier[] }) =>
     request<import("../types").Model>(`/api/models/${id}`, {
       method: "PUT",
       body: JSON.stringify(data),
@@ -187,6 +187,14 @@ export const stats = {
     request<import("../types").DailyStats[]>(`/api/stats/daily?days=${days}`),
   tps: () =>
     request<{ model_id: string; tps: number | null }[]>("/api/stats/tps"),
+};
+
+export const requestLogs = {
+  list: (params: { limit?: number; offset?: number; status?: string; provider?: string; search?: string } = {}) => {
+    const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined).map(([key, value]) => [key, String(value)]));
+    return request<{ data: import("../types").RequestLog[]; total: number; limit: number; offset: number }>(`/api/request-logs?${query}`);
+  },
+  clear: () => request<{ success: boolean; removed: number }>("/api/request-logs", { method: "DELETE" }),
 };
 
 // Settings

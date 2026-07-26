@@ -17,6 +17,7 @@ import {
   codexPublicPlugin,
   antigravityPublicPlugin,
   antigravityUsagePlugin,
+  requestLogsPlugin,
 } from "./api";
 
 // Initialize database
@@ -68,6 +69,7 @@ const protectedApp = new Elysia()
   .use(keysPlugin)
   .use(settingsPlugin)
   .use(statsPlugin)
+  .use(requestLogsPlugin)
   .use(codexPlugin);
 
 app.use(protectedApp as any);

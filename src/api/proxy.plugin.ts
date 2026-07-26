@@ -10,6 +10,7 @@ import { credentialService } from "../services/credential.service";
 import { logger } from "../logger";
 import { antigravityResponses } from "../integrations/antigravity";
 import { isBlockedAntigravityModel } from "../integrations/antigravity";
+import { requestLogService } from "../services/request-log.service";
 
 function anthropicPayload(body: any, modelId: string, stream = false) {
   const messages = splitAnthropicMessages(body.messages);
@@ -47,9 +48,20 @@ function isQuotaError(error: unknown) {
   return /429|quota|resource_exhausted|too many requests|rate.?limit/i.test(message);
 }
 
+function tokenDetails(usage: any) {
+  return {
+    cacheRead: Number(usage?.prompt_tokens_details?.cached_tokens ?? usage?.cache_read_input_tokens ?? usage?.cache_read_tokens ?? usage?.cachedContentTokenCount ?? 0),
+    cacheWrite: Number(usage?.cache_creation_input_tokens ?? usage?.cache_write_tokens ?? 0),
+  };
+}
+
+function clientIp(request: Request, headers: Record<string, string | undefined>) {
+  return headers["x-forwarded-for"]?.split(",")[0]?.trim() || headers["x-real-ip"] || request.headers.get("cf-connecting-ip") || "unknown";
+}
+
 function anthropicStreamResponse(
   response: Response,
-  onUsage: (promptTokens: number, completionTokens: number, durationMs: number, generationDurationMs?: number) => void,
+  onUsage: (promptTokens: number, completionTokens: number, durationMs: number, generationDurationMs?: number, details?: { cacheRead: number; cacheWrite: number }) => void,
   start: number,
   model: string
 ) {
@@ -59,6 +71,8 @@ function anthropicStreamResponse(
   let buffer = "";
   let promptTokens = 0;
   let completionTokens = 0;
+  let cacheRead = 0;
+  let cacheWrite = 0;
   let index = 0;
   let firstTokenAt: number | null = null;
 
@@ -79,6 +93,7 @@ function anthropicStreamResponse(
             const data = JSON.parse(dataLine.slice(5).trim());
             if (data.type === "message_start") {
               promptTokens = data.message?.usage?.input_tokens ?? 0;
+              ({ cacheRead, cacheWrite } = tokenDetails(data.message?.usage));
             } else if (data.type === "content_block_delta" && data.delta?.text) {
               firstTokenAt ??= performance.now();
               emit({ id: data.index ?? `chatcmpl-${Date.now()}`, object: "chat.completion.chunk", created: Math.floor(Date.now() / 1000), model, choices: [{ index, delta: { content: data.delta.text }, finish_reason: null }] });
@@ -88,12 +103,13 @@ function anthropicStreamResponse(
               emit({ id: `chatcmpl-${Date.now()}`, object: "chat.completion.chunk", created: Math.floor(Date.now() / 1000), model, choices: [{ index, delta: { tool_calls: [{ index: data.index ?? 0, type: "function", function: { arguments: data.delta.partial_json ?? "" } }] }, finish_reason: null }] });
             } else if (data.type === "message_delta") {
               completionTokens = data.usage?.output_tokens ?? completionTokens;
+              ({ cacheRead, cacheWrite } = tokenDetails({ ...data.usage, ...data.message?.usage }));
               emit({ id: `chatcmpl-${Date.now()}`, object: "chat.completion.chunk", created: Math.floor(Date.now() / 1000), model, choices: [{ index, delta: {}, finish_reason: data.delta?.stop_reason ?? "stop" }], usage: { prompt_tokens: promptTokens, completion_tokens: completionTokens, total_tokens: promptTokens + completionTokens } });
             }
           }
           if (done) break;
         }
-         onUsage(promptTokens, completionTokens, Math.round(performance.now() - start), Math.round(performance.now() - (firstTokenAt ?? start)));
+          onUsage(promptTokens, completionTokens, Math.round(performance.now() - start), Math.round(performance.now() - (firstTokenAt ?? start)), { cacheRead, cacheWrite });
         controller.enqueue(new TextEncoder().encode("data: [DONE]\n\n"));
       } catch (error: any) {
         controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({ error: { message: error.message } })}\n\n`));
@@ -106,7 +122,7 @@ function anthropicStreamResponse(
 
 function recordSseUsageResponse(
   response: Response,
-  onUsage: (promptTokens: number, completionTokens: number, durationMs: number, generationDurationMs?: number) => void,
+  onUsage: (promptTokens: number, completionTokens: number, durationMs: number, generationDurationMs?: number, details?: { cacheRead: number; cacheWrite: number }) => void,
   start: number,
 ) {
   const reader = response.body?.getReader();
@@ -115,12 +131,14 @@ function recordSseUsageResponse(
   let buffer = "";
   let promptTokens = 0;
   let completionTokens = 0;
+  let cacheRead = 0;
+  let cacheWrite = 0;
   let recorded = false;
   let firstTokenAt: number | null = null;
   const record = () => {
     if (recorded) return;
     recorded = true;
-    onUsage(promptTokens, completionTokens, Math.round(performance.now() - start), Math.round(performance.now() - (firstTokenAt ?? start)));
+    onUsage(promptTokens, completionTokens, Math.round(performance.now() - start), Math.round(performance.now() - (firstTokenAt ?? start)), { cacheRead, cacheWrite });
   };
 
   return new Response(new ReadableStream({
@@ -147,6 +165,7 @@ function recordSseUsageResponse(
                 if (usage) {
                   promptTokens = Number(usage.prompt_tokens ?? usage.input_tokens ?? usage.promptTokenCount ?? promptTokens);
                   completionTokens = Number(usage.completion_tokens ?? usage.output_tokens ?? usage.candidatesTokenCount ?? completionTokens);
+                  ({ cacheRead, cacheWrite } = tokenDetails(usage));
                 }
               } catch { /* Ignore non-JSON SSE events. */ }
             }
@@ -233,17 +252,21 @@ export const proxyPlugin = (app: Elysia) =>
           };
         }
 
-        if (provider.protocol === "antigravity" && isBlockedAntigravityModel(parsed.modelId)) {
+         if (provider.protocol === "antigravity" && isBlockedAntigravityModel(parsed.modelId)) {
           set.status = 403;
           return { error: "Model blocked", message: `Model "${parsed.modelId}" is not available through Antigravity` };
-        }
+         }
+
+         const requestLogId = requestLogService.start({ providerId: provider.id, providerName: provider.name, modelName: parsed.modelId, clientIp: clientIp(request, headers), requesterName: apiKey.name });
 
         const requestSequence = provider.credential_mode === "round_robin" ? credentialService.beginRequest(provider.id) : undefined;
         let credential = credentialService.select(provider.id, provider.credential_mode, provider.fixed_credential_id, requestSequence) || credentialService.select(provider.id, "round_robin", null, requestSequence);
-        if (!credential) {
-          set.status = 503;
+         if (!credential) {
+           requestLogService.complete(requestLogId, { status: "error", statusCode: 503, error: "No active provider credential" });
+           set.status = 503;
           return { error: "No active provider credential", message: `Provider "${provider.name}" has no active credential` };
-        }
+         }
+         requestLogService.setCredential(requestLogId, credential);
         logger.debug("Credential selected", { provider: provider.name, mode: provider.credential_mode, credential_id: credential.id, kind: credential.kind });
 
         // Build request payload for the provider
@@ -255,16 +278,16 @@ export const proxyPlugin = (app: Elysia) =>
             attempted.add(credential.id);
             try {
               const start = performance.now(); const modelRecord = modelService.findByProviderAndModel(provider.id, parsed.modelId); const credentialProvider = { ...provider, api_key: credential.secret ?? "" };
-              if (body.stream) return anthropicStreamResponse(await createAnthropicStream(credentialProvider, anthropicPayload(body, parsed.modelId), credential.secret ?? undefined), (promptTokens, completionTokens, durationMs) => usageService.record(provider.id, modelRecord?.id ?? parsed.modelId, parsed.modelId, promptTokens, completionTokens, durationMs), start, parsed.modelId);
+              if (body.stream) return anthropicStreamResponse(await createAnthropicStream(credentialProvider, anthropicPayload(body, parsed.modelId), credential.secret ?? undefined), (promptTokens, completionTokens, durationMs, _generationDurationMs, details) => { usageService.record(provider.id, modelRecord?.id ?? parsed.modelId, parsed.modelId, promptTokens, completionTokens, durationMs, durationMs, details); requestLogService.complete(requestLogId, { promptTokens, completionTokens, cacheRead: details?.cacheRead, cacheWrite: details?.cacheWrite, durationMs }); }, start, parsed.modelId);
               const completion = await createAnthropicMessage(credentialProvider, anthropicPayload(body, parsed.modelId), credential.secret ?? undefined);
-              usageService.record(provider.id, modelRecord?.id ?? parsed.modelId, parsed.modelId, completion.usage?.input_tokens ?? 0, completion.usage?.output_tokens ?? 0, Math.round(performance.now() - start)); credentialService.clearError(credential.id); credentialService.clearCooldown(credential.id); return toOpenAICompletion(completion);
+              const details = tokenDetails(completion.usage); const durationMs = Math.round(performance.now() - start); usageService.record(provider.id, modelRecord?.id ?? parsed.modelId, parsed.modelId, completion.usage?.input_tokens ?? 0, completion.usage?.output_tokens ?? 0, durationMs, undefined, details); requestLogService.complete(requestLogId, { promptTokens: completion.usage?.input_tokens, completionTokens: completion.usage?.output_tokens, cacheRead: details.cacheRead, cacheWrite: details.cacheWrite, durationMs }); credentialService.clearError(credential.id); credentialService.clearCooldown(credential.id); return toOpenAICompletion(completion);
             } catch (error: any) {
               failures.push(error.message); credentialService.markError(credential.id, error.message);
               if (provider.credential_mode !== "round_robin") break;
-              credentialService.markCooldown(credential.id, 10, error.message, requestSequence); const next = credentialService.select(provider.id, "round_robin", null, requestSequence); if (!next || attempted.has(next.id)) break; credential = next;
+              credentialService.markCooldown(credential.id, 10, error.message, requestSequence); const next = credentialService.select(provider.id, "round_robin", null, requestSequence); if (!next || attempted.has(next.id)) break; credential = next; requestLogService.setCredential(requestLogId, credential);
             }
           }
-          set.status = failures.every(isQuotaError) ? 429 : 502; return { error: "Provider request failed", message: `All ${attempted.size} available credentials failed. ${failures.at(-1)}` };
+          const statusCode = failures.every(isQuotaError) ? 429 : 502; requestLogService.complete(requestLogId, { status: "error", statusCode, error: failures.at(-1) }); set.status = statusCode; return { error: "Provider request failed", message: `All ${attempted.size} available credentials failed. ${failures.at(-1)}` };
         }
 
         if (provider.protocol === "codex") {
@@ -273,14 +296,14 @@ export const proxyPlugin = (app: Elysia) =>
             attempted.add(credential.id);
             try {
               const start = performance.now(); const response = codexStreamToOpenAI(await codexResponses(body, parsed.modelId, credential), parsed.modelId); const modelRecord = modelService.findByProviderAndModel(provider.id, parsed.modelId); credentialService.clearError(credential.id); credentialService.clearCooldown(credential.id);
-              return recordSseUsageResponse(response, (promptTokens, completionTokens, durationMs, generationDurationMs) => usageService.record(provider.id, modelRecord?.id ?? parsed.modelId, parsed.modelId, promptTokens, completionTokens, durationMs, generationDurationMs), start);
+              return recordSseUsageResponse(response, (promptTokens, completionTokens, durationMs, generationDurationMs, details) => { usageService.record(provider.id, modelRecord?.id ?? parsed.modelId, parsed.modelId, promptTokens, completionTokens, durationMs, generationDurationMs, details); requestLogService.complete(requestLogId, { promptTokens, completionTokens, cacheRead: details?.cacheRead, cacheWrite: details?.cacheWrite, durationMs }); }, start);
             } catch (error: any) {
               failures.push(error.message); credentialService.markError(credential.id, error.message);
               if (provider.credential_mode !== "round_robin") break;
-              credentialService.markCooldown(credential.id, 10, error.message, requestSequence); const next = credentialService.select(provider.id, "round_robin", null, requestSequence); if (!next || attempted.has(next.id)) break; credential = next;
+              credentialService.markCooldown(credential.id, 10, error.message, requestSequence); const next = credentialService.select(provider.id, "round_robin", null, requestSequence); if (!next || attempted.has(next.id)) break; credential = next; requestLogService.setCredential(requestLogId, credential);
             }
           }
-          set.status = failures.every(isQuotaError) ? 429 : 502; return { error: "Codex request failed", message: `All ${attempted.size} available credentials failed. ${failures.at(-1)}` };
+          const statusCode = failures.every(isQuotaError) ? 429 : 502; requestLogService.complete(requestLogId, { status: "error", statusCode, error: failures.at(-1) }); set.status = statusCode; return { error: "Codex request failed", message: `All ${attempted.size} available credentials failed. ${failures.at(-1)}` };
         }
 
         if (provider.protocol === "antigravity") {
@@ -294,14 +317,14 @@ export const proxyPlugin = (app: Elysia) =>
               credentialService.clearError(credential.id);
               credentialService.clearCooldown(credential.id);
               const modelRecord = modelService.findByProviderAndModel(provider.id, parsed.modelId);
-              return recordSseUsageResponse(response, (promptTokens, completionTokens, durationMs, generationDurationMs) => {
-                usageService.record(provider.id, modelRecord?.id ?? parsed.modelId, parsed.modelId, promptTokens, completionTokens, durationMs, generationDurationMs);
+              return recordSseUsageResponse(response, (promptTokens, completionTokens, durationMs, generationDurationMs, details) => {
+                 usageService.record(provider.id, modelRecord?.id ?? parsed.modelId, parsed.modelId, promptTokens, completionTokens, durationMs, generationDurationMs, details); requestLogService.complete(requestLogId, { promptTokens, completionTokens, cacheRead: details?.cacheRead, cacheWrite: details?.cacheWrite, durationMs });
               }, start);
             } catch (error: any) {
               credentialService.markError(credential.id, error.message);
               failures.push(error.message);
               if (provider.credential_mode !== "round_robin") {
-                set.status = isQuotaError(error) ? 429 : 502;
+                const statusCode = isQuotaError(error) ? 429 : 502; requestLogService.complete(requestLogId, { status: "error", statusCode, error: error.message }); set.status = statusCode;
                 return { error: "Antigravity request failed", message: error.message };
               }
               credentialService.markCooldown(credential.id, 10, error.message, requestSequence);
@@ -311,10 +334,11 @@ export const proxyPlugin = (app: Elysia) =>
               }
               logger.info("Retrying Antigravity request with next credential", { provider: provider.name, failed_credential_id: credential.id, next_credential_id: next.id });
               credential = next;
+              requestLogService.setCredential(requestLogId, credential);
             }
           }
           const allQuotaLimited = failures.length > 0 && failures.every((message) => isQuotaError(message));
-          set.status = allQuotaLimited ? 429 : failures.length ? 502 : 503;
+          const statusCode = allQuotaLimited ? 429 : failures.length ? 502 : 503; requestLogService.complete(requestLogId, { status: "error", statusCode, error: failures.at(-1) }); set.status = statusCode;
           return {
             error: allQuotaLimited ? "Antigravity quota exhausted" : "Antigravity request failed",
             message: failures.length
@@ -339,6 +363,7 @@ export const proxyPlugin = (app: Elysia) =>
 
             let promptTokens = 0;
             let completionTokens = 0;
+            let cacheDetails = { cacheRead: 0, cacheWrite: 0 };
             let firstTokenAt: number | null = null;
 
              credentialService.clearError(credential.id); credentialService.clearCooldown(credential.id); return new Response(
@@ -351,12 +376,13 @@ export const proxyPlugin = (app: Elysia) =>
                       if (usage) {
                         promptTokens = Number(usage.prompt_tokens ?? 0);
                         completionTokens = Number(usage.completion_tokens ?? 0);
+                        cacheDetails = tokenDetails(usage);
                       }
                       const data = `data: ${JSON.stringify(chunk)}\n\n`;
                       controller.enqueue(new TextEncoder().encode(data));
                     }
                     const endedAt = performance.now();
-                    usageService.record(provider.id, modelRecord?.id ?? parsed.modelId, parsed.modelId, promptTokens, completionTokens, Math.round(endedAt - start), Math.round(endedAt - (firstTokenAt ?? start)));
+                     const durationMs = Math.round(endedAt - start); usageService.record(provider.id, modelRecord?.id ?? parsed.modelId, parsed.modelId, promptTokens, completionTokens, durationMs, Math.round(endedAt - (firstTokenAt ?? start)), cacheDetails); requestLogService.complete(requestLogId, { promptTokens, completionTokens, cacheRead: cacheDetails.cacheRead, cacheWrite: cacheDetails.cacheWrite, durationMs });
                     controller.enqueue(new TextEncoder().encode("data: [DONE]\n\n"));
                   } catch (err: any) {
                     const errorData = `data: ${JSON.stringify({
@@ -379,9 +405,9 @@ export const proxyPlugin = (app: Elysia) =>
            } catch (error: any) {
              failures.push(error.message); credentialService.markError(credential.id, error.message);
              if (provider.credential_mode !== "round_robin") break;
-             credentialService.markCooldown(credential.id, 10, error.message, requestSequence); const next = credentialService.select(provider.id, "round_robin", null, requestSequence); if (!next || attempted.has(next.id)) break; credential = next;
+             credentialService.markCooldown(credential.id, 10, error.message, requestSequence); const next = credentialService.select(provider.id, "round_robin", null, requestSequence); if (!next || attempted.has(next.id)) break; credential = next; requestLogService.setCredential(requestLogId, credential);
            }
-           set.status = failures.every(isQuotaError) ? 429 : 502; return { error: "Provider request failed", message: `All ${attempted.size} available credentials failed. ${failures.at(-1)}` };
+           const statusCode = failures.every(isQuotaError) ? 429 : 502; requestLogService.complete(requestLogId, { status: "error", statusCode, error: failures.at(-1) }); set.status = statusCode; return { error: "Provider request failed", message: `All ${attempted.size} available credentials failed. ${failures.at(-1)}` };
         }
 
         // Non-streaming
@@ -393,24 +419,26 @@ export const proxyPlugin = (app: Elysia) =>
 
           // Record token usage
           const modelRecord = modelService.findByProviderAndModel(provider.id, parsed.modelId);
-          usageService.record(
+           usageService.record(
             provider.id,
             modelRecord?.id ?? parsed.modelId,
             parsed.modelId,
             completion.usage?.prompt_tokens ?? 0,
-            completion.usage?.completion_tokens ?? 0,
-            durationMs,
-            durationMs
-          );
+             completion.usage?.completion_tokens ?? 0,
+             durationMs,
+             durationMs,
+             tokenDetails(completion.usage)
+           );
+           const details = tokenDetails(completion.usage); requestLogService.complete(requestLogId, { promptTokens: completion.usage?.prompt_tokens, completionTokens: completion.usage?.completion_tokens, cacheRead: details.cacheRead, cacheWrite: details.cacheWrite, durationMs });
 
             credentialService.clearError(credential.id);
             return completion;
         } catch (error: any) {
           failures.push(error.message); credentialService.markError(credential.id, error.message);
           if (provider.credential_mode !== "round_robin") break;
-          credentialService.markCooldown(credential.id, 10, error.message, requestSequence); const next = credentialService.select(provider.id, "round_robin", null, requestSequence); if (!next || attempted.has(next.id)) break; credential = next;
+           credentialService.markCooldown(credential.id, 10, error.message, requestSequence); const next = credentialService.select(provider.id, "round_robin", null, requestSequence); if (!next || attempted.has(next.id)) break; credential = next; requestLogService.setCredential(requestLogId, credential);
         }
-        set.status = failures.every(isQuotaError) ? 429 : 502; return { error: "Provider request failed", message: `All ${attempted.size} available credentials failed. ${failures.at(-1)}` }; }
+         const statusCode = failures.every(isQuotaError) ? 429 : 502; requestLogService.complete(requestLogId, { status: "error", statusCode, error: failures.at(-1) }); set.status = statusCode; return { error: "Provider request failed", message: `All ${attempted.size} available credentials failed. ${failures.at(-1)}` }; }
       },
       {
         // Keep the proxy forward-compatible with new OpenAI fields. The

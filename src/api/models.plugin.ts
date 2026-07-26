@@ -37,6 +37,7 @@ export const modelsPlugin = (app: Elysia) =>
           provider_id: id,
           model_id: body.model_id,
           display_name: body.display_name,
+          pricing_tiers: body.pricing_tiers,
           is_manual: 1,
       });
         return model;
@@ -45,6 +46,13 @@ export const modelsPlugin = (app: Elysia) =>
         body: t.Object({
           model_id: t.String({ minLength: 1 }),
           display_name: t.Optional(t.String()),
+          pricing_tiers: t.Optional(t.Array(t.Object({
+            threshold_tokens: t.Number({ minimum: 0 }),
+            input_per_million: t.Number({ minimum: 0 }),
+            output_per_million: t.Number({ minimum: 0 }),
+            cache_read_per_million: t.Number({ minimum: 0 }),
+            cache_write_per_million: t.Number({ minimum: 0 }),
+          }))),
         }),
       }
     )
@@ -229,6 +237,13 @@ export const modelsPlugin = (app: Elysia) =>
         body: t.Object({
           model_id: t.Optional(t.String({ minLength: 1 })),
           display_name: t.Optional(t.Union([t.String(), t.Null()])),
+          pricing_tiers: t.Optional(t.Array(t.Object({
+            threshold_tokens: t.Number({ minimum: 0 }),
+            input_per_million: t.Number({ minimum: 0 }),
+            output_per_million: t.Number({ minimum: 0 }),
+            cache_read_per_million: t.Number({ minimum: 0 }),
+            cache_write_per_million: t.Number({ minimum: 0 }),
+          }))),
         }),
       }
     )

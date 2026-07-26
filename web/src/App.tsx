@@ -11,6 +11,7 @@ import SettingsPage from "./pages/SettingsPage";
 import ModelsPage from "./pages/ModelsPage";
 import StatsPage from "./pages/StatsPage";
 import UsageLimitsPage from "./pages/UsageLimitsPage";
+import RequestLogsPage from "./pages/RequestLogsPage";
 import type { Page } from "./types";
 import { ToastProvider } from "./components/ui/toast";
 
@@ -55,6 +56,7 @@ export default function App() {
           {currentPage === "models" && <ModelsPage />}
           {currentPage === "stats" && <StatsPage />}
           {currentPage === "usage" && <UsageLimitsPage />}
+          {currentPage === "request-logs" && <RequestLogsPage />}
           {currentPage === "keys" && <ApiKeysPage />}
           {currentPage === "settings" && <SettingsPage darkMode={darkMode} onThemeChange={setDarkMode} />}
         </main>

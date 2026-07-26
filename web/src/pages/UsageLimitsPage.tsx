@@ -52,6 +52,16 @@ function quotaFamily(quota: AntigravityQuota) {
   return value.includes("gemini") ? "gemini" : "claude-gpt";
 }
 
+function quotaResetLabel(quotas: AntigravityQuota[]) {
+  const reset = quotas.find((quota) => quota.reset_at)?.reset_at;
+  const resetIn = quotas.find((quota) => quota.reset_in)?.reset_in;
+  if (reset) {
+    const date = new Date(reset);
+    if (!Number.isNaN(date.getTime())) return `Resets ${date.toLocaleString()}`;
+  }
+  return resetIn ? `Resets in ${resetIn}` : "Reset time unavailable";
+}
+
 function AntigravityQuotaSummary({ quotas }: { quotas: AntigravityQuota[] }) {
   const isBlocked = (value: string) => { const normalized = value.toLowerCase(); return normalized === "chat_20706" || normalized === "chat_23310" || normalized.includes("tab_flash_lite_preview") || normalized.includes("tab_jump_flash_lite_preview") || normalized.includes("gemini-3.6-flash-tiered"); };
   const visibleQuotas = quotas.filter((quota) => !isBlocked(quota.group_name) && !isBlocked(quota.limit_name) && !quota.model_ids.some(isBlocked));
@@ -62,14 +72,15 @@ function AntigravityQuotaSummary({ quotas }: { quotas: AntigravityQuota[] }) {
   ].filter((family) => family.quotas.length > 0).map((family) => {
     const used = Math.max(...family.quotas.map((quota) => quota.used_percent));
     const remaining = Math.min(...family.quotas.map((quota) => quota.remaining_fraction));
-    return { ...family, used, remaining };
+    return { ...family, used, remaining, resetLabel: quotaResetLabel(family.quotas) };
   });
   return <div className="space-y-3">
     <div className="space-y-5">{families.map((family) => <Tooltip key={family.id}>
       <TooltipTrigger render={<div className="space-y-2 cursor-help" aria-label={`${family.label}: ${family.used}% used`} />}>
         <div className="flex items-center justify-between gap-3 text-sm"><span>{family.label}</span><span className="font-medium">{family.used}% used</span></div>
         <div className="h-2 overflow-hidden rounded-full bg-muted"><div className={`h-full rounded-full ${family.color} transition-all`} style={{ width: `${family.used}%` }} /></div>
-        <div className="text-xs text-muted-foreground">{Math.round(family.remaining * 100)}% remaining · {family.quotas.length} quota entr{family.quotas.length === 1 ? "y" : "ies"}</div>
+         <div className="text-xs text-muted-foreground">{Math.round(family.remaining * 100)}% remaining · {family.quotas.length} quota entr{family.quotas.length === 1 ? "y" : "ies"}</div>
+         <div className="text-xs text-muted-foreground">{family.resetLabel}</div>
       </TooltipTrigger>
       <TooltipContent side="top" className="w-fit max-w-[min(420px,calc(100vw-2rem))] whitespace-normal p-3">
         <div className="w-fit max-w-full space-y-2 overflow-hidden"><div className="flex items-center gap-2"><span className={`size-2 shrink-0 rounded-full ${family.color}`} /><span className="text-xs font-semibold">{family.label}</span></div><div className="text-xs text-muted-foreground">{family.used}% used · {Math.round(family.remaining * 100)}% remaining</div><div className="border-t border-border pt-2 text-xs text-muted-foreground"><div className="max-h-24 overflow-y-auto break-all">Models: {[...new Set(family.quotas.flatMap((quota) => quota.model_ids))].join(", ")}</div></div></div>

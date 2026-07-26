@@ -39,6 +39,16 @@ export interface Model {
   is_manual: number;
   is_active: number;
   created_at: string;
+  pricing_tiers?: PricingTier[];
+}
+
+export interface PricingTier {
+  id?: string;
+  threshold_tokens: number;
+  input_per_million: number;
+  output_per_million: number;
+  cache_read_per_million: number;
+  cache_write_per_million: number;
 }
 
 export interface ModelWithProvider extends Model {
@@ -66,6 +76,8 @@ export interface StatsOverview {
   total_tokens_completion: number;
   avg_tokens_per_request: number;
   avg_duration_ms: number;
+  estimated_cost_usd: number;
+  total_tokens_cache: number;
 }
 
 export interface StatsByProvider {
@@ -73,6 +85,7 @@ export interface StatsByProvider {
   provider_name: string;
   requests: number;
   tokens_total: number;
+  estimated_cost_usd: number;
 }
 
 export interface StatsByModel {
@@ -86,12 +99,15 @@ export interface StatsByModel {
   tokens_completion: number;
   avg_duration_ms: number;
   tps: number | null;
+  tokens_cache_read: number;
+  estimated_cost_usd: number;
 }
 
 export interface DailyStats {
   date: string;
   requests: number;
   tokens_total: number;
+  estimated_cost_usd: number;
 }
 
 export interface CodexUsageWindow {
@@ -121,7 +137,32 @@ export type Page =
   | "dashboard"
   | "models"
   | "stats"
+  | "request-logs"
   | "keys"
   | "settings"
   | "login"
   | "provider-detail";
+
+export interface RequestLog {
+  id: string;
+  provider_id: string | null;
+  provider_name: string;
+  model_name: string;
+  client_ip: string | null;
+  requester_name: string | null;
+  credential_label: string | null;
+  credential_identity: string | null;
+  status: "pending" | "success" | "error";
+  status_code: number | null;
+  tokens_prompt: number;
+  tokens_completion: number;
+  tokens_cache_read: number;
+  tokens_cache_write: number;
+  tokens_total: number;
+  estimated_cost_usd: number;
+  tps: number | null;
+  duration_ms: number | null;
+  error_message: string | null;
+  created_at: string;
+  completed_at: string | null;
+}

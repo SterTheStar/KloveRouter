@@ -7,7 +7,10 @@ export interface UsageLog {
   model_name: string;
   tokens_prompt: number;
   tokens_completion: number;
+  tokens_cache_write: number;
   tokens_total: number;
+  estimated_cost_usd: number;
+  total_tokens_cache: number;
   duration_ms: number;
   generation_duration_ms: number;
   created_at: string;
@@ -20,6 +23,8 @@ export interface StatsOverview {
   total_tokens_completion: number;
   avg_tokens_per_request: number;
   avg_duration_ms: number;
+  estimated_cost_usd: number;
+  tokens_cache_read: number;
 }
 
 export interface StatsByProvider {
@@ -27,6 +32,7 @@ export interface StatsByProvider {
   provider_name: string;
   requests: number;
   tokens_total: number;
+  estimated_cost_usd: number;
 }
 
 export interface StatsByModel {
@@ -40,12 +46,15 @@ export interface StatsByModel {
   tokens_completion: number;
   avg_duration_ms: number;
   tps: number | null;
+  tokens_cache_read: number;
+  estimated_cost_usd: number;
 }
 
 export interface DailyStats {
   date: string;
   requests: number;
   tokens_total: number;
+  estimated_cost_usd: number;
 }
 
 export const usageService = {
@@ -57,13 +66,19 @@ export const usageService = {
     tokensCompletion: number,
     durationMs: number,
     generationDurationMs = durationMs,
+    details: { cacheRead?: number; cacheWrite?: number } = {},
   ): UsageLog {
     const db = getDb();
     const id = crypto.randomUUID();
     const total = tokensPrompt + tokensCompletion;
+    const cacheRead = details.cacheRead ?? 0;
+    const cacheWrite = details.cacheWrite ?? 0;
+    const tier = db.query("SELECT * FROM model_pricing_tiers WHERE model_id = ? AND threshold_tokens <= ? ORDER BY threshold_tokens DESC LIMIT 1").get(modelId, tokensPrompt) as { input_per_million: number; output_per_million: number; cache_read_per_million: number; cache_write_per_million: number } | null;
+    const uncachedPrompt = Math.max(0, tokensPrompt - cacheRead);
+    const estimatedCost = tier ? (uncachedPrompt * tier.input_per_million + tokensCompletion * tier.output_per_million + cacheRead * tier.cache_read_per_million + cacheWrite * tier.cache_write_per_million) / 1_000_000 : 0;
     db.query(
-      `INSERT INTO usage_log (id, provider_id, model_id, model_name, tokens_prompt, tokens_completion, tokens_total, duration_ms, generation_duration_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).run(id, providerId, modelId, modelName, tokensPrompt, tokensCompletion, total, durationMs, generationDurationMs);
+      `INSERT INTO usage_log (id, provider_id, model_id, model_name, tokens_prompt, tokens_completion, tokens_cache_read, tokens_cache_write, tokens_total, estimated_cost_usd, duration_ms, generation_duration_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(id, providerId, modelId, modelName, tokensPrompt, tokensCompletion, cacheRead, cacheWrite, total, estimatedCost, durationMs, generationDurationMs);
     return db.query("SELECT * FROM usage_log WHERE id = ?").get(id) as UsageLog;
   },
 
@@ -75,7 +90,9 @@ export const usageService = {
            COUNT(*) as total_requests,
             COALESCE(SUM(tokens_total), 0) as total_tokens,
            COALESCE(SUM(tokens_prompt), 0) as total_tokens_prompt,
-           COALESCE(SUM(tokens_completion), 0) as total_tokens_completion,
+            COALESCE(SUM(tokens_completion), 0) as total_tokens_completion,
+            COALESCE(SUM(estimated_cost_usd), 0) as estimated_cost_usd,
+            COALESCE(SUM(tokens_cache_read), 0) as total_tokens_cache,
            COALESCE(CAST(SUM(tokens_total) AS REAL) / MAX(COUNT(*), 1), 0) as avg_tokens_per_request,
            COALESCE(CAST(SUM(duration_ms) AS REAL) / MAX(COUNT(*), 1), 0) as avg_duration_ms
          FROM usage_log
@@ -93,7 +110,8 @@ export const usageService = {
            u.provider_id,
            p.name as provider_name,
            COUNT(*) as requests,
-           COALESCE(SUM(u.tokens_total), 0) as tokens_total
+            COALESCE(SUM(u.tokens_total), 0) as tokens_total
+            ,COALESCE(SUM(u.estimated_cost_usd), 0) as estimated_cost_usd
          FROM usage_log u
          JOIN providers p ON p.id = u.provider_id
          WHERE u.created_at >= datetime('now', ? || ' days')
@@ -115,7 +133,9 @@ export const usageService = {
            COUNT(*) as requests,
            COALESCE(SUM(u.tokens_total), 0) as tokens_total,
            COALESCE(SUM(u.tokens_prompt), 0) as tokens_prompt,
-           COALESCE(SUM(u.tokens_completion), 0) as tokens_completion,
+            COALESCE(SUM(u.tokens_completion), 0) as tokens_completion,
+            COALESCE(SUM(u.tokens_cache_read), 0) as tokens_cache_read,
+            COALESCE(SUM(u.estimated_cost_usd), 0) as estimated_cost_usd,
            COALESCE(CAST(SUM(u.duration_ms) AS REAL) / MAX(COUNT(*), 1), 0) as avg_duration_ms,
             CASE WHEN SUM(u.generation_duration_ms) > 0
               THEN CAST(SUM(u.tokens_completion) AS REAL) / (CAST(SUM(u.generation_duration_ms) AS REAL) / 1000.0)
@@ -137,7 +157,8 @@ export const usageService = {
         `SELECT
            DATE(created_at) as date,
            COUNT(*) as requests,
-           COALESCE(SUM(tokens_total), 0) as tokens_total
+            COALESCE(SUM(tokens_total), 0) as tokens_total
+            ,COALESCE(SUM(estimated_cost_usd), 0) as estimated_cost_usd
          FROM usage_log
          WHERE created_at >= datetime('now', ? || ' days')
          GROUP BY DATE(created_at)

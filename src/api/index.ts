@@ -6,6 +6,7 @@ import { settingsPlugin } from "./settings.plugin";
 import { proxyPlugin } from "./proxy.plugin";
 import { statsPlugin } from "./stats.plugin";
 import { codexPlugin, codexPublicPlugin, antigravityPublicPlugin, antigravityUsagePlugin } from "./codex.plugin";
+import { requestLogsPlugin } from "./request-logs.plugin";
 
 export {
   authPlugin,
@@ -19,4 +20,5 @@ export {
   codexPublicPlugin,
   antigravityPublicPlugin,
   antigravityUsagePlugin,
+  requestLogsPlugin,
 };
