@@ -33,7 +33,10 @@ export const providersPlugin = (app: Elysia) =>
         }
         const provider = providerService.create({
           ...body,
-          api_key: body.api_key ?? "codex-session",
+          api_key:
+            body.api_key ??
+            body.auth_code ??
+            (body.protocol === "codex" ? "codex-session" : "freebuff-token"),
         });
         logger.success("Provider created", {
           provider: provider.name,
@@ -46,6 +49,7 @@ export const providersPlugin = (app: Elysia) =>
           name: t.String({ minLength: 1 }),
           base_url: t.String({ minLength: 1 }),
           api_key: t.Optional(t.String({ minLength: 1 })),
+          auth_code: t.Optional(t.String({ minLength: 1 })),
           avatar: t.Optional(t.String()),
           protocol: t.Optional(
             t.Union([
@@ -53,6 +57,7 @@ export const providersPlugin = (app: Elysia) =>
               t.Literal("anthropic"),
               t.Literal("codex"),
               t.Literal("antigravity"),
+              t.Literal("freebuff"),
             ]),
           ),
           credential_mode: t.Optional(
@@ -78,6 +83,7 @@ export const providersPlugin = (app: Elysia) =>
           name: t.Optional(t.String({ minLength: 1 })),
           base_url: t.Optional(t.String({ minLength: 1 })),
           api_key: t.Optional(t.String({ minLength: 1 })),
+          auth_code: t.Optional(t.String({ minLength: 1 })),
           avatar: t.Optional(t.Union([t.String(), t.Null()])),
           protocol: t.Optional(
             t.Union([
@@ -85,6 +91,7 @@ export const providersPlugin = (app: Elysia) =>
               t.Literal("anthropic"),
               t.Literal("codex"),
               t.Literal("antigravity"),
+              t.Literal("freebuff"),
             ]),
           ),
           credential_mode: t.Optional(
@@ -120,10 +127,10 @@ export const providersPlugin = (app: Elysia) =>
         if (
           !credential ||
           credential.provider_id !== id ||
-          credential.kind !== "api_key"
+           credential.kind !== "api_key" && credential.kind !== "freebuff"
         ) {
           set.status = 404;
-          return { error: "API key not found" };
+          return { error: "Credential secret not found" };
         }
         return { secret: credential.secret };
       },
@@ -149,6 +156,7 @@ export const providersPlugin = (app: Elysia) =>
               t.Literal("api_key"),
               t.Literal("codex"),
               t.Literal("antigravity"),
+              t.Literal("freebuff"),
             ]),
           ),
           secret: t.Optional(t.String()),

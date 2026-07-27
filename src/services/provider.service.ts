@@ -7,7 +7,7 @@ export interface Provider {
   base_url: string;
   api_key: string;
   avatar: string | null;
-  protocol: "openai" | "anthropic" | "codex" | "antigravity";
+  protocol: "openai" | "anthropic" | "codex" | "antigravity" | "freebuff";
   credential_mode: CredentialMode;
   fixed_credential_id: string | null;
   is_active: number;
@@ -20,7 +20,7 @@ export interface ProviderPublic {
   name: string;
   base_url: string;
   avatar: string | null;
-  protocol: "openai" | "anthropic" | "codex" | "antigravity";
+  protocol: "openai" | "anthropic" | "codex" | "antigravity" | "freebuff";
   credential_mode: CredentialMode;
   fixed_credential_id: string | null;
   is_active: number;
@@ -33,7 +33,7 @@ export type CreateProviderInput = {
   base_url: string;
   api_key: string;
   avatar?: string;
-  protocol?: "openai" | "anthropic" | "codex" | "antigravity";
+  protocol?: "openai" | "anthropic" | "codex" | "antigravity" | "freebuff";
   credential_mode?: CredentialMode;
   fixed_credential_id?: string | null;
 };
@@ -43,7 +43,7 @@ export type UpdateProviderInput = {
   base_url?: string;
   api_key?: string;
   avatar?: string | null;
-  protocol?: "openai" | "anthropic" | "codex" | "antigravity";
+  protocol?: "openai" | "anthropic" | "codex" | "antigravity" | "freebuff";
   credential_mode?: CredentialMode;
   fixed_credential_id?: string | null;
   is_active?: number;
@@ -62,6 +62,7 @@ function defaultProviderAvatar(protocol: Provider["protocol"]): string | null {
   if (protocol === "antigravity")
     return "https://antigravity.google/assets/image/brand/antigravity-icon__full-color.png";
   if (protocol === "codex") return "https://openai.com/favicon.ico";
+  if (protocol === "freebuff") return "https://freebuff.com/favicon.ico";
   return null;
 }
 
@@ -143,11 +144,15 @@ export const providerService = {
         ? "Codex session"
         : input.protocol === "antigravity"
           ? "Google account"
+          : input.protocol === "freebuff"
+            ? "Freebuff token"
           : "Default API key",
       input.protocol === "codex"
         ? "codex"
         : input.protocol === "antigravity"
           ? "antigravity"
+          : input.protocol === "freebuff"
+            ? "freebuff"
           : "api_key",
       input.protocol === "antigravity" ? null : input.api_key,
     );

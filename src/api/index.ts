@@ -10,6 +10,7 @@ import {
   codexPublicPlugin,
   antigravityPublicPlugin,
   antigravityUsagePlugin,
+  freebuffUsagePlugin,
 } from "./codex.plugin";
 import { requestLogsPlugin } from "./request-logs.plugin";
 
@@ -25,5 +26,6 @@ export {
   codexPublicPlugin,
   antigravityPublicPlugin,
   antigravityUsagePlugin,
+  freebuffUsagePlugin,
   requestLogsPlugin,
 };

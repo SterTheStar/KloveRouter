@@ -172,6 +172,8 @@ const providerDescriptions: Record<string, string> = {
     "Anthropic's native Messages API for Claude models, reasoning, and tool use.",
   codex:
     "ChatGPT OAuth access for OpenAI Codex models with account-based usage limits.",
+  freebuff:
+    "Free Codebuff/Freebuff models through a token-authenticated OpenAI-compatible gateway.",
   blueminds:
     "An OpenAI-compatible gateway for accessing hosted language models through BlueMinds.",
   agnes:
@@ -276,6 +278,15 @@ const providerTypes = [
     placeholder: "https://chatgpt.com/backend-api/codex",
     preset: false,
   },
+  {
+    id: "freebuff",
+    protocol: "freebuff" as const,
+    name: "Freebuff",
+    description: providerDescriptions.freebuff,
+    logo: opencodeLogo,
+    placeholder: "https://www.codebuff.com",
+    preset: false,
+  },
   ...openAiCompatiblePresets.map(([id, name, placeholder]) => ({
     id,
     protocol: "openai" as const,
@@ -305,6 +316,7 @@ export default function AddProviderModal({
   const [name, setName] = useState("");
   const [baseUrl, setBaseUrl] = useState("");
   const [apiKey, setApiKey] = useState("");
+  const [authCode, setAuthCode] = useState("");
   const [avatar, setAvatar] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -332,6 +344,7 @@ export default function AddProviderModal({
     setName("");
     setBaseUrl("");
     setApiKey("");
+    setAuthCode("");
     setAvatar(null);
     setError(null);
     setStep("select");
@@ -484,7 +497,7 @@ export default function AddProviderModal({
         "Connect your Codex account before adding this provider.",
       );
     }
-    if (!name || !baseUrl || !apiKey)
+    if (!name || !baseUrl || (selectedType?.protocol === "freebuff" ? !authCode : !apiKey))
       return setError("All fields are required.");
     setLoading(true);
     setError(null);
@@ -492,7 +505,9 @@ export default function AddProviderModal({
       await providers.create({
         name,
         base_url: baseUrl,
-        api_key: apiKey,
+        ...(selectedType?.protocol === "freebuff"
+          ? { auth_code: authCode }
+          : { api_key: apiKey }),
         protocol: selectedType?.protocol,
         avatar:
           avatar || (selectedType?.preset ? selectedType.logo : undefined),
@@ -705,14 +720,25 @@ export default function AddProviderModal({
               {selectedType?.protocol !== "codex" &&
                 selectedType?.protocol !== "antigravity" && (
                   <div className="space-y-2">
-                    <Label htmlFor="provider-key">API key</Label>
+                    <Label htmlFor="provider-key">
+                      {selectedType?.protocol === "freebuff" ? "Auth code" : "API key"}
+                    </Label>
                     <Input
                       id="provider-key"
                       type="password"
-                      value={apiKey}
-                      onChange={(e) => setApiKey(e.target.value)}
-                      placeholder="sk-..."
+                      value={selectedType?.protocol === "freebuff" ? authCode : apiKey}
+                      onChange={(e) =>
+                        selectedType?.protocol === "freebuff"
+                          ? setAuthCode(e.target.value)
+                          : setApiKey(e.target.value)
+                      }
+                      placeholder={selectedType?.protocol === "freebuff" ? "Paste your Freebuff auth code" : "sk-..."}
                     />
+                    {selectedType?.protocol === "freebuff" && (
+                      <p className="text-xs text-muted-foreground">
+                        Use the auth code from your Freebuff account or CLI. It is encrypted before being stored.
+                      </p>
+                    )}
                   </div>
                 )}
               {pendingOAuth && (

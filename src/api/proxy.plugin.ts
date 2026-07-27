@@ -17,6 +17,7 @@ import { antigravityResponses } from "../integrations/antigravity";
 import { isBlockedAntigravityModel } from "../integrations/antigravity";
 import { requestLogService } from "../services/request-log.service";
 import { openAIStreamResponse } from "./openai-stream";
+import { freebuffResponses } from "../integrations/freebuff";
 
 function anthropicPayload(body: any, modelId: string, stream = false) {
   const messages = splitAnthropicMessages(body.messages);
@@ -947,6 +948,43 @@ export const proxyPlugin = (app: Elysia) =>
                 : `All ${attempted.size} available Antigravity credential${attempted.size === 1 ? "" : "s"} failed. ${failures.at(-1)}`
               : "No credential is currently available for this request.",
           };
+        }
+
+        if (provider.protocol === "freebuff") {
+          const attempted = new Set<string>();
+          const failures: string[] = [];
+          while (credential && !attempted.has(credential.id)) {
+            attempted.add(credential.id);
+            try {
+              const start = performance.now();
+              const response = await freebuffResponses(
+                body,
+                parsed.modelId,
+                credential,
+                provider.base_url,
+              );
+              const modelRecord = modelService.findByProviderAndModel(provider.id, parsed.modelId);
+              if (!body.stream) {
+                requestLogService.complete(requestLogId, { durationMs: Math.round(performance.now() - start) });
+                return response.json();
+              }
+              return recordSseUsageResponse(response, (promptTokens, completionTokens, durationMs, generationDurationMs, details) => {
+                const usage = usageService.record(provider.id, modelRecord?.id ?? parsed.modelId, parsed.modelId, promptTokens, completionTokens, durationMs, generationDurationMs, details);
+                requestLogService.complete(requestLogId, { promptTokens, completionTokens, cacheRead: details?.cacheRead, cacheWrite: details?.cacheWrite, cost: usage.estimated_cost_usd, durationMs });
+              }, start);
+            } catch (error: any) {
+              failures.push(error.message);
+              credentialService.markError(credential.id, error.message);
+              if (provider.credential_mode !== "round_robin") break;
+              const next = credentialService.select(provider.id, "round_robin", null, requestSequence);
+              if (!next || attempted.has(next.id)) break;
+              credential = next;
+              requestLogService.setCredential(requestLogId, credential);
+            }
+          }
+          set.status = 502;
+          requestLogService.complete(requestLogId, { status: "error", statusCode: 502, error: failures.at(-1) });
+          return { error: "Freebuff request failed", message: failures.at(-1) };
         }
 
         // Handle streaming

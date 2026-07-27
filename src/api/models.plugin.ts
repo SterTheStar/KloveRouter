@@ -18,6 +18,7 @@ import {
 } from "../integrations/antigravity";
 import { logger } from "../logger";
 import { generateDisplayName } from "../services/model-name";
+import { freebuffModels } from "../integrations/freebuff";
 
 export const modelsPlugin = (app: Elysia) =>
   app
@@ -175,6 +176,14 @@ export const modelsPlugin = (app: Elysia) =>
               models_found: selected.length,
               message: `Synced ${selected.length} Antigravity models from ${provider.name}`,
             };
+          }
+
+          if (provider.protocol === "freebuff") {
+            const available = await freebuffModels();
+            if (query.preview === true) return preview(available);
+            for (const model of available)
+              modelService.upsert({ provider_id: id, model_id: model.id, display_name: model.display_name, is_manual: 0 });
+            return { success: true, models_found: available.length, message: `Synced ${available.length} Freebuff models from ${provider.name}` };
           }
 
           const credential =

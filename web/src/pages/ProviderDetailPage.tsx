@@ -128,6 +128,7 @@ export default function ProviderDetailPage({
   const [baseUrl, setBaseUrl] = useState("");
   const newKeyLabelRef = useRef<HTMLInputElement>(null);
   const newKeySecretRef = useRef<HTMLInputElement>(null);
+  const newAuthCodeRef = useRef<HTMLInputElement>(null);
   const [addingKey, setAddingKey] = useState(false);
   const [showAddKey, setShowAddKey] = useState(false);
   const [revealedKeys, setRevealedKeys] = useState<Record<string, string>>({});
@@ -156,7 +157,7 @@ export default function ProviderDetailPage({
     () =>
       credentials.filter((credential) => {
         if (!credential.is_active) return false;
-        if (credential.kind === "api_key")
+        if (credential.kind === "api_key" || credential.kind === "freebuff")
           return Boolean(credential.masked_secret);
         return Boolean(
           credential.account_id || credential.email || credential.project_id,
@@ -516,6 +517,34 @@ export default function ProviderDetailPage({
     }
   };
 
+  const addFreebuffAuthCode = async () => {
+    const label = newKeyLabelRef.current?.value.trim() ?? "";
+    const authCode = newAuthCodeRef.current?.value.trim() ?? "";
+    if (!label || !authCode) {
+      setError("Auth code label and value are required.");
+      return;
+    }
+    setAddingKey(true);
+    setError(null);
+    try {
+      await providers.addCredential(providerId, {
+        label,
+        kind: "freebuff",
+        secret: authCode,
+      });
+      if (newKeyLabelRef.current) newKeyLabelRef.current.value = "";
+      if (newAuthCodeRef.current) newAuthCodeRef.current.value = "";
+      setShowAddKey(false);
+      setSuccess("Freebuff auth code added.");
+      await load();
+    } catch (e: any) {
+      setError(e.message);
+      notifyError("Could not add Freebuff auth code", e.message);
+    } finally {
+      setAddingKey(false);
+    }
+  };
+
   const removeApiKey = async (credentialId: string) => {
     try {
       await providers.removeCredential(providerId, credentialId);
@@ -647,11 +676,15 @@ export default function ProviderDetailPage({
           <CardTitle>Connection settings</CardTitle>
           <div className="flex flex-wrap justify-end gap-2">
             {(provider.protocol === "codex" ||
-              provider.protocol === "antigravity") && (
+              provider.protocol === "antigravity" ||
+              provider.protocol === "freebuff") && (
               <>
                 <Button
                   variant="outline"
-                  onClick={addOAuthAccount}
+                  onClick={provider.protocol === "freebuff" ? () => {
+                    setShowAddKey(true);
+                    document.getElementById("provider-credentials")?.scrollIntoView({ behavior: "smooth" });
+                  } : addOAuthAccount}
                   disabled={credentialAction}
                 >
                   {credentialAction ? (
@@ -659,9 +692,9 @@ export default function ProviderDetailPage({
                   ) : (
                     <LoginIcon className="size-4" />
                   )}
-                  Connect account
+                  {provider.protocol === "freebuff" ? "Add auth code" : "Connect account"}
                 </Button>
-                {credentials.some(
+                {provider.protocol !== "freebuff" && credentials.some(
                   (credential) =>
                     (credential.kind === "codex" ||
                       credential.kind === "antigravity") &&
@@ -858,6 +891,49 @@ export default function ProviderDetailPage({
                   </span>
                 )}
               </div>
+            </div>
+          ) : provider.protocol === "freebuff" ? (
+            <div id="provider-credentials" className="space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <Label>Freebuff auth codes</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Auth codes are stored encrypted and rotated according to the selected routing strategy.
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowAddKey((value) => !value)}
+                >
+                  {showAddKey ? <CloseCircle className="size-4" /> : <Add className="size-4" />}
+                  {showAddKey ? "Cancel" : "Add auth code"}
+                </Button>
+              </div>
+              <div className="space-y-2">
+                {credentials.filter((credential) => credential.kind === "freebuff").map((credential) => (
+                  <div key={credential.id} className="grid items-center gap-2 border-b border-border/60 py-2 md:grid-cols-[minmax(8rem,0.65fr)_minmax(0,1.8fr)_auto]">
+                    <Input value={credential.label} readOnly className="h-9 bg-background" />
+                    <Input value={credential.masked_secret ?? "Hidden auth code"} readOnly className="h-9 bg-background font-mono" />
+                    <Button variant="destructive" size="icon" className="size-9" onClick={() => removeApiKey(credential.id)} title="Remove auth code">
+                      <Trash2 className="size-4" />
+                    </Button>
+                  </div>
+                ))}
+                {!credentials.some((credential) => credential.kind === "freebuff") && (
+                  <div className="text-xs text-muted-foreground">No Freebuff auth codes configured.</div>
+                )}
+              </div>
+              {showAddKey && (
+                <div className="grid gap-2 rounded-md border border-dashed p-3 md:grid-cols-[1fr_1.5fr_auto]">
+                  <Input ref={newKeyLabelRef} placeholder="Auth code label" />
+                  <Input ref={newAuthCodeRef} type="password" placeholder="Paste Freebuff auth code" />
+                  <Button onClick={addFreebuffAuthCode} disabled={addingKey}>
+                    {addingKey ? <LoaderCircle className="size-4 animate-spin" /> : <Add className="size-4" />}
+                    Add code
+                  </Button>
+                </div>
+              )}
             </div>
           ) : (
             <div className="space-y-3">

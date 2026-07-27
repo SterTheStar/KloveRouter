@@ -3,7 +3,7 @@ export interface Provider {
   name: string;
   base_url: string;
   avatar: string | null;
-  protocol: "openai" | "anthropic" | "codex" | "antigravity";
+  protocol: "openai" | "anthropic" | "codex" | "antigravity" | "freebuff";
   is_active: number;
   created_at: string;
   updated_at: string;
@@ -20,7 +20,7 @@ export interface ProviderCredential {
   id: string;
   provider_id: string;
   label: string;
-  kind: "api_key" | "codex" | "antigravity";
+  kind: "api_key" | "codex" | "antigravity" | "freebuff";
   account_id: string | null;
   email?: string | null;
   project_id?: string | null;

@@ -15,6 +15,7 @@ import {
 } from "../integrations/antigravity";
 import { antigravityUsage } from "../integrations/antigravity";
 import { parseManualOAuthCallback } from "../integrations/oauth-callback";
+import { freebuffUnlock, freebuffUsage } from "../integrations/freebuff";
 
 export const codexPublicPlugin = (app: Elysia) =>
   app.get(
@@ -42,6 +43,20 @@ export const codexPublicPlugin = (app: Elysia) =>
         error: t.Optional(t.String()),
       }),
     },
+  ).post(
+    "/api/freebuff/unlock",
+    async ({ body, set }) => {
+      try {
+        const credential = credentialService.findById(body.credential_id);
+        if (!credential || credential.kind !== "freebuff")
+          throw new Error("Freebuff credential not found");
+        return await freebuffUnlock(credential);
+      } catch (error: any) {
+        set.status = 502;
+        return { error: error.message };
+      }
+    },
+    { body: t.Object({ credential_id: t.String() }) },
   );
 
 export const antigravityPublicPlugin = (app: Elysia) =>
@@ -200,4 +215,26 @@ export const antigravityUsagePlugin = (app: Elysia) =>
       }
     },
     { query: t.Object({ credential_id: t.String() }) },
+  );
+
+export const freebuffUsagePlugin = (app: Elysia) =>
+  app.get(
+    "/api/freebuff/usage",
+    async ({ query, set }) => {
+      try {
+        const credential = credentialService.findById(query.credential_id);
+        if (!credential || credential.kind !== "freebuff")
+          throw new Error("Freebuff credential not found");
+        return await freebuffUsage(credential, undefined, query.model);
+      } catch (error: any) {
+        set.status = 502;
+        return { error: error.message };
+      }
+    },
+    {
+      query: t.Object({
+        credential_id: t.String(),
+        model: t.Optional(t.String()),
+      }),
+    },
   );

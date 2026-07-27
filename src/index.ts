@@ -17,6 +17,7 @@ import {
   codexPublicPlugin,
   antigravityPublicPlugin,
   antigravityUsagePlugin,
+  freebuffUsagePlugin,
   requestLogsPlugin,
 } from "./api";
 
@@ -70,6 +71,7 @@ const protectedApp = new Elysia()
   .use(statsPlugin)
   .use(requestLogsPlugin)
   .use(antigravityUsagePlugin)
+  .use(freebuffUsagePlugin)
   .use(codexPlugin);
 
 app.use(protectedApp as any);

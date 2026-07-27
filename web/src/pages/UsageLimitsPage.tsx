@@ -13,7 +13,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { antigravity, codex, providers } from "../api/client";
+import { antigravity, codex, freebuff, providers } from "../api/client";
 import type {
   AntigravityQuota,
   CodexUsage,
@@ -57,6 +57,42 @@ function UsageWindow({
       </div>
       <div className="text-xs text-muted-foreground">
         {windowLabel(value)} · {resetLabel(value?.reset_at)}
+      </div>
+    </div>
+  );
+}
+
+function FreebuffUsageSummary({ usage }: { usage: any }) {
+  const rateLimit = usage?.rateLimit ?? usage?.rate_limit;
+  const recentCount = Number(rateLimit?.recentCount ?? rateLimit?.recent_count ?? 0);
+  const limit = Number(rateLimit?.limit ?? 0);
+  const remaining = limit - recentCount;
+  const hasRateLimit = Number.isFinite(limit) && limit > 0;
+  const used = hasRateLimit ? Math.min(100, Math.max(0, (recentCount / limit) * 100)) : 0;
+  const expires = usage?.expires_at ? new Date(usage.expires_at).toLocaleString() : null;
+  return (
+    <div className="space-y-5">
+      <div className="space-y-2">
+        <div className="flex items-center justify-between gap-3 text-sm">
+          <span>Shared Freebuff account limit</span>
+          <span className="font-medium">{hasRateLimit ? `${Math.max(0, remaining).toFixed(1)} remaining` : "Quota data pending"}</span>
+        </div>
+        <div className="h-2 overflow-hidden rounded-full bg-muted">
+          <div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${used}%` }} />
+        </div>
+        <div className="text-xs text-muted-foreground">
+          {hasRateLimit
+            ? `${recentCount.toFixed(1)} / ${limit} used`
+            : "Quota counters unavailable"}
+          {usage?.usage_cached_at
+            ? ` · Last measurement: ${new Date(usage.usage_cached_at).toLocaleString()}`
+            : ""}
+          {usage?.usage_cache_stale
+            ? " · Refresh available when a session is active"
+            : ""}
+          {rateLimit?.resetAt ? ` · Resets ${new Date(rateLimit.resetAt).toLocaleString()}` : rateLimit?.reset_at ? ` · Resets ${new Date(rateLimit.reset_at).toLocaleString()}` : ""}
+          {expires ? ` · Session expires ${expires}` : ""}
+        </div>
       </div>
     </div>
   );
@@ -253,12 +289,14 @@ export default function UsageLimitsPage() {
       usage: CodexUsage | null;
       credits: any[];
       antigravityQuota: AntigravityQuota[] | null;
+      freebuffUsage: any | null;
     }[]
   >([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [consuming, setConsuming] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [unlocking, setUnlocking] = useState<string | null>(null);
 
   const accountIdentity = (
     provider: Provider,
@@ -274,14 +312,15 @@ export default function UsageLimitsPage() {
       const providerList = await providers.list();
       const oauthProviders = providerList.filter(
         (provider) =>
-          provider.protocol === "codex" || provider.protocol === "antigravity",
+          provider.protocol === "codex" || provider.protocol === "antigravity" || provider.protocol === "freebuff",
       );
       const accountGroups = await Promise.all(
         oauthProviders.map(async (provider) => {
           const credentials = (await providers.credentials(provider.id)).filter(
             (credential) =>
               (credential.kind === "codex" && credential.account_id) ||
-              (credential.kind === "antigravity" && credential.email),
+              (credential.kind === "antigravity" && credential.email) ||
+              (credential.kind === "freebuff" && credential.masked_secret),
           );
           return Promise.all(
             credentials.map(async (credential) => {
@@ -293,6 +332,16 @@ export default function UsageLimitsPage() {
                     usage: null,
                     credits: [],
                     antigravityQuota: await antigravity.usage(credential.id),
+                    freebuffUsage: null,
+                  };
+                if (provider.protocol === "freebuff")
+                  return {
+                    provider,
+                    credential,
+                    usage: null,
+                    credits: [],
+                    antigravityQuota: null,
+                    freebuffUsage: await freebuff.usage(credential.id),
                   };
                 const [usageResult, creditResult] = await Promise.all([
                   codex.usage(credential.id),
@@ -304,6 +353,7 @@ export default function UsageLimitsPage() {
                   usage: usageResult,
                   credits: creditsFromPayload(creditResult),
                   antigravityQuota: null,
+                  freebuffUsage: null,
                 };
               } catch {
                 return {
@@ -343,6 +393,19 @@ export default function UsageLimitsPage() {
       setError(e.message);
     } finally {
       setConsuming(false);
+    }
+  };
+
+  const unlockFreebuff = async (credentialId: string) => {
+    setUnlocking(credentialId);
+    setError(null);
+    try {
+      await freebuff.unlock(credentialId);
+      await load(true);
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setUnlocking(null);
     }
   };
 
@@ -391,7 +454,7 @@ export default function UsageLimitsPage() {
       ) : (
         <div className="grid gap-5 xl:grid-cols-2">
           {accounts.map(
-            ({ provider, credential, usage, credits, antigravityQuota }) => (
+            ({ provider, credential, usage, credits, antigravityQuota, freebuffUsage: freebuffData }) => (
               <Card key={credential.id}>
                 <CardHeader>
                   <div className="flex items-center justify-between gap-3">
@@ -410,15 +473,46 @@ export default function UsageLimitsPage() {
                             ? credential.email || credential.label
                             : credential.label}
                         </CardTitle>
-                        <div className="text-xs text-muted-foreground">
-                          {accountIdentity(provider, credential)} ·{" "}
-                          {provider.protocol === "antigravity"
-                            ? "Antigravity account"
-                            : (usage?.plan_type ?? "Codex OAuth account")}
-                        </div>
+                        {provider.protocol === "freebuff" ? (
+                          <div className="text-xs text-muted-foreground">
+                            Session {freebuffData?.status ?? "none"} · Tier {freebuffData?.accessTier ?? freebuffData?.access_tier ?? "unknown"} · Country {freebuffData?.countryCode ?? freebuffData?.country_code ?? "unknown"}
+                          </div>
+                        ) : (
+                          <div className="text-xs text-muted-foreground">
+                            {accountIdentity(provider, credential)} ·{" "}
+                            {provider.protocol === "antigravity"
+                              ? "Antigravity account"
+                              : usage?.plan_type ?? "Codex OAuth account"}
+                          </div>
+                        )}
                       </div>
                     </div>
-                    {provider.protocol === "codex" && (
+                      {provider.protocol === "freebuff" && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() =>
+                            freebuffData?.instance_id
+                              ? unlockFreebuff(credential.id)
+                              : load(true)
+                          }
+                          disabled={
+                            unlocking === credential.id ||
+                            refreshing ||
+                            !freebuffData?.instance_id
+                          }
+                        >
+                          {unlocking === credential.id || refreshing ? (
+                            <LoaderCircle className="size-4 animate-spin" />
+                          ) : (
+                            <ResetLine className="size-4" />
+                          )}
+                          {freebuffData?.instance_id
+                            ? `Unlock ${freebuffData.model ?? "current model"}`
+                            : "No active session"}
+                        </Button>
+                      )}
+                      {provider.protocol === "codex" && (
                       <Button
                         size="sm"
                         variant="outline"
@@ -434,7 +528,9 @@ export default function UsageLimitsPage() {
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-5">
-                  {provider.protocol === "antigravity" ? (
+                    {provider.protocol === "freebuff" ? (
+                      <FreebuffUsageSummary usage={freebuffData} />
+                    ) : provider.protocol === "antigravity" ? (
                     antigravityQuota?.length ? (
                       <AntigravityQuotaSummary quotas={antigravityQuota} />
                     ) : (
@@ -460,10 +556,6 @@ export default function UsageLimitsPage() {
           )}
         </div>
       )}
-      <p className="text-xs text-muted-foreground">
-        Usage data uses private Codex/ChatGPT and Google Cloud Code endpoints
-        and may be unavailable or change without notice.
-      </p>
     </div>
   );
 }
