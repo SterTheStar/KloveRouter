@@ -191,6 +191,8 @@ export interface RtkStatus {
   pid: number | null;
   configPath: string | null;
   downloadUrl: string | null;
+  latestVersion: string | null;
+  updateAvailable: boolean;
 }
 
 export interface CavemanStatus {
@@ -199,4 +201,6 @@ export interface CavemanStatus {
   installed: boolean;
   version: string | null;
   skillPath: string | null;
+  latestVersion: string | null;
+  updateAvailable: boolean;
 }

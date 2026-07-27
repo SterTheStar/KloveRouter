@@ -5,6 +5,11 @@ import { getDb } from "../../db/connection";
 import { logger } from "../../logger";
 import type { RtkStatus } from "./rtk.types";
 
+function normalizeVersion(v: string | null): string {
+  if (!v) return "";
+  return v.replace(/^rtk\s*/i, "").replace(/^v/, "").trim();
+}
+
 class RtkManager {
   private process: Bun.Subprocess | null = null;
   private _enabled = false;
@@ -98,6 +103,18 @@ class RtkManager {
     const binPath = rtkBinary.binaryPath();
     const cfgPath = rtkConfig.configPath();
 
+    const [latestVersion, updateAvailable] = installed
+      ? await Promise.all([
+          rtkBinary.checkLatestVersion(),
+          rtkBinary.currentVersion().then((cur) =>
+            rtkBinary.checkLatestVersion().then((latest) => {
+              if (!latest) return false;
+              return normalizeVersion(latest) !== normalizeVersion(cur);
+            }),
+          ),
+        ])
+      : [null, false];
+
     const db = getDb();
     const row = db
       .query("SELECT value FROM settings WHERE key = ?")
@@ -114,6 +131,8 @@ class RtkManager {
       pid: this.getPid(),
       configPath: existsSync(cfgPath) ? cfgPath : null,
       downloadUrl: rtkBinary.getDownloadUrl(),
+      latestVersion,
+      updateAvailable,
     };
   }
 }

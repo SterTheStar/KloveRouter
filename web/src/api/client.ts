@@ -395,6 +395,11 @@ export const rtk = {
       "/api/rtk/install",
       { method: "POST" },
     ),
+  update: () =>
+    request<{ success: boolean; binaryPath?: string; message?: string }>(
+      "/api/rtk/update",
+      { method: "POST" },
+    ),
 };
 
 // Caveman
@@ -424,6 +429,11 @@ export const caveman = {
     request<{ success: boolean; message: string }>("/api/caveman/uninstall", {
       method: "POST",
     }),
+  update: () =>
+    request<{ success: boolean; skillPath?: string; message?: string }>(
+      "/api/caveman/update",
+      { method: "POST" },
+    ),
 };
 
 // Settings

@@ -49,4 +49,13 @@ export const cavemanPlugin = (app: Elysia) =>
       await cavemanBinary.uninstall();
       logger.info("Caveman uninstalled");
       return { success: true, message: "Caveman uninstalled" };
+    })
+    .post("/api/caveman/update", async ({ set }) => {
+      try {
+        const skillPath = await cavemanBinary.update();
+        return { success: true, skillPath, message: "Caveman updated" };
+      } catch (error: any) {
+        set.status = 500;
+        return { success: false, message: error.message };
+      }
     });

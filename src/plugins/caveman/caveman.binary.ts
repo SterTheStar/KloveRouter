@@ -4,7 +4,6 @@ import { join } from "node:path";
 import { logger } from "../../logger";
 
 const CAVEMAN_DIR = join(".", "data", "caveman");
-const CAVEMAN_VERSION = "v1.9.1";
 const SKILL_FILE = "SKILL.md";
 
 function cavemanDir(): string {
@@ -15,12 +14,31 @@ function skillPath(): string {
   return join(cavemanDir(), SKILL_FILE);
 }
 
-async function downloadArchive(): Promise<string> {
+function versionFilePath(): string {
+  return join(cavemanDir(), "version.txt");
+}
+
+async function readVersion(): Promise<string | null> {
+  try {
+    return (await readFile(versionFilePath(), "utf-8")).trim();
+  } catch {
+    return null;
+  }
+}
+
+async function writeVersion(version: string): Promise<void> {
+  const dir = cavemanDir();
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  await writeFile(versionFilePath(), version);
+}
+
+async function downloadArchive(version: string): Promise<string> {
   const dir = cavemanDir();
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
 
-  const url = `https://github.com/JuliusBrussee/caveman/archive/refs/tags/${CAVEMAN_VERSION}.tar.gz`;
-  const dest = join(dir, `caveman-${CAVEMAN_VERSION}.tar.gz`);
+  const tag = version.startsWith("v") ? version : `v${version}`;
+  const url = `https://github.com/JuliusBrussee/caveman/archive/refs/tags/${tag}.tar.gz`;
+  const dest = join(dir, `caveman-${tag}.tar.gz`);
 
   logger.info(`Downloading Caveman from ${url}`);
 
@@ -34,9 +52,10 @@ async function downloadArchive(): Promise<string> {
   return dest;
 }
 
-async function extractSkill(archivePath: string): Promise<string> {
+async function extractSkill(archivePath: string, version: string): Promise<string> {
   const dir = cavemanDir();
-  const extractDir = join(dir, `caveman-${CAVEMAN_VERSION.replace(/^v/, "")}`);
+  const tag = version.startsWith("v") ? version : `v${version}`;
+  const extractDir = join(dir, `caveman-${tag.replace(/^v/, "")}`);
 
   if (existsSync(extractDir)) {
     await rm(extractDir, { recursive: true, force: true });
@@ -61,22 +80,66 @@ async function extractSkill(archivePath: string): Promise<string> {
   return skillPath();
 }
 
+async function checkLatestVersion(): Promise<string | null> {
+  try {
+    const response = await fetch(
+      "https://api.github.com/repos/JuliusBrussee/caveman/releases/latest",
+      { headers: { "Accept": "application/json" }, signal: AbortSignal.timeout(5000) },
+    );
+    if (!response.ok) return null;
+    const data = await response.json() as any;
+    return data.tag_name as string;
+  } catch {
+    return null;
+  }
+}
+
 export const cavemanBinary = {
   cavemanDir,
   skillPath,
+  versionFilePath,
+
+  async currentVersion(): Promise<string | null> {
+    return readVersion();
+  },
 
   async isInstalled(): Promise<boolean> {
     return existsSync(skillPath());
   },
 
-  async ensureInstalled(): Promise<string> {
+  async checkLatestVersion(): Promise<string | null> {
+    return checkLatestVersion();
+  },
+
+  async ensureInstalled(version?: string): Promise<string> {
     if (await this.isInstalled()) {
-      logger.info("Caveman skill already installed");
+      const v = await readVersion();
+      logger.info(`Caveman skill already installed (${v || "unknown version"})`);
       return skillPath();
     }
 
-    const archive = await downloadArchive();
-    return extractSkill(archive);
+    const ver = version || "v1.9.1";
+    const archive = await downloadArchive(ver);
+    const result = await extractSkill(archive, ver);
+    await writeVersion(ver);
+    return result;
+  },
+
+  async update(): Promise<string> {
+    const latest = await checkLatestVersion();
+    if (!latest) throw new Error("Could not fetch latest Caveman version");
+
+    const current = await readVersion();
+    if (current && current === latest) {
+      logger.info("Caveman already at latest version");
+      return skillPath();
+    }
+
+    logger.info(`Updating Caveman from ${current || "unknown"} to ${latest}`);
+    const archive = await downloadArchive(latest);
+    const result = await extractSkill(archive, latest);
+    await writeVersion(latest);
+    return result;
   },
 
   async uninstall(): Promise<void> {

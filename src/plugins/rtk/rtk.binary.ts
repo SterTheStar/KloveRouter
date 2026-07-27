@@ -7,7 +7,6 @@ import type { RtkPlatform, RtkArch, RtkBinaryInfo } from "./rtk.types";
 
 const RTK_DIR = join(".", "data", "rtk");
 const BINARY_NAME = process.platform === "win32" ? "rtk.exe" : "rtk";
-const RTK_VERSION = "0.44.0";
 
 const ASSET_NAMES: Record<string, string> = {
   "aarch64-apple-darwin": "rtk-aarch64-apple-darwin.tar.gz",
@@ -50,14 +49,15 @@ function getTargetTriple(): string {
   throw new Error(`No binary available for ${platform}-${arch}`);
 }
 
-function downloadUrl(): string {
+function downloadUrl(version: string): string {
   const triple = getTargetTriple();
   const assetName = ASSET_NAMES[triple];
   if (!assetName) throw new Error(`No asset for target ${triple}`);
-  return `https://github.com/rtk-ai/rtk/releases/download/v${RTK_VERSION}/${assetName}`;
+  const v = version.startsWith("v") ? version : `v${version}`;
+  return `https://github.com/rtk-ai/rtk/releases/download/${v}/${assetName}`;
 }
 
-function getBinaryInfo(): RtkBinaryInfo {
+function getBinaryInfo(version: string): RtkBinaryInfo {
   const triple = getTargetTriple();
   const platform = detectPlatform();
   const arch = detectArch();
@@ -67,7 +67,7 @@ function getBinaryInfo(): RtkBinaryInfo {
     platform,
     arch,
     filename: `rtk-${triple}.${ext}`,
-    url: downloadUrl(),
+    url: downloadUrl(version),
   };
 }
 
@@ -83,15 +83,32 @@ function checksumPath(): string {
   return join(rtkDir(), `${BINARY_NAME}.sha256`);
 }
 
+function versionFilePath(): string {
+  return join(rtkDir(), "version.txt");
+}
+
+async function readVersion(): Promise<string | null> {
+  try {
+    return (await readFile(versionFilePath(), "utf-8")).trim();
+  } catch {
+    return null;
+  }
+}
+
+async function writeVersion(version: string): Promise<void> {
+  await writeFile(versionFilePath(), version);
+}
+
 async function computeChecksum(filePath: string): Promise<string> {
   const data = await readFile(filePath);
   return createHash("sha256").update(data).digest("hex");
 }
 
-async function downloadBinary(info: RtkBinaryInfo): Promise<string> {
+async function downloadBinary(version: string): Promise<string> {
   const dir = rtkDir();
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
 
+  const info = getBinaryInfo(version);
   const dest = join(dir, info.filename);
   logger.info(`Downloading RTK binary from ${info.url}`);
 
@@ -139,6 +156,20 @@ async function getVersion(binPath: string): Promise<string | null> {
   }
 }
 
+async function checkLatestVersion(): Promise<string | null> {
+  try {
+    const response = await fetch(
+      "https://api.github.com/repos/rtk-ai/rtk/releases/latest",
+      { headers: { "Accept": "application/json" }, signal: AbortSignal.timeout(5000) },
+    );
+    if (!response.ok) return null;
+    const data = await response.json() as any;
+    return data.tag_name as string;
+  } catch {
+    return null;
+  }
+}
+
 export const rtkBinary = {
   detectPlatform,
   detectArch,
@@ -146,6 +177,20 @@ export const rtkBinary = {
   binaryPath,
   rtkDir,
   checksumPath,
+
+  async currentVersion(): Promise<string | null> {
+    const stored = await readVersion();
+    if (stored) return stored;
+    const bin = binaryPath();
+    if (existsSync(bin)) {
+      const v = await getVersion(bin);
+      if (v) {
+        await writeVersion(v);
+        return v;
+      }
+    }
+    return null;
+  },
 
   async isInstalled(): Promise<boolean> {
     return existsSync(binaryPath());
@@ -160,13 +205,19 @@ export const rtkBinary = {
     return actual === saved.trim().toLowerCase();
   },
 
-  async ensureBinary(): Promise<string> {
+  async checkLatestVersion(): Promise<string | null> {
+    return checkLatestVersion();
+  },
+
+  async ensureBinary(version?: string): Promise<string> {
+    const ver = version || (await readVersion()) || "v0.44.0";
+
     if (await this.isInstalled()) {
       const valid = await this.verifyChecksum();
       if (valid) {
-        const version = await getVersion(binaryPath());
-        if (version) {
-          logger.info(`RTK binary already installed (${version})`);
+        const binVersion = await getVersion(binaryPath());
+        if (binVersion) {
+          logger.info(`RTK binary already installed (${binVersion})`);
           return binaryPath();
         }
       } else {
@@ -174,17 +225,34 @@ export const rtkBinary = {
       }
     }
 
-    const info = getBinaryInfo();
-    const archive = await downloadBinary(info);
+    const targetVer = version || ver;
+    const archive = await downloadBinary(targetVer);
     const binPath = await extractBinary(archive);
 
     const hash = await computeChecksum(binPath);
     await writeFile(checksumPath(), hash);
 
-    const version = await getVersion(binPath);
-    if (version) logger.success(`RTK ${version} installed at ${binPath}`);
+    const binVersion = await getVersion(binPath);
+    const versionStr = binVersion || targetVer;
+    await writeVersion(versionStr);
+
+    if (binVersion) logger.success(`RTK ${binVersion} installed at ${binPath}`);
 
     return binPath;
+  },
+
+  async update(): Promise<string> {
+    const latest = await checkLatestVersion();
+    if (!latest) throw new Error("Could not fetch latest RTK version");
+
+    const current = await this.currentVersion();
+    if (current && current === latest) {
+      logger.info("RTK already at latest version");
+      return binaryPath();
+    }
+
+    logger.info(`Updating RTK from ${current || "unknown"} to ${latest}`);
+    return this.ensureBinary(latest);
   },
 
   async getVersion(): Promise<string | null> {
@@ -193,6 +261,6 @@ export const rtkBinary = {
   },
 
   getDownloadUrl(): string {
-    return downloadUrl();
+    return downloadUrl("v0.44.0");
   },
 };

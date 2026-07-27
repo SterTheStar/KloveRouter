@@ -6,4 +6,6 @@ export interface CavemanStatus {
   installed: boolean;
   version: string | null;
   skillPath: string | null;
+  latestVersion: string | null;
+  updateAvailable: boolean;
 }

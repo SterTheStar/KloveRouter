@@ -140,6 +140,20 @@ export default function SettingsPage({
     }
   };
 
+  const updateRtk = async () => {
+    setRtkLoading(true);
+    try {
+      const result = await rtk.update();
+      notifySuccess(result.message || "RTK updated");
+      const status = await rtk.status();
+      setRtkStatus(status);
+    } catch (e: any) {
+      notifyError("RTK update failed", e.message);
+    } finally {
+      setRtkLoading(false);
+    }
+  };
+
   const toggleCaveman = async () => {
     setCavemanToggling(true);
     try {
@@ -179,6 +193,20 @@ export default function SettingsPage({
       setCavemanStatus(status);
     } catch (e: any) {
       notifyError("Caveman install failed", e.message);
+    } finally {
+      setCavemanLoading(false);
+    }
+  };
+
+  const updateCaveman = async () => {
+    setCavemanLoading(true);
+    try {
+      const result = await caveman.update();
+      notifySuccess(result.message || "Caveman updated");
+      const status = await caveman.status();
+      setCavemanStatus(status);
+    } catch (e: any) {
+      notifyError("Caveman update failed", e.message);
     } finally {
       setCavemanLoading(false);
     }
@@ -275,8 +303,10 @@ export default function SettingsPage({
                   </div>
                   <div className="text-xs text-muted-foreground">
                     {rtkStatus?.installed
-                      ? `Binary installed${rtkStatus.version ? ` (${rtkStatus.version})` : ""}`
-                      : "Binary not installed"}
+                      ? rtkStatus.version
+                        ? `v${rtkStatus.version.replace(/^rtk\s*/, "")}`
+                        : "Installed"
+                      : "Not installed"}
                   </div>
                 </div>
               </div>
@@ -295,6 +325,21 @@ export default function SettingsPage({
                     )}
                   </Button>
                 )}
+                {rtkStatus?.installed && rtkStatus?.updateAvailable && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={updateRtk}
+                    disabled={rtkLoading}
+                    className="border-amber-500/50 text-amber-600 hover:bg-amber-500/10"
+                  >
+                    {rtkLoading ? (
+                      <LoaderCircle className="size-4 animate-spin" />
+                    ) : (
+                      `Update to ${rtkStatus.latestVersion}`
+                    )}
+                  </Button>
+                )}
                 <Switch
                   checked={rtkStatus?.enabled ?? false}
                   onCheckedChange={toggleRtk}
@@ -303,6 +348,11 @@ export default function SettingsPage({
                 />
               </div>
             </div>
+            {rtkStatus?.installed && rtkStatus?.latestVersion && !rtkStatus?.updateAvailable && (
+              <div className="text-xs text-muted-foreground">
+                Latest: {rtkStatus.latestVersion} — up to date
+              </div>
+            )}
             {rtkStatus?.platform && rtkStatus?.arch && (
               <Separator />
             )}
@@ -330,8 +380,10 @@ export default function SettingsPage({
                 </div>
                 <div className="text-xs text-muted-foreground">
                   {cavemanStatus?.installed
-                    ? `Skill installed (v${cavemanStatus.version})`
-                    : "Skill not installed"}
+                    ? cavemanStatus.version
+                      ? `${cavemanStatus.version}`
+                      : "Installed"
+                    : "Not installed"}
                 </div>
               </div>
               <div className="flex items-center gap-2">
@@ -349,6 +401,21 @@ export default function SettingsPage({
                     )}
                   </Button>
                 )}
+                {cavemanStatus?.installed && cavemanStatus?.updateAvailable && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={updateCaveman}
+                    disabled={cavemanLoading}
+                    className="border-amber-500/50 text-amber-600 hover:bg-amber-500/10"
+                  >
+                    {cavemanLoading ? (
+                      <LoaderCircle className="size-4 animate-spin" />
+                    ) : (
+                      `Update to ${cavemanStatus.latestVersion}`
+                    )}
+                  </Button>
+                )}
                 <Switch
                   checked={cavemanStatus?.enabled ?? false}
                   onCheckedChange={toggleCaveman}
@@ -357,6 +424,11 @@ export default function SettingsPage({
                 />
               </div>
             </div>
+            {cavemanStatus?.installed && cavemanStatus?.latestVersion && !cavemanStatus?.updateAvailable && (
+              <div className="text-xs text-muted-foreground">
+                Latest: {cavemanStatus.latestVersion} — up to date
+              </div>
+            )}
             {cavemanStatus?.installed && (
               <>
                 <Separator />

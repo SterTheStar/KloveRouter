@@ -50,6 +50,15 @@ export const rtkPlugin = (app: Elysia) =>
         set.status = 500;
         return { success: false, message: error.message };
       }
+    })
+    .post("/api/rtk/update", async ({ set }) => {
+      try {
+        const binPath = await rtkBinary.update();
+        return { success: true, binaryPath: binPath, message: "RTK updated" };
+      } catch (error: any) {
+        set.status = 500;
+        return { success: false, message: error.message };
+      }
     });
 
 export function initRtkOnStartup(): void {

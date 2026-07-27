@@ -1,7 +1,7 @@
 import { getDb } from "../../db/connection";
 import { getCavemanPrompt } from "./caveman.prompt";
 import { cavemanBinary } from "./caveman.binary";
-import type { CavemanLevel } from "./caveman.types";
+import type { CavemanLevel, CavemanStatus } from "./caveman.types";
 
 const VALID_LEVELS: CavemanLevel[] = [
   "lite", "full", "ultra",
@@ -66,18 +66,34 @@ export async function injectCavemanPrompt(messages: any[]): Promise<any[]> {
   return [{ role: "system", content: prompt }, ...messages];
 }
 
-export async function getCavemanStatus(): Promise<{
-  enabled: boolean;
-  level: CavemanLevel;
-  installed: boolean;
-  version: string | null;
-  skillPath: string | null;
-}> {
+function normalizeVersion(v: string | null): string {
+  if (!v) return "";
+  return v.replace(/^v/, "").trim();
+}
+
+export async function getCavemanStatus(): Promise<CavemanStatus> {
+  const installed = await cavemanBinary.isInstalled();
+  const version = await cavemanBinary.currentVersion();
+
+  const [latestVersion, updateAvailable] = installed
+    ? await Promise.all([
+        cavemanBinary.checkLatestVersion(),
+        cavemanBinary.currentVersion().then((cur) =>
+          cavemanBinary.checkLatestVersion().then((latest) => {
+            if (!latest) return false;
+            return normalizeVersion(latest) !== normalizeVersion(cur);
+          }),
+        ),
+      ])
+    : [null, false];
+
   return {
     enabled: isCavemanEnabled(),
     level: getCavemanLevel(),
-    installed: await cavemanBinary.isInstalled(),
-    version: "1.9.1",
-    skillPath: await cavemanBinary.isInstalled() ? cavemanBinary.skillPath() : null,
+    installed,
+    version,
+    skillPath: installed ? cavemanBinary.skillPath() : null,
+    latestVersion,
+    updateAvailable,
   };
 }

@@ -19,6 +19,8 @@ export interface RtkStatus {
   pid: number | null;
   configPath: string | null;
   downloadUrl: string | null;
+  latestVersion: string | null;
+  updateAvailable: boolean;
 }
 
 export interface RtkConfig {
