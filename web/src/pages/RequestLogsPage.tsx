@@ -260,15 +260,21 @@ export default function RequestLogsPage() {
                       </div>
                     </td>
                     <td className="p-3">
-                      <div>{formatNumber(log.tokens_total)} tokens</div>
-                      <div className="mt-1 text-xs text-muted-foreground">
-                        In {formatNumber(log.tokens_prompt)} · Out{" "}
-                        {formatNumber(log.tokens_completion)}
-                      </div>
-                      {log.tokens_cache_read > 0 && (
-                        <div className="text-xs text-blue-500">
-                          Cache {formatNumber(log.tokens_cache_read)}
-                        </div>
+                      {log.tokens_total === 0 && log.status === "success" ? (
+                        <div className="text-xs text-muted-foreground">Not supported</div>
+                      ) : (
+                        <>
+                          <div>{formatNumber(log.tokens_total)} tokens</div>
+                          <div className="mt-1 text-xs text-muted-foreground">
+                            In {formatNumber(log.tokens_prompt)} · Out{" "}
+                            {formatNumber(log.tokens_completion)}
+                          </div>
+                          {log.tokens_cache_read > 0 && (
+                            <div className="text-xs text-blue-500">
+                              Cache {formatNumber(log.tokens_cache_read)}
+                            </div>
+                          )}
+                        </>
                       )}
                     </td>
                     <td className="p-3 font-medium">
