@@ -1,4 +1,5 @@
 import { logger } from "../../logger";
+import { credentialService } from "../../services/credential.service";
 
 const DEFAULT_BASE_URL = "https://www.codebuff.com";
 const AGENTS_URL =
@@ -14,6 +15,7 @@ const CLI_USER_AGENT = "Freebuff-CLI/0.0.105";
 type FreebuffCredential = {
   id: string;
   secret?: string | null;
+  fingerprint_json?: string | null;
 };
 
 type Session = {
@@ -37,6 +39,7 @@ type Session = {
 };
 
 const sessions = new Map<string, Session>();
+const sessionLocks = new Map<string, Promise<Session>>();
 const usageSnapshots = new Map<string, { fetchedAt: number; value: any }>();
 const USAGE_REFRESH_INTERVAL = 10 * 60 * 1000;
 const SESSION_IDLE_TIMEOUT = 10 * 60 * 1000;
@@ -75,9 +78,39 @@ async function request(
 ) {
   const headers = new Headers(init.headers);
   headers.set("Authorization", `Bearer ${tokenOf(credential)}`);
-  headers.set("User-Agent", USER_AGENT);
+  if (!headers.has("User-Agent")) headers.set("User-Agent", USER_AGENT);
   headers.set("Accept", "application/json, text/event-stream");
   return fetch(url, { ...init, headers });
+}
+
+function credentialMetadata(credential: FreebuffCredential) {
+  try {
+    const parsed = credential.fingerprint_json
+      ? JSON.parse(credential.fingerprint_json)
+      : {};
+    return {
+      fingerprintId: parsed.fingerprintId as string | undefined,
+      fingerprintHash: parsed.fingerprintHash as string | undefined,
+      instanceId: parsed.instanceId as string | undefined,
+    };
+  } catch {
+    return {};
+  }
+}
+
+function instanceIdFor(credential: FreebuffCredential) {
+  return credentialMetadata(credential).instanceId || `klove-${credential.id}`;
+}
+
+async function persistInstanceId(credential: FreebuffCredential, instanceId: string) {
+  const metadata = credentialMetadata(credential);
+  if (metadata.instanceId === instanceId) return;
+  const fingerprint_json = JSON.stringify({
+    ...credentialMetadata(credential),
+    instanceId,
+  });
+  credential.fingerprint_json = fingerprint_json;
+  credentialService.update(credential.id, { fingerprint_json });
 }
 
 async function jsonError(response: Response, action: string) {
@@ -85,7 +118,7 @@ async function jsonError(response: Response, action: string) {
   throw new Error(`${action} failed (${response.status}): ${text.slice(0, 1000)}`);
 }
 
-async function ensureSession(
+async function createSession(
   credential: FreebuffCredential,
   endpoint: string,
   model: string,
@@ -103,6 +136,7 @@ async function ensureSession(
     headers: {
       "Content-Type": "application/json",
       "User-Agent": CLI_USER_AGENT,
+      "x-freebuff-instance-id": instanceIdFor(credential),
       "x-freebuff-model": model,
     },
     body: "{}",
@@ -122,6 +156,7 @@ async function ensureSession(
         headers: {
           "Content-Type": "application/json",
           "User-Agent": CLI_USER_AGENT,
+          "x-freebuff-instance-id": instanceIdFor(credential),
           "x-freebuff-model": model,
         },
         body: "{}",
@@ -177,7 +212,88 @@ async function ensureSession(
     endpoint: baseUrl(endpoint),
   } satisfies Session;
   sessions.set(credential.id, session);
+  await persistInstanceId(credential, state.instanceId);
   return session;
+}
+
+async function ensureSession(
+  credential: FreebuffCredential,
+  endpoint: string,
+  model: string,
+): Promise<Session> {
+  const existing = sessionLocks.get(credential.id);
+  if (existing) return existing;
+  const operation = ensureSessionUnlocked(credential, endpoint, model);
+  sessionLocks.set(credential.id, operation);
+  try {
+    return await operation;
+  } finally {
+    if (sessionLocks.get(credential.id) === operation) sessionLocks.delete(credential.id);
+  }
+}
+
+async function ensureSessionUnlocked(
+  credential: FreebuffCredential,
+  endpoint: string,
+  model: string,
+): Promise<Session> {
+  const current = sessions.get(credential.id);
+  const instanceId = current?.instanceId || instanceIdFor(credential);
+  const response = await request(credential, `${baseUrl(endpoint)}/api/v1/freebuff/session`, {
+    method: "GET",
+    headers: {
+      "User-Agent": CLI_USER_AGENT,
+      "x-freebuff-instance-id": instanceId,
+    },
+  });
+  if (response.ok) {
+    const state = (await response.json()) as any;
+    if (state.status === "active" && state.instanceId && state.model === model) {
+      const session: Session = {
+        ...state,
+        instanceId: state.instanceId,
+        model,
+        expiresAt: state.expiresAt ? Date.parse(state.expiresAt) : undefined,
+        lastUsedAt: Date.now(),
+        inFlight: current?.inFlight ?? 0,
+        credential,
+        endpoint: baseUrl(endpoint),
+      };
+      sessions.set(credential.id, session);
+      await persistInstanceId(credential, state.instanceId);
+      return session;
+    }
+    if (state.status === "active" && state.model && state.model !== model) {
+      await endSession(credential, endpoint);
+    } else if (state.status === "queued") {
+      for (let attempt = 0; attempt < 30; attempt++) {
+        await new Promise((resolve) => setTimeout(resolve, Math.max(500, Math.min(state.estimatedWaitMs || 1000, 3000))));
+        const poll = await request(credential, `${baseUrl(endpoint)}/api/v1/freebuff/session`, {
+          method: "GET",
+          headers: { "User-Agent": CLI_USER_AGENT, "x-freebuff-instance-id": instanceId },
+        });
+        if (!poll.ok) break;
+        const next = (await poll.json()) as any;
+        if (next.status === "active" && next.model === model) {
+          const session: Session = {
+            ...next,
+            instanceId: next.instanceId,
+            model,
+            expiresAt: next.expiresAt ? Date.parse(next.expiresAt) : undefined,
+            lastUsedAt: Date.now(),
+            inFlight: 0,
+            credential,
+            endpoint: baseUrl(endpoint),
+          };
+          sessions.set(credential.id, session);
+          await persistInstanceId(credential, next.instanceId);
+          return session;
+        }
+      }
+      throw new Error("Freebuff waiting room did not become active");
+    }
+  }
+  return createSession(credential, endpoint, model);
 }
 
 function isModelLockError(status: number, body: string) {
@@ -212,7 +328,7 @@ async function endSession(credential: FreebuffCredential, endpoint: string) {
       method: "DELETE",
       headers: {
         "User-Agent": CLI_USER_AGENT,
-        ...(current?.instanceId ? { "x-freebuff-instance-id": current.instanceId } : {}),
+        "x-freebuff-instance-id": current?.instanceId || instanceIdFor(credential),
       },
     },
   );

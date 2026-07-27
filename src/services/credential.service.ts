@@ -91,6 +91,7 @@ export const credentialService = {
       access_token: decryptSecret(credential.access_token),
       refresh_token: decryptSecret(credential.refresh_token),
       id_token: decryptSecret(credential.id_token),
+      fingerprint_json: decryptSecret(credential.fingerprint_json),
     };
   },
 
@@ -164,7 +165,7 @@ export const credentialService = {
         input.project_id ?? null,
         input.managed_project_id ?? null,
         input.expires_at ?? null,
-        input.fingerprint_json ?? null,
+        encryptSecret(input.fingerprint_json),
         input.quota_json ?? null,
       );
     return toPublic(this.findById(id)!);
@@ -225,7 +226,9 @@ export const credentialService = {
             updates[index]?.split(" ")[0],
           )
             ? encryptSecret(value as string | null)
-            : value,
+            : updates[index]?.startsWith("fingerprint_json ")
+              ? encryptSecret(value as string | null)
+              : value,
         ),
       );
     const result = this.findById(id);

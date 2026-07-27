@@ -142,10 +142,18 @@ export const providersPlugin = (app: Elysia) =>
           set.status = 404;
           return { error: "Provider not found" };
         }
+        const fingerprint_json =
+          body.fingerprint_id || body.fingerprint_hash
+            ? JSON.stringify({
+                fingerprintId: body.fingerprint_id,
+                fingerprintHash: body.fingerprint_hash,
+              })
+            : body.fingerprint_json;
         return credentialService.create({
           ...body,
           provider_id: id,
           kind: body.kind ?? "api_key",
+          fingerprint_json,
         });
       },
       {
@@ -166,6 +174,9 @@ export const providersPlugin = (app: Elysia) =>
           account_id: t.Optional(t.String()),
           email: t.Optional(t.String()),
           project_id: t.Optional(t.String()),
+          fingerprint_json: t.Optional(t.String()),
+          fingerprint_id: t.Optional(t.String()),
+          fingerprint_hash: t.Optional(t.String()),
         }),
       },
     )
