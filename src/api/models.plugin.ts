@@ -18,7 +18,29 @@ import {
 } from "../integrations/antigravity";
 import { logger } from "../logger";
 import { generateDisplayName } from "../services/model-name";
-import { freebuffModels } from "../integrations/freebuff";
+import { freebuffModels, freebuffResponses } from "../integrations/freebuff";
+
+async function freebuffTest(
+  model: string,
+  credential: { id: string; secret?: string | null },
+  endpoint: string,
+) {
+  const response = await freebuffResponses(
+    {
+      model,
+      messages: [{ role: "user", content: "Say 'ok' and nothing else." }],
+      max_tokens: 10,
+      stream: false,
+    },
+    model,
+    credential,
+    endpoint,
+  );
+  if (!response.ok) {
+    throw new Error(`Freebuff test failed (${response.status})`);
+  }
+  return response.json();
+}
 
 export const modelsPlugin = (app: Elysia) =>
   app
@@ -365,7 +387,9 @@ export const modelsPlugin = (app: Elysia) =>
                       credential.secret ?? undefined,
                     ),
                   )
-                : await createOpenAIClient(
+                : provider.protocol === "freebuff"
+                  ? await freebuffTest(model.model_id, credential, provider.base_url)
+                  : await createOpenAIClient(
                     credentialProvider,
                   ).chat.completions.create({
                     model: model.model_id,
