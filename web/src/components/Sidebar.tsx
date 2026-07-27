@@ -24,12 +24,12 @@ const items = [
 ];
 
 function BuyMeACoffeeButton() {
-  const srcDoc = `<!doctype html><html><head><meta charset="utf-8"><style>html,body{width:240px;height:50px;margin:0;background:transparent;overflow:hidden}body{display:flex;justify-content:center;align-items:center}</style></head><body><script type='text/javascript' src='https://storage.ko-fi.com/cdn/widget/Widget_2.js'></script><script type='text/javascript'>kofiwidget2.init('Support me on Ko-fi', '#ff5c38', 'V7V11EYI5U');kofiwidget2.draw();</script></body></html>`;
+  const srcDoc = `<!doctype html><html><head><meta charset="utf-8"><style>html,body{width:100%;height:50px;margin:0;background:transparent;overflow:hidden}body{display:flex;justify-content:center;align-items:center}</style></head><body><script type='text/javascript' src='https://storage.ko-fi.com/cdn/widget/Widget_2.js'></script><script type='text/javascript'>kofiwidget2.init('Support me on Ko-fi', '#ff5c38', 'V7V11EYI5U');kofiwidget2.draw();</script></body></html>`;
   return (
     <div className="mb-3 flex h-[50px] w-full items-start justify-center overflow-hidden rounded-xl">
       <iframe
         title="Support me on Ko-fi"
-        className="block h-[50px] w-[240px] shrink-0 rounded-xl border-0"
+        className="block h-[50px] w-full shrink-0 rounded-xl border-0"
         sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"
         srcDoc={srcDoc}
       />
