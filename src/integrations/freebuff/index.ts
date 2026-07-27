@@ -267,7 +267,10 @@ export async function freebuffResponses(
   endpoint?: string,
 ) {
   const upstream = baseUrl(endpoint);
-  const agentId = await freebuffAgentForModel(model);
+  // Free mode requires the run root to be one of Freebuff's allowlisted
+  // orchestrators. The dynamically parsed catalog can also contain helper
+  // subagents, which cannot be used as the top-level run.
+  const agentId = freebuffRootAgentForModel(model);
   let session = await ensureSession(credential, upstream, model);
   session.lastUsedAt = Date.now();
   session.inFlight += 1;
@@ -584,4 +587,19 @@ async function freebuffAgentForModel(model: string) {
   const agent = modelAgents.get(model);
   if (!agent) throw new Error(`Freebuff model not found: ${model}`);
   return agent;
+}
+
+function freebuffRootAgentForModel(model: string) {
+  const roots: Record<string, string> = {
+    "deepseek/deepseek-v4-pro": "base2-free-deepseek",
+    "deepseek/deepseek-v4-flash": "base2-free-deepseek-flash",
+    "minimax/minimax-m2.7": "base2-free",
+    "minimax/minimax-m3": "base2-free-minimax-m3",
+    "moonshotai/kimi-k2.6": "base2-free-kimi",
+    "moonshotai/kimi-k2.7": "base2-free-kimi",
+    "mimo/mimo-v2.5-pro": "base2-free-mimo-pro",
+    "mimo/mimo-v2.5": "base2-free-mimo",
+    "z-ai/glm-5.2": "base2-free-glm",
+  };
+  return roots[model] ?? "base2-free";
 }
