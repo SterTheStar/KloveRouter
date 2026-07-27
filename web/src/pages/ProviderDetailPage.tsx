@@ -1160,23 +1160,19 @@ export default function ProviderDetailPage({
                     </Badge>
                   </TableCell>
                   <TableCell>
-                    {provider.protocol === "qwen" && model.is_active === 0 ? (
-                      <Badge variant="outline" className="text-muted-foreground">Not supported</Badge>
-                    ) : (
-                      <Switch
-                        checked={model.is_active === 1}
-                        onCheckedChange={async () => {
-                          const updated = await modelsApi.toggle(model.id);
-                          setList((items) =>
-                            items.map((item) =>
-                              item.id === model.id
-                                ? { ...item, is_active: updated.is_active }
-                                : item,
-                            ),
-                          );
-                        }}
-                      />
-                    )}
+                    <Switch
+                      checked={model.is_active === 1}
+                      onCheckedChange={async () => {
+                        const updated = await modelsApi.toggle(model.id);
+                        setList((items) =>
+                          items.map((item) =>
+                            item.id === model.id
+                              ? { ...item, is_active: updated.is_active }
+                              : item,
+                          ),
+                        );
+                      }}
+                    />
                   </TableCell>
                   <TableCell>
                     <div className="flex justify-center gap-1">

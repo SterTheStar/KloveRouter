@@ -111,7 +111,7 @@ export async function qwenModels(
     .map((m: any) => ({
       id: m.id,
       display_name: m.display_name || m.id,
-      is_thinking_model: !!m.info?.meta?.capabilities?.thinking,
+      is_thinking_model: m.info?.meta?.think_skip?.enable === false,
     }));
 }
 
