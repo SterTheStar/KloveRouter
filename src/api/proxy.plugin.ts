@@ -537,7 +537,17 @@ export const proxyPlugin = (app: Elysia) =>
         }
         body.messages = await injectCavemanPrompt(body.messages);
         body.messages = await customSkillsProxy.injectSkills(body.messages);
-        const rtkActive = rtkManager.enabled && rtkManager.initialized;
+        if (rtkManager.enabled && rtkManager.initialized) {
+          const lastUserIdx = body.messages.length - 1;
+          const lastMsg = body.messages[lastUserIdx];
+          if (lastMsg?.role === "user" && typeof lastMsg.content === "string") {
+            const result = await rtkManager.compress(lastMsg.content);
+            if (result && result.savedPercent > 0) {
+              body.messages[lastUserIdx] = { ...lastMsg, content: result.compressed };
+              logger.info(`RTK compressed input: ${result.originalChars}→${result.compressedChars} chars (-${result.savedPercent}%)`);
+            }
+          }
+        }
         const apiKey = await verifyApiKey(headers);
         if (!apiKey) {
           set.status = 401;
@@ -1077,24 +1087,7 @@ export const proxyPlugin = (app: Elysia) =>
                 stream_options: { include_usage: true },
               })) as any;
 
-              let streamContent = "";
-              const wrappedStream = {
-                [Symbol.asyncIterator]() {
-                  const iter = stream[Symbol.asyncIterator]();
-                  return {
-                    async next() {
-                      const result = await iter.next();
-                      if (!result.done && result.value?.choices?.[0]?.delta?.content) {
-                        streamContent += result.value.choices[0].delta.content;
-                      }
-                      return result;
-                    },
-                  };
-                },
-                controller: stream.controller,
-              };
-
-              return openAIStreamResponse(wrappedStream, {
+              return openAIStreamResponse(stream, {
                 start,
                 tokenDetails,
                 onComplete: ({
@@ -1125,13 +1118,6 @@ export const proxyPlugin = (app: Elysia) =>
                   });
                   credentialService.clearError(credentialId);
                   credentialService.clearCooldown(credentialId);
-                  if (rtkActive && streamContent) {
-                    rtkManager.compress(streamContent).then((result) => {
-                      if (result) {
-                        logger.info(`RTK compressed stream ${parsed.modelId}: ${result.originalChars}→${result.compressedChars} chars (-${result.savedPercent}%)`);
-                      }
-                    });
-                  }
                 },
                 onError: (error, stats) => {
                   credentialService.markError(credentialId, error.message);
@@ -1232,13 +1218,6 @@ export const proxyPlugin = (app: Elysia) =>
               });
 
               credentialService.clearError(credential.id);
-              if (rtkActive && completion.choices?.[0]?.message?.content) {
-                const result = await rtkManager.compress(completion.choices[0].message.content);
-                if (result) {
-                  completion.choices[0].message.content = result.compressed;
-                  logger.info(`RTK compressed ${parsed.modelId}: ${result.originalChars}→${result.compressedChars} chars (-${result.savedPercent}%)`);
-                }
-              }
               return completion;
             } catch (error: any) {
               failures.push(error.message);
