@@ -67,20 +67,20 @@ export const providers = {
     api_key?: string;
     auth_code?: string;
     avatar?: string;
-    protocol?: "openai" | "anthropic" | "codex" | "antigravity" | "freebuff";
-  }) =>
-    request<import("../types").Provider>("/api/providers", {
-      method: "POST",
-      body: JSON.stringify(data),
-    }),
-  update: (
-    id: string,
-    data: {
-      name?: string;
-      base_url?: string;
-      api_key?: string;
-      avatar?: string | null;
-      protocol?: "openai" | "anthropic" | "codex" | "antigravity" | "freebuff";
+     protocol?: "openai" | "anthropic" | "codex" | "antigravity" | "freebuff" | "qwen";
+   }) =>
+     request<import("../types").Provider>("/api/providers", {
+       method: "POST",
+       body: JSON.stringify(data),
+     }),
+   update: (
+     id: string,
+     data: {
+       name?: string;
+       base_url?: string;
+       api_key?: string;
+       avatar?: string | null;
+       protocol?: "openai" | "anthropic" | "codex" | "antigravity" | "freebuff" | "qwen";
       credential_mode?: "fixed" | "round_robin";
       fixed_credential_id?: string | null;
       is_active?: number;
@@ -106,7 +106,7 @@ export const providers = {
     id: string,
     data: {
       label: string;
-      kind?: "api_key" | "codex" | "antigravity" | "freebuff";
+      kind?: "api_key" | "codex" | "antigravity" | "freebuff" | "qwen";
       secret?: string;
       access_token?: string;
       refresh_token?: string;

@@ -175,6 +175,8 @@ const providerDescriptions: Record<string, string> = {
     "ChatGPT OAuth access for OpenAI Codex models with account-based usage limits.",
   freebuff:
     "Free Codebuff/Freebuff models through a token-authenticated OpenAI-compatible gateway.",
+  qwen:
+    "Qwen AI models through an OpenAI-compatible gateway. Uses a Bearer token extracted from chat.qwen.ai.",
   blueminds:
     "An OpenAI-compatible gateway for accessing hosted language models through BlueMinds.",
   agnes:
@@ -286,6 +288,15 @@ const providerTypes = [
     description: providerDescriptions.freebuff,
     logo: freebuffLogo,
     placeholder: "https://www.codebuff.com",
+    preset: false,
+  },
+  {
+    id: "qwen",
+    protocol: "qwen" as const,
+    name: "Qwen",
+    description: providerDescriptions.qwen,
+    logo: "https://assets.alicdn.com/g/qwenweb/qwen-webui-fe/0.0.201/favicon.png",
+    placeholder: "https://qwen.aikit.club",
     preset: false,
   },
   ...openAiCompatiblePresets.map(([id, name, placeholder]) => ({
@@ -499,7 +510,7 @@ export default function AddProviderModal({
         "Connect your Codex account before adding this provider.",
       );
     }
-    if (!name || !baseUrl || (selectedType?.protocol === "freebuff" ? !authCode : !apiKey))
+    if (!name || !baseUrl || (selectedType?.protocol === "freebuff" || selectedType?.protocol === "qwen" ? !authCode : !apiKey))
       return setError("All fields are required.");
     setLoading(true);
     setError(null);
@@ -507,7 +518,7 @@ export default function AddProviderModal({
       await providers.create({
         name,
         base_url: baseUrl,
-        ...(selectedType?.protocol === "freebuff"
+        ...(selectedType?.protocol === "freebuff" || selectedType?.protocol === "qwen"
           ? { auth_code: authCode }
           : { api_key: apiKey }),
         protocol: selectedType?.protocol,
@@ -725,24 +736,59 @@ export default function AddProviderModal({
               {selectedType?.protocol !== "codex" &&
                 selectedType?.protocol !== "antigravity" && (
                   <div className="space-y-2">
-                    <Label htmlFor="provider-key">
-                      {selectedType?.protocol === "freebuff" ? "Auth code" : "API key"}
+                     <Label htmlFor="provider-key">
+                      {selectedType?.protocol === "freebuff" || selectedType?.protocol === "qwen" ? "Auth code" : "API key"}
                     </Label>
                     <Input
                       id="provider-key"
                       type="password"
-                      value={selectedType?.protocol === "freebuff" ? authCode : apiKey}
+                      value={selectedType?.protocol === "freebuff" || selectedType?.protocol === "qwen" ? authCode : apiKey}
                       onChange={(e) =>
-                        selectedType?.protocol === "freebuff"
+                        selectedType?.protocol === "freebuff" || selectedType?.protocol === "qwen"
                           ? setAuthCode(e.target.value)
                           : setApiKey(e.target.value)
                       }
-                      placeholder={selectedType?.protocol === "freebuff" ? "Paste your Freebuff auth code" : "sk-..."}
+                      placeholder={selectedType?.protocol === "freebuff" || selectedType?.protocol === "qwen" ? "Paste your auth token" : "sk-..."}
                     />
-                    {selectedType?.protocol === "freebuff" && (
-                      <p className="text-xs text-muted-foreground">
-                        Use the auth code from your Freebuff account or CLI. It is encrypted before being stored.
-                      </p>
+                    {(selectedType?.protocol === "freebuff" || selectedType?.protocol === "qwen") && (
+                      selectedType?.protocol === "qwen" ? (
+                        <div className="space-y-3 rounded-lg border border-dashed p-3 text-xs text-muted-foreground">
+                          <p className="font-medium text-foreground">How to get your Qwen token:</p>
+                          <ol className="list-inside list-decimal space-y-1">
+                            <li>Go to <a href="https://chat.qwen.ai" target="_blank" rel="noreferrer" className="text-primary underline underline-offset-2">chat.qwen.ai</a> and log in</li>
+                            <li>Open browser DevTools (<kbd className="rounded border bg-muted px-1 font-mono">F12</kbd> → Console)</li>
+                            <li>Copy and paste this code:</li>
+                          </ol>
+                          <div className="relative">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const code = `javascript:(()=>{\n  if (location.hostname !== "chat.qwen.ai")\n    return alert("🚀 Use em chat.qwen.ai");\n  const token = localStorage.getItem("token");\n  if (!token)\n    return console.log("❌ Token n\u00e3o encontrado");\n  console.log("🔑 Qwen access_token:\\n", token);\n})();`;
+                                navigator.clipboard.writeText(code);
+                              }}
+                              className="absolute right-1 top-1 rounded px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground hover:bg-muted-foreground/10 hover:text-foreground"
+                            >
+                              Copy
+                            </button>
+                            <pre className="overflow-x-auto rounded bg-muted p-2 pt-5 font-mono text-[11px] leading-relaxed">
+{`javascript:(()=>{
+  if (location.hostname !== "chat.qwen.ai")
+    return alert("🚀 Use em chat.qwen.ai");
+  const token = localStorage.getItem("token");
+  if (!token)
+    return console.log("❌ Token n\u00e3o encontrado");
+  console.log("🔑 Qwen access_token:\\n", token);
+})();`}
+                            </pre>
+                          </div>
+                          <p>Press <kbd className="rounded border bg-muted px-1 font-mono">Enter</kbd>, then copy the token that appears in the console and paste it above.</p>
+                          <p className="text-muted-foreground">The token is encrypted before being stored.</p>
+                        </div>
+                      ) : (
+                        <p className="text-xs text-muted-foreground">
+                          Use the auth code from your Freebuff account or CLI. It is encrypted before being stored.
+                        </p>
+                      )
                     )}
                   </div>
                 )}

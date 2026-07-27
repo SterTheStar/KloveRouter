@@ -19,6 +19,7 @@ import {
 import { logger } from "../logger";
 import { generateDisplayName } from "../services/model-name";
 import { freebuffModels, freebuffResponses } from "../integrations/freebuff";
+import { qwenModels, qwenResponses } from "../integrations/qwen";
 
 async function freebuffTest(
   model: string,
@@ -38,6 +39,28 @@ async function freebuffTest(
   );
   if (!response.ok) {
     throw new Error(`Freebuff test failed (${response.status})`);
+  }
+  return response.json();
+}
+
+async function qwenTest(
+  model: string,
+  credential: { id: string; secret?: string | null },
+  endpoint: string,
+) {
+  const response = await qwenResponses(
+    {
+      model,
+      messages: [{ role: "user", content: "Say 'ok' and nothing else." }],
+      max_tokens: 10,
+      stream: false,
+    },
+    model,
+    credential,
+    endpoint,
+  );
+  if (!response.ok) {
+    throw new Error(`Qwen test failed (${response.status})`);
   }
   return response.json();
 }
@@ -200,12 +223,30 @@ export const modelsPlugin = (app: Elysia) =>
             };
           }
 
-          if (provider.protocol === "freebuff") {
+           if (provider.protocol === "freebuff") {
             const available = await freebuffModels();
             if (query.preview === true) return preview(available);
             for (const model of available)
               modelService.upsert({ provider_id: id, model_id: model.id, display_name: model.display_name, is_manual: 0 });
             return { success: true, models_found: available.length, message: `Synced ${available.length} Freebuff models from ${provider.name}` };
+          }
+
+          if (provider.protocol === "qwen") {
+            const credential =
+              credentialService.select(
+                provider.id,
+                provider.credential_mode,
+                provider.fixed_credential_id,
+              ) || credentialService.select(provider.id, "round_robin");
+            if (!credential) {
+              set.status = 503;
+              return { error: "No active Qwen credential" };
+            }
+            const available = await qwenModels(credential, provider.base_url);
+            if (query.preview === true) return preview(available);
+            for (const model of available)
+              modelService.upsert({ provider_id: id, model_id: model.id, display_name: model.display_name, is_manual: 0 });
+            return { success: true, models_found: available.length, message: `Synced ${available.length} Qwen models from ${provider.name}` };
           }
 
           const credential =
@@ -388,8 +429,10 @@ export const modelsPlugin = (app: Elysia) =>
                     ),
                   )
                 : provider.protocol === "freebuff"
-                  ? await freebuffTest(model.model_id, credential, provider.base_url)
-                  : await createOpenAIClient(
+                   ? await freebuffTest(model.model_id, credential, provider.base_url)
+                   : provider.protocol === "qwen"
+                     ? await qwenTest(model.model_id, credential, provider.base_url)
+                     : await createOpenAIClient(
                     credentialProvider,
                   ).chat.completions.create({
                     model: model.model_id,

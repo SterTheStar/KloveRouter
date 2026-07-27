@@ -157,7 +157,7 @@ export default function ProviderDetailPage({
     () =>
       credentials.filter((credential) => {
         if (!credential.is_active) return false;
-        if (credential.kind === "api_key" || credential.kind === "freebuff")
+        if (credential.kind === "api_key" || credential.kind === "freebuff" || credential.kind === "qwen")
           return Boolean(credential.masked_secret);
         return Boolean(
           credential.account_id || credential.email || credential.project_id,
@@ -529,17 +529,17 @@ export default function ProviderDetailPage({
     try {
       await providers.addCredential(providerId, {
         label,
-        kind: "freebuff",
+        kind: provider.protocol === "qwen" ? "qwen" : "freebuff",
         secret: authCode,
       });
       if (newKeyLabelRef.current) newKeyLabelRef.current.value = "";
       if (newAuthCodeRef.current) newAuthCodeRef.current.value = "";
       setShowAddKey(false);
-      setSuccess("Freebuff auth code added.");
+      setSuccess(provider.protocol === "qwen" ? "Qwen auth code added." : "Freebuff auth code added.");
       await load();
     } catch (e: any) {
       setError(e.message);
-      notifyError("Could not add Freebuff auth code", e.message);
+      notifyError("Could not add auth code", e.message);
     } finally {
       setAddingKey(false);
     }
@@ -677,11 +677,12 @@ export default function ProviderDetailPage({
           <div className="flex flex-wrap justify-end gap-2">
             {(provider.protocol === "codex" ||
               provider.protocol === "antigravity" ||
-              provider.protocol === "freebuff") && (
+              provider.protocol === "freebuff" ||
+              provider.protocol === "qwen") && (
               <>
                 <Button
                   variant="outline"
-                  onClick={provider.protocol === "freebuff" ? () => {
+                  onClick={provider.protocol === "freebuff" || provider.protocol === "qwen" ? () => {
                     setShowAddKey(true);
                     document.getElementById("provider-credentials")?.scrollIntoView({ behavior: "smooth" });
                   } : addOAuthAccount}
@@ -692,9 +693,9 @@ export default function ProviderDetailPage({
                   ) : (
                     <LoginIcon className="size-4" />
                   )}
-                  {provider.protocol === "freebuff" ? "Add auth code" : "Connect account"}
+                  {provider.protocol === "freebuff" || provider.protocol === "qwen" ? "Add auth code" : "Connect account"}
                 </Button>
-                {provider.protocol !== "freebuff" && credentials.some(
+                {provider.protocol !== "freebuff" && provider.protocol !== "qwen" && credentials.some(
                   (credential) =>
                     (credential.kind === "codex" ||
                       credential.kind === "antigravity") &&
@@ -892,11 +893,11 @@ export default function ProviderDetailPage({
                 )}
               </div>
             </div>
-          ) : provider.protocol === "freebuff" ? (
+          ) : provider.protocol === "freebuff" || provider.protocol === "qwen" ? (
             <div id="provider-credentials" className="space-y-3">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <Label>Freebuff auth codes</Label>
+                  <Label>{provider.protocol === "qwen" ? "Qwen auth codes" : "Freebuff auth codes"}</Label>
                   <p className="text-xs text-muted-foreground">
                     Auth codes are stored encrypted and rotated according to the selected routing strategy.
                   </p>
@@ -911,7 +912,7 @@ export default function ProviderDetailPage({
                 </Button>
               </div>
               <div className="space-y-2">
-                {credentials.filter((credential) => credential.kind === "freebuff").map((credential) => (
+                {credentials.filter((credential) => credential.kind === "freebuff" || credential.kind === "qwen").map((credential) => (
                   <div key={credential.id} className="grid items-center gap-2 border-b border-border/60 py-2 md:grid-cols-[minmax(8rem,0.65fr)_minmax(0,1.8fr)_auto]">
                     <Input value={credential.label} readOnly className="h-9 bg-background" />
                     <Input value={credential.masked_secret ?? "Hidden auth code"} readOnly className="h-9 bg-background font-mono" />
@@ -920,14 +921,14 @@ export default function ProviderDetailPage({
                     </Button>
                   </div>
                 ))}
-                {!credentials.some((credential) => credential.kind === "freebuff") && (
-                  <div className="text-xs text-muted-foreground">No Freebuff auth codes configured.</div>
+                {!credentials.some((credential) => credential.kind === "freebuff" || credential.kind === "qwen") && (
+                  <div className="text-xs text-muted-foreground">No auth codes configured.</div>
                 )}
               </div>
               {showAddKey && (
                 <div className="grid gap-2 rounded-md border border-dashed p-3 md:grid-cols-[1fr_1.5fr_auto]">
                   <Input ref={newKeyLabelRef} placeholder="Auth code label" />
-                  <Input ref={newAuthCodeRef} type="password" placeholder="Paste Freebuff auth code" />
+                    <Input ref={newAuthCodeRef} type="password" placeholder={provider.protocol === "qwen" ? "Paste Qwen auth token" : "Paste Freebuff auth code"} />
                   <Button onClick={addFreebuffAuthCode} disabled={addingKey}>
                     {addingKey ? <LoaderCircle className="size-4 animate-spin" /> : <Add className="size-4" />}
                     Add code

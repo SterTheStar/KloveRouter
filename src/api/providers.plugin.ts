@@ -58,6 +58,7 @@ export const providersPlugin = (app: Elysia) =>
               t.Literal("codex"),
               t.Literal("antigravity"),
               t.Literal("freebuff"),
+              t.Literal("qwen"),
             ]),
           ),
           credential_mode: t.Optional(
@@ -92,6 +93,7 @@ export const providersPlugin = (app: Elysia) =>
               t.Literal("codex"),
               t.Literal("antigravity"),
               t.Literal("freebuff"),
+              t.Literal("qwen"),
             ]),
           ),
           credential_mode: t.Optional(
@@ -127,7 +129,7 @@ export const providersPlugin = (app: Elysia) =>
         if (
           !credential ||
           credential.provider_id !== id ||
-           credential.kind !== "api_key" && credential.kind !== "freebuff"
+           credential.kind !== "api_key" && credential.kind !== "freebuff" && credential.kind !== "qwen"
         ) {
           set.status = 404;
           return { error: "Credential secret not found" };
@@ -165,6 +167,7 @@ export const providersPlugin = (app: Elysia) =>
               t.Literal("codex"),
               t.Literal("antigravity"),
               t.Literal("freebuff"),
+              t.Literal("qwen"),
             ]),
           ),
           secret: t.Optional(t.String()),
