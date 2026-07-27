@@ -1,4 +1,5 @@
 import { logger } from "../../logger";
+import { credentialService } from "../../services/credential.service";
 
 const DEFAULT_BASE_URL = "https://qwen.aikit.club";
 const USER_AGENT = "Klove/1.0.0";
@@ -53,13 +54,30 @@ export async function qwenResponses(
     stream: body.stream ?? false,
   };
 
+  const requestStarted = performance.now();
   const response = await fetch(`${upstream}/v1/chat/completions`, {
     method: "POST",
     headers: headers(credential),
     body: JSON.stringify(payload),
   });
 
-  if (!response.ok) await jsonError(response, "Qwen chat");
+  logger.debug("Qwen response headers received", {
+    model,
+    duration_ms: Math.round(performance.now() - requestStarted),
+    status: response.status,
+  });
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    throw new Error(`Qwen chat failed (${response.status}): ${text.slice(0, 1000)}`);
+  }
+
+  const cloned = response.clone();
+  const preview = await cloned.text().catch(() => "");
+  logger.debug("Qwen response body preview", {
+    preview: preview.slice(0, 200),
+  });
+
   return response;
 }
 

@@ -1003,8 +1003,29 @@ export const proxyPlugin = (app: Elysia) =>
               );
               const modelRecord = modelService.findByProviderAndModel(provider.id, parsed.modelId);
               if (!body.stream) {
-                requestLogService.complete(requestLogId, { durationMs: Math.round(performance.now() - start) });
-                return response.json();
+                const completion = await response.json();
+                const durationMs = Math.round(performance.now() - start);
+                const details = tokenDetails(completion.usage);
+                const usage = usageService.record(
+                  provider.id,
+                  modelRecord?.id ?? parsed.modelId,
+                  parsed.modelId,
+                  completion.usage?.prompt_tokens ?? 0,
+                  completion.usage?.completion_tokens ?? 0,
+                  durationMs,
+                  durationMs,
+                  details,
+                );
+                requestLogService.complete(requestLogId, {
+                  promptTokens: completion.usage?.prompt_tokens,
+                  completionTokens: completion.usage?.completion_tokens,
+                  cacheRead: details.cacheRead,
+                  cacheWrite: details.cacheWrite,
+                  cost: usage.estimated_cost_usd,
+                  durationMs,
+                });
+                credentialService.clearError(credential.id);
+                return completion;
               }
               return recordSseUsageResponse(response, (promptTokens, completionTokens, durationMs, generationDurationMs, details) => {
                 const usage = usageService.record(provider.id, modelRecord?.id ?? parsed.modelId, parsed.modelId, promptTokens, completionTokens, durationMs, generationDurationMs, details);
