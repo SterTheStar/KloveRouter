@@ -32,6 +32,7 @@ export type CreateModelInput = {
   model_id: string;
   display_name?: string;
   is_manual?: number;
+  is_active?: number;
   pricing_tiers?: PricingTier[];
 };
 
@@ -389,8 +390,8 @@ export const modelService = {
           ? existing.display_name
           : generateDisplayName(input.model_id));
       db.query(
-        "UPDATE models SET is_manual = ?, display_name = ?, is_active = 1, created_at = datetime('now') WHERE id = ?",
-      ).run(input.is_manual ?? 0, displayName, existing.id);
+        "UPDATE models SET is_manual = ?, display_name = ?, is_active = ?, created_at = datetime('now') WHERE id = ?",
+      ).run(input.is_manual ?? 0, displayName, input.is_active ?? 1, existing.id);
       const hasPricing = Boolean(
         db
           .query("SELECT 1 FROM model_pricing_tiers WHERE model_id = ? LIMIT 1")
@@ -403,13 +404,14 @@ export const modelService = {
 
     const id = crypto.randomUUID();
     db.query(
-      "INSERT INTO models (id, provider_id, model_id, display_name, is_manual) VALUES (?, ?, ?, ?, ?)",
+      "INSERT INTO models (id, provider_id, model_id, display_name, is_manual, is_active) VALUES (?, ?, ?, ?, ?, ?)",
     ).run(
       id,
       input.provider_id,
       input.model_id,
       input.display_name?.trim() || generateDisplayName(input.model_id),
       input.is_manual ?? 0,
+      input.is_active ?? 1,
     );
     savePricing(id, pricingTiers);
     return this.findById(id)!;

@@ -245,7 +245,7 @@ export const modelsPlugin = (app: Elysia) =>
             const available = await qwenModels(credential, provider.base_url);
             if (query.preview === true) return preview(available);
             for (const model of available)
-              modelService.upsert({ provider_id: id, model_id: model.id, display_name: model.display_name, is_manual: 0 });
+              modelService.upsert({ provider_id: id, model_id: model.id, display_name: model.display_name, is_manual: 0, is_active: model.is_thinking_model ? 0 : 1 });
             return { success: true, models_found: available.length, message: `Synced ${available.length} Qwen models from ${provider.name}` };
           }
 

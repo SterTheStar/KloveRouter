@@ -89,7 +89,7 @@ export async function qwenModels(
   credential: QwenCredential,
   endpoint?: string,
 ): Promise<
-  { id: string; display_name: string }[]
+  { id: string; display_name: string; is_thinking_model?: boolean }[]
 > {
   const upstream = baseUrl(endpoint);
   const response = await fetch(`${upstream}/v1/models`, {
@@ -111,6 +111,7 @@ export async function qwenModels(
     .map((m: any) => ({
       id: m.id,
       display_name: m.display_name || m.id,
+      is_thinking_model: !!m.info?.meta?.capabilities?.thinking,
     }));
 }
 
