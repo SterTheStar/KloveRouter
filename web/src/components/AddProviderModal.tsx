@@ -511,8 +511,7 @@ export default function AddProviderModal({
           ? { auth_code: authCode }
           : { api_key: apiKey }),
         protocol: selectedType?.protocol,
-        avatar:
-          avatar || (selectedType?.preset ? selectedType.logo : undefined),
+        avatar: avatar || selectedType?.logo,
       });
       success("Provider added", `${name} is ready to use.`);
       onSuccess();
