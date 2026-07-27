@@ -126,6 +126,7 @@ const openAiCompatiblePresets = [
   ["requesty", "Requesty", "https://router.requesty.ai/v1"],
   ["portkey", "Portkey AI Gateway", "https://api.portkey.ai/v1"],
   ["opencode", "OpenCode Zen", "https://opencode.ai/zen/v1"],
+  ["qwen-cloud", "Qwen Cloud (DashScope)", "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"],
 ] as const;
 
 const presetLogos: Record<string, string> = {
@@ -163,6 +164,7 @@ const presetLogos: Record<string, string> = {
   requesty: requestyLogo,
   portkey: portkeyLogo,
   opencode: opencodeLogo,
+  "qwen-cloud": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSo40UOb-RkREKfwbqyj7DSTi20FbS1Tr9r7Sa_J0nwoXIlac27LPVgC3A&s=10",
 };
 
 const providerDescriptions: Record<string, string> = {
@@ -242,6 +244,8 @@ const providerDescriptions: Record<string, string> = {
     "An AI gateway for routing, observability, fallbacks, and governance across model providers.",
   opencode:
     "OpenCode Zen's curated gateway for accessing supported models through an OpenAI-compatible API.",
+  "qwen-cloud":
+    "Alibaba Cloud's DashScope API for Qwen models, with official OpenAI-compatible endpoints for chat, vision, and reasoning models.",
 };
 
 const providerTypes = [
