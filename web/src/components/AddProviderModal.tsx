@@ -297,7 +297,7 @@ const providerTypes = [
   {
     id: "qwen",
     protocol: "qwen" as const,
-    name: "Qwen",
+    name: "Qwen Chat",
     description: providerDescriptions.qwen,
     logo: "https://assets.alicdn.com/g/qwenweb/qwen-webui-fe/0.0.201/favicon.png",
     placeholder: "https://qwen.aikit.club",
