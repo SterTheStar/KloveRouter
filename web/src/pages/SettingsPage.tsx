@@ -20,6 +20,7 @@ import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { Tabs } from "@/components/ui/tabs";
 import type { Tab } from "@/components/ui/tabs";
+import { cn } from "@/lib/utils";
 import AvatarUpload from "../components/AvatarUpload";
 import { settings, rtk, caveman } from "../api/client";
 import { useToast } from "../components/ui/toast";
@@ -434,7 +435,7 @@ export default function SettingsPage({
                 <Separator />
                 <div className="space-y-2">
                   <Label>Compression level</Label>
-                  <div className="flex flex-wrap gap-2">
+                  <div className={cn("flex flex-wrap gap-2", !cavemanStatus?.enabled && "pointer-events-none opacity-50")}>
                     {["lite", "full", "ultra", "wenyan-lite", "wenyan-full", "wenyan-ultra"].map((lvl) => (
                       <Button
                         key={lvl}
@@ -446,6 +447,9 @@ export default function SettingsPage({
                       </Button>
                     ))}
                   </div>
+                  {!cavemanStatus?.enabled && (
+                    <p className="text-xs text-muted-foreground">Enable Caveman to change level</p>
+                  )}
                 </div>
               </>
             )}
