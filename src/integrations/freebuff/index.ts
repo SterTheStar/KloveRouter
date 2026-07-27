@@ -12,6 +12,7 @@ const MODEL_SOURCES = [
 const CLI_USER_AGENT = "Freebuff-CLI/0.0.105";
 const CHAT_USER_AGENT = "ai-sdk/openai-compatible/0.0.0-test/codebuff ai-sdk/provider-utils/3.0.20 runtime/browser";
 const BUN_USER_AGENT = "Bun/1.3.11";
+const CONTEXT_PRUNER_AGENT_ID = "context-pruner";
 
 type FreebuffCredential = {
   id: string;
@@ -303,11 +304,11 @@ async function endSession(credential: FreebuffCredential, endpoint: string) {
   return { unlocked: true };
 }
 
-async function startRun(credential: FreebuffCredential, endpoint: string, agentId: string) {
+async function startRun(credential: FreebuffCredential, endpoint: string, agentId: string, ancestorRunIds: string[] = []) {
   const response = await request(credential, `${baseUrl(endpoint)}/api/v1/agent-runs`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "User-Agent": BUN_USER_AGENT },
-    body: JSON.stringify({ action: "START", agentId, ancestorRunIds: [] }),
+    body: JSON.stringify({ action: "START", agentId, ancestorRunIds }),
   });
   if (!response.ok) await jsonError(response, "Freebuff run");
   const body = (await response.json()) as { runId?: string };
@@ -319,6 +320,9 @@ async function recordRunStep(
   credential: FreebuffCredential,
   endpoint: string,
   runId: string,
+  stepNumber: number,
+  childRunIds: string[],
+  messageId: string | null,
   startTime: string,
 ) {
   const response = await request(
@@ -328,10 +332,10 @@ async function recordRunStep(
       method: "POST",
       headers: { "Content-Type": "application/json", "User-Agent": BUN_USER_AGENT },
       body: JSON.stringify({
-        stepNumber: 1,
+        stepNumber,
         credits: 0,
-        childRunIds: [],
-        messageId: null,
+        childRunIds,
+        messageId,
         status: "completed",
         startTime,
       }),
@@ -342,7 +346,7 @@ async function recordRunStep(
   await response.body?.cancel().catch(() => {});
 }
 
-async function finishRun(credential: FreebuffCredential, endpoint: string, runId: string) {
+async function finishRun(credential: FreebuffCredential, endpoint: string, runId: string, totalSteps: number) {
   const response = await request(credential, `${baseUrl(endpoint)}/api/v1/agent-runs`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "User-Agent": BUN_USER_AGENT },
@@ -350,13 +354,40 @@ async function finishRun(credential: FreebuffCredential, endpoint: string, runId
       action: "FINISH",
       runId,
       status: "completed",
-      totalSteps: 1,
+      totalSteps,
       directCredits: 0,
       totalCredits: 0,
     }),
   });
   if (!response.ok) logger.warn("Freebuff run finish failed", { status: response.status });
   await response.body?.cancel().catch(() => {});
+}
+
+async function startRunChain(
+  credential: FreebuffCredential,
+  endpoint: string,
+  agentId: string,
+): Promise<{ runId: string; startedAt: string; childRunId: string }> {
+  const upstream = baseUrl(endpoint);
+  const startedAt = new Date().toISOString();
+  const runId = await startRun(credential, upstream, agentId, []);
+  const childStartedAt = new Date().toISOString();
+  const childRunId = await startRun(credential, upstream, CONTEXT_PRUNER_AGENT_ID, [runId]);
+  await recordRunStep(credential, upstream, childRunId, 1, [], null, childStartedAt);
+  await finishRun(credential, upstream, childRunId, 2);
+  await recordRunStep(credential, upstream, runId, 1, [childRunId], null, startedAt);
+  return { runId, startedAt, childRunId };
+}
+
+async function finalizeRunChain(
+  credential: FreebuffCredential,
+  endpoint: string,
+  runId: string,
+  startedAt: string,
+  messageId: string | null,
+) {
+  await recordRunStep(credential, baseUrl(endpoint), runId, 2, [], messageId, startedAt);
+  await finishRun(credential, baseUrl(endpoint), runId, 3);
 }
 
 function clientSessionId() {
@@ -412,20 +443,21 @@ export async function freebuffResponses(
   const agentId = freebuffRootAgentForModel(activeModel);
   session.lastUsedAt = Date.now();
   session.inFlight += 1;
-  const runId = await startRun(credential, upstream, agentId);
-  const runStartTime = new Date().toISOString();
+  const run = await startRunChain(credential, upstream, agentId);
   const payload = structuredClone(body);
   payload.model = activeModel;
   payload.stream = body.stream ?? false;
   payload.codebuff_metadata = {
     ...(payload.codebuff_metadata || {}),
-    run_id: runId,
+    run_id: run.runId,
     cost_mode: "free",
     client_id: clientSessionId(),
     trace_session_id: crypto.randomUUID(),
     ...(session.instanceId ? { freebuff_instance_id: session.instanceId } : {}),
   };
   payload.provider = { ...(payload.provider || {}), data_collection: "deny" };
+  let messageId: string | null = null;
+  const finalize = () => finalizeRunChain(credential, upstream, run.runId, run.startedAt, messageId).catch(() => {});
   try {
     let response = await request(credential, `${upstream}/api/v1/chat/completions`, {
       method: "POST",
@@ -465,12 +497,12 @@ export async function freebuffResponses(
       }
     }
     if (!payload.stream) {
-      const result = await response.arrayBuffer();
-      await recordRunStep(credential, upstream, runId, runStartTime).catch(() => {});
-      await finishRun(credential, upstream, runId).catch(() => {});
+      const result = await response.json();
+      messageId = result?.id ?? null;
+      await finalize();
       session.inFlight = Math.max(0, session.inFlight - 1);
       session.lastUsedAt = Date.now();
-      return new Response(result, { status: response.status, headers: response.headers });
+      return new Response(JSON.stringify(result), { status: response.status, headers: { "content-type": "application/json" } });
     }
     return new Response(
       new ReadableStream({
@@ -480,14 +512,20 @@ export async function freebuffResponses(
             if (!reader) throw new Error("Freebuff returned an empty response");
             while (true) {
               const part = await reader.read();
-              if (part.value) controller.enqueue(part.value);
+              if (part.value) {
+                const chunk = new TextDecoder().decode(part.value);
+                if (!messageId) {
+                  const m = chunk.match(/"id"\s*:\s*"([^"]+)"/);
+                  if (m) messageId = m[1];
+                }
+                controller.enqueue(part.value);
+              }
               if (part.done) break;
             }
           } catch (error) {
             controller.error(error);
           } finally {
-            await recordRunStep(credential, upstream, runId, runStartTime).catch(() => {});
-            await finishRun(credential, upstream, runId).catch(() => {});
+            await finalize();
             session.inFlight = Math.max(0, session.inFlight - 1);
             session.lastUsedAt = Date.now();
             controller.close();
@@ -497,8 +535,7 @@ export async function freebuffResponses(
       { headers: response.headers },
     );
   } catch (error) {
-    await recordRunStep(credential, upstream, runId, runStartTime).catch(() => {});
-    await finishRun(credential, upstream, runId).catch(() => {});
+    await finalize();
     session.inFlight = Math.max(0, session.inFlight - 1);
     session.lastUsedAt = Date.now();
     throw error;
