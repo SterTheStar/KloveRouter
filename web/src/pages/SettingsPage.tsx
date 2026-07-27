@@ -291,7 +291,12 @@ export default function SettingsPage({
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <PuzzleLine className="size-5" />
-              RTK (Rust Token Killer)
+              <span>RTK (Rust Token Killer)</span>
+              {rtkStatus?.installed && rtkStatus?.latestVersion && !rtkStatus?.updateAvailable && (
+                <span className="text-xs font-normal text-muted-foreground">
+                  Latest: {rtkStatus.latestVersion} — up to date
+                </span>
+              )}
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -349,11 +354,6 @@ export default function SettingsPage({
                 />
               </div>
             </div>
-            {rtkStatus?.installed && rtkStatus?.latestVersion && !rtkStatus?.updateAvailable && (
-              <div className="text-xs text-muted-foreground">
-                Latest: {rtkStatus.latestVersion} — up to date
-              </div>
-            )}
             {rtkStatus?.platform && rtkStatus?.arch && (
               <Separator />
             )}
@@ -370,7 +370,12 @@ export default function SettingsPage({
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <CavemanLine className="size-5" />
-              Caveman
+              <span>Caveman</span>
+              {cavemanStatus?.installed && cavemanStatus?.latestVersion && !cavemanStatus?.updateAvailable && (
+                <span className="text-xs font-normal text-muted-foreground">
+                  Latest: {cavemanStatus.latestVersion} — up to date
+                </span>
+              )}
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -425,11 +430,6 @@ export default function SettingsPage({
                 />
               </div>
             </div>
-            {cavemanStatus?.installed && cavemanStatus?.latestVersion && !cavemanStatus?.updateAvailable && (
-              <div className="text-xs text-muted-foreground">
-                Latest: {cavemanStatus.latestVersion} — up to date
-              </div>
-            )}
             {cavemanStatus?.installed && (
               <>
                 <Separator />
