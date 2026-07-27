@@ -619,7 +619,8 @@ export default function AddProviderModal({
               {filteredTypes.map((type) => (
                 <button
                   key={type.id}
-                  className="flex w-full items-center gap-4 rounded-lg border p-4 text-left transition-colors hover:bg-muted/50"
+                  disabled={type.id === "freebuff"}
+                  className={`flex w-full items-center gap-4 rounded-lg border p-4 text-left transition-colors ${type.id === "freebuff" ? "cursor-not-allowed opacity-50" : "hover:bg-muted/50"}`}
                   onClick={() => selectType(type)}
                 >
                   <img
@@ -644,6 +645,9 @@ export default function AddProviderModal({
                       {(type.protocol === "codex" ||
                         type.protocol === "antigravity") && (
                         <Badge variant="outline">OAuth</Badge>
+                      )}
+                      {type.id === "freebuff" && (
+                        <Badge variant="destructive">Not working</Badge>
                       )}
                     </div>
                     <div className="text-xs text-muted-foreground">
