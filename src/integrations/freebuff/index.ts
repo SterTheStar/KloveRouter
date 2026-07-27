@@ -98,7 +98,7 @@ async function ensureSession(
   )
     return current;
 
-  const response = await request(credential, `${baseUrl(endpoint)}/api/v1/freebuff/session`, {
+  let response = await request(credential, `${baseUrl(endpoint)}/api/v1/freebuff/session`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -107,6 +107,29 @@ async function ensureSession(
     },
     body: "{}",
   });
+  if (response.status === 409) {
+    const locked = (await response.json().catch(() => null)) as {
+      status?: string;
+      currentModel?: string;
+    } | null;
+    if (locked?.status === "model_locked" && locked.currentModel && locked.currentModel !== model) {
+      // Limited accounts can only have one active model session. Re-query the
+      // active model to obtain its instance id instead of destroying a live
+      // session (which would also spend another admission/quota unit).
+      response = await request(credential, `${baseUrl(endpoint)}/api/v1/freebuff/session`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "User-Agent": CLI_USER_AGENT,
+          "x-freebuff-model": locked.currentModel,
+        },
+        body: "{}",
+      });
+      model = locked.currentModel;
+    } else {
+      throw new Error(`Freebuff session model locked (${response.status})`);
+    }
+  }
   if (response.status === 404)
     return {
       instanceId: "",
@@ -270,14 +293,15 @@ export async function freebuffResponses(
   // Free mode requires the run root to be one of Freebuff's allowlisted
   // orchestrators. The dynamically parsed catalog can also contain helper
   // subagents, which cannot be used as the top-level run.
-  const agentId = freebuffRootAgentForModel(model);
   let session = await ensureSession(credential, upstream, model);
+  const activeModel = session.model || model;
+  const agentId = freebuffRootAgentForModel(activeModel);
   session.lastUsedAt = Date.now();
   session.inFlight += 1;
   const runId = await startRun(credential, upstream, agentId);
   const runStartTime = new Date().toISOString();
   const payload = structuredClone(body);
-  payload.model = model;
+  payload.model = activeModel;
   payload.stream = body.stream ?? false;
   payload.codebuff_metadata = {
     ...(payload.codebuff_metadata || {}),
