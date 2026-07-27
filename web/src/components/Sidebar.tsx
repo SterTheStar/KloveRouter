@@ -24,12 +24,12 @@ const items = [
 ];
 
 function BuyMeACoffeeButton() {
-  const srcDoc = `<!doctype html><html><head><meta charset="utf-8"><style>html,body{width:228px;height:48px;margin:0;background:transparent;overflow:hidden}body{display:flex;justify-content:center}.bmc-btn{min-width:228px!important;width:228px!important;height:48px!important;border-radius:10px!important;padding:0 16px!important}.bmc-btn svg{height:27px!important}.bmc-btn-text{font-size:20px!important}</style></head><body><script type="text/javascript" src="https://cdnjs.buymeacoffee.com/1.0.0/button.prod.min.js" data-name="bmc-button" data-slug="sterzinhab9" data-color="#FFDD00" data-emoji="" data-font="Poppins" data-text="Buy me a coffee" data-outline-color="#000000" data-font-color="#000000" data-coffee-color="#ffffff"></script></body></html>`;
+  const srcDoc = `<!doctype html><html><head><meta charset="utf-8"><style>html,body{width:240px;height:50px;margin:0;background:transparent;overflow:hidden}body{display:flex;justify-content:center;align-items:center}</style></head><body><script type='text/javascript' src='https://storage.ko-fi.com/cdn/widget/Widget_2.js'></script><script type='text/javascript'>kofiwidget2.init('Support me on Ko-fi', '#ff5c38', 'V7V11EYI5U');kofiwidget2.draw();</script></body></html>`;
   return (
-    <div className="mb-3 flex h-12 w-full items-start justify-center overflow-hidden rounded-xl">
+    <div className="mb-3 flex h-[50px] w-full items-start justify-center overflow-hidden rounded-xl">
       <iframe
-        title="Buy me a coffee"
-        className="block h-12 w-[228px] shrink-0 rounded-xl border-0"
+        title="Support me on Ko-fi"
+        className="block h-[50px] w-[240px] shrink-0 rounded-xl border-0"
         sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"
         srcDoc={srcDoc}
       />
