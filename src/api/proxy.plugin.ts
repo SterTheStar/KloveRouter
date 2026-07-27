@@ -1077,7 +1077,24 @@ export const proxyPlugin = (app: Elysia) =>
                 stream_options: { include_usage: true },
               })) as any;
 
-              return openAIStreamResponse(stream, {
+              let streamContent = "";
+              const wrappedStream = {
+                [Symbol.asyncIterator]() {
+                  const iter = stream[Symbol.asyncIterator]();
+                  return {
+                    async next() {
+                      const result = await iter.next();
+                      if (!result.done && result.value?.choices?.[0]?.delta?.content) {
+                        streamContent += result.value.choices[0].delta.content;
+                      }
+                      return result;
+                    },
+                  };
+                },
+                controller: stream.controller,
+              };
+
+              return openAIStreamResponse(wrappedStream, {
                 start,
                 tokenDetails,
                 onComplete: ({
@@ -1108,6 +1125,13 @@ export const proxyPlugin = (app: Elysia) =>
                   });
                   credentialService.clearError(credentialId);
                   credentialService.clearCooldown(credentialId);
+                  if (rtkActive && streamContent) {
+                    rtkManager.compress(streamContent).then((result) => {
+                      if (result) {
+                        logger.info(`RTK compressed stream ${parsed.modelId}: ${result.originalChars}→${result.compressedChars} chars (-${result.savedPercent}%)`);
+                      }
+                    });
+                  }
                 },
                 onError: (error, stats) => {
                   credentialService.markError(credentialId, error.message);
