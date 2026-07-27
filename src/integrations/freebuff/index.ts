@@ -80,7 +80,7 @@ async function request(
   const headers = new Headers(init.headers);
   headers.set("Authorization", `Bearer ${tokenOf(credential)}`);
   if (!headers.has("User-Agent")) headers.set("User-Agent", CLI_USER_AGENT);
-  if (!headers.has("Accept")) headers.set("Accept", "application/json, text/event-stream");
+  if (!headers.has("Accept")) headers.set("Accept", "*/*");
   return fetch(url, { ...init, headers });
 }
 
