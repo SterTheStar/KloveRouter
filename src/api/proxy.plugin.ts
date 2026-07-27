@@ -538,7 +538,6 @@ export const proxyPlugin = (app: Elysia) =>
         body.messages = await injectCavemanPrompt(body.messages);
         body.messages = await customSkillsProxy.injectSkills(body.messages);
         const rtkActive = rtkManager.enabled && rtkManager.initialized;
-        const inputSize = rtkActive ? JSON.stringify(body.messages).length : 0;
         const apiKey = await verifyApiKey(headers);
         if (!apiKey) {
           set.status = 401;
@@ -1209,9 +1208,12 @@ export const proxyPlugin = (app: Elysia) =>
               });
 
               credentialService.clearError(credential.id);
-              if (rtkActive) {
-                const outputSize = JSON.stringify(completion).length;
-                logger.info(`RTK: ${parsed.modelId} — input ${inputSize} chars → output ${outputSize} chars (saved ${Math.max(0, inputSize - outputSize)} chars)`);
+              if (rtkActive && completion.choices?.[0]?.message?.content) {
+                const result = await rtkManager.compress(completion.choices[0].message.content);
+                if (result) {
+                  completion.choices[0].message.content = result.compressed;
+                  logger.info(`RTK compressed ${parsed.modelId}: ${result.originalChars}→${result.compressedChars} chars (-${result.savedPercent}%)`);
+                }
               }
               return completion;
             } catch (error: any) {

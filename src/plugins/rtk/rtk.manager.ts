@@ -1,9 +1,20 @@
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
+import { readFile, writeFile, unlink } from "node:fs/promises";
+import { join } from "node:path";
 import { rtkBinary } from "./rtk.binary";
 import { rtkConfig } from "./rtk.config";
 import { getDb } from "../../db/connection";
 import { logger } from "../../logger";
 import type { RtkStatus } from "./rtk.types";
+
+interface RtkCompressResult {
+  original: string;
+  compressed: string;
+  originalChars: number;
+  compressedChars: number;
+  savedChars: number;
+  savedPercent: number;
+}
 
 function normalizeVersion(v: string | null): string {
   if (!v) return "";
@@ -95,6 +106,50 @@ class RtkManager {
 
   getPid(): number | null {
     return this.process?.pid ?? null;
+  }
+
+  async compress(content: string): Promise<RtkCompressResult | null> {
+    if (!content) return null;
+
+    const binPath = rtkBinary.binaryPath();
+    if (!existsSync(binPath)) return null;
+
+    const tmpDir = join(".", "data", "rtk", "tmp");
+    if (!existsSync(tmpDir)) mkdirSync(tmpDir, { recursive: true });
+    const tmpFile = join(tmpDir, `resp-${Date.now()}.txt`);
+
+    try {
+      await writeFile(tmpFile, content, "utf-8");
+
+      const proc = Bun.spawnSync([binPath, "read", tmpFile, "-l", "aggressive"], {
+        env: { ...process.env, RTK_TELEMETRY_DISABLED: "1" },
+      });
+
+      if (proc.exitCode !== 0) return null;
+
+      const compressed = proc.stdout.toString();
+      if (!compressed) return null;
+
+      const originalChars = content.length;
+      const compressedChars = compressed.length;
+      const savedChars = originalChars - compressedChars;
+      const savedPercent = originalChars > 0
+        ? Math.round((savedChars / originalChars) * 100)
+        : 0;
+
+      return {
+        original: content,
+        compressed,
+        originalChars,
+        compressedChars,
+        savedChars,
+        savedPercent,
+      };
+    } catch {
+      return null;
+    } finally {
+      unlink(tmpFile).catch(() => {});
+    }
   }
 
   async getStatus(): Promise<RtkStatus> {

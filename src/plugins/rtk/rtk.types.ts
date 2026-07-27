@@ -23,6 +23,15 @@ export interface RtkStatus {
   updateAvailable: boolean;
 }
 
+export interface RtkCompressResult {
+  original: string;
+  compressed: string;
+  originalChars: number;
+  compressedChars: number;
+  savedChars: number;
+  savedPercent: number;
+}
+
 export interface RtkConfig {
   hooks?: {
     exclude_commands?: string[];
