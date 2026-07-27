@@ -16,13 +16,9 @@ type QwenUsage = {
   expires_at?: string | null;
 };
 
-function stripDetails(text: string): string {
-  return text.replace(/<details>[\s\S]*?<\/details>/g, "").trim();
-}
-
-export function cleanQwenContent(content: string): string {
-  const stripped = stripDetails(content);
-  return stripped || content;
+export function cleanQwenContent(text: string): string {
+  const stripped = text.replace(/<details>[\s\S]*?<\/details>/g, "").trim();
+  return stripped || text;
 }
 
 function tokenOf(credential: QwenCredential) {
