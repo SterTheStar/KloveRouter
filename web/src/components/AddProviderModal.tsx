@@ -486,6 +486,7 @@ export default function AddProviderModal({
     setSelectedType(type);
     setName(type.name);
     setBaseUrl(type.placeholder);
+    setAvatar(type.logo);
     setStep("form");
   };
 
