@@ -58,6 +58,7 @@ import parasailLogo from "../assets/providers/parasail.png";
 import replicateLogo from "../assets/providers/replicate.png";
 import portkeyLogo from "../assets/providers/portkey.png";
 import opencodeLogo from "../assets/providers/opencode.png";
+import freebuffLogo from "../assets/providers/freebuff.png";
 
 function endpointFavicon(endpoint: string) {
   try {
@@ -283,7 +284,7 @@ const providerTypes = [
     protocol: "freebuff" as const,
     name: "Freebuff",
     description: providerDescriptions.freebuff,
-    logo: opencodeLogo,
+    logo: freebuffLogo,
     placeholder: "https://www.codebuff.com",
     preset: false,
   },
