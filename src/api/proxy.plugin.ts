@@ -18,7 +18,7 @@ import { isBlockedAntigravityModel } from "../integrations/antigravity";
 import { requestLogService } from "../services/request-log.service";
 import { openAIStreamResponse } from "./openai-stream";
 import { freebuffResponses } from "../integrations/freebuff";
-import { qwenResponses } from "../integrations/qwen";
+import { cleanQwenContent, qwenResponses } from "../integrations/qwen";
 
 function anthropicPayload(body: any, modelId: string, stream = false) {
   const messages = splitAnthropicMessages(body.messages);
@@ -1004,6 +1004,8 @@ export const proxyPlugin = (app: Elysia) =>
               const modelRecord = modelService.findByProviderAndModel(provider.id, parsed.modelId);
               if (!body.stream) {
                 const completion = await response.json();
+                if (completion.choices?.[0]?.message?.content)
+                  completion.choices[0].message.content = cleanQwenContent(completion.choices[0].message.content);
                 const durationMs = Math.round(performance.now() - start);
                 const details = tokenDetails(completion.usage);
                 const usage = usageService.record(

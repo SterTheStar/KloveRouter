@@ -1,5 +1,4 @@
 import { logger } from "../../logger";
-import { credentialService } from "../../services/credential.service";
 
 const DEFAULT_BASE_URL = "https://qwen.aikit.club";
 const USER_AGENT = "Klove/1.0.0";
@@ -16,6 +15,15 @@ type QwenUsage = {
   access_token?: string | null;
   expires_at?: string | null;
 };
+
+function stripDetails(text: string): string {
+  return text.replace(/<details>[\s\S]*?<\/details>/g, "").trim();
+}
+
+export function cleanQwenContent(content: string): string {
+  const stripped = stripDetails(content);
+  return stripped || content;
+}
 
 function tokenOf(credential: QwenCredential) {
   if (!credential.secret) throw new Error("Qwen token is not configured");
