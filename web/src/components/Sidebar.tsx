@@ -24,15 +24,19 @@ const items = [
 ];
 
 function BuyMeACoffeeButton() {
-  const srcDoc = `<!doctype html><html><head><meta charset="utf-8"><style>html,body{width:100%;height:50px;margin:0;background:transparent;overflow:hidden}body{display:flex;justify-content:center;align-items:center}</style></head><body><script type='text/javascript' src='https://storage.ko-fi.com/cdn/widget/Widget_2.js'></script><script type='text/javascript'>kofiwidget2.init('Support me on Ko-fi', '#ff5c38', 'V7V11EYI5U');kofiwidget2.draw();</script></body></html>`;
   return (
-    <div className="mb-3 flex h-[50px] w-full items-start justify-center overflow-hidden rounded-xl">
-      <iframe
-        title="Support me on Ko-fi"
-        className="block h-[50px] w-full shrink-0 rounded-xl border-0"
-        sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"
-        srcDoc={srcDoc}
-      />
+    <div className="mb-3 flex h-[50px] w-full items-center justify-center overflow-hidden rounded-xl bg-[#ff5c38] transition-colors hover:bg-[#e04e2e]">
+      <a
+        href="https://ko-fi.com/V7V11EYI5U"
+        target="_blank"
+        rel="noreferrer"
+        className="flex w-full items-center justify-center gap-2 px-4 py-3 text-sm font-semibold text-white no-underline"
+      >
+        <svg viewBox="0 0 24 24" className="size-5 fill-current">
+          <path d="M23.881 8.948c-.773-4.085-4.859-4.593-4.859-4.593H.723c-.604 0-.679.798-.679.798s-.082 7.324-.026 11.822c.033 2.568 1.775 3.227 1.775 3.227h20.041s3.299-.537 3.799-3.884c.318-2.135.697-7.37.248-8.37zm-2.725 4.166c-.232 1.543-1.889 1.914-1.889 1.914H7.414s-1.72-.231-1.72-2.161V7.281h13.928s1.86.108 2.092 1.647c.232 1.539.193 4.186.442 4.186z"/>
+        </svg>
+        Support me on Ko-fi
+      </a>
     </div>
   );
 }
