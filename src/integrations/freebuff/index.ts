@@ -9,7 +9,6 @@ const MODEL_SOURCES = [
   "https://raw.githubusercontent.com/CodebuffAI/codebuff/main/common/src/constants/freebuff-model-ids.ts",
   "https://raw.githubusercontent.com/CodebuffAI/codebuff/main/common/src/constants/model-config.ts",
 ];
-const USER_AGENT = "ai-sdk/openai-compatible/1.0.25/codebuff";
 const CLI_USER_AGENT = "Freebuff-CLI/0.0.105";
 
 type FreebuffCredential = {
@@ -78,7 +77,7 @@ async function request(
 ) {
   const headers = new Headers(init.headers);
   headers.set("Authorization", `Bearer ${tokenOf(credential)}`);
-  if (!headers.has("User-Agent")) headers.set("User-Agent", USER_AGENT);
+  headers.set("User-Agent", CLI_USER_AGENT);
   headers.set("Accept", "application/json, text/event-stream");
   return fetch(url, { ...init, headers });
 }
