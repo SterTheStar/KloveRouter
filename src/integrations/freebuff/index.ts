@@ -10,6 +10,8 @@ const MODEL_SOURCES = [
   "https://raw.githubusercontent.com/CodebuffAI/codebuff/main/common/src/constants/model-config.ts",
 ];
 const CLI_USER_AGENT = "Freebuff-CLI/0.0.105";
+const CHAT_USER_AGENT = "ai-sdk/openai-compatible/0.0.0-test/codebuff ai-sdk/provider-utils/3.0.20 runtime/browser";
+const BUN_USER_AGENT = "Bun/1.3.11";
 
 type FreebuffCredential = {
   id: string;
@@ -77,8 +79,8 @@ async function request(
 ) {
   const headers = new Headers(init.headers);
   headers.set("Authorization", `Bearer ${tokenOf(credential)}`);
-  headers.set("User-Agent", CLI_USER_AGENT);
-  headers.set("Accept", "application/json, text/event-stream");
+  if (!headers.has("User-Agent")) headers.set("User-Agent", CLI_USER_AGENT);
+  if (!headers.has("Accept")) headers.set("Accept", "application/json, text/event-stream");
   return fetch(url, { ...init, headers });
 }
 
@@ -341,7 +343,7 @@ async function endSession(credential: FreebuffCredential, endpoint: string) {
 async function startRun(credential: FreebuffCredential, endpoint: string, agentId: string) {
   const response = await request(credential, `${baseUrl(endpoint)}/api/v1/agent-runs`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "User-Agent": BUN_USER_AGENT },
     body: JSON.stringify({ action: "START", agentId, ancestorRunIds: [] }),
   });
   if (!response.ok) await jsonError(response, "Freebuff run");
@@ -361,7 +363,7 @@ async function recordRunStep(
     `${baseUrl(endpoint)}/api/v1/agent-runs/${runId}/steps`,
     {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "User-Agent": BUN_USER_AGENT },
       body: JSON.stringify({
         stepNumber: 1,
         credits: 0,
@@ -380,7 +382,7 @@ async function recordRunStep(
 async function finishRun(credential: FreebuffCredential, endpoint: string, runId: string) {
   const response = await request(credential, `${baseUrl(endpoint)}/api/v1/agent-runs`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "User-Agent": BUN_USER_AGENT },
     body: JSON.stringify({
       action: "FINISH",
       runId,
@@ -430,7 +432,7 @@ export async function freebuffResponses(
   try {
     let response = await request(credential, `${upstream}/api/v1/chat/completions`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "User-Agent": CHAT_USER_AGENT },
       body: JSON.stringify(payload),
     });
     if (!response.ok) {
@@ -450,7 +452,7 @@ export async function freebuffResponses(
           };
           response = await request(credential, `${upstream}/api/v1/chat/completions`, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: { "Content-Type": "application/json", "User-Agent": CHAT_USER_AGENT },
             body: JSON.stringify(payload),
           });
           if (!response.ok) {
