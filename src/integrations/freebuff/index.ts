@@ -124,20 +124,11 @@ async function createSession(
   endpoint: string,
   model: string,
 ): Promise<Session> {
-  const current = sessions.get(credential.id);
-  if (
-    current &&
-    current.model === model &&
-    (!current.expiresAt || current.expiresAt > Date.now() + 5000)
-  )
-    return current;
-
   let response = await request(credential, `${baseUrl(endpoint)}/api/v1/freebuff/session`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       "User-Agent": CLI_USER_AGENT,
-      "x-freebuff-instance-id": instanceIdFor(credential),
       "x-freebuff-model": model,
     },
     body: "{}",
@@ -148,16 +139,12 @@ async function createSession(
       currentModel?: string;
     } | null;
     if (locked?.status === "model_locked" && locked.currentModel && locked.currentModel !== model) {
-      // A limited account can only have one active model session. When the
-      // requested model differs, explicitly switch sessions instead of
-      // silently sending the request to the currently locked model.
       await endSession(credential, baseUrl(endpoint));
       response = await request(credential, `${baseUrl(endpoint)}/api/v1/freebuff/session`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "User-Agent": CLI_USER_AGENT,
-          "x-freebuff-instance-id": instanceIdFor(credential),
           "x-freebuff-model": model,
         },
         body: "{}",
@@ -177,19 +164,11 @@ async function createSession(
       endpoint: baseUrl(endpoint),
     };
   if (!response.ok) await jsonError(response, "Freebuff session");
-  const state = (await response.json()) as {
-    status?: string;
-    instanceId?: string;
-    expiresAt?: string;
-    estimatedWaitMs?: number;
-    position?: number;
-    queueDepth?: number;
-  };
+  const state = (await response.json()) as any;
   if (state.status === "queued") {
-    const wait = Math.max(1000, Math.min(state.estimatedWaitMs || 5000, 5000));
-    throw new Error(
-      `Freebuff waiting room queued${state.position ? ` (position ${state.position}/${state.queueDepth || state.position})` : ""}; retry in about ${Math.ceil(wait / 1000)}s`,
-    );
+    const polled = await pollSession(credential, endpoint, state);
+    if (polled) return polled;
+    throw new Error("Freebuff waiting room did not become active");
   }
   if (state.status !== "active" || !state.instanceId)
     throw new Error("Freebuff session did not become active");
@@ -197,14 +176,14 @@ async function createSession(
   const session: Session = {
     instanceId: state.instanceId,
     status: state.status,
-    model: (state as any).model ?? model,
-    accessTier: (state as any).accessTier,
-    countryCode: (state as any).countryCode,
-    countryBlockReason: (state as any).countryBlockReason,
-    remainingMs: (state as any).remainingMs,
-    rateLimit: (state as any).rateLimit,
-    rateLimitsByModel: (state as any).rateLimitsByModel,
-    admittedAt: (state as any).admittedAt,
+    model: state.model ?? model,
+    accessTier: state.accessTier,
+    countryCode: state.countryCode,
+    countryBlockReason: state.countryBlockReason,
+    remainingMs: state.remainingMs,
+    rateLimit: state.rateLimit,
+    rateLimitsByModel: state.rateLimitsByModel,
+    admittedAt: state.admittedAt,
     expiresAt,
     requestedModel: model,
     lastUsedAt: Date.now(),
@@ -217,6 +196,44 @@ async function createSession(
   return session;
 }
 
+async function pollSession(
+  credential: FreebuffCredential,
+  endpoint: string,
+  state: any,
+): Promise<Session | null> {
+  const upstream = baseUrl(endpoint);
+  for (let attempt = 0; attempt < 30; attempt++) {
+    await new Promise((resolve) => setTimeout(resolve, Math.max(500, Math.min(state.estimatedWaitMs || 1000, 3000))));
+    const poll = await request(credential, `${upstream}/api/v1/freebuff/session`, {
+      method: "GET",
+      headers: { "User-Agent": CLI_USER_AGENT, "x-freebuff-instance-id": state.instanceId || "" },
+    });
+    if (!poll.ok) return null;
+    const next = (await poll.json()) as any;
+    if (next.status === "active" && next.instanceId) {
+      const expiresAt = next.expiresAt ? Date.parse(next.expiresAt) : undefined;
+      const session: Session = {
+        instanceId: next.instanceId,
+        status: next.status,
+        model: next.model ?? state.requestedModel,
+        accessTier: next.accessTier,
+        countryCode: next.countryCode,
+        expiresAt,
+        requestedModel: state.requestedModel,
+        lastUsedAt: Date.now(),
+        inFlight: 0,
+        credential,
+        endpoint: upstream,
+      };
+      sessions.set(credential.id, session);
+      await persistInstanceId(credential, next.instanceId);
+      return session;
+    }
+    state = next;
+  }
+  return null;
+}
+
 async function ensureSession(
   credential: FreebuffCredential,
   endpoint: string,
@@ -224,77 +241,23 @@ async function ensureSession(
 ): Promise<Session> {
   const existing = sessionLocks.get(credential.id);
   if (existing) return existing;
-  const operation = ensureSessionUnlocked(credential, endpoint, model);
+  const operation = (async (): Promise<Session> => {
+    const cached = sessions.get(credential.id);
+    if (
+      cached &&
+      cached.model === model &&
+      cached.status === "active" &&
+      (!cached.expiresAt || cached.expiresAt > Date.now() + 5000)
+    )
+      return cached;
+    return createSession(credential, endpoint, model);
+  })();
   sessionLocks.set(credential.id, operation);
   try {
     return await operation;
   } finally {
     if (sessionLocks.get(credential.id) === operation) sessionLocks.delete(credential.id);
   }
-}
-
-async function ensureSessionUnlocked(
-  credential: FreebuffCredential,
-  endpoint: string,
-  model: string,
-): Promise<Session> {
-  const current = sessions.get(credential.id);
-  const instanceId = current?.instanceId || instanceIdFor(credential);
-  const response = await request(credential, `${baseUrl(endpoint)}/api/v1/freebuff/session`, {
-    method: "GET",
-    headers: {
-      "User-Agent": CLI_USER_AGENT,
-      "x-freebuff-instance-id": instanceId,
-    },
-  });
-  if (response.ok) {
-    const state = (await response.json()) as any;
-    if (state.status === "active" && state.instanceId && state.model === model) {
-      const session: Session = {
-        ...state,
-        instanceId: state.instanceId,
-        model,
-        expiresAt: state.expiresAt ? Date.parse(state.expiresAt) : undefined,
-        lastUsedAt: Date.now(),
-        inFlight: current?.inFlight ?? 0,
-        credential,
-        endpoint: baseUrl(endpoint),
-      };
-      sessions.set(credential.id, session);
-      await persistInstanceId(credential, state.instanceId);
-      return session;
-    }
-    if (state.status === "active" && state.model && state.model !== model) {
-      await endSession(credential, endpoint);
-    } else if (state.status === "queued") {
-      for (let attempt = 0; attempt < 30; attempt++) {
-        await new Promise((resolve) => setTimeout(resolve, Math.max(500, Math.min(state.estimatedWaitMs || 1000, 3000))));
-        const poll = await request(credential, `${baseUrl(endpoint)}/api/v1/freebuff/session`, {
-          method: "GET",
-          headers: { "User-Agent": CLI_USER_AGENT, "x-freebuff-instance-id": instanceId },
-        });
-        if (!poll.ok) break;
-        const next = (await poll.json()) as any;
-        if (next.status === "active" && next.model === model) {
-          const session: Session = {
-            ...next,
-            instanceId: next.instanceId,
-            model,
-            expiresAt: next.expiresAt ? Date.parse(next.expiresAt) : undefined,
-            lastUsedAt: Date.now(),
-            inFlight: 0,
-            credential,
-            endpoint: baseUrl(endpoint),
-          };
-          sessions.set(credential.id, session);
-          await persistInstanceId(credential, next.instanceId);
-          return session;
-        }
-      }
-      throw new Error("Freebuff waiting room did not become active");
-    }
-  }
-  return createSession(credential, endpoint, model);
 }
 
 function isModelLockError(status: number, body: string) {
@@ -397,7 +360,40 @@ async function finishRun(credential: FreebuffCredential, endpoint: string, runId
 }
 
 function clientSessionId() {
-  return Math.random().toString(36).slice(2, 15);
+  return "freebuff-proxy-" + crypto.randomUUID().replace(/-/g, "").substring(0, 16);
+}
+
+async function preRequestChain(
+  credential: FreebuffCredential,
+  endpoint: string,
+  messages: any[],
+) {
+  const upstream = baseUrl(endpoint);
+  try {
+    await request(credential, `${upstream}/api/agents/validate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "User-Agent": BUN_USER_AGENT },
+      body: JSON.stringify({}),
+    });
+  } catch {}
+  try {
+    await request(credential, `${upstream}/api/v1/ads`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "User-Agent": CLI_USER_AGENT },
+      body: JSON.stringify({
+        provider: "gravity",
+        messages,
+        device: { os: "windows", timezone: "Asia/Shanghai", locale: "zh-CN" },
+        userAgent: BUN_USER_AGENT,
+      }),
+    });
+  } catch {}
+  try {
+    await request(credential, `${upstream}/api/v1/freebuff/streak`, {
+      method: "GET",
+      headers: { "User-Agent": BUN_USER_AGENT },
+    });
+  } catch {}
 }
 
 export async function freebuffResponses(
@@ -407,6 +403,7 @@ export async function freebuffResponses(
   endpoint?: string,
 ) {
   const upstream = baseUrl(endpoint);
+  await preRequestChain(credential, upstream, body.messages || []);
   // Free mode requires the run root to be one of Freebuff's allowlisted
   // orchestrators. The dynamically parsed catalog can also contain helper
   // subagents, which cannot be used as the top-level run.
