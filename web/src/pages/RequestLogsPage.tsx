@@ -259,9 +259,9 @@ export default function RequestLogsPage() {
                         {log.client_ip || "—"}
                       </div>
                     </td>
-                    <td className="p-3">
+                    <td className="p-3 align-middle">
                       {log.tokens_total === 0 && log.status === "success" ? (
-                        <div className="text-xs text-muted-foreground">Not supported</div>
+                        <Badge variant="outline" className="text-muted-foreground">Not supported</Badge>
                       ) : (
                         <>
                           <div>{formatNumber(log.tokens_total)} tokens</div>
