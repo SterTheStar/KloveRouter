@@ -2,37 +2,36 @@ import { existsSync, mkdirSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { rtkBinary } from "./rtk.binary";
-import { config as appConfig } from "../../config";
+import { config } from "../../config";
 import { logger } from "../../logger";
 import type { RtkConfig } from "./rtk.types";
 
-const RTK_CONFIG_DIR = join(".", "data", "rtk", "config");
 const CONFIG_FILE = "config.toml";
 
 function configDir(): string {
-  return join(appConfig.isDev ? "." : ".", RTK_CONFIG_DIR);
+  return join(config.dataDir, "rtk", "config");
 }
 
 function configPath(): string {
   return join(configDir(), CONFIG_FILE);
 }
 
-function generateToml(config: RtkConfig): string {
+function generateToml(cfg: RtkConfig): string {
   const lines: string[] = [];
 
-  if (config.hooks) {
+  if (cfg.hooks) {
     lines.push("[hooks]");
-    if (config.hooks.exclude_commands?.length) {
-      const cmds = config.hooks.exclude_commands.map((c) => `"${c}"`).join(", ");
+    if (cfg.hooks.exclude_commands?.length) {
+      const cmds = cfg.hooks.exclude_commands.map((c) => `"${c}"`).join(", ");
       lines.push(`exclude_commands = [${cmds}]`);
     }
     lines.push("");
   }
 
-  if (config.tee) {
+  if (cfg.tee) {
     lines.push("[tee]");
-    lines.push(`enabled = ${config.tee.enabled ?? true}`);
-    lines.push(`mode = "${config.tee.mode ?? "failures"}"`);
+    lines.push(`enabled = ${cfg.tee.enabled ?? true}`);
+    lines.push(`mode = "${cfg.tee.mode ?? "failures"}"`);
     lines.push("");
   }
 
@@ -55,7 +54,8 @@ export const rtkConfig = {
     try {
       const content = await readFile(path, "utf-8");
       return parseToml(content);
-    } catch {
+    } catch (error) {
+      logger.warn("Failed to load RTK config, using defaults", { path, error });
       return {};
     }
   },

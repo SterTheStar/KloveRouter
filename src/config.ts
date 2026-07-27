@@ -1,3 +1,5 @@
+import { dirname, join } from "node:path";
+
 export const config = {
   port: parseInt(process.env.PORT || "3000"),
   jwtSecret: process.env.JWT_SECRET || "klove-jwt-secret-change-in-production",
@@ -9,4 +11,7 @@ export const config = {
     process.env.JWT_SECRET ||
     "klove-credential-encryption-key-change-in-production",
   logLevel: process.env.LOG_LEVEL || "info",
+  get dataDir(): string {
+    return dirname(this.dbPath);
+  },
 };

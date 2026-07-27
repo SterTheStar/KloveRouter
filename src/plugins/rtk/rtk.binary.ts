@@ -3,9 +3,9 @@ import { readFile, writeFile, chmod } from "node:fs/promises";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
 import { logger } from "../../logger";
+import { config } from "../../config";
 import type { RtkPlatform, RtkArch, RtkBinaryInfo } from "./rtk.types";
 
-const RTK_DIR = join(".", "data", "rtk");
 const BINARY_NAME = process.platform === "win32" ? "rtk.exe" : "rtk";
 
 const ASSET_NAMES: Record<string, string> = {
@@ -72,7 +72,7 @@ function getBinaryInfo(version: string): RtkBinaryInfo {
 }
 
 function rtkDir(): string {
-  return join(".", RTK_DIR);
+  return join(config.dataDir, "rtk");
 }
 
 function binaryPath(): string {
@@ -150,8 +150,10 @@ async function getVersion(binPath: string): Promise<string | null> {
   try {
     const proc = Bun.spawnSync([binPath, "--version"]);
     if (proc.exitCode === 0) return proc.stdout.toString().trim();
+    logger.warn("Failed to get RTK version", { exitCode: proc.exitCode });
     return null;
   } catch {
+    logger.warn("Failed to execute RTK binary for version check", { binPath });
     return null;
   }
 }
@@ -162,10 +164,14 @@ async function checkLatestVersion(): Promise<string | null> {
       "https://api.github.com/repos/rtk-ai/rtk/releases/latest",
       { headers: { "Accept": "application/json" }, signal: AbortSignal.timeout(5000) },
     );
-    if (!response.ok) return null;
+    if (!response.ok) {
+      logger.warn("Failed to fetch latest RTK version", { status: response.status });
+      return null;
+    }
     const data = await response.json() as any;
     return data.tag_name as string;
-  } catch {
+  } catch (error) {
+    logger.warn("Error fetching latest RTK version", { error });
     return null;
   }
 }
@@ -261,6 +267,7 @@ export const rtkBinary = {
   },
 
   getDownloadUrl(): string {
-    return downloadUrl("v0.44.0");
+    const fallback = "v0.44.0";
+    return downloadUrl(fallback);
   },
 };

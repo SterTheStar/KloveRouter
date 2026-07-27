@@ -1,20 +1,11 @@
 import { existsSync, mkdirSync } from "node:fs";
-import { readFile, writeFile, unlink } from "node:fs/promises";
+import { writeFile, unlink } from "node:fs/promises";
 import { join } from "node:path";
 import { rtkBinary } from "./rtk.binary";
 import { rtkConfig } from "./rtk.config";
 import { getDb } from "../../db/connection";
 import { logger } from "../../logger";
-import type { RtkStatus } from "./rtk.types";
-
-interface RtkCompressResult {
-  original: string;
-  compressed: string;
-  originalChars: number;
-  compressedChars: number;
-  savedChars: number;
-  savedPercent: number;
-}
+import type { RtkStatus, RtkCompressResult } from "./rtk.types";
 
 function normalizeVersion(v: string | null): string {
   if (!v) return "";
@@ -66,8 +57,15 @@ class RtkManager {
   }
 
   startDaemon(): void {
-    if (this.process) return;
     if (!this._enabled) return;
+
+    if (this.process) {
+      try {
+        this.process.kill();
+      } catch {
+      }
+      this.process = null;
+    }
 
     const binPath = rtkBinary.binaryPath();
     if (!existsSync(binPath)) {
@@ -146,6 +144,7 @@ class RtkManager {
         savedPercent,
       };
     } catch {
+      logger.error("Failed to compress response", { contentLength: content.length });
       return null;
     } finally {
       unlink(tmpFile).catch(() => {});
@@ -154,21 +153,20 @@ class RtkManager {
 
   async getStatus(): Promise<RtkStatus> {
     const installed = await rtkBinary.isInstalled();
-    const version = await rtkBinary.getVersion();
     const binPath = rtkBinary.binaryPath();
+    const version = installed ? await rtkBinary.getVersion() : null;
     const cfgPath = rtkConfig.configPath();
 
-    const [latestVersion, updateAvailable] = installed
-      ? await Promise.all([
-          rtkBinary.checkLatestVersion(),
-          rtkBinary.currentVersion().then((cur) =>
-            rtkBinary.checkLatestVersion().then((latest) => {
-              if (!latest) return false;
-              return normalizeVersion(latest) !== normalizeVersion(cur);
-            }),
-          ),
-        ])
-      : [null, false];
+    let latestVersion: string | null = null;
+    let updateAvailable = false;
+
+    if (installed) {
+      latestVersion = await rtkBinary.checkLatestVersion();
+      const current = await rtkBinary.currentVersion();
+      updateAvailable = latestVersion
+        ? normalizeVersion(latestVersion) !== normalizeVersion(current)
+        : false;
+    }
 
     const db = getDb();
     const row = db
