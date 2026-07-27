@@ -1,6 +1,7 @@
 import { getDb } from "../../db/connection";
 import { getCavemanPrompt } from "./caveman.prompt";
 import { cavemanBinary } from "./caveman.binary";
+import { logger } from "../../logger";
 import type { CavemanLevel, CavemanStatus } from "./caveman.types";
 
 const VALID_LEVELS: CavemanLevel[] = [
@@ -45,10 +46,15 @@ export function setCavemanLevel(level: CavemanLevel): void {
 
 export async function injectCavemanPrompt(messages: any[]): Promise<any[]> {
   if (!isCavemanEnabled()) return messages;
-  if (!(await cavemanBinary.isInstalled())) return messages;
+  if (!(await cavemanBinary.isInstalled())) {
+    logger.warn("Caveman enabled but skill not installed — skipping injection");
+    return messages;
+  }
 
   const level = getCavemanLevel();
   const prompt = await getCavemanPrompt(level);
+
+  logger.info(`Caveman injecting prompt (level: ${level})`);
 
   const systemIndex = messages.findIndex(
     (m: any) => m.role === "system" || m.role === "developer",

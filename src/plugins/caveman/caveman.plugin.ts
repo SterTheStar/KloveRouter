@@ -39,6 +39,7 @@ export const cavemanPlugin = (app: Elysia) =>
     .post("/api/caveman/install", async ({ set }) => {
       try {
         const skillPath = await cavemanBinary.ensureInstalled();
+        logger.success(`Caveman skill installed at ${skillPath}`);
         return { success: true, skillPath };
       } catch (error: any) {
         set.status = 500;
@@ -53,6 +54,7 @@ export const cavemanPlugin = (app: Elysia) =>
     .post("/api/caveman/update", async ({ set }) => {
       try {
         const skillPath = await cavemanBinary.update();
+        logger.success(`Caveman updated to latest version at ${skillPath}`);
         return { success: true, skillPath, message: "Caveman updated" };
       } catch (error: any) {
         set.status = 500;

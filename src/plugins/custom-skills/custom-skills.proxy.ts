@@ -145,7 +145,13 @@ export const customSkillsProxy = {
 
   async injectSkills(messages: any[]): Promise<any[]> {
     const active = await this.getActiveSkills();
-    if (active.length === 0) return messages;
+    if (active.length === 0) {
+      logger.debug("No active custom skills to inject");
+      return messages;
+    }
+
+    const names = active.map((s) => s.name).join(", ");
+    logger.info(`Custom skills injecting: ${names}`);
 
     const combined = active
       .map((s) => `## ${s.name}\n\n${s.content}`)

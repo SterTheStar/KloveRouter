@@ -21,6 +21,7 @@ import { freebuffResponses } from "../integrations/freebuff";
 import { cleanQwenContent, qwenResponses } from "../integrations/qwen";
 import { injectCavemanPrompt } from "../plugins/caveman";
 import { customSkillsProxy } from "../plugins/custom-skills";
+import { rtkManager } from "../plugins/rtk";
 
 function anthropicPayload(body: any, modelId: string, stream = false) {
   const messages = splitAnthropicMessages(body.messages);
@@ -536,6 +537,8 @@ export const proxyPlugin = (app: Elysia) =>
         }
         body.messages = await injectCavemanPrompt(body.messages);
         body.messages = await customSkillsProxy.injectSkills(body.messages);
+        const rtkActive = rtkManager.enabled && rtkManager.initialized;
+        const inputSize = rtkActive ? JSON.stringify(body.messages).length : 0;
         const apiKey = await verifyApiKey(headers);
         if (!apiKey) {
           set.status = 401;
@@ -1206,6 +1209,10 @@ export const proxyPlugin = (app: Elysia) =>
               });
 
               credentialService.clearError(credential.id);
+              if (rtkActive) {
+                const outputSize = JSON.stringify(completion).length;
+                logger.info(`RTK: ${parsed.modelId} — input ${inputSize} chars → output ${outputSize} chars (saved ${Math.max(0, inputSize - outputSize)} chars)`);
+              }
               return completion;
             } catch (error: any) {
               failures.push(error.message);

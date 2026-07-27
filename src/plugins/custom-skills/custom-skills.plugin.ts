@@ -1,5 +1,6 @@
 import { Elysia, t } from "elysia";
 import { customSkillsProxy } from "./custom-skills.proxy";
+import { logger } from "../../logger";
 
 export const customSkillsPlugin = (app: Elysia) =>
   app
@@ -27,6 +28,7 @@ export const customSkillsPlugin = (app: Elysia) =>
           return { error: "name and content are required" };
         }
         const skill = await customSkillsProxy.create(name.trim(), content);
+        logger.success(`Custom skill created: ${skill.name}`);
         return skill;
       },
       { body: t.Object({ name: t.String(), content: t.String() }) },
@@ -44,6 +46,7 @@ export const customSkillsPlugin = (app: Elysia) =>
           set.status = 404;
           return { error: "Skill not found" };
         }
+        logger.info(`Custom skill updated: ${skill.name}${data.is_active !== undefined ? ` (active: ${data.is_active})` : ""}`);
         return skill;
       },
       {
@@ -60,6 +63,7 @@ export const customSkillsPlugin = (app: Elysia) =>
         set.status = 404;
         return { error: "Skill not found" };
       }
+      logger.info(`Custom skill deleted: ${id}`);
       return { success: true };
     })
     .post("/api/custom-skills/:id/toggle", async ({ params: { id }, set }) => {
@@ -71,5 +75,6 @@ export const customSkillsPlugin = (app: Elysia) =>
       const updated = await customSkillsProxy.update(id, {
         is_active: !skill.is_active,
       });
+      logger.info(`Custom skill toggled: ${updated?.name} → ${updated?.is_active ? "active" : "inactive"}`);
       return updated;
     });
