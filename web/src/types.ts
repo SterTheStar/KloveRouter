@@ -180,3 +180,23 @@ export interface UserProfile {
   name: string;
   avatar: string | null;
 }
+
+export interface RtkStatus {
+  installed: boolean;
+  enabled: boolean;
+  version: string | null;
+  binaryPath: string | null;
+  platform: string | null;
+  arch: string | null;
+  pid: number | null;
+  configPath: string | null;
+  downloadUrl: string | null;
+}
+
+export interface CavemanStatus {
+  enabled: boolean;
+  level: string;
+  installed: boolean;
+  version: string | null;
+  skillPath: string | null;
+}

@@ -378,6 +378,54 @@ export const requestLogs = {
     }),
 };
 
+// RTK
+export const rtk = {
+  status: () =>
+    request<import("../types").RtkStatus>("/api/rtk/status"),
+  enable: () =>
+    request<{ success: boolean; message: string }>("/api/rtk/enable", {
+      method: "POST",
+    }),
+  disable: () =>
+    request<{ success: boolean; message: string }>("/api/rtk/disable", {
+      method: "POST",
+    }),
+  install: () =>
+    request<{ success: boolean; binaryPath?: string; message?: string }>(
+      "/api/rtk/install",
+      { method: "POST" },
+    ),
+};
+
+// Caveman
+export const caveman = {
+  status: () =>
+    request<import("../types").CavemanStatus>("/api/caveman/status"),
+  enable: () =>
+    request<{ success: boolean; message: string; level: string }>(
+      "/api/caveman/enable",
+      { method: "POST" },
+    ),
+  disable: () =>
+    request<{ success: boolean; message: string }>("/api/caveman/disable", {
+      method: "POST",
+    }),
+  setLevel: (level: string) =>
+    request<{ success: boolean; message: string; level: string }>(
+      "/api/caveman/level",
+      { method: "POST", body: JSON.stringify({ level }) },
+    ),
+  install: () =>
+    request<{ success: boolean; skillPath?: string; message?: string }>(
+      "/api/caveman/install",
+      { method: "POST" },
+    ),
+  uninstall: () =>
+    request<{ success: boolean; message: string }>("/api/caveman/uninstall", {
+      method: "POST",
+    }),
+};
+
 // Settings
 export const settings = {
   profile: () =>

@@ -13,6 +13,7 @@ import {
   freebuffUsagePlugin,
 } from "./codex.plugin";
 import { requestLogsPlugin } from "./request-logs.plugin";
+import { rtkPlugin } from "../plugins/rtk";
 
 export {
   authPlugin,
@@ -28,4 +29,5 @@ export {
   antigravityUsagePlugin,
   freebuffUsagePlugin,
   requestLogsPlugin,
+  rtkPlugin,
 };

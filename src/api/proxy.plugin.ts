@@ -19,6 +19,7 @@ import { requestLogService } from "../services/request-log.service";
 import { openAIStreamResponse } from "./openai-stream";
 import { freebuffResponses } from "../integrations/freebuff";
 import { cleanQwenContent, qwenResponses } from "../integrations/qwen";
+import { injectCavemanPrompt } from "../plugins/caveman";
 
 function anthropicPayload(body: any, modelId: string, stream = false) {
   const messages = splitAnthropicMessages(body.messages);
@@ -532,6 +533,7 @@ export const proxyPlugin = (app: Elysia) =>
             message: "model and messages are required",
           };
         }
+        body.messages = await injectCavemanPrompt(body.messages);
         const apiKey = await verifyApiKey(headers);
         if (!apiKey) {
           set.status = 401;

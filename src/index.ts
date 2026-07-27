@@ -19,10 +19,16 @@ import {
   antigravityUsagePlugin,
   freebuffUsagePlugin,
   requestLogsPlugin,
+  rtkPlugin,
 } from "./api";
+import { initRtkOnStartup, rtkPublicPlugin } from "./plugins/rtk";
+import { cavemanPublicPlugin, cavemanPlugin } from "./plugins/caveman";
 
 // Initialize database
 getDb();
+
+// Auto-start RTK if enabled in settings
+initRtkOnStartup();
 
 const app = new Elysia()
   .onRequest(requestHooks.onRequest)
@@ -44,6 +50,12 @@ const app = new Elysia()
   .use(codexPublicPlugin)
   .use(antigravityPublicPlugin)
   .use(proxyPlugin);
+
+// RTK public routes
+app.use(rtkPublicPlugin);
+
+// Caveman public routes
+app.use(cavemanPublicPlugin);
 
 // Protected routes (require JWT)
 const protectedApp = new Elysia()
@@ -72,7 +84,9 @@ const protectedApp = new Elysia()
   .use(requestLogsPlugin)
   .use(antigravityUsagePlugin)
   .use(freebuffUsagePlugin)
-  .use(codexPlugin);
+  .use(codexPlugin)
+  .use(rtkPlugin)
+  .use(cavemanPlugin);
 
 app.use(protectedApp as any);
 
