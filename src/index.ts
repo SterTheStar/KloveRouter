@@ -23,6 +23,7 @@ import {
 } from "./api";
 import { initRtkOnStartup, rtkPublicPlugin } from "./plugins/rtk";
 import { cavemanPublicPlugin, cavemanPlugin } from "./plugins/caveman";
+import { customSkillsPlugin } from "./plugins/custom-skills";
 
 // Initialize database
 getDb();
@@ -86,7 +87,8 @@ const protectedApp = new Elysia()
   .use(freebuffUsagePlugin)
   .use(codexPlugin)
   .use(rtkPlugin)
-  .use(cavemanPlugin);
+  .use(cavemanPlugin)
+  .use(customSkillsPlugin);
 
 app.use(protectedApp as any);
 

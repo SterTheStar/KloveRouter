@@ -9,6 +9,10 @@ import {
   RiShieldLine as ShieldLine,
   RiPuzzle2Line as PuzzleLine,
   RiBubbleChartLine as CavemanLine,
+  RiFileListLine as RiFileListLine,
+  RiEditLine as RiEditLine,
+  RiDeleteBinLine as RiDeleteBinLine,
+  RiAddLine as RiAddLine,
 } from "@remixicon/react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -16,13 +20,22 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { Tabs } from "@/components/ui/tabs";
 import type { Tab } from "@/components/ui/tabs";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import AvatarUpload from "../components/AvatarUpload";
-import { settings, rtk, caveman } from "../api/client";
+import { settings, rtk, caveman, customSkills } from "../api/client";
 import { useToast } from "../components/ui/toast";
 import type { UserProfile, RtkStatus, CavemanStatus } from "../types";
 
@@ -64,6 +77,16 @@ export default function SettingsPage({
   const [cavemanStatus, setCavemanStatus] = useState<CavemanStatus | null>(null);
   const [cavemanToggling, setCavemanToggling] = useState(false);
   const [cavemanLoading, setCavemanLoading] = useState(false);
+
+  const [customSkillList, setCustomSkillList] = useState<import("../types").CustomSkill[]>([]);
+  const [showSkillDialog, setShowSkillDialog] = useState(false);
+  const [editingSkill, setEditingSkill] = useState<string | null>(null);
+  const [skillName, setSkillName] = useState("");
+  const [skillContent, setSkillContent] = useState("");
+
+  useEffect(() => {
+    customSkills.list().then(setCustomSkillList).catch(() => {});
+  }, []);
 
   useEffect(() => {
     rtk.status().then(setRtkStatus).catch(() => {});
@@ -210,6 +233,48 @@ export default function SettingsPage({
       notifyError("Caveman update failed", e.message);
     } finally {
       setCavemanLoading(false);
+    }
+  };
+
+  const toggleCustomSkill = async (id: string) => {
+    try {
+      const updated = await customSkills.toggle(id);
+      setCustomSkillList((prev) =>
+        prev.map((s) => (s.id === id ? { ...s, is_active: updated.is_active } : s)),
+      );
+    } catch (e: any) {
+      notifyError("Toggle failed", e.message);
+    }
+  };
+
+  const removeCustomSkill = async (id: string) => {
+    try {
+      await customSkills.remove(id);
+      setCustomSkillList((prev) => prev.filter((s) => s.id !== id));
+      notifySuccess("Skill removed");
+    } catch (e: any) {
+      notifyError("Remove failed", e.message);
+    }
+  };
+
+  const saveCustomSkill = async () => {
+    if (!skillName.trim() || !skillContent.trim()) return;
+    try {
+      if (editingSkill) {
+        const updated = await customSkills.update(editingSkill, {
+          name: skillName.trim(),
+          content: skillContent,
+        });
+        setCustomSkillList((prev) => prev.map((s) => (s.id === editingSkill ? updated : s)));
+        notifySuccess("Skill updated");
+      } else {
+        const created = await customSkills.create({ name: skillName.trim(), content: skillContent });
+        setCustomSkillList((prev) => [...prev, created]);
+        notifySuccess("Skill created");
+      }
+      setShowSkillDialog(false);
+    } catch (e: any) {
+      notifyError("Save failed", e.message);
     }
   };
 
@@ -455,6 +520,74 @@ export default function SettingsPage({
             )}
           </CardContent>
         </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <RiFileListLine className="size-5" />
+              Custom Skills
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {customSkillList.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No custom skills yet.</p>
+            ) : (
+              customSkillList.map((skill) => (
+                <div key={skill.id} className="flex items-center justify-between rounded-lg border p-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium truncate">{skill.name}</span>
+                      {skill.content && (
+                        <span className="text-xs text-muted-foreground truncate">
+                          {skill.content.split('\n')[0]}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Button
+                      variant="ghost"
+                      size="xs"
+                      onClick={() => {
+                        setEditingSkill(skill.id);
+                        setSkillName(skill.name);
+                        setSkillContent(skill.content);
+                        setShowSkillDialog(true);
+                      }}
+                    >
+                      <RiEditLine className="size-3.5" />
+                    </Button>
+                    <Switch
+                      checked={skill.is_active}
+                      onCheckedChange={() => toggleCustomSkill(skill.id)}
+                      aria-label={`Toggle ${skill.name}`}
+                    />
+                    <Button
+                      variant="ghost"
+                      size="xs"
+                      onClick={() => removeCustomSkill(skill.id)}
+                      className="text-destructive hover:text-destructive"
+                    >
+                      <RiDeleteBinLine className="size-3.5" />
+                    </Button>
+                  </div>
+                </div>
+              ))
+            )}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setEditingSkill(null);
+                setSkillName("");
+                setSkillContent("");
+                setShowSkillDialog(true);
+              }}
+            >
+              <RiAddLine className="size-4" />
+              Add skill
+            </Button>
+          </CardContent>
+        </Card>
         </>
       )}
 
@@ -532,6 +665,46 @@ export default function SettingsPage({
           </CardContent>
         </Card>
       )}
+
+      <Dialog open={showSkillDialog} onOpenChange={setShowSkillDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{editingSkill ? "Edit skill" : "New skill"}</DialogTitle>
+            <DialogDescription>
+              Write a custom system prompt skill. Active skills are injected into every proxy request.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label htmlFor="skill-name">Name</Label>
+              <Input
+                id="skill-name"
+                value={skillName}
+                onChange={(e) => setSkillName(e.target.value)}
+                placeholder="My custom skill"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="skill-content">Content (markdown)</Label>
+              <Textarea
+                id="skill-content"
+                value={skillContent}
+                onChange={(e) => setSkillContent(e.target.value)}
+                placeholder="You are an expert at..."
+                rows={8}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowSkillDialog(false)}>
+              Cancel
+            </Button>
+            <Button onClick={saveCustomSkill} disabled={!skillName.trim() || !skillContent.trim()}>
+              {editingSkill ? "Update" : "Create"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

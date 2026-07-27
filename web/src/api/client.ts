@@ -436,6 +436,32 @@ export const caveman = {
     ),
 };
 
+// Custom Skills
+export const customSkills = {
+  list: () =>
+    request<import("../types").CustomSkill[]>("/api/custom-skills"),
+  get: (id: string) =>
+    request<import("../types").CustomSkill>(`/api/custom-skills/${id}`),
+  create: (data: { name: string; content: string }) =>
+    request<import("../types").CustomSkill>("/api/custom-skills", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  update: (id: string, data: { name?: string; content?: string; is_active?: boolean }) =>
+    request<import("../types").CustomSkill>(`/api/custom-skills/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+  remove: (id: string) =>
+    request<{ success: boolean }>(`/api/custom-skills/${id}`, {
+      method: "DELETE",
+    }),
+  toggle: (id: string) =>
+    request<import("../types").CustomSkill>(`/api/custom-skills/${id}/toggle`, {
+      method: "POST",
+    }),
+};
+
 // Settings
 export const settings = {
   profile: () =>

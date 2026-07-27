@@ -20,6 +20,7 @@ import { openAIStreamResponse } from "./openai-stream";
 import { freebuffResponses } from "../integrations/freebuff";
 import { cleanQwenContent, qwenResponses } from "../integrations/qwen";
 import { injectCavemanPrompt } from "../plugins/caveman";
+import { customSkillsProxy } from "../plugins/custom-skills";
 
 function anthropicPayload(body: any, modelId: string, stream = false) {
   const messages = splitAnthropicMessages(body.messages);
@@ -534,6 +535,7 @@ export const proxyPlugin = (app: Elysia) =>
           };
         }
         body.messages = await injectCavemanPrompt(body.messages);
+        body.messages = await customSkillsProxy.injectSkills(body.messages);
         const apiKey = await verifyApiKey(headers);
         if (!apiKey) {
           set.status = 401;
