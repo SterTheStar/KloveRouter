@@ -113,19 +113,19 @@ async function ensureSession(
       currentModel?: string;
     } | null;
     if (locked?.status === "model_locked" && locked.currentModel && locked.currentModel !== model) {
-      // Limited accounts can only have one active model session. Re-query the
-      // active model to obtain its instance id instead of destroying a live
-      // session (which would also spend another admission/quota unit).
+      // A limited account can only have one active model session. When the
+      // requested model differs, explicitly switch sessions instead of
+      // silently sending the request to the currently locked model.
+      await endSession(credential, baseUrl(endpoint));
       response = await request(credential, `${baseUrl(endpoint)}/api/v1/freebuff/session`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "User-Agent": CLI_USER_AGENT,
-          "x-freebuff-model": locked.currentModel,
+          "x-freebuff-model": model,
         },
         body: "{}",
       });
-      model = locked.currentModel;
     } else {
       throw new Error(`Freebuff session model locked (${response.status})`);
     }
