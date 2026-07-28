@@ -93,7 +93,10 @@ export function parseRawModelMetadata(raw: any): ModelMetadataInput {
         boolean(raw?.supportsThinking) ?? boolean(raw?.reasoning) ??
           (reasoningEfforts?.length ? true : supported(["reasoning", "reasoning_effort"])),
       ),
-      tools: capability("tools", boolean(raw?.supportsTools) ?? boolean(raw?.tool_call) ?? supported(["tools", "tool_choice", "function_call"])),
+      tools: capability("tools", boolean(raw?.supportsTools) ?? boolean(raw?.tool_call) ??
+        ((raw?.supports_parallel_tool_calls === true || typeof raw?.tool_mode === "string" ||
+          (Array.isArray(raw?.experimental_supported_tools) && raw.experimental_supported_tools.length > 0)) ||
+          supported(["tools", "tool_choice", "function_call"]))),
       vision: capability("vision", boolean(raw?.supportsImages) ?? boolean(raw?.supportsVideo) ?? (inputModalities.length ? inputModalities.some((item) => item.includes("image")) : undefined)),
       attachments: capability("attachments", boolean(raw?.supportsAttachments) ?? boolean(raw?.attachment) ?? (supportedMimeTypes.length ? supportedMimeTypes.some((item: string) => !item.startsWith("image/") && item !== "text/plain") : (inputModalities.length ? inputModalities.some((item) => item.includes("file")) : undefined))),
       streaming: capability("streaming", boolean(raw?.supportsStreaming) ?? boolean(raw?.streaming) ?? boolean(raw?.supports_streaming)),
@@ -142,7 +145,7 @@ export async function resolveModelMetadata(
   raw: any = {},
 ): Promise<ModelMetadataInput> {
   const rawMetadata = parseRawModelMetadata(raw);
-  if (protocol === "antigravity")
+  if (protocol === "antigravity" || protocol === "codex")
     return rawMetadata;
   if (dedicatedIntegrations.has(protocol))
     return numericMetadata(rawMetadata);

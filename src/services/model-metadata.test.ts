@@ -131,6 +131,34 @@ describe("model metadata resolver", () => {
     ]);
   });
 
+  test("parses Codex model capabilities and reasoning levels", async () => {
+    const parsed = await resolveModelMetadata("codex", "gpt-5.6-luna", {
+      context_window: 272_000,
+      max_context_window: 272_000,
+      input_modalities: ["text", "image"],
+      supports_parallel_tool_calls: true,
+      tool_mode: "code_mode_only",
+      default_reasoning_level: "medium",
+      supported_reasoning_levels: [
+        { effort: "low" },
+        { effort: "medium" },
+        { effort: "high" },
+      ],
+    });
+
+    expect(parsed).toEqual(expect.objectContaining({
+      context_window: 272_000,
+      capabilities: expect.objectContaining({
+        reasoning: true,
+        tools: true,
+        vision: true,
+      }),
+      reasoning_efforts: expect.arrayContaining([
+        expect.objectContaining({ effort: "medium", is_default: true }),
+      ]),
+    }));
+  });
+
   test("parses OpenRouter-style architecture, top provider, and supported efforts", () => {
     const parsed = parseRawModelMetadata({
       context_length: 1_000_000,
