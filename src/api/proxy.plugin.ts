@@ -542,17 +542,14 @@ export const proxyPlugin = (app: Elysia) =>
         }
 
         if (rtkManager.enabled) {
-          body.messages = await Promise.all(
-            body.messages.map(async (message: any) => {
-              if (message?.role !== "tool" || typeof message.content !== "string") {
-                return message;
-              }
-              const filtered = await rtkManager.filterToolOutput(message.content);
-              return filtered === message.content
-                ? message
-                : { ...message, content: filtered };
-            }),
-          );
+          const lastMessageIndex = body.messages.length - 1;
+          const lastMessage = body.messages[lastMessageIndex];
+          if (lastMessage?.role === "tool" && typeof lastMessage.content === "string") {
+            const filtered = await rtkManager.filterToolOutput(lastMessage.content);
+            if (filtered !== lastMessage.content) {
+              body.messages[lastMessageIndex] = { ...lastMessage, content: filtered };
+            }
+          }
         }
 
         body.messages = await injectCavemanPrompt(body.messages);
