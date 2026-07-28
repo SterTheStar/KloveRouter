@@ -1,9 +1,10 @@
 import { existsSync, mkdirSync } from "node:fs";
 import { readFile, writeFile, rm } from "node:fs/promises";
 import { join } from "node:path";
+import { config } from "../../config";
 import { logger } from "../../logger";
 
-const CAVEMAN_DIR = join(".", "data", "caveman");
+const CAVEMAN_DIR = join(config.dataDir, "caveman");
 const SKILL_FILE = "SKILL.md";
 
 function cavemanDir(): string {
@@ -61,12 +62,13 @@ async function extractSkill(archivePath: string, version: string): Promise<strin
     await rm(extractDir, { recursive: true, force: true });
   }
 
-  const { execSync } = await import("node:child_process");
-  execSync(`tar -xzf "${archivePath}" -C "${dir}"`, { stdio: "pipe" });
+  const { execFileSync } = await import("node:child_process");
+  execFileSync("tar", ["-xzf", archivePath, "-C", dir], { stdio: "pipe" });
 
   const srcSkillPath = join(extractDir, "skills", "caveman", SKILL_FILE);
   if (!existsSync(srcSkillPath)) {
-    const entries = execSync(`ls "${extractDir}/skills/"`, { encoding: "utf8" }).trim();
+    const { readdirSync } = await import("node:fs");
+    const entries = readdirSync(join(extractDir, "skills")).join(", ");
     throw new Error(`Caveman SKILL.md not found. skills/ contents: ${entries}`);
   }
 

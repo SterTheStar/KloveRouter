@@ -1,13 +1,14 @@
 import { existsSync, mkdirSync, readdirSync } from "node:fs";
 import { readFile, writeFile, rm } from "node:fs/promises";
 import { join } from "node:path";
+import { config } from "../../config";
 import { logger } from "../../logger";
 import type { CustomSkill } from "./custom-skills.types";
 
-const SKILLS_DIR = join(".", "data", "custom-skills");
+const SKILLS_DIR = join(config.dataDir, "custom-skills");
 
 function skillsDir(): string {
-  return join(".", SKILLS_DIR);
+  return SKILLS_DIR;
 }
 
 function skillFilePath(id: string): string {
@@ -52,12 +53,11 @@ export const customSkillsProxy = {
     if (!skill) return null;
 
     try {
-      skill.content = await readFile(skillFilePath(id), "utf-8");
+      const content = await readFile(skillFilePath(id), "utf-8");
+      return { ...skill, content };
     } catch {
-      skill.content = "";
+      return { ...skill, content: "" };
     }
-
-    return skill;
   },
 
   async create(name: string, content: string): Promise<CustomSkill> {

@@ -16,20 +16,10 @@ export interface RtkStatus {
   binaryPath: string | null;
   platform: RtkPlatform | null;
   arch: RtkArch | null;
-  pid: number | null;
   configPath: string | null;
   downloadUrl: string | null;
   latestVersion: string | null;
   updateAvailable: boolean;
-}
-
-export interface RtkCompressResult {
-  original: string;
-  compressed: string;
-  originalChars: number;
-  compressedChars: number;
-  savedChars: number;
-  savedPercent: number;
 }
 
 export interface RtkConfig {

@@ -41,6 +41,13 @@ export const customSkillsPlugin = (app: Elysia) =>
           content?: string;
           is_active?: boolean;
         };
+        if (
+          (data.name !== undefined && !data.name.trim()) ||
+          (data.content !== undefined && !data.content.trim())
+        ) {
+          set.status = 400;
+          return { error: "name and content cannot be empty" };
+        }
         const skill = await customSkillsProxy.update(id, data);
         if (!skill) {
           set.status = 404;
@@ -75,6 +82,6 @@ export const customSkillsPlugin = (app: Elysia) =>
       const updated = await customSkillsProxy.update(id, {
         is_active: !skill.is_active,
       });
-      logger.info(`Custom skill toggled: ${updated?.name} → ${updated?.is_active ? "active" : "inactive"}`);
+       logger.info(`Custom skill toggled: ${updated?.name} ${updated?.is_active ? "active" : "inactive"}`);
       return updated;
     });

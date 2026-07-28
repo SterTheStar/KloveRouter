@@ -425,8 +425,7 @@ export default function SettingsPage({
             {rtkStatus?.platform && rtkStatus?.arch && (
               <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-muted-foreground">
                 <span>Platform: {rtkStatus.platform}-{rtkStatus.arch}</span>
-                {rtkStatus.pid && <span>PID: {rtkStatus.pid}</span>}
-                {rtkStatus.configPath && <span>Config: {rtkStatus.configPath}</span>}
+                 {rtkStatus.configPath && <span>RTK config: {rtkStatus.configPath}</span>}
               </div>
             )}
           </CardContent>

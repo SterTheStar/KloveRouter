@@ -21,7 +21,6 @@ import { freebuffResponses } from "../integrations/freebuff";
 import { cleanQwenContent, qwenResponses } from "../integrations/qwen";
 import { injectCavemanPrompt } from "../plugins/caveman";
 import { customSkillsProxy } from "../plugins/custom-skills";
-import { rtkManager } from "../plugins/rtk";
 
 function anthropicPayload(body: any, modelId: string, stream = false) {
   const messages = splitAnthropicMessages(body.messages);
@@ -535,24 +534,14 @@ export const proxyPlugin = (app: Elysia) =>
             message: "model and messages are required",
           };
         }
-        body.messages = await injectCavemanPrompt(body.messages);
-        body.messages = await customSkillsProxy.injectSkills(body.messages);
-        if (rtkManager.enabled && rtkManager.initialized) {
-          const lastUserIdx = body.messages.length - 1;
-          const lastMsg = body.messages[lastUserIdx];
-          if (lastMsg?.role === "user" && typeof lastMsg.content === "string") {
-            const result = await rtkManager.compress(lastMsg.content);
-            if (result && result.savedPercent > 0) {
-              body.messages[lastUserIdx] = { ...lastMsg, content: result.compressed };
-              logger.info(`RTK compressed input: ${result.originalChars}→${result.compressedChars} chars (-${result.savedPercent}%)`);
-            }
-          }
-        }
         const apiKey = await verifyApiKey(headers);
         if (!apiKey) {
           set.status = 401;
           return { error: "Unauthorized", message: "Valid API key required" };
         }
+
+        body.messages = await injectCavemanPrompt(body.messages);
+        body.messages = await customSkillsProxy.injectSkills(body.messages);
 
         // Parse providername/modelname
         const parsed = parseModelName(body.model);

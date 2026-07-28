@@ -52,7 +52,13 @@ export async function injectCavemanPrompt(messages: any[]): Promise<any[]> {
   }
 
   const level = getCavemanLevel();
-  const prompt = await getCavemanPrompt(level);
+  let prompt: string;
+  try {
+    prompt = await getCavemanPrompt(level);
+  } catch (error) {
+    logger.error("Failed to load Caveman prompt", { error, level });
+    return messages;
+  }
 
   logger.info(`Caveman injecting prompt (level: ${level})`);
 
@@ -79,19 +85,12 @@ function normalizeVersion(v: string | null): string {
 
 export async function getCavemanStatus(): Promise<CavemanStatus> {
   const installed = await cavemanBinary.isInstalled();
-  const version = await cavemanBinary.currentVersion();
+  const version = installed ? await cavemanBinary.currentVersion() : null;
 
-  const [latestVersion, updateAvailable] = installed
-    ? await Promise.all([
-        cavemanBinary.checkLatestVersion(),
-        cavemanBinary.currentVersion().then((cur) =>
-          cavemanBinary.checkLatestVersion().then((latest) => {
-            if (!latest) return false;
-            return normalizeVersion(latest) !== normalizeVersion(cur);
-          }),
-        ),
-      ])
-    : [null, false];
+  const latestVersion = installed ? await cavemanBinary.checkLatestVersion() : null;
+  const updateAvailable = Boolean(
+    latestVersion && normalizeVersion(latestVersion) !== normalizeVersion(version),
+  );
 
   return {
     enabled: isCavemanEnabled(),

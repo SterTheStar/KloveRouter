@@ -31,16 +31,16 @@ export const rtkPlugin = (app: Elysia) =>
       try {
         await rtkManager.enable();
         setRtkEnabled(true);
-        return { success: true, message: "RTK enabled" };
+        return { success: true, message: "RTK enabled for OpenCode shell commands" };
       } catch (error: any) {
         set.status = 500;
         return { success: false, message: error.message };
       }
     })
     .post("/api/rtk/disable", async () => {
-      rtkManager.disable();
+      await rtkManager.disable();
       setRtkEnabled(false);
-      return { success: true, message: "RTK disabled" };
+      return { success: true, message: "RTK disabled for OpenCode shell commands" };
     })
     .post("/api/rtk/install", async ({ set }) => {
       try {
@@ -66,9 +66,7 @@ export function initRtkOnStartup(): void {
 
   logger.info("RTK is enabled in settings, initializing...");
 
-  rtkManager.initialize().then(() => {
-    rtkManager.enable().catch((err) => {
-      logger.error("Failed to auto-start RTK", { error: err });
-    });
+  rtkManager.enable().catch((err) => {
+    logger.error("Failed to auto-start RTK", { error: err });
   });
 }
