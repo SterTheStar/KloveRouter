@@ -29,7 +29,7 @@ function effortRows(values: string[], defaultEffort = "medium"): ReasoningEffort
 
 function parseEfforts(raw: any): ReasoningEffort[] | undefined {
   const source = raw?.reasoning_efforts ?? raw?.supported_reasoning_efforts ??
-    raw?.reasoning?.efforts ?? raw?.reasoning?.supported_efforts ??
+    raw?.supported_reasoning_levels ?? raw?.reasoning?.efforts ?? raw?.reasoning?.supported_efforts ??
     raw?.capabilities?.reasoning_efforts;
   if (!Array.isArray(source) || !source.length) return undefined;
   const values = source
@@ -39,7 +39,7 @@ function parseEfforts(raw: any): ReasoningEffort[] | undefined {
     .filter((item: unknown): item is string => typeof item === "string" && Boolean(item.trim()))
     .map((item) => item.trim());
   if (!values.length) return undefined;
-  const preferred = String(raw?.default_reasoning_effort ?? raw?.reasoning?.default_effort ?? "medium");
+  const preferred = String(raw?.default_reasoning_effort ?? raw?.default_reasoning_level ?? raw?.reasoning?.default_effort ?? "medium");
   const fallback = values.includes(preferred) ? preferred : values.includes("medium") ? "medium" : values[0];
   return effortRows([...new Set(values)], fallback);
 }
@@ -66,6 +66,9 @@ export function parseRawModelMetadata(raw: any): ModelMetadataInput {
   const explicit = raw?.capabilities && typeof raw.capabilities === "object"
     ? raw.capabilities
     : {};
+  const supportedMimeTypes = Array.isArray(raw?.supportedMimeTypes)
+    ? raw.supportedMimeTypes.map(String).map((value: string) => value.toLowerCase())
+    : [];
   const supported = (names: string[]) => parameters
     ? names.some((name) => parameters.has(name))
     : undefined;
@@ -74,27 +77,27 @@ export function parseRawModelMetadata(raw: any): ModelMetadataInput {
   const reasoningEfforts = parseEfforts(raw);
   return {
     context_window: positiveInteger(
-      raw?.context_window ?? raw?.context_length ?? raw?.max_context_length ??
+      raw?.maxTokens ?? raw?.max_context_window ?? raw?.context_window ?? raw?.context_length ?? raw?.max_context_length ??
         raw?.input_token_limit ?? raw?.limit?.context ?? nested?.context_window ??
-        nested?.context_length ?? nested?.input_token_limit ?? nested?.limit?.context ??
+        nested?.max_context_window ?? nested?.context_length ?? nested?.input_token_limit ?? nested?.limit?.context ??
         raw?.top_provider?.context_length,
     ),
     max_output_tokens: positiveInteger(
-      raw?.max_output_tokens ?? raw?.max_completion_tokens ?? raw?.output_token_limit ??
+      raw?.maxOutputTokens ?? raw?.max_output_tokens ?? raw?.max_completion_tokens ?? raw?.output_token_limit ??
         raw?.limit?.output ?? nested?.max_output_tokens ?? nested?.output_token_limit ??
         nested?.limit?.output ?? raw?.top_provider?.max_completion_tokens,
     ),
     capabilities: {
       reasoning: capability(
         "reasoning",
-        boolean(raw?.reasoning) ??
+        boolean(raw?.supportsThinking) ?? boolean(raw?.reasoning) ??
           (reasoningEfforts?.length ? true : supported(["reasoning", "reasoning_effort"])),
       ),
-      tools: capability("tools", boolean(raw?.tool_call) ?? supported(["tools", "tool_choice", "function_call"])),
-      vision: capability("vision", inputModalities.length ? inputModalities.some((item) => item.includes("image")) : undefined),
-      attachments: capability("attachments", boolean(raw?.attachment) ?? (inputModalities.length ? inputModalities.some((item) => item.includes("file")) : undefined)),
-      streaming: capability("streaming", boolean(raw?.streaming) ?? boolean(raw?.supports_streaming)),
-      non_streaming: capability("non_streaming", boolean(raw?.non_streaming) ?? boolean(raw?.supports_non_streaming)),
+      tools: capability("tools", boolean(raw?.supportsTools) ?? boolean(raw?.tool_call) ?? supported(["tools", "tool_choice", "function_call"])),
+      vision: capability("vision", boolean(raw?.supportsImages) ?? boolean(raw?.supportsVideo) ?? (inputModalities.length ? inputModalities.some((item) => item.includes("image")) : undefined)),
+      attachments: capability("attachments", boolean(raw?.supportsAttachments) ?? boolean(raw?.attachment) ?? (supportedMimeTypes.length ? supportedMimeTypes.some((item: string) => !item.startsWith("image/") && item !== "text/plain") : (inputModalities.length ? inputModalities.some((item) => item.includes("file")) : undefined))),
+      streaming: capability("streaming", boolean(raw?.supportsStreaming) ?? boolean(raw?.streaming) ?? boolean(raw?.supports_streaming)),
+      non_streaming: capability("non_streaming", boolean(raw?.supportsNonStreaming) ?? boolean(raw?.non_streaming) ?? boolean(raw?.supports_non_streaming)),
     },
     reasoning_efforts: reasoningEfforts,
   };
@@ -139,6 +142,8 @@ export async function resolveModelMetadata(
   raw: any = {},
 ): Promise<ModelMetadataInput> {
   const rawMetadata = parseRawModelMetadata(raw);
+  if (protocol === "antigravity")
+    return rawMetadata;
   if (dedicatedIntegrations.has(protocol))
     return numericMetadata(rawMetadata);
   const resolved = mergeMetadata(rawMetadata);

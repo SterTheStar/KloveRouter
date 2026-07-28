@@ -82,6 +82,55 @@ describe("model metadata resolver", () => {
     expect(parsed.reasoning_efforts?.find((effort) => effort.is_default)?.effort).toBe("high");
   });
 
+  test("prefers the model maximum context window when provider returns both limits", () => {
+    const parsed = parseRawModelMetadata({
+      context_window: 272_000,
+      max_context_window: 1_000_000,
+    });
+
+    expect(parsed.context_window).toBe(1_000_000);
+  });
+
+  test("parses Antigravity model limits and explicit capabilities", async () => {
+    const raw = {
+      maxTokens: 1_048_576,
+      maxOutputTokens: 65_536,
+      supportsImages: true,
+      supportsThinking: true,
+      supportsVideo: true,
+      supportedMimeTypes: ["image/png", "application/pdf"],
+      supported_reasoning_levels: ["low", "high"],
+      default_reasoning_level: "high",
+    };
+
+    const parsed = await resolveModelMetadata("antigravity", "gemini-test", raw);
+
+    expect(parsed).toEqual(expect.objectContaining({
+      context_window: 1_048_576,
+      max_output_tokens: 65_536,
+    }));
+    expect(parsed.capabilities).toEqual(expect.objectContaining({
+      reasoning: true,
+      vision: true,
+      attachments: true,
+    }));
+    expect(parsed.reasoning_efforts).toEqual([
+      expect.objectContaining({ effort: "low", is_default: false }),
+      expect.objectContaining({ effort: "high", is_default: true }),
+    ]);
+
+    const normalApiParsed = parseRawModelMetadata(raw);
+    expect(normalApiParsed.capabilities).toEqual(expect.objectContaining({
+      reasoning: true,
+      vision: true,
+      attachments: true,
+    }));
+    expect(normalApiParsed.reasoning_efforts).toEqual([
+      expect.objectContaining({ effort: "low", is_default: false }),
+      expect.objectContaining({ effort: "high", is_default: true }),
+    ]);
+  });
+
   test("parses OpenRouter-style architecture, top provider, and supported efforts", () => {
     const parsed = parseRawModelMetadata({
       context_length: 1_000_000,

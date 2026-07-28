@@ -413,6 +413,10 @@ function seedMissingMetadata(modelId: string, input: ModelMetadataInput): void {
   });
 }
 
+function refreshSyncedMetadata(modelId: string, input: ModelMetadataInput): void {
+  saveMetadata(modelId, input);
+}
+
 function hydrate(model: Model | null): Model | null {
   if (!model) return null;
   const db = getDb();
@@ -543,7 +547,8 @@ export const modelService = {
         );
         if (!syncingManualModel && (input.pricing_tiers || !hasPricing))
           savePricing(existing.id, pricingTiers);
-        seedMissingMetadata(existing.id, input);
+        if (syncingManualModel) seedMissingMetadata(existing.id, input);
+        else refreshSyncedMetadata(existing.id, input);
       })();
       return this.findById(existing.id)!;
     }
