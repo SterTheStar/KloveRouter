@@ -398,8 +398,6 @@ export function codexRequestBody(
         : Object.keys(reasoningInput).length
           ? reasoningInput
           : undefined;
-  const maxOutputTokens =
-    body.max_output_tokens ?? body.max_completion_tokens ?? body.max_tokens;
   return {
     model,
     input: converted.input,
@@ -417,9 +415,6 @@ export function codexRequestBody(
       ? { temperature: body.temperature }
       : {}),
     ...(body.top_p !== undefined ? { top_p: body.top_p } : {}),
-    ...(maxOutputTokens !== undefined
-      ? { max_output_tokens: maxOutputTokens }
-      : {}),
     ...(reasoning ? { reasoning } : {}),
     ...(text ? { text } : {}),
   };

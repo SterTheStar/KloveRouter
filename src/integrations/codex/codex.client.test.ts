@@ -130,10 +130,10 @@ describe("codexModels", () => {
 });
 
 describe("codexRequestBody", () => {
-  test("omits empty or disabled reasoning and accepts output aliases", () => {
+  test("omits empty or disabled reasoning and does not send output token limits", () => {
     expect(
       codexRequestBody({ messages: [], max_tokens: 20 }, "gpt-test"),
-    ).toMatchObject({ max_output_tokens: 20 });
+    ).not.toHaveProperty("max_output_tokens");
     expect(
       codexRequestBody({ messages: [], max_tokens: 20 }, "gpt-test"),
     ).not.toHaveProperty("reasoning");
