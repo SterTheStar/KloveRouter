@@ -1,7 +1,7 @@
 import type { Provider } from "../services/provider.service";
 
 export type AnthropicMessage = {
-  role: "user" | "assistant" | "system";
+  role: "user" | "assistant" | "system" | "developer";
   content: unknown;
 };
 
@@ -47,7 +47,7 @@ function headers(
 
 export function splitAnthropicMessages(messages: AnthropicMessage[]) {
   const systemMessages = messages.filter(
-    (message) => (message as { role: string }).role === "system",
+    (message) => (message as { role: string }).role === "system" || message.role === "developer",
   );
   return {
     system:

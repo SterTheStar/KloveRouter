@@ -5,7 +5,7 @@ export interface CavemanStatus {
   level: CavemanLevel;
   installed: boolean;
   version: string | null;
-  skillPath: string | null;
+  skillPath?: string | null;
   latestVersion: string | null;
   updateAvailable: boolean;
 }

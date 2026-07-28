@@ -195,7 +195,7 @@ export interface RtkStatus {
 
 export interface CavemanStatus {
   enabled: boolean;
-  level: string;
+  level: "lite" | "full" | "ultra" | "wenyan-lite" | "wenyan-full" | "wenyan-ultra";
   installed: boolean;
   version: string | null;
   skillPath: string | null;

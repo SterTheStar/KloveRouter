@@ -62,15 +62,23 @@ export async function injectCavemanPrompt(messages: any[]): Promise<any[]> {
 
   logger.info(`Caveman injecting prompt (level: ${level})`);
 
-  const systemIndex = messages.findIndex(
-    (m: any) => m.role === "system" || m.role === "developer",
-  );
+  const systemIndex = messages.findIndex((m: any) => m.role === "system");
+  const developerIndex = systemIndex >= 0 ? -1 : messages.findIndex((m: any) => m.role === "developer");
+  const targetIndex = systemIndex >= 0 ? systemIndex : developerIndex;
 
-  if (systemIndex >= 0) {
+  if (targetIndex >= 0) {
     const updated = [...messages];
-    updated[systemIndex] = {
-      ...updated[systemIndex],
-      content: `${prompt}\n\n${updated[systemIndex].content}`,
+    const target = updated[targetIndex];
+    const content = target.content;
+    const injected = typeof content === "string"
+      ? `${prompt}\n\n${content}`
+      : Array.isArray(content)
+        ? [{ type: "text", text: prompt }, ...content]
+        : [{ type: "text", text: prompt }, ...(content ? [content] : [])];
+    updated[targetIndex] = {
+      ...target,
+      role: target.role,
+      content: injected,
     };
     return updated;
   }

@@ -6,11 +6,16 @@ export const CAVEMAN_LEVELS: CavemanLevel[] = [
   "wenyan-lite", "wenyan-full", "wenyan-ultra",
 ];
 
-function extractLevelPrompt(skillContent: string, level: CavemanLevel): string {
-  const label = level;
-  const regex = new RegExp(`\\|\\s*\\*\\*${label}\\*\\*\\s*\\|(.+?)\\|`);
-  const match = skillContent.match(regex);
-  if (match) return match[1].trim();
+export function extractLevelPrompt(skillContent: string, level: CavemanLevel): string {
+  const escaped = level.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const line = skillContent.split(/\r?\n/).find((value) =>
+    new RegExp(`^\\s*\\|\\s*\\*\\*${escaped}\\*\\*\\s*\\|`).test(value),
+  );
+  if (line) {
+    const cells = line.split("|").map((cell) => cell.trim());
+    const prompt = cells[2];
+    if (prompt) return prompt;
+  }
 
   throw new Error(`Level "${level}" not found in Caveman SKILL.md`);
 }
