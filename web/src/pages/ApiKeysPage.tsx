@@ -40,6 +40,7 @@ import { apiKeys } from "../api/client";
 import ConfirmDialog from "../components/ConfirmDialog";
 import { useToast } from "../components/ui/toast";
 import type { ApiKey, ApiKeyWithSecret } from "../types";
+import { copyToClipboard } from "../lib/clipboard";
 
 export default function ApiKeysPage() {
   const { success, error: notifyError } = useToast();
@@ -93,9 +94,7 @@ export default function ApiKeysPage() {
 
   const copy = async (value: string) => {
     try {
-      if (!navigator.clipboard)
-        throw new Error("Clipboard access is unavailable.");
-      await navigator.clipboard.writeText(value);
+      await copyToClipboard(value);
       success("Copied to clipboard");
     } catch (e: any) {
       notifyError("Could not copy", e.message);

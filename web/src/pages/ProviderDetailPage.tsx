@@ -68,6 +68,7 @@ import {
   models as modelsApi,
 } from "../api/client";
 import type { Model, Provider, ProviderCredential } from "../types";
+import { copyToClipboard } from "../lib/clipboard";
 import { useToast } from "../components/ui/toast";
 
 export default function ProviderDetailPage({
@@ -601,9 +602,7 @@ export default function ProviderDetailPage({
 
   const copy = async (value: string, label = "Copied to clipboard") => {
     try {
-      if (!navigator.clipboard)
-        throw new Error("Clipboard access is unavailable.");
-      await navigator.clipboard.writeText(value);
+      await copyToClipboard(value);
       notifySuccess(label);
     } catch (e: any) {
       notifyError(

@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { requestLogs } from "../api/client";
 import type { RequestLog } from "../types";
+import { copyToClipboard } from "../lib/clipboard";
 
 function formatNumber(value: number) {
   return value.toLocaleString();
@@ -77,7 +78,7 @@ export default function RequestLogsPage() {
     return () => window.clearInterval(interval);
   }, [load]);
   const copy = async (value: string) => {
-    await navigator.clipboard.writeText(value);
+    await copyToClipboard(value);
   };
   const clear = async () => {
     if (!window.confirm("Delete all request logs?")) return;

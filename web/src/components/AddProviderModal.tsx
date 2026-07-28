@@ -20,6 +20,7 @@ import { Textarea } from "@/components/ui/textarea";
 import AvatarUpload from "./AvatarUpload";
 import { antigravity, codex, providers } from "../api/client";
 import { useToast } from "./ui/toast";
+import { copyToClipboard } from "../lib/clipboard";
 import openAiLogo from "../assets/providers/openai.svg";
 import codexLogo from "../assets/providers/codex.png";
 import anthropicLogo from "../assets/providers/anthropic.png";
@@ -766,9 +767,14 @@ export default function AddProviderModal({
                           <div className="relative">
                             <button
                               type="button"
-                              onClick={() => {
+                              onClick={async () => {
                                 const code = `javascript:(()=>{\n  if (location.hostname !== "chat.qwen.ai")\n    return alert("🚀 Use em chat.qwen.ai");\n  const token = localStorage.getItem("token");\n  if (!token)\n    return console.log("❌ Token n\u00e3o encontrado");\n  console.log("🔑 Qwen access_token:\\n", token);\n})();`;
-                                navigator.clipboard.writeText(code);
+                                try {
+                                  await copyToClipboard(code);
+                                  success("Setup code copied");
+                                } catch (e: any) {
+                                  notifyError("Could not copy setup code", e.message);
+                                }
                               }}
                               className="absolute right-1 top-1 rounded px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground hover:bg-muted-foreground/10 hover:text-foreground"
                             >

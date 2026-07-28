@@ -2,7 +2,6 @@ import {
   createContext,
   useCallback,
   useContext,
-  useEffect,
   useMemo,
   useState,
   type ReactNode,
@@ -58,18 +57,6 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     }),
     [push],
   );
-  useEffect(() => {
-    const clipboard = navigator.clipboard;
-    if (!clipboard) return;
-    const originalWriteText = clipboard.writeText.bind(clipboard);
-    clipboard.writeText = (text: string) =>
-      originalWriteText(text).then(() => {
-        push({ title: "Copied to clipboard", type: "success" });
-      });
-    return () => {
-      clipboard.writeText = originalWriteText;
-    };
-  }, [push]);
   return (
     <ToastContext.Provider value={value}>
       {children}
