@@ -78,7 +78,7 @@ describe("metadata-backed request validation", () => {
       messages: [
         { role: "user", content: "a".repeat(201) },
         { role: "user", content: [{ type: "text", text: "b".repeat(39) }] },
-        { role: "user", content: [{ type: "image_url", image_url: { url: "large" } }] },
+         { role: "user", content: [{ type: "image_url", image_url: { url: "https://example.com/large.png" } }] },
       ],
       max_tokens: 40,
     };

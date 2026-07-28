@@ -90,7 +90,22 @@ describe("googleStreamToOpenAI", () => {
 });
 
 describe("toGoogleBody", () => {
-  test("explicit effort beats model suffix and none disables thoughts", () => {
+  test("converts OpenAI image_url data parts to Gemini inline data", async () => {
+    const transformed = await toGoogleBody({
+      model: "gemini-test",
+      messages: [{ role: "user", content: [
+        { type: "text", text: "What is this?" },
+        { type: "image_url", image_url: { url: "data:image/png;base64,aGVsbG8=" } },
+      ] }],
+    }, "project");
+
+    expect(transformed.request.contents[0].parts).toEqual([
+      { text: "What is this?" },
+      { inlineData: { mimeType: "image/png", data: "aGVsbG8=" } },
+    ]);
+  });
+
+  test("explicit effort beats model suffix and none disables thoughts", async () => {
     const body = {
       model: "gemini-3.6-flash-high",
       messages: [{ role: "user", content: "hello" }],
@@ -99,7 +114,7 @@ describe("toGoogleBody", () => {
     Object.defineProperty(body, "__klove_reasoning", {
       value: { effort: "none", upstreamValue: "disabled", explicit: true },
     });
-    const transformed = toGoogleBody(body, "project");
+    const transformed = await toGoogleBody(body, "project");
     expect(transformed.request.generationConfig.maxOutputTokens).toBe(123);
     expect(transformed.request.generationConfig.thinkingConfig).toEqual({
       includeThoughts: false,

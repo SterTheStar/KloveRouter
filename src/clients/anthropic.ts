@@ -1,9 +1,27 @@
 import type { Provider } from "../services/provider.service";
+import { parseDataImage, openAIImageUrl } from "../services/multimodal";
 
 export type AnthropicMessage = {
   role: "user" | "assistant" | "system" | "developer";
   content: unknown;
 };
+
+function anthropicContent(content: any): any {
+  if (!Array.isArray(content)) return content;
+  return content.flatMap((part: any) => {
+    if (part?.type === "image_url" || part?.type === "input_image") {
+      const source = openAIImageUrl(part);
+      const data = source ? parseDataImage(source) : null;
+      if (data)
+        return [{ type: "image", source: { type: "base64", media_type: data.mimeType, data: data.data } }];
+      if (source?.startsWith("https://"))
+        return [{ type: "image", source: { type: "url", url: source } }];
+      return [];
+    }
+    if (part?.type === "text") return [{ type: "text", text: part.text ?? "" }];
+    return [part];
+  });
+}
 
 export type AnthropicResponse = {
   id: string;
@@ -58,7 +76,7 @@ export function splitAnthropicMessages(messages: AnthropicMessage[]) {
       .filter(
         (message) => message.role === "user" || message.role === "assistant",
       )
-      .map((message) => ({ role: message.role, content: message.content })),
+       .map((message) => ({ role: message.role, content: anthropicContent(message.content) })),
   };
 }
 

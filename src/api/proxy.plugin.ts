@@ -33,6 +33,7 @@ import {
   ModelRequestError,
   validateModelRequest,
 } from "../services/request-validation";
+import { MultimodalRequestError } from "../services/multimodal";
 
 function anthropicPayload(body: any, modelId: string, stream = false) {
   const messages = splitAnthropicMessages(body.messages);
@@ -650,7 +651,7 @@ export const proxyPlugin = (app: Elysia) =>
         try {
           validateModelRequest(body, modelRecord);
         } catch (error) {
-          if (!(error instanceof ModelRequestError)) throw error;
+          if (!(error instanceof ModelRequestError) && !(error instanceof MultimodalRequestError)) throw error;
           set.status = 400;
           return { error: "Invalid model request", message: error.message };
         }

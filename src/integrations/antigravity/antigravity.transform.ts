@@ -1,4 +1,5 @@
 import { logger } from "../../logger";
+import { resolveImageData, openAIImageUrl } from "../../services/multimodal";
 
 function modelId(model: string) {
   return model.toLowerCase().replace(/^antigravity-/, "");
@@ -20,9 +21,9 @@ function textValue(value: any): string {
     return String(value.text ?? value.value ?? value.content ?? "");
   return String(value ?? "");
 }
-function contentParts(content: any) {
+async function contentParts(content: any) {
   if (Array.isArray(content))
-    return content.flatMap((p): any[] => {
+    return (await Promise.all(content.map(async (p): Promise<any[]> => {
       if (
         p?.type === "text" ||
         p?.type === "input_text" ||
@@ -31,16 +32,15 @@ function contentParts(content: any) {
         const text = textValue(p.text ?? p.value ?? p.content);
         return text ? [{ text }] : [];
       }
-      if (p?.type === "image_url" && p.image_url?.url) {
-        const match = String(p.image_url.url).match(
-          /^data:([^;]+);base64,(.+)$/,
-        );
-        return match
-          ? [{ inlineData: { mimeType: match[1], data: match[2] } }]
+      if (p?.type === "image_url" || p?.type === "input_image") {
+        const source = openAIImageUrl(p);
+        const image = source ? await resolveImageData(source) : null;
+        return image
+          ? [{ inlineData: { mimeType: image.mimeType, data: image.data } }]
           : [];
       }
       return [];
-    });
+    }))).flat();
   const text = textValue(content);
   return text ? [{ text }] : [];
 }
@@ -151,14 +151,14 @@ function googleSchema(schema: any): any {
   if (!result.type) result.type = result.properties ? "OBJECT" : "STRING";
   return result;
 }
-export function toGoogleBody(
+export async function toGoogleBody(
   body: any,
   projectId: string,
   sessionId = crypto.randomUUID(),
 ) {
-  const systemParts = (body.messages ?? [])
+  const systemParts = (await Promise.all((body.messages ?? [])
     .filter((m: any) => m.role === "system" || m.role === "developer")
-    .flatMap((m: any) => contentParts(m.content));
+    .map((m: any) => contentParts(m.content)))).flat();
   const contents: any[] = [];
   const calls = new Map<string, AntigravityCall>();
   for (const message of body.messages ?? []) {
@@ -194,7 +194,7 @@ export function toGoogleBody(
       });
       continue;
     }
-    const parts = contentParts(message.content);
+    const parts = await contentParts(message.content);
     if (Array.isArray(message.content)) {
       for (const part of message.content) {
         if (part?.type === "tool_use") {

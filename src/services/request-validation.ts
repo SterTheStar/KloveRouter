@@ -1,4 +1,5 @@
 import type { Model } from "./model.service";
+import { validateMultimodalRequest } from "./multimodal";
 
 export class ModelRequestError extends Error {
   constructor(message: string) {
@@ -58,6 +59,7 @@ export function estimateRequestTextTokens(body: any): number {
 }
 
 export function validateModelRequest(body: any, model: Model): void {
+  validateMultimodalRequest(body, model);
   const output = resolveRequestedOutputTokens(body);
   if (
     output.value !== undefined &&

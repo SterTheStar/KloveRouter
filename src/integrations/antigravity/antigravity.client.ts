@@ -47,7 +47,7 @@ export async function antigravityResponses(
     model,
   );
   const payload = JSON.stringify(
-    toGoogleBody({ ...body, model }, credential.project_id),
+    await toGoogleBody({ ...body, model }, credential.project_id),
   );
   let response: Response | null = null;
   let lastError: unknown;

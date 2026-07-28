@@ -13,3 +13,17 @@ describe("splitAnthropicMessages", () => {
     expect(result.messages).toEqual([{ role: "user", content: "Hello" }]);
   });
 });
+
+it("converts OpenAI image parts to Anthropic image blocks", () => {
+  const result = splitAnthropicMessages([
+    { role: "user", content: [
+      { type: "text", text: "describe" },
+      { type: "image_url", image_url: { url: "data:image/png;base64,aGVsbG8=" } },
+    ] },
+  ]);
+
+  expect(result.messages[0].content).toEqual([
+    { type: "text", text: "describe" },
+    { type: "image", source: { type: "base64", media_type: "image/png", data: "aGVsbG8=" } },
+  ]);
+});
