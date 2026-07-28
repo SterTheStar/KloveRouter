@@ -308,7 +308,7 @@ export default function SettingsPage({
               </div>
             </CardHeader>
             <CardContent className="space-y-5">
-              <AvatarUpload value={avatar} name={name} onChange={setAvatar} />
+              <AvatarUpload value={avatar} name={name} onChange={setAvatar} label="Profile avatar" onError={(message) => notifyError("Invalid avatar", message)} />
               <div className="space-y-2">
                 <Label htmlFor="profile-name">Display name</Label>
                 <Input

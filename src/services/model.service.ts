@@ -1,6 +1,7 @@
 import { getDb } from "../db/connection";
 import { isBlockedAntigravityModel } from "../integrations/antigravity/antigravity.models";
 import { generateDisplayName } from "./model-name";
+import { resolveProviderAvatar, type ProviderProtocol } from "./provider-appearance";
 
 export interface Model {
   id: string;
@@ -287,16 +288,6 @@ function withPricing(model: Model | null): Model | null {
   };
 }
 
-function providerAvatar(avatar: string | null, baseUrl: string): string | null {
-  if (avatar) return avatar;
-  try {
-    const hostname = new URL(baseUrl).hostname;
-    return `https://www.google.com/s2/favicons?domain=${hostname}&sz=64`;
-  } catch {
-    return null;
-  }
-}
-
 export const modelService = {
   findByProviderAndModel(providerId: string, modelId: string): Model | null {
     const db = getDb();
@@ -347,7 +338,7 @@ export const modelService = {
       )
       .all() as (ModelWithProvider & {
       provider_base_url: string;
-      provider_protocol: string;
+       provider_protocol: ProviderProtocol;
     })[];
 
     return models
@@ -361,8 +352,9 @@ export const modelService = {
       .map(({ provider_base_url, provider_protocol, ...model }) => ({
         ...model,
         pricing_tiers: withPricing(model)?.pricing_tiers,
-        provider_avatar: providerAvatar(
+        provider_avatar: resolveProviderAvatar(
           model.provider_avatar,
+          provider_protocol,
           provider_base_url,
         ),
       }));

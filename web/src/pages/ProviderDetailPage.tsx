@@ -181,7 +181,7 @@ export default function ProviderDetailPage({
       setList(models);
       setName(current.name);
       setBaseUrl(current.base_url);
-      setAvatar(current.avatar);
+      setAvatar(current.avatar_override ?? null);
       setConnectedAccount(
         providerCredentials.find(
           (credential) => credential.kind === "codex" && credential.account_id,
@@ -725,7 +725,7 @@ export default function ProviderDetailPage({
           </div>
         </CardHeader>
         <CardContent className="space-y-5">
-          <AvatarUpload value={avatar} name={name} onChange={setAvatar} />
+          <AvatarUpload value={avatar} name={name} onChange={setAvatar} label="Provider avatar" onError={(message) => notifyError("Invalid avatar", message)} />
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="provider-name">Provider name</Label>

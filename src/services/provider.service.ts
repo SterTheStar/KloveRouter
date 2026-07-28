@@ -1,5 +1,6 @@
 import { getDb } from "../db/connection";
 import type { CredentialMode } from "./credential.service";
+import { resolveProviderAvatar, type ProviderProtocol } from "./provider-appearance";
 
 export interface Provider {
   id: string;
@@ -7,7 +8,7 @@ export interface Provider {
   base_url: string;
   api_key: string;
   avatar: string | null;
-  protocol: "openai" | "anthropic" | "codex" | "antigravity" | "freebuff" | "qwen";
+  protocol: ProviderProtocol;
   credential_mode: CredentialMode;
   fixed_credential_id: string | null;
   is_active: number;
@@ -20,7 +21,8 @@ export interface ProviderPublic {
   name: string;
   base_url: string;
   avatar: string | null;
-  protocol: "openai" | "anthropic" | "codex" | "antigravity" | "freebuff" | "qwen";
+  avatar_override: string | null;
+  protocol: ProviderProtocol;
   credential_mode: CredentialMode;
   fixed_credential_id: string | null;
   is_active: number;
@@ -33,7 +35,7 @@ export type CreateProviderInput = {
   base_url: string;
   api_key: string;
   avatar?: string;
-  protocol?: "openai" | "anthropic" | "codex" | "antigravity" | "freebuff" | "qwen";
+  protocol?: ProviderProtocol;
   credential_mode?: CredentialMode;
   fixed_credential_id?: string | null;
 };
@@ -43,30 +45,11 @@ export type UpdateProviderInput = {
   base_url?: string;
   api_key?: string;
   avatar?: string | null;
-  protocol?: "openai" | "anthropic" | "codex" | "antigravity" | "freebuff" | "qwen";
+  protocol?: ProviderProtocol;
   credential_mode?: CredentialMode;
   fixed_credential_id?: string | null;
   is_active?: number;
 };
-
-function getFaviconUrl(baseUrl: string): string | null {
-  try {
-    const hostname = new URL(baseUrl).hostname;
-    return `https://www.google.com/s2/favicons?domain=${hostname}&sz=64`;
-  } catch {
-    return null;
-  }
-}
-
-function defaultProviderAvatar(protocol: Provider["protocol"]): string | null {
-  if (protocol === "antigravity")
-    return "https://antigravity.google/assets/image/brand/antigravity-icon__full-color.png";
-  if (protocol === "codex") return "https://openai.com/favicon.ico";
-  if (protocol === "freebuff") return "https://freebuff.com/favicon.ico";
-  if (protocol === "qwen")
-    return "https://assets.alicdn.com/g/qwenweb/qwen-webui-fe/0.0.201/favicon.png";
-  return null;
-}
 
 export function providerPrefix(name: string): string {
   return name.toLowerCase().replace(/\s+/g, "");
@@ -77,12 +60,8 @@ function toPublic(p: Provider): ProviderPublic {
     id: p.id,
     name: p.name,
     base_url: p.base_url,
-    // OpenAI-compatible presets intentionally use the endpoint's favicon,
-    // rather than the generic OpenAI logo. Custom uploaded avatars still win.
-    avatar:
-      p.avatar ??
-      defaultProviderAvatar(p.protocol) ??
-      getFaviconUrl(p.base_url),
+    avatar: resolveProviderAvatar(p.avatar, p.protocol, p.base_url),
+    avatar_override: p.avatar,
     protocol: p.protocol ?? "openai",
     credential_mode: p.credential_mode ?? "fixed",
     fixed_credential_id: p.fixed_credential_id ?? null,
@@ -133,7 +112,7 @@ export const providerService = {
       input.name,
       input.base_url.replace(/\/+$/, ""),
       input.api_key,
-      input.avatar ?? defaultProviderAvatar(input.protocol ?? "openai"),
+      input.avatar ?? null,
       input.protocol ?? "openai",
     );
     const credentialId = crypto.randomUUID();

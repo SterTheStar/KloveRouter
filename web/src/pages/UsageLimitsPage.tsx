@@ -5,7 +5,6 @@ import {
   RiRestartLine as ResetLine,
 } from "@remixicon/react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -21,6 +20,7 @@ import type {
   Provider,
   ProviderCredential,
 } from "../types";
+import ProviderIcon from "../components/ProviderIcon";
 
 function windowLabel(window: CodexUsageWindow | null | undefined) {
   const seconds = window?.limit_window_seconds;
@@ -459,14 +459,7 @@ export default function UsageLimitsPage() {
                 <CardHeader>
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex items-center gap-3">
-                      <Avatar className="size-11">
-                        <AvatarImage src={provider.avatar ?? undefined} />
-                        <AvatarFallback>
-                          {(credential.email || credential.label)
-                            .charAt(0)
-                            .toUpperCase()}
-                        </AvatarFallback>
-                      </Avatar>
+                      <ProviderIcon name={provider.name} src={provider.avatar} fallbackLabel={credential.email || credential.label} className="size-11" />
                       <div>
                         <CardTitle>
                           {provider.protocol === "antigravity"

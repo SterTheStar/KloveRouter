@@ -1,6 +1,7 @@
 import { Elysia, t } from "elysia";
 import { userInfo } from "node:os";
 import { getDb } from "../db/connection";
+import { isValidAvatar } from "../services/provider-appearance";
 
 function defaultProfileName() {
   try {
@@ -47,6 +48,10 @@ export const settingsPlugin = (app: Elysia) =>
         if (name.length > 40) {
           set.status = 400;
           return { error: "Profile name must be 40 characters or fewer" };
+        }
+        if (!isValidAvatar(body.avatar)) {
+          set.status = 400;
+          return { error: "Avatar must be an image URL or an image up to 1 MB" };
         }
         const db = getDb();
         db.query(

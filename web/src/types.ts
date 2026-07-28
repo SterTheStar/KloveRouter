@@ -3,6 +3,7 @@ export interface Provider {
   name: string;
   base_url: string;
   avatar: string | null;
+  avatar_override?: string | null;
   protocol: "openai" | "anthropic" | "codex" | "antigravity" | "freebuff" | "qwen";
   is_active: number;
   created_at: string;

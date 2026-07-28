@@ -1,21 +1,32 @@
 import { useRef } from "react";
-import { RiCameraLine as CameraLine } from "@remixicon/react";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import DisplayAvatar from "./DisplayAvatar";
 
 export default function AvatarUpload({
   value,
   name,
   onChange,
+  label = "Avatar",
+  onError,
 }: {
   value: string | null;
   name: string;
   onChange: (value: string | null) => void;
+  label?: string;
+  onError?: (message: string) => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const select = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      onError?.("Choose an image file.");
+      return;
+    }
+    if (file.size > 1024 * 1024) {
+      onError?.("Avatar must be 1 MB or smaller.");
+      return;
+    }
     const reader = new FileReader();
     reader.onload = () => onChange(reader.result as string);
     reader.readAsDataURL(file);
@@ -26,17 +37,12 @@ export default function AvatarUpload({
         ref={inputRef}
         className="hidden"
         type="file"
-        accept="image/*"
+        accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml,image/x-icon"
         onChange={select}
       />
-      <Avatar className="size-14">
-        <AvatarImage src={value ?? undefined} />
-        <AvatarFallback>
-          {name.charAt(0).toUpperCase() || <CameraLine className="size-5" />}
-        </AvatarFallback>
-      </Avatar>
+      <DisplayAvatar name={name || "Avatar"} src={value} className="size-14" />
       <div className="space-y-1">
-        <div className="text-sm font-medium">Provider avatar</div>
+        <div className="text-sm font-medium">{label}</div>
         <div className="flex gap-2">
           <Button
             type="button"

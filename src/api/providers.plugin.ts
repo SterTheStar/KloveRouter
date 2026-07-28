@@ -3,6 +3,7 @@ import { providerService } from "../services/provider.service";
 import { credentialService } from "../services/credential.service";
 import { codexAuthService } from "../integrations/codex";
 import { logger } from "../logger";
+import { isValidAvatar } from "../services/provider-appearance";
 
 export const providersPlugin = (app: Elysia) =>
   app
@@ -26,6 +27,10 @@ export const providersPlugin = (app: Elysia) =>
     .post(
       "/api/providers",
       ({ body, set }) => {
+        if (!isValidAvatar(body.avatar)) {
+          set.status = 400;
+          return { error: "Avatar must be an image URL or an image up to 1 MB" };
+        }
         const existing = providerService.findByName(body.name);
         if (existing) {
           set.status = 409;
@@ -75,6 +80,10 @@ export const providersPlugin = (app: Elysia) =>
         if (!existing) {
           set.status = 404;
           return { error: "Provider not found" };
+        }
+        if (!isValidAvatar(body.avatar)) {
+          set.status = 400;
+          return { error: "Avatar must be an image URL or an image up to 1 MB" };
         }
         const updated = providerService.update(id, body);
         return updated;

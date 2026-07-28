@@ -1,21 +1,10 @@
 import { RiDeleteBinLine as DeleteIcon } from "@remixicon/react";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import ProviderIcon from "./ProviderIcon";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import type { Provider } from "../types";
-
-function rootFavicon(baseUrl: string) {
-  try {
-    const hostname = new URL(baseUrl).hostname;
-    const parts = hostname.split(".");
-    const root = parts.length > 2 ? parts.slice(-2).join(".") : hostname;
-    return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(root)}&sz=64`;
-  } catch {
-    return undefined;
-  }
-}
 
 interface Props {
   provider: Provider;
@@ -46,19 +35,7 @@ export default function ProviderCard({
       <CardContent>
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <Avatar className="size-12">
-              <AvatarImage
-                src={provider.avatar ?? undefined}
-                onError={(event) => {
-                  const fallback = rootFavicon(provider.base_url);
-                  if (fallback && event.currentTarget.src !== fallback)
-                    event.currentTarget.src = fallback;
-                }}
-              />
-              <AvatarFallback>
-                {provider.name.charAt(0).toUpperCase()}
-              </AvatarFallback>
-            </Avatar>
+            <ProviderIcon name={provider.name} src={provider.avatar} className="size-12" />
             <div>
               <div className="font-medium">{provider.name}</div>
               <Badge variant={provider.is_active ? "secondary" : "outline"}>

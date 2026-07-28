@@ -10,7 +10,6 @@ import {
   RiCloseLine as CloseLine,
 } from "@remixicon/react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -35,6 +34,7 @@ import {
 import { models, stats } from "../api/client";
 import type { ModelWithProvider } from "../types";
 import { useToast } from "../components/ui/toast";
+import ProviderIcon from "../components/ProviderIcon";
 
 type SourceFilter = "all" | "manual" | "synced";
 
@@ -304,14 +304,7 @@ export default function ModelsPage() {
                               <ChevronDown className="size-4" />
                             )}
                           </Button>
-                          <Avatar className="size-5">
-                            <AvatarImage
-                              src={models[0].provider_avatar ?? undefined}
-                            />
-                            <AvatarFallback className="text-[10px]">
-                              {providerName.charAt(0).toUpperCase()}
-                            </AvatarFallback>
-                          </Avatar>
+                          <ProviderIcon name={providerName} src={models[0].provider_avatar} className="size-5 text-[10px]" />
                           {providerName}
                           <span className="text-xs text-muted-foreground">
                             ({models.length})

@@ -9,7 +9,7 @@ import {
   RiSettings4Line as Settings4Line,
 } from "@remixicon/react";
 import { Button } from "@/components/ui/button";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import DisplayAvatar from "./DisplayAvatar";
 import type { Page } from "../types";
 import type { UserProfile } from "../types";
 
@@ -120,12 +120,7 @@ export default function Sidebar({
             className="flex min-w-0 flex-1 items-center gap-3 rounded-md text-left"
             onClick={() => onNavigate("settings")}
           >
-            <Avatar className="size-10">
-              <AvatarImage src={profile.avatar ?? undefined} />
-              <AvatarFallback>
-                {profile.name.charAt(0).toUpperCase()}
-              </AvatarFallback>
-            </Avatar>
+            <DisplayAvatar name={profile.name} src={profile.avatar} className="size-10" />
             <span className="min-w-0 flex-1 truncate text-sm font-medium">
               {profile.name}
             </span>
