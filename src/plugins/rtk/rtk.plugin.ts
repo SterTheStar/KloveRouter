@@ -67,6 +67,7 @@ export function initRtkOnStartup(): void {
   logger.info("RTK is enabled in settings, initializing...");
 
   rtkManager.enable().catch((err) => {
+    setRtkEnabled(false);
     logger.error("Failed to auto-start RTK", { error: err });
   });
 }

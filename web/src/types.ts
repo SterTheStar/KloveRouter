@@ -188,7 +188,6 @@ export interface RtkStatus {
   binaryPath: string | null;
   platform: string | null;
   arch: string | null;
-  configPath: string | null;
   downloadUrl: string | null;
   latestVersion: string | null;
   updateAvailable: boolean;

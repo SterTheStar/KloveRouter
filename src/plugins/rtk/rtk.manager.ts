@@ -1,8 +1,10 @@
 import { existsSync } from "node:fs";
 import { rtkBinary } from "./rtk.binary";
-import { getDb } from "../../db/connection";
 import { logger } from "../../logger";
 import type { RtkStatus } from "./rtk.types";
+
+const MAX_TOOL_OUTPUT_BYTES = 10 * 1024 * 1024;
+const PIPE_TIMEOUT_MS = 5_000;
 
 function normalizeVersion(v: string | null): string {
   if (!v) return "";
@@ -52,10 +54,23 @@ class RtkManager {
   async filterToolOutput(content: string): Promise<string> {
     if (!this._enabled || !content.trim()) return content;
 
+    const inputBytes = Buffer.byteLength(content, "utf8");
+    if (inputBytes > MAX_TOOL_OUTPUT_BYTES) {
+      logger.warn("RTK skipped tool output: input exceeds limit", {
+        inputBytes,
+        maxBytes: MAX_TOOL_OUTPUT_BYTES,
+      });
+      return content;
+    }
+
     const binPath = rtkBinary.binaryPath();
-    if (!existsSync(binPath)) return content;
+    if (!existsSync(binPath)) {
+      logger.warn("RTK skipped tool output: binary not found", { binPath });
+      return content;
+    }
 
     try {
+      logger.info("RTK starting pipe", { inputBytes });
       const proc = Bun.spawn([binPath, "pipe"], {
         stdin: "pipe",
         stdout: "pipe",
@@ -65,11 +80,26 @@ class RtkManager {
       proc.stdin.write(content);
       proc.stdin.end();
 
+      let timedOut = false;
+      const timeout = setTimeout(() => {
+        timedOut = true;
+        proc.kill();
+      }, PIPE_TIMEOUT_MS);
+
       const [stdout, stderr, exitCode] = await Promise.all([
         new Response(proc.stdout).text(),
         new Response(proc.stderr).text(),
         proc.exited,
       ]);
+      clearTimeout(timeout);
+
+      if (timedOut) {
+        logger.warn("RTK pipe timed out, preserving tool output", {
+          timeoutMs: PIPE_TIMEOUT_MS,
+          inputBytes,
+        });
+        return content;
+      }
 
       if (exitCode !== 0 || !stdout) {
         logger.warn("RTK pipe failed, preserving tool output", {
@@ -79,10 +109,20 @@ class RtkManager {
         return content;
       }
 
-      if (stdout.length < content.length) {
-        logger.info(`RTK filtered tool output: ${content.length} to ${stdout.length} chars`);
+      const outputBytes = Buffer.byteLength(stdout, "utf8");
+      const savedBytes = inputBytes - outputBytes;
+      const savedPercent = Math.max(0, Math.round((savedBytes / inputBytes) * 100));
+      logger.info("RTK pipe finished", {
+        exitCode,
+        inputBytes,
+        outputBytes,
+        savedBytes,
+        savedPercent,
+      });
+      if (outputBytes < inputBytes) {
+        logger.info(`RTK filtered tool output: ${inputBytes} to ${outputBytes} bytes (-${savedPercent}%)`);
       }
-      return stdout;
+      return outputBytes < inputBytes ? stdout : content;
     } catch (error) {
       logger.warn("RTK pipe unavailable, preserving tool output", { error });
       return content;
@@ -104,20 +144,13 @@ class RtkManager {
         : false;
     }
 
-    const db = getDb();
-    const row = db
-      .query("SELECT value FROM settings WHERE key = ?")
-      .get("rtk_enabled") as { value: string } | undefined;
-    const enabledFromDb = row?.value === "1";
-
     return {
       installed,
-      enabled: enabledFromDb,
+      enabled: this._enabled,
       version,
       binaryPath: installed ? binPath : null,
       platform: installed ? (rtkBinary.detectPlatform() as any) : null,
       arch: installed ? (rtkBinary.detectArch() as any) : null,
-      configPath: null,
       downloadUrl: rtkBinary.getDownloadUrl(),
       latestVersion,
       updateAvailable,

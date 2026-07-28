@@ -22,6 +22,7 @@ import { cleanQwenContent, qwenResponses } from "../integrations/qwen";
 import { injectCavemanPrompt } from "../plugins/caveman";
 import { customSkillsProxy } from "../plugins/custom-skills";
 import { rtkManager } from "../plugins/rtk";
+import { filterLastToolMessage } from "../plugins/rtk/rtk.messages";
 
 function anthropicPayload(body: any, modelId: string, stream = false) {
   const messages = splitAnthropicMessages(body.messages);
@@ -542,13 +543,27 @@ export const proxyPlugin = (app: Elysia) =>
         }
 
         if (rtkManager.enabled) {
-          const lastMessageIndex = body.messages.length - 1;
-          const lastMessage = body.messages[lastMessageIndex];
-          if (lastMessage?.role === "tool" && typeof lastMessage.content === "string") {
-            const filtered = await rtkManager.filterToolOutput(lastMessage.content);
-            if (filtered !== lastMessage.content) {
-              body.messages[lastMessageIndex] = { ...lastMessage, content: filtered };
-            }
+          const lastMessage = body.messages.at(-1);
+          logger.info("RTK checking last message", {
+            messageCount: body.messages.length,
+            role: lastMessage?.role ?? null,
+            contentType: Array.isArray(lastMessage?.content)
+              ? "array"
+              : typeof lastMessage?.content,
+          });
+          const originalMessages = body.messages;
+          body.messages = await filterLastToolMessage(
+            originalMessages,
+            (content) => rtkManager.filterToolOutput(content),
+          );
+          if (body.messages !== originalMessages) {
+            logger.info("RTK replaced last tool output");
+          } else {
+            logger.info("RTK skipped last message", {
+              reason: lastMessage?.role === "tool"
+                ? "tool output was unchanged"
+                : "last message is not a tool message",
+            });
           }
         }
 

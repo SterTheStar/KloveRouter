@@ -16,18 +16,7 @@ export interface RtkStatus {
   binaryPath: string | null;
   platform: RtkPlatform | null;
   arch: RtkArch | null;
-  configPath: string | null;
   downloadUrl: string | null;
   latestVersion: string | null;
   updateAvailable: boolean;
-}
-
-export interface RtkConfig {
-  hooks?: {
-    exclude_commands?: string[];
-  };
-  tee?: {
-    enabled?: boolean;
-    mode?: "failures" | "always" | "never";
-  };
 }

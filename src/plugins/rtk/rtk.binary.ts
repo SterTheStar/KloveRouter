@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, readdirSync } from "node:fs";
-import { readFile, writeFile, chmod, rm } from "node:fs/promises";
+import { readFile, writeFile, chmod, rm, mkdtemp, rename } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { createHash } from "node:crypto";
 import { logger } from "../../logger";
@@ -7,6 +7,12 @@ import { config } from "../../config";
 import type { RtkPlatform, RtkArch, RtkBinaryInfo } from "./rtk.types";
 
 const BINARY_NAME = process.platform === "win32" ? "rtk.exe" : "rtk";
+const FALLBACK_VERSION = "v0.44.0";
+const DOWNLOAD_TIMEOUT_MS = 30_000;
+const LATEST_VERSION_CACHE_MS = 10 * 60_000;
+
+let installPromise: Promise<string> | null = null;
+let latestVersionCache: { value: string | null; expiresAt: number } | null = null;
 
 const ASSET_NAMES: Record<string, string> = {
   "aarch64-apple-darwin": "rtk-aarch64-apple-darwin.tar.gz",
@@ -109,10 +115,12 @@ async function downloadBinary(version: string): Promise<string> {
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
 
   const info = getBinaryInfo(version);
-  const dest = join(dir, info.filename);
+  const dest = join(dir, `${crypto.randomUUID()}-${info.filename}`);
   logger.info(`Downloading RTK binary from ${info.url}`);
 
-  const response = await fetch(info.url);
+  const response = await fetch(info.url, {
+    signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS),
+  });
   if (!response.ok) throw new Error(`Failed to download RTK: ${response.status} ${response.statusText}`);
 
   const buffer = await response.arrayBuffer();
@@ -120,32 +128,59 @@ async function downloadBinary(version: string): Promise<string> {
 
   logger.info(`Downloaded to ${dest} (${buffer.byteLength} bytes)`);
 
+  const checksumResponse = await fetch(
+    `https://github.com/rtk-ai/rtk/releases/download/${version.startsWith("v") ? version : `v${version}`}/checksums.txt`,
+    { signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS) },
+  );
+  if (!checksumResponse.ok) {
+    await rm(dest, { force: true });
+    throw new Error(`Failed to download RTK checksums: ${checksumResponse.status}`);
+  }
+  const checksums = await checksumResponse.text();
+  const expected = checksums
+    .split("\n")
+    .map((line) => line.trim().split(/\s+/))
+    .find((parts) => parts.at(-1)?.replace(/^\*/, "") === info.filename)?.[0];
+  const actual = await computeChecksum(dest);
+  if (!expected || actual !== expected.toLowerCase()) {
+    await rm(dest, { force: true });
+    throw new Error(`RTK archive checksum verification failed for ${info.filename}`);
+  }
+
   return dest;
 }
 
 async function extractBinary(archivePath: string): Promise<string> {
   const dir = rtkDir();
   const binPath = binaryPath();
+  const extractDir = await mkdtemp(join(dir, ".extract-"));
+  const extractedBin = join(extractDir, BINARY_NAME);
+  const stagedBin = join(dir, `${BINARY_NAME}.new-${crypto.randomUUID()}`);
 
   try {
     if (archivePath.endsWith(".zip")) {
       const { execFileSync } = await import("node:child_process");
-      execFileSync("unzip", ["-o", archivePath, "-d", dir], { stdio: "pipe" });
+      execFileSync("unzip", ["-o", archivePath, "-d", extractDir], { stdio: "pipe" });
     } else {
       const { execFileSync } = await import("node:child_process");
-      execFileSync("tar", ["-xzf", archivePath, "-C", dir], { stdio: "pipe" });
+      execFileSync("tar", ["-xzf", archivePath, "-C", extractDir], { stdio: "pipe" });
     }
 
-    if (!existsSync(binPath)) {
-      const entries = readdirSync(dir);
+    if (!existsSync(extractedBin)) {
+      const entries = readdirSync(extractDir);
       throw new Error(`Binary not found after extraction. Contents: ${entries.join(", ")}`);
     }
 
-    await chmod(binPath, 0o755);
+    await rename(extractedBin, stagedBin);
+    await chmod(stagedBin, 0o755);
+    if (process.platform === "win32") await rm(binPath, { force: true });
+    await rename(stagedBin, binPath);
     logger.info(`Binary extracted to ${binPath}`);
     return binPath;
   } finally {
     await rm(archivePath, { force: true }).catch(() => {});
+    await rm(extractDir, { recursive: true, force: true }).catch(() => {});
+    await rm(stagedBin, { force: true }).catch(() => {});
   }
 }
 
@@ -162,6 +197,9 @@ async function getVersion(binPath: string): Promise<string | null> {
 }
 
 async function checkLatestVersion(): Promise<string | null> {
+  if (latestVersionCache && latestVersionCache.expiresAt > Date.now()) {
+    return latestVersionCache.value;
+  }
   try {
     const response = await fetch(
       "https://api.github.com/repos/rtk-ai/rtk/releases/latest",
@@ -172,11 +210,52 @@ async function checkLatestVersion(): Promise<string | null> {
       return null;
     }
     const data = await response.json() as any;
-    return data.tag_name as string;
+    const value = data.tag_name as string;
+    latestVersionCache = { value, expiresAt: Date.now() + LATEST_VERSION_CACHE_MS };
+    return value;
   } catch (error) {
     logger.warn("Error fetching latest RTK version", { error });
     return null;
   }
+}
+
+function normalizeVersion(version: string | null): string {
+  return (version ?? "").replace(/^rtk\s*/i, "").replace(/^v/, "").trim();
+}
+
+async function cleanupLegacyArchives(): Promise<void> {
+  const dir = rtkDir();
+  if (!existsSync(dir)) return;
+  await Promise.all(
+    readdirSync(dir)
+      .filter((name) => name.endsWith(".tar.gz") || name.endsWith(".zip"))
+      .map((name) => rm(join(dir, name), { force: true }).catch(() => {})),
+  );
+}
+
+async function ensureBinaryUnlocked(version?: string): Promise<string> {
+  const installed = existsSync(binaryPath());
+  if (installed && await rtkBinary.verifyChecksum()) {
+    const binVersion = await getVersion(binaryPath());
+    if (binVersion && (!version || normalizeVersion(binVersion) === normalizeVersion(version))) {
+      await cleanupLegacyArchives();
+      logger.info(`RTK binary already installed (${binVersion})`);
+      return binaryPath();
+    }
+  } else if (installed) {
+    logger.warn("RTK binary checksum mismatch, re-downloading");
+  }
+
+  const targetVersion = version || await checkLatestVersion() || FALLBACK_VERSION;
+  const archive = await downloadBinary(targetVersion);
+  const binPath = await extractBinary(archive);
+  const hash = await computeChecksum(binPath);
+  await writeFile(checksumPath(), hash);
+  const binVersion = await getVersion(binPath);
+  await writeVersion(binVersion || targetVersion);
+  await cleanupLegacyArchives();
+  if (binVersion) logger.success(`RTK ${binVersion} installed at ${binPath}`);
+  return binPath;
 }
 
 export const rtkBinary = {
@@ -219,35 +298,12 @@ export const rtkBinary = {
   },
 
   async ensureBinary(version?: string): Promise<string> {
-    const ver = version || (await readVersion()) || "v0.44.0";
-
-    if (await this.isInstalled()) {
-      const valid = await this.verifyChecksum();
-      if (valid) {
-        const binVersion = await getVersion(binaryPath());
-        if (binVersion) {
-          logger.info(`RTK binary already installed (${binVersion})`);
-          return binaryPath();
-        }
-      } else {
-        logger.warn("RTK binary checksum mismatch, re-downloading");
-      }
+    if (!installPromise) {
+      installPromise = ensureBinaryUnlocked(version).finally(() => {
+        installPromise = null;
+      });
     }
-
-    const targetVer = version || ver;
-    const archive = await downloadBinary(targetVer);
-    const binPath = await extractBinary(archive);
-
-    const hash = await computeChecksum(binPath);
-    await writeFile(checksumPath(), hash);
-
-    const binVersion = await getVersion(binPath);
-    const versionStr = binVersion || targetVer;
-    await writeVersion(versionStr);
-
-    if (binVersion) logger.success(`RTK ${binVersion} installed at ${binPath}`);
-
-    return binPath;
+    return installPromise;
   },
 
   async update(): Promise<string> {
@@ -255,7 +311,7 @@ export const rtkBinary = {
     if (!latest) throw new Error("Could not fetch latest RTK version");
 
     const current = await this.currentVersion();
-    if (current && current.replace(/^rtk\s*/i, "").replace(/^v/, "").trim() === latest.replace(/^rtk\s*/i, "").replace(/^v/, "").trim()) {
+    if (current && normalizeVersion(current) === normalizeVersion(latest)) {
       logger.info("RTK already at latest version");
       return binaryPath();
     }
@@ -270,7 +326,6 @@ export const rtkBinary = {
   },
 
   getDownloadUrl(): string {
-    const fallback = "v0.44.0";
-    return downloadUrl(fallback);
+    return downloadUrl(FALLBACK_VERSION);
   },
 };
