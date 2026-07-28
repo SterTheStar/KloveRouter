@@ -20,26 +20,10 @@ export function extractQwenContent(text: string): {
   content: string;
   reasoningContent?: string;
 } {
-  const reasoning = [...text.matchAll(/<details[^>]*>([\s\S]*?)<\/details>/gi)]
-    .map((match) => match[1].replace(/<[^>]+>/g, "").trim())
-    .filter(Boolean)
-    .join("\n\n");
-  const content = removeQwenFooter(
-    text.replace(/<details[^>]*>[\s\S]*?<\/details>/gi, "").trim(),
-  );
+  const content = text.replace(/<details[^>]*>[\s\S]*?<\/details>/gi, "").trim();
   return {
-    content: content || (reasoning ? "" : text),
-    ...(reasoning ? { reasoningContent: reasoning } : {}),
+    content: content || text,
   };
-}
-
-function removeQwenFooter(text: string): string {
-  return text
-    .replace(
-      /\s*Howu\s*\n+\s*[A-Z][a-z]+ \d{1,2}, \d{4}\s*$/i,
-      "",
-    )
-    .trim();
 }
 
 export function cleanQwenContent(text: string): string {
@@ -52,6 +36,40 @@ export function cleanQwenStream(response: Response): Response {
   const decoder = new TextDecoder();
   const encoder = new TextEncoder();
   let buffer = "";
+  let markupBuffer = "";
+  let inDetails = false;
+  const cleanStreamContent = (value: string, final = false) => {
+    markupBuffer += value;
+    let output = "";
+    while (markupBuffer) {
+      if (inDetails) {
+        const close = markupBuffer.search(/<\/details\s*>/i);
+        if (close < 0) {
+          if (final) markupBuffer = "";
+          break;
+        }
+        markupBuffer = markupBuffer.slice(close).replace(/^<\/details\s*>/i, "");
+        inDetails = false;
+        continue;
+      }
+      const open = markupBuffer.search(/<details(?:\s[^>]*)?>/i);
+      if (open >= 0) {
+        output += markupBuffer.slice(0, open);
+        markupBuffer = markupBuffer.slice(open).replace(/^<details(?:\s[^>]*)?>/i, "");
+        inDetails = true;
+        continue;
+      }
+      const partial = markupBuffer.match(/<d(?:e(?:t(?:a(?:i(?:l(?:s)?)?)?)?)?)?$/i);
+      if (!final && partial?.index !== undefined) {
+        output += markupBuffer.slice(0, partial.index);
+        markupBuffer = markupBuffer.slice(partial.index);
+        break;
+      }
+      output += markupBuffer;
+      markupBuffer = "";
+    }
+    return output;
+  };
   return new Response(
     new ReadableStream({
       async start(controller) {
@@ -71,7 +89,7 @@ export function cleanQwenStream(response: Response): Response {
             const data = JSON.parse(raw);
             for (const choice of data.choices ?? []) {
               if (typeof choice.delta?.content === "string")
-                choice.delta.content = cleanQwenContent(choice.delta.content);
+                choice.delta.content = cleanStreamContent(choice.delta.content);
               if (typeof choice.message?.content === "string")
                 choice.message.content = cleanQwenContent(choice.message.content);
             }
@@ -90,6 +108,10 @@ export function cleanQwenStream(response: Response): Response {
             buffer = events.pop() ?? "";
             for (const event of events) emit(event);
             if (done) {
+              const remaining = cleanStreamContent("", true);
+              if (remaining) {
+                controller.enqueue(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: remaining } }] })}\n\n`));
+              }
               if (buffer.trim()) emit(buffer);
               break;
             }
