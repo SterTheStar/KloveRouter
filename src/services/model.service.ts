@@ -11,7 +11,38 @@ export interface Model {
   is_manual: number;
   is_active: number;
   created_at: string;
+  updated_at: string;
+  context_window: number | null;
+  max_output_tokens: number | null;
+  capabilities: ModelCapabilities;
+  reasoning_efforts: ReasoningEffort[];
   pricing_tiers?: PricingTier[];
+}
+
+export const capabilityKeys = [
+  "reasoning",
+  "tools",
+  "vision",
+  "attachments",
+  "streaming",
+  "non_streaming",
+] as const;
+
+export type ModelCapabilities = Record<(typeof capabilityKeys)[number], boolean | null>;
+
+export interface ReasoningEffort {
+  effort: string;
+  display_name: string;
+  upstream_value: string;
+  sort_order: number;
+  is_default: boolean;
+}
+
+export interface ModelMetadataInput {
+  context_window?: number | null;
+  max_output_tokens?: number | null;
+  capabilities?: Partial<ModelCapabilities>;
+  reasoning_efforts?: ReasoningEffort[];
 }
 
 export interface PricingTier {
@@ -28,7 +59,7 @@ export interface ModelWithProvider extends Model {
   provider_avatar: string | null;
 }
 
-export type CreateModelInput = {
+export type CreateModelInput = ModelMetadataInput & {
   provider_id: string;
   model_id: string;
   display_name?: string;
@@ -36,6 +67,13 @@ export type CreateModelInput = {
   is_active?: number;
   pricing_tiers?: PricingTier[];
 };
+
+export class InvalidModelMetadataError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "InvalidModelMetadataError";
+  }
+}
 
 export class DuplicateProviderModelError extends Error {
   constructor(public readonly modelId: string) {
@@ -275,11 +313,123 @@ function savePricing(modelId: string, tiers?: PricingTier[]) {
   }
 }
 
-function withPricing(model: Model | null): Model | null {
+function validateMetadata(input: ModelMetadataInput): void {
+  for (const [name, value] of [
+    ["context_window", input.context_window],
+    ["max_output_tokens", input.max_output_tokens],
+  ] as const) {
+    if (value !== undefined && value !== null && (!Number.isInteger(value) || value <= 0))
+      throw new InvalidModelMetadataError(`${name} must be a positive integer or null`);
+  }
+  if (input.capabilities) {
+    for (const key of Object.keys(input.capabilities)) {
+      if (!capabilityKeys.includes(key as (typeof capabilityKeys)[number]))
+        throw new InvalidModelMetadataError(`Unknown capability: ${key}`);
+      const value = input.capabilities[key as keyof ModelCapabilities];
+      if (value !== undefined && value !== null && typeof value !== "boolean")
+        throw new InvalidModelMetadataError(`${key} capability must be boolean or null`);
+    }
+  }
+  if (input.reasoning_efforts) {
+    const names = new Set<string>();
+    let defaults = 0;
+    for (const effort of input.reasoning_efforts) {
+      if (!effort.effort.trim() || !effort.display_name.trim() || !effort.upstream_value.trim())
+        throw new InvalidModelMetadataError("Reasoning effort fields cannot be empty");
+      if (!Number.isInteger(effort.sort_order))
+        throw new InvalidModelMetadataError("Reasoning effort sort_order must be an integer");
+      if (names.has(effort.effort))
+        throw new InvalidModelMetadataError(`Duplicate reasoning effort: ${effort.effort}`);
+      names.add(effort.effort);
+      if (effort.is_default) defaults++;
+    }
+    if (defaults > 1)
+      throw new InvalidModelMetadataError("Only one reasoning effort can be default");
+  }
+}
+
+function saveMetadata(modelId: string, input: ModelMetadataInput): void {
+  const db = getDb();
+  validateMetadata(input);
+  const scalarUpdates: string[] = [];
+  const scalarValues: Array<number | null> = [];
+  if (input.context_window !== undefined) {
+    scalarUpdates.push("context_window = ?");
+    scalarValues.push(input.context_window);
+  }
+  if (input.max_output_tokens !== undefined) {
+    scalarUpdates.push("max_output_tokens = ?");
+    scalarValues.push(input.max_output_tokens);
+  }
+  if (scalarUpdates.length)
+    db.query(`UPDATE models SET ${scalarUpdates.join(", ")} WHERE id = ?`).run(...scalarValues, modelId);
+
+  if (input.capabilities !== undefined) {
+    const existing = db.query("SELECT * FROM model_capabilities WHERE model_id = ?").get(modelId) as
+      | (Record<string, number | null> & { model_id: string })
+      | null;
+    const values = capabilityKeys.map((key) => {
+      const value = input.capabilities?.[key];
+      if (value === undefined) return existing?.[key] ?? null;
+      return value === null ? null : value ? 1 : 0;
+    });
+    db.query(`INSERT INTO model_capabilities (model_id, ${capabilityKeys.join(", ")})
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(model_id) DO UPDATE SET ${capabilityKeys.map((key) => `${key} = excluded.${key}`).join(", ")}`)
+      .run(modelId, ...values);
+  }
+  if (input.reasoning_efforts !== undefined) {
+    db.query("DELETE FROM model_reasoning_efforts WHERE model_id = ?").run(modelId);
+    for (const effort of input.reasoning_efforts)
+      db.query("INSERT INTO model_reasoning_efforts (id, model_id, effort, display_name, upstream_value, sort_order, is_default) VALUES (?, ?, ?, ?, ?, ?, ?)")
+        .run(crypto.randomUUID(), modelId, effort.effort.trim(), effort.display_name.trim(), effort.upstream_value.trim(), effort.sort_order, effort.is_default ? 1 : 0);
+  }
+}
+
+function seedMissingMetadata(modelId: string, input: ModelMetadataInput): void {
+  const db = getDb();
+  const model = db
+    .query("SELECT context_window, max_output_tokens FROM models WHERE id = ?")
+    .get(modelId) as { context_window: number | null; max_output_tokens: number | null };
+  const capabilities = db
+    .query("SELECT reasoning, tools, vision, attachments, streaming, non_streaming FROM model_capabilities WHERE model_id = ?")
+    .get(modelId) as Record<(typeof capabilityKeys)[number], number | null> | null;
+  const seededCapabilities = input.capabilities
+    ? Object.fromEntries(
+        capabilityKeys.map((key) => [
+          key,
+          capabilities?.[key] == null ? input.capabilities?.[key] : undefined,
+        ]),
+      ) as Partial<ModelCapabilities>
+    : undefined;
+  const hasEfforts = Boolean(
+    db.query("SELECT 1 FROM model_reasoning_efforts WHERE model_id = ? LIMIT 1").get(modelId),
+  );
+  saveMetadata(modelId, {
+    context_window: model.context_window == null ? input.context_window : undefined,
+    max_output_tokens: model.max_output_tokens == null ? input.max_output_tokens : undefined,
+    capabilities: seededCapabilities,
+    reasoning_efforts: hasEfforts ? undefined : input.reasoning_efforts,
+  });
+}
+
+function hydrate(model: Model | null): Model | null {
   if (!model) return null;
   const db = getDb();
+  const capabilities = db
+    .query("SELECT reasoning, tools, vision, attachments, streaming, non_streaming FROM model_capabilities WHERE model_id = ?")
+    .get(model.id) as Record<(typeof capabilityKeys)[number], number | null> | null;
   return {
     ...model,
+    context_window: model.context_window ?? null,
+    max_output_tokens: model.max_output_tokens ?? null,
+    capabilities: Object.fromEntries(
+      capabilityKeys.map((key) => {
+        const value = capabilities?.[key];
+        return [key, value == null ? null : Boolean(value)];
+      }),
+    ) as ModelCapabilities,
+    reasoning_efforts: (db.query("SELECT effort, display_name, upstream_value, sort_order, is_default FROM model_reasoning_efforts WHERE model_id = ? ORDER BY sort_order ASC, effort ASC").all(model.id) as Array<Omit<ReasoningEffort, "is_default"> & { is_default: number }>).map((effort) => ({ ...effort, is_default: Boolean(effort.is_default) })),
     pricing_tiers: db
       .query(
         "SELECT id, threshold_tokens, input_per_million, output_per_million, cache_read_per_million, cache_write_per_million FROM model_pricing_tiers WHERE model_id = ? ORDER BY threshold_tokens ASC",
@@ -291,7 +441,7 @@ function withPricing(model: Model | null): Model | null {
 export const modelService = {
   findByProviderAndModel(providerId: string, modelId: string): Model | null {
     const db = getDb();
-    return withPricing(
+    return hydrate(
       db
         .query("SELECT * FROM models WHERE provider_id = ? AND model_id = ?")
         .get(providerId, modelId) as Model | null,
@@ -310,7 +460,7 @@ export const modelService = {
        ORDER BY m.model_id ASC`,
       )
       .all(providerId)
-      .map((model) => withPricing(model as Model)!) as Model[];
+      .map((model) => hydrate(model as Model)!) as Model[];
   },
 
   findAllActive(): Model[] {
@@ -324,7 +474,8 @@ export const modelService = {
            AND NOT (p.protocol = 'antigravity' AND lower(m.model_id) LIKE '%gemini-3.6-flash-tiered%')
          ORDER BY m.model_id ASC`,
       )
-      .all() as Model[];
+      .all()
+      .map((model) => hydrate(model as Model)!) as Model[];
   },
 
   findAllActiveWithProvider(): ModelWithProvider[] {
@@ -351,7 +502,7 @@ export const modelService = {
       )
       .map(({ provider_base_url, provider_protocol, ...model }) => ({
         ...model,
-        pricing_tiers: withPricing(model)?.pricing_tiers,
+         ...hydrate(model),
         provider_avatar: resolveProviderAvatar(
           model.provider_avatar,
           provider_protocol,
@@ -362,13 +513,14 @@ export const modelService = {
 
   findById(id: string): Model | null {
     const db = getDb();
-    return withPricing(
+    return hydrate(
       db.query("SELECT * FROM models WHERE id = ?").get(id) as Model | null,
     );
   },
 
   upsert(input: CreateModelInput): Model {
     const db = getDb();
+    validateMetadata(input);
     const pricingTiers =
       input.pricing_tiers ?? defaultPricing(input.provider_id, input.model_id);
     const existing = db
@@ -376,37 +528,74 @@ export const modelService = {
       .get(input.provider_id, input.model_id) as Model | null;
 
     if (existing) {
-      const displayName =
-        input.display_name?.trim() ||
-        (existing.is_manual
+      db.transaction(() => {
+        const syncingManualModel = Boolean(existing.is_manual && input.is_manual === 0);
+        const displayName = syncingManualModel
           ? existing.display_name
-          : generateDisplayName(input.model_id));
-      db.query(
-        "UPDATE models SET is_manual = ?, display_name = ?, is_active = ?, created_at = datetime('now') WHERE id = ?",
-      ).run(input.is_manual ?? 0, displayName, input.is_active ?? 1, existing.id);
-      const hasPricing = Boolean(
-        db
-          .query("SELECT 1 FROM model_pricing_tiers WHERE model_id = ? LIMIT 1")
-          .get(existing.id),
-      );
-      if (input.pricing_tiers || !hasPricing)
-        savePricing(existing.id, pricingTiers);
+          : input.display_name?.trim() || generateDisplayName(input.model_id);
+         db.query("UPDATE models SET display_name = ?, is_active = ?, updated_at = datetime('now') WHERE id = ?").run(
+          displayName,
+          syncingManualModel ? existing.is_active : input.is_active ?? existing.is_active,
+          existing.id,
+        );
+        const hasPricing = Boolean(
+          db.query("SELECT 1 FROM model_pricing_tiers WHERE model_id = ? LIMIT 1").get(existing.id),
+        );
+        if (!syncingManualModel && (input.pricing_tiers || !hasPricing))
+          savePricing(existing.id, pricingTiers);
+        seedMissingMetadata(existing.id, input);
+      })();
       return this.findById(existing.id)!;
     }
 
     const id = crypto.randomUUID();
-    db.query(
-      "INSERT INTO models (id, provider_id, model_id, display_name, is_manual, is_active) VALUES (?, ?, ?, ?, ?, ?)",
-    ).run(
-      id,
-      input.provider_id,
-      input.model_id,
-      input.display_name?.trim() || generateDisplayName(input.model_id),
-      input.is_manual ?? 0,
-      input.is_active ?? 1,
-    );
-    savePricing(id, pricingTiers);
+    db.transaction(() => {
+      db.query(
+        "INSERT INTO models (id, provider_id, model_id, display_name, is_manual, is_active, updated_at) VALUES (?, ?, ?, ?, ?, ?, datetime('now'))",
+      ).run(
+        id,
+        input.provider_id,
+        input.model_id,
+        input.display_name?.trim() || generateDisplayName(input.model_id),
+        input.is_manual ?? 0,
+        input.is_active ?? 1,
+      );
+      savePricing(id, pricingTiers);
+      saveMetadata(id, input);
+    })();
     return this.findById(id)!;
+  },
+
+  resetExisting(input: CreateModelInput): Model | null {
+    const db = getDb();
+    validateMetadata(input);
+    const existing = db
+      .query("SELECT * FROM models WHERE provider_id = ? AND model_id = ?")
+      .get(input.provider_id, input.model_id) as Model | null;
+    if (!existing) return null;
+    const pricingTiers =
+      input.pricing_tiers ?? defaultPricing(input.provider_id, input.model_id);
+    db.transaction(() => {
+      db.query(
+        "UPDATE models SET display_name = ?, is_manual = 0, is_active = ?, context_window = NULL, max_output_tokens = NULL, updated_at = datetime('now') WHERE id = ?",
+      ).run(
+        input.display_name?.trim() || generateDisplayName(input.model_id),
+        input.is_active ?? existing.is_active,
+        existing.id,
+      );
+      db.query("DELETE FROM model_capabilities WHERE model_id = ?").run(existing.id);
+      db.query("DELETE FROM model_reasoning_efforts WHERE model_id = ?").run(existing.id);
+      if (pricingTiers !== undefined) savePricing(existing.id, pricingTiers);
+      saveMetadata(existing.id, {
+        context_window: input.context_window ?? null,
+        max_output_tokens: input.max_output_tokens ?? null,
+        capabilities: Object.fromEntries(
+          capabilityKeys.map((key) => [key, input.capabilities?.[key] ?? null]),
+        ) as ModelCapabilities,
+        reasoning_efforts: input.reasoning_efforts ?? [],
+      });
+    })();
+    return this.findById(existing.id);
   },
 
   create(input: CreateModelInput): Model {
@@ -418,19 +607,20 @@ export const modelService = {
     const model = this.findById(id);
     if (!model) return null;
     const newActive = model.is_active ? 0 : 1;
-    db.query("UPDATE models SET is_active = ? WHERE id = ?").run(newActive, id);
+    db.query("UPDATE models SET is_active = ?, updated_at = datetime('now') WHERE id = ?").run(newActive, id);
     return this.findById(id);
   },
 
   update(
     id: string,
-    input: {
+    input: ModelMetadataInput & {
       model_id?: string;
       display_name?: string | null;
       pricing_tiers?: PricingTier[];
     },
   ): Model | null {
     const db = getDb();
+    validateMetadata(input);
     const existing = this.findById(id);
     if (!existing) return null;
 
@@ -454,14 +644,15 @@ export const modelService = {
           generateDisplayName(input.model_id ?? existing.model_id),
       );
     }
-    savePricing(id, input.pricing_tiers);
-
-    if (updates.length === 0) return existing;
-
-    values.push(id);
-    db.query(`UPDATE models SET ${updates.join(", ")} WHERE id = ?`).run(
-      ...values,
-    );
+    db.transaction(() => {
+      savePricing(id, input.pricing_tiers);
+      saveMetadata(id, input);
+      if (updates.length) {
+        values.push(id);
+        db.query(`UPDATE models SET ${updates.join(", ")} WHERE id = ?`).run(...values);
+      }
+      db.query("UPDATE models SET updated_at = datetime('now') WHERE id = ?").run(id);
+    })();
 
     return this.findById(id);
   },

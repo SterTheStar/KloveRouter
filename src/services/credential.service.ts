@@ -2,7 +2,7 @@ import { getDb } from "../db/connection";
 import { decryptSecret, encryptSecret } from "./secret.service";
 import { logger } from "../logger";
 
-export type CredentialKind = "api_key" | "codex" | "antigravity" | "freebuff" | "qwen";
+export type CredentialKind = "api_key" | "codex" | "antigravity" | "freebuff" | "qwen" | "atomesus";
 export type CredentialMode = "fixed" | "round_robin";
 
 export interface ProviderCredential {
@@ -273,9 +273,11 @@ export const credentialService = {
             ? "kind = 'antigravity' AND refresh_token IS NOT NULL"
             : provider?.protocol === "freebuff"
               ? "kind = 'freebuff' AND secret IS NOT NULL"
-              : provider?.protocol === "qwen"
-                ? "kind = 'qwen' AND secret IS NOT NULL"
-              : "kind = 'api_key' AND secret IS NOT NULL";
+             : provider?.protocol === "qwen"
+                 ? "kind = 'qwen' AND secret IS NOT NULL"
+               : provider?.protocol === "atomesus"
+                 ? "kind = 'atomesus' AND secret IS NOT NULL"
+               : "kind = 'api_key' AND secret IS NOT NULL";
     if (mode === "fixed" && fixedId) {
       const raw = db
         .query(

@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { codexModels, codexStreamToOpenAI } from "./codex.client";
+import {
+  codexModels,
+  codexRequestBody,
+  codexStreamToOpenAI,
+} from "./codex.client";
 
 const encoder = new TextEncoder();
 
@@ -122,5 +126,23 @@ describe("codexModels", () => {
     } finally {
       globalThis.fetch = originalFetch;
     }
+  });
+});
+
+describe("codexRequestBody", () => {
+  test("omits empty or disabled reasoning and accepts output aliases", () => {
+    expect(
+      codexRequestBody({ messages: [], max_tokens: 20 }, "gpt-test"),
+    ).toMatchObject({ max_output_tokens: 20 });
+    expect(
+      codexRequestBody({ messages: [], max_tokens: 20 }, "gpt-test"),
+    ).not.toHaveProperty("reasoning");
+    const disabled = { messages: [] } as any;
+    Object.defineProperty(disabled, "__klove_reasoning", {
+      value: { effort: "none", upstreamValue: "none" },
+    });
+    expect(codexRequestBody(disabled, "gpt-test")).not.toHaveProperty(
+      "reasoning",
+    );
   });
 });

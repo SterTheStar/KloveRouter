@@ -1,6 +1,8 @@
 import { Elysia, t } from "elysia";
 import {
   DuplicateProviderModelError,
+  InvalidModelMetadataError,
+  type ModelMetadataInput,
   modelService,
 } from "../services/model.service";
 import { providerService } from "../services/provider.service";
@@ -20,6 +22,29 @@ import { logger } from "../logger";
 import { generateDisplayName } from "../services/model-name";
 import { freebuffModels, freebuffResponses } from "../integrations/freebuff";
 import { qwenModels, qwenResponses } from "../integrations/qwen";
+import { atomesusModels, atomesusTest } from "../integrations/atomesus";
+import { parseRawModelMetadata, resolveModelMetadata } from "../services/model-metadata";
+
+const nullableBoolean = t.Union([t.Boolean(), t.Null()]);
+const capabilitiesSchema = t.Object({
+  reasoning: nullableBoolean,
+  tools: nullableBoolean,
+  vision: nullableBoolean,
+  attachments: nullableBoolean,
+  streaming: nullableBoolean,
+  non_streaming: nullableBoolean,
+});
+const reasoningEffortsSchema = t.Array(
+  t.Object({
+    effort: t.String({ minLength: 1 }),
+    display_name: t.String({ minLength: 1 }),
+    upstream_value: t.String({ minLength: 1 }),
+    sort_order: t.Integer(),
+    is_default: t.Boolean(),
+  }),
+);
+
+export const parseGenericModelMetadata = parseRawModelMetadata;
 
 async function freebuffTest(
   model: string,
@@ -98,6 +123,10 @@ export const modelsPlugin = (app: Elysia) =>
           model_id: body.model_id,
           display_name: body.display_name || generateDisplayName(body.model_id),
           pricing_tiers: body.pricing_tiers,
+          context_window: body.context_window,
+          max_output_tokens: body.max_output_tokens,
+          capabilities: body.capabilities,
+          reasoning_efforts: body.reasoning_efforts,
           is_manual: 1,
         });
         return model;
@@ -106,6 +135,10 @@ export const modelsPlugin = (app: Elysia) =>
         body: t.Object({
           model_id: t.String({ minLength: 1 }),
           display_name: t.Optional(t.String()),
+          context_window: t.Optional(t.Union([t.Integer({ minimum: 1 }), t.Null()])),
+          max_output_tokens: t.Optional(t.Union([t.Integer({ minimum: 1 }), t.Null()])),
+          capabilities: t.Optional(capabilitiesSchema),
+          reasoning_efforts: t.Optional(reasoningEffortsSchema),
           pricing_tiers: t.Optional(
             t.Array(
               t.Object({
@@ -130,12 +163,26 @@ export const modelsPlugin = (app: Elysia) =>
         }
 
         const freeOnly = query.free_only === true;
+        const existingOnly = query.existing_only === true;
+        const resetExisting = query.reset_existing === true;
+        const existingIds = new Set(
+          modelService.findByProvider(id).map((model) => model.model_id),
+        );
+        const saveSyncedModel = (input: Parameters<typeof modelService.upsert>[0]) =>
+          resetExisting
+            ? modelService.resetExisting(input)
+            : modelService.upsert(input);
+        const selectModels = <T extends { id: string }>(available: T[]) => {
+          const freeSelected = freeOnly
+            ? available.filter((model) => /(?:^|[:-])free(?:$|\b)/i.test(model.id))
+            : available;
+          return existingOnly
+            ? freeSelected.filter((model) => existingIds.has(model.id))
+            : freeSelected;
+        };
         const preview = (
           available: { id: string; display_name?: string }[],
         ) => {
-          const existingIds = new Set(
-            modelService.findByProvider(id).map((model) => model.model_id),
-          );
           const freeModels = available.filter((model) =>
             /(?:^|[:-])free(?:$|\b)/i.test(model.id),
           );
@@ -155,6 +202,7 @@ export const modelsPlugin = (app: Elysia) =>
             free_existing_models: freeExisting,
             free_models_to_add: freeModels.length - freeExisting,
             free_only: freeOnly,
+            existing_only: existingOnly,
           };
         };
         try {
@@ -171,17 +219,14 @@ export const modelsPlugin = (app: Elysia) =>
             }
             const available = await codexModels(credential);
             if (query.preview === true) return preview(available);
-            const selected = freeOnly
-              ? available.filter((model) =>
-                  /(?:^|[:-])free(?:$|\b)/i.test(model.id),
-                )
-              : available;
+            const selected = selectModels(available);
             for (const model of selected) {
-              modelService.upsert({
+              saveSyncedModel({
                 provider_id: id,
                 model_id: model.id,
                 display_name: model.display_name,
                 is_manual: 0,
+                ...await resolveModelMetadata(provider.protocol, model.id, model),
               });
             }
             return {
@@ -204,17 +249,14 @@ export const modelsPlugin = (app: Elysia) =>
             }
             const available = await antigravityModels(credential);
             if (query.preview === true) return preview(available);
-            const selected = freeOnly
-              ? available.filter((model) =>
-                  /(?:^|[:-])free(?:$|\b)/i.test(model.id),
-                )
-              : available;
+            const selected = selectModels(available);
             for (const model of selected)
-              modelService.upsert({
+              saveSyncedModel({
                 provider_id: id,
                 model_id: model.id,
                 display_name: model.display_name,
                 is_manual: 0,
+                ...await resolveModelMetadata(provider.protocol, model.id, model),
               });
             return {
               success: true,
@@ -226,9 +268,16 @@ export const modelsPlugin = (app: Elysia) =>
            if (provider.protocol === "freebuff") {
             const available = await freebuffModels();
             if (query.preview === true) return preview(available);
-            for (const model of available)
-              modelService.upsert({ provider_id: id, model_id: model.id, display_name: model.display_name, is_manual: 0 });
-            return { success: true, models_found: available.length, message: `Synced ${available.length} Freebuff models from ${provider.name}` };
+            const selected = selectModels(available);
+            for (const model of selected)
+              saveSyncedModel({
+                provider_id: id,
+                model_id: model.id,
+                display_name: model.display_name,
+                is_manual: 0,
+                ...await resolveModelMetadata(provider.protocol, model.id, model),
+              });
+            return { success: true, models_found: selected.length, message: `Synced ${selected.length} Freebuff models from ${provider.name}` };
           }
 
           if (provider.protocol === "qwen") {
@@ -244,9 +293,32 @@ export const modelsPlugin = (app: Elysia) =>
             }
             const available = await qwenModels(credential, provider.base_url);
             if (query.preview === true) return preview(available);
-            for (const model of available)
-              modelService.upsert({ provider_id: id, model_id: model.id, display_name: model.display_name, is_manual: 0, is_active: model.is_thinking_model ? 0 : 1 });
-            return { success: true, models_found: available.length, message: `Synced ${available.length} Qwen models from ${provider.name}` };
+            const selected = selectModels(available);
+            for (const model of selected)
+              saveSyncedModel({
+                provider_id: id,
+                model_id: model.id,
+                display_name: model.display_name,
+                is_manual: 0,
+                is_active: 1,
+                ...await resolveModelMetadata(provider.protocol, model.id, model),
+              });
+            return { success: true, models_found: selected.length, message: `Synced ${selected.length} Qwen models from ${provider.name}` };
+          }
+
+          if (provider.protocol === "atomesus") {
+            const available = atomesusModels();
+            if (query.preview === true) return preview(available);
+            const selected = selectModels(available);
+            for (const model of selected)
+              saveSyncedModel({
+                provider_id: id,
+                model_id: model.id,
+                display_name: model.display_name,
+                is_manual: 0,
+                ...await resolveModelMetadata(provider.protocol, model.id, model),
+              });
+            return { success: true, models_found: selected.length, message: `Synced ${selected.length} AtomeSus models from ${provider.name}` };
           }
 
           const credential =
@@ -303,19 +375,18 @@ export const modelsPlugin = (app: Elysia) =>
           }
 
           if (query.preview === true) return preview(models);
-          models = freeOnly
-            ? models.filter((model) => /(?:^|[:-])free(?:$|\b)/i.test(model.id))
-            : models;
+          models = selectModels(models);
 
           let added = 0;
           for (const model of models) {
             if (model.id) {
-              modelService.upsert({
+              saveSyncedModel({
                 provider_id: id,
                 model_id: model.id,
                 display_name:
                   model.display_name || generateDisplayName(model.id),
                 is_manual: 0,
+                ...await resolveModelMetadata(provider.protocol, model.id, model),
               });
               added++;
             }
@@ -343,6 +414,8 @@ export const modelsPlugin = (app: Elysia) =>
         query: t.Object({
           preview: t.Optional(t.Boolean()),
           free_only: t.Optional(t.Boolean()),
+          existing_only: t.Optional(t.Boolean()),
+          reset_existing: t.Optional(t.Boolean()),
         }),
       },
     )
@@ -430,9 +503,11 @@ export const modelsPlugin = (app: Elysia) =>
                   )
                 : provider.protocol === "freebuff"
                    ? await freebuffTest(model.model_id, credential, provider.base_url)
-                   : provider.protocol === "qwen"
-                     ? await qwenTest(model.model_id, credential, provider.base_url)
-                     : await createOpenAIClient(
+                 : provider.protocol === "qwen"
+                   ? await qwenTest(model.model_id, credential, provider.base_url)
+                   : provider.protocol === "atomesus"
+                     ? await atomesusTest(model.model_id, credential, provider.base_url)
+                   : await createOpenAIClient(
                     credentialProvider,
                   ).chat.completions.create({
                     model: model.model_id,
@@ -493,6 +568,10 @@ export const modelsPlugin = (app: Elysia) =>
               model_id: error.modelId,
             };
           }
+          if (error instanceof InvalidModelMetadataError) {
+            set.status = 400;
+            return { error: "Invalid model metadata", message: error.message };
+          }
           throw error;
         }
       },
@@ -500,6 +579,10 @@ export const modelsPlugin = (app: Elysia) =>
         body: t.Object({
           model_id: t.Optional(t.String({ minLength: 1 })),
           display_name: t.Optional(t.Union([t.String(), t.Null()])),
+          context_window: t.Optional(t.Union([t.Integer({ minimum: 1 }), t.Null()])),
+          max_output_tokens: t.Optional(t.Union([t.Integer({ minimum: 1 }), t.Null()])),
+          capabilities: t.Optional(capabilitiesSchema),
+          reasoning_efforts: t.Optional(reasoningEffortsSchema),
           pricing_tiers: t.Optional(
             t.Array(
               t.Object({

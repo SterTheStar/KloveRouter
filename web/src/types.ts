@@ -4,7 +4,7 @@ export interface Provider {
   base_url: string;
   avatar: string | null;
   avatar_override?: string | null;
-  protocol: "openai" | "anthropic" | "codex" | "antigravity" | "freebuff" | "qwen";
+  protocol: "openai" | "anthropic" | "codex" | "antigravity" | "freebuff" | "qwen" | "atomesus";
   is_active: number;
   created_at: string;
   updated_at: string;
@@ -21,7 +21,7 @@ export interface ProviderCredential {
   id: string;
   provider_id: string;
   label: string;
-  kind: "api_key" | "codex" | "antigravity" | "freebuff" | "qwen";
+  kind: "api_key" | "codex" | "antigravity" | "freebuff" | "qwen" | "atomesus";
   account_id: string | null;
   email?: string | null;
   project_id?: string | null;
@@ -40,7 +40,35 @@ export interface Model {
   is_manual: number;
   is_active: number;
   created_at: string;
+  context_window: number | null;
+  max_output_tokens: number | null;
+  capabilities: ModelCapabilities;
+  reasoning_efforts: ReasoningEffort[];
   pricing_tiers?: PricingTier[];
+}
+
+export interface ModelCapabilities {
+  reasoning: boolean | null;
+  tools: boolean | null;
+  vision: boolean | null;
+  attachments: boolean | null;
+  streaming: boolean | null;
+  non_streaming: boolean | null;
+}
+
+export interface ReasoningEffort {
+  effort: string;
+  display_name: string;
+  upstream_value: string;
+  sort_order: number;
+  is_default: boolean;
+}
+
+export interface ModelMetadataInput {
+  context_window: number | null;
+  max_output_tokens: number | null;
+  capabilities: ModelCapabilities;
+  reasoning_efforts: ReasoningEffort[];
 }
 
 export interface PricingTier {
@@ -147,6 +175,7 @@ export type Page =
   | "dashboard"
   | "models"
   | "stats"
+  | "usage"
   | "request-logs"
   | "keys"
   | "settings"

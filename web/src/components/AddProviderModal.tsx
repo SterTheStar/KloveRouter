@@ -225,7 +225,7 @@ export default function AddProviderModal({
         "Connect your Codex account before adding this provider.",
       );
     }
-    if (!name || !baseUrl || (selectedType?.protocol === "freebuff" || selectedType?.protocol === "qwen" ? !authCode : !apiKey))
+    if (!name || !baseUrl || (selectedType?.protocol === "freebuff" || selectedType?.protocol === "qwen" || selectedType?.protocol === "atomesus" ? !authCode : !apiKey))
       return setError("All fields are required.");
     setLoading(true);
     setError(null);
@@ -233,7 +233,7 @@ export default function AddProviderModal({
       await providers.create({
         name,
         base_url: baseUrl,
-        ...(selectedType?.protocol === "freebuff" || selectedType?.protocol === "qwen"
+        ...(selectedType?.protocol === "freebuff" || selectedType?.protocol === "qwen" || selectedType?.protocol === "atomesus"
           ? { auth_code: authCode }
           : { api_key: apiKey }),
         protocol: selectedType?.protocol,
@@ -437,18 +437,18 @@ export default function AddProviderModal({
                 selectedType?.protocol !== "antigravity" && (
                   <div className="space-y-2">
                      <Label htmlFor="provider-key">
-                      {selectedType?.protocol === "freebuff" || selectedType?.protocol === "qwen" ? "Auth code" : "API key"}
+                       {selectedType?.protocol === "atomesus" ? "Bearer token" : selectedType?.protocol === "freebuff" || selectedType?.protocol === "qwen" ? "Auth code" : "API key"}
                     </Label>
                     <Input
                       id="provider-key"
                       type="password"
-                      value={selectedType?.protocol === "freebuff" || selectedType?.protocol === "qwen" ? authCode : apiKey}
+                       value={selectedType?.protocol === "freebuff" || selectedType?.protocol === "qwen" || selectedType?.protocol === "atomesus" ? authCode : apiKey}
                       onChange={(e) =>
-                        selectedType?.protocol === "freebuff" || selectedType?.protocol === "qwen"
+                         selectedType?.protocol === "freebuff" || selectedType?.protocol === "qwen" || selectedType?.protocol === "atomesus"
                           ? setAuthCode(e.target.value)
                           : setApiKey(e.target.value)
                       }
-                      placeholder={selectedType?.protocol === "freebuff" || selectedType?.protocol === "qwen" ? "Paste your auth token" : "sk-..."}
+                       placeholder={selectedType?.protocol === "atomesus" ? "Paste your AtomeSus bearer token" : selectedType?.protocol === "freebuff" || selectedType?.protocol === "qwen" ? "Paste your auth token" : "sk-..."}
                     />
                     {(selectedType?.protocol === "freebuff" || selectedType?.protocol === "qwen") && (
                       selectedType?.protocol === "qwen" ? (

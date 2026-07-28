@@ -252,6 +252,8 @@ export function toGoogleBody(
     generationConfig.maxOutputTokens = body.max_tokens;
   else if (body.max_completion_tokens !== undefined)
     generationConfig.maxOutputTokens = body.max_completion_tokens;
+  else if (body.max_output_tokens !== undefined)
+    generationConfig.maxOutputTokens = body.max_output_tokens;
   if (body.top_p !== undefined) generationConfig.topP = body.top_p;
   if (body.top_k !== undefined) generationConfig.topK = body.top_k;
   if (body.stop !== undefined)
@@ -259,11 +261,20 @@ export function toGoogleBody(
       ? body.stop
       : [body.stop];
   if (/gemini|claude|gpt|thinking/i.test(body.model)) {
-    const effort =
-      modelReasoningEffort(body.model) ??
+    const resolvedEffort = body.__klove_reasoning?.effort;
+    const effort = body.__klove_reasoning?.upstreamValue ??
       body.reasoning?.effort ??
-      body.reasoning_effort;
-    const thinkingConfig: any = { includeThoughts: true };
+      body.reasoning_effort ??
+      modelReasoningEffort(body.model);
+    const normalizedEffort = String(effort ?? "").toLowerCase();
+    const disabled = resolvedEffort === "none" || normalizedEffort === "none";
+    const thinkingConfig: any = {
+      includeThoughts: !disabled,
+    };
+    if (disabled) {
+      thinkingConfig.thinkingBudget = 0;
+      generationConfig.thinkingConfig = thinkingConfig;
+    } else
     if (effort && /gemini-2\.5/i.test(body.model))
       thinkingConfig.thinkingBudget =
         (
@@ -275,10 +286,12 @@ export function toGoogleBody(
             xhigh: 24576,
             max: 24576,
           } as Record<string, number>
-        )[effort] ?? 8192;
+        )[normalizedEffort] ?? 8192;
     else if (effort)
       thinkingConfig.thinkingLevel =
-        effort === "xhigh" || effort === "max" ? "high" : effort;
+        normalizedEffort === "xhigh" || normalizedEffort === "max"
+          ? "high"
+          : normalizedEffort;
     generationConfig.thinkingConfig = thinkingConfig;
   }
   const request: any = { contents, generationConfig, sessionId };

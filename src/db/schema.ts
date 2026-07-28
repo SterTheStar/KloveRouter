@@ -1,5 +1,6 @@
 import { Database } from "bun:sqlite";
 import { config } from "../config";
+import { encryptSecret } from "../services/secret.service";
 
 export function initSchema(db: Database): void {
   db.exec(`
@@ -22,11 +23,37 @@ export function initSchema(db: Database): void {
       provider_id   TEXT NOT NULL,
       model_id      TEXT NOT NULL,
       display_name  TEXT,
+      context_window INTEGER,
+      max_output_tokens INTEGER,
       is_manual     INTEGER NOT NULL DEFAULT 0,
       is_active     INTEGER NOT NULL DEFAULT 1,
       created_at    TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at    TEXT NOT NULL DEFAULT (datetime('now')),
       FOREIGN KEY (provider_id) REFERENCES providers(id) ON DELETE CASCADE,
       UNIQUE(provider_id, model_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS model_capabilities (
+      model_id TEXT PRIMARY KEY,
+      reasoning INTEGER,
+      tools INTEGER,
+      vision INTEGER,
+      attachments INTEGER,
+      streaming INTEGER,
+      non_streaming INTEGER,
+      FOREIGN KEY (model_id) REFERENCES models(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS model_reasoning_efforts (
+      id TEXT PRIMARY KEY,
+      model_id TEXT NOT NULL,
+      effort TEXT NOT NULL,
+      display_name TEXT NOT NULL,
+      upstream_value TEXT NOT NULL,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      is_default INTEGER NOT NULL DEFAULT 0,
+      FOREIGN KEY (model_id) REFERENCES models(id) ON DELETE CASCADE,
+      UNIQUE(model_id, effort)
     );
 
     CREATE TABLE IF NOT EXISTS provider_credentials (
@@ -51,6 +78,20 @@ export function initSchema(db: Database): void {
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now')),
       FOREIGN KEY (provider_id) REFERENCES providers(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS atomesus_sessions (
+      credential_id TEXT NOT NULL,
+      session_id TEXT NOT NULL,
+      messages TEXT NOT NULL DEFAULT '[]',
+      model TEXT NOT NULL DEFAULT '',
+      effort TEXT NOT NULL DEFAULT '',
+      system TEXT NOT NULL DEFAULT '',
+      file_key TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      PRIMARY KEY (credential_id, session_id),
+      FOREIGN KEY (credential_id) REFERENCES provider_credentials(id) ON DELETE CASCADE
     );
 
     CREATE TABLE IF NOT EXISTS api_keys (
@@ -163,6 +204,45 @@ export function initSchema(db: Database): void {
   if (!cols.find((c) => c.name === "fixed_credential_id")) {
     db.exec("ALTER TABLE providers ADD COLUMN fixed_credential_id TEXT");
   }
+
+  const modelCols = db.query("PRAGMA table_info(models)").all() as {
+    name: string;
+  }[];
+  if (!modelCols.find((c) => c.name === "context_window"))
+    db.exec("ALTER TABLE models ADD COLUMN context_window INTEGER");
+  if (!modelCols.find((c) => c.name === "max_output_tokens"))
+    db.exec("ALTER TABLE models ADD COLUMN max_output_tokens INTEGER");
+  if (!modelCols.find((c) => c.name === "updated_at")) {
+    db.exec("ALTER TABLE models ADD COLUMN updated_at TEXT NOT NULL DEFAULT ''");
+    db.exec("UPDATE models SET updated_at = created_at WHERE updated_at = ''");
+  }
+  db.exec(`
+    CREATE TRIGGER IF NOT EXISTS models_fill_updated_at
+    AFTER INSERT ON models
+    WHEN NEW.updated_at = ''
+    BEGIN
+      UPDATE models SET updated_at = datetime('now') WHERE id = NEW.id;
+    END
+  `);
+  db.exec(`
+    CREATE TRIGGER IF NOT EXISTS models_touch_updated_at
+    AFTER UPDATE ON models
+    WHEN NEW.updated_at = OLD.updated_at
+    BEGIN
+      UPDATE models SET updated_at = datetime('now') WHERE id = NEW.id;
+    END
+  `);
+
+  const atomesusSessionCols = db
+    .query("PRAGMA table_info(atomesus_sessions)")
+    .all() as { name: string }[];
+  for (const [name, sql] of [
+    ["model", "ALTER TABLE atomesus_sessions ADD COLUMN model TEXT NOT NULL DEFAULT ''"],
+    ["effort", "ALTER TABLE atomesus_sessions ADD COLUMN effort TEXT NOT NULL DEFAULT ''"],
+    ["system", "ALTER TABLE atomesus_sessions ADD COLUMN system TEXT NOT NULL DEFAULT ''"],
+    ["file_key", "ALTER TABLE atomesus_sessions ADD COLUMN file_key TEXT NOT NULL DEFAULT ''"],
+  ] as const)
+    if (!atomesusSessionCols.find((column) => column.name === name)) db.exec(sql);
 
   const credentialCols = db
     .query("PRAGMA table_info(provider_credentials)")
@@ -347,11 +427,31 @@ export function initSchema(db: Database): void {
         provider.id,
         provider.protocol === "codex" ? "Codex session" : "Default API key",
         provider.protocol === "codex" ? "codex" : "api_key",
-        provider.api_key,
+        encryptSecret(provider.api_key),
       );
       db.query("UPDATE providers SET fixed_credential_id = ? WHERE id = ?").run(
         credentialId,
         provider.id,
+      );
+    }
+    const encryptedApiKey = encryptSecret(provider.api_key);
+    if (encryptedApiKey !== provider.api_key) {
+      db.query("UPDATE providers SET api_key = ? WHERE id = ?").run(
+        encryptedApiKey,
+        provider.id,
+      );
+    }
+  }
+
+  const credentialSecrets = db
+    .query("SELECT id, secret FROM provider_credentials WHERE secret IS NOT NULL")
+    .all() as { id: string; secret: string }[];
+  for (const credential of credentialSecrets) {
+    const encrypted = encryptSecret(credential.secret);
+    if (encrypted !== credential.secret) {
+      db.query("UPDATE provider_credentials SET secret = ? WHERE id = ?").run(
+        encrypted,
+        credential.id,
       );
     }
   }

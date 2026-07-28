@@ -16,9 +16,23 @@ type QwenUsage = {
   expires_at?: string | null;
 };
 
+export function extractQwenContent(text: string): {
+  content: string;
+  reasoningContent?: string;
+} {
+  const reasoning = [...text.matchAll(/<details[^>]*>([\s\S]*?)<\/details>/gi)]
+    .map((match) => match[1].replace(/<[^>]+>/g, "").trim())
+    .filter(Boolean)
+    .join("\n\n");
+  const content = text.replace(/<details[^>]*>[\s\S]*?<\/details>/gi, "").trim();
+  return {
+    content: content || (reasoning ? "" : text),
+    ...(reasoning ? { reasoningContent: reasoning } : {}),
+  };
+}
+
 export function cleanQwenContent(text: string): string {
-  const stripped = text.replace(/<details>[\s\S]*?<\/details>/g, "").trim();
-  return stripped || text;
+  return extractQwenContent(text).content;
 }
 
 function tokenOf(credential: QwenCredential) {
@@ -89,7 +103,7 @@ export async function qwenModels(
   credential: QwenCredential,
   endpoint?: string,
 ): Promise<
-  { id: string; display_name: string; is_thinking_model?: boolean }[]
+  { id: string; display_name: string; is_thinking_model?: boolean; [key: string]: any }[]
 > {
   const upstream = baseUrl(endpoint);
   const response = await fetch(`${upstream}/v1/models`, {
@@ -109,9 +123,14 @@ export async function qwenModels(
   return entries
     .filter((m: any) => m.id)
     .map((m: any) => ({
+      ...m,
       id: m.id,
       display_name: m.display_name || m.id,
       is_thinking_model: m.info?.meta?.think_skip?.enable === false,
+      capabilities: {
+        ...(m.capabilities && typeof m.capabilities === "object" ? m.capabilities : {}),
+        ...(m.info?.meta?.think_skip?.enable === false ? { reasoning: true } : {}),
+      },
     }));
 }
 

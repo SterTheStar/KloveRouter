@@ -17,17 +17,28 @@ import { antigravityResponses } from "../integrations/antigravity";
 import { isBlockedAntigravityModel } from "../integrations/antigravity";
 import { requestLogService } from "../services/request-log.service";
 import { openAIStreamResponse } from "./openai-stream";
+import { openAICompletionFromSse } from "./openai-completion";
 import { freebuffResponses } from "../integrations/freebuff";
-import { cleanQwenContent, qwenResponses } from "../integrations/qwen";
+import { extractQwenContent, qwenResponses } from "../integrations/qwen";
+import { atomesusResponses } from "../integrations/atomesus";
 import { injectCavemanPrompt } from "../plugins/caveman";
 import { customSkillsProxy } from "../plugins/custom-skills";
 import { rtkManager } from "../plugins/rtk";
 import { filterLastToolMessage } from "../plugins/rtk/rtk.messages";
+import {
+  applyResolvedReasoning,
+  ReasoningRequestError,
+} from "../services/reasoning";
+import {
+  ModelRequestError,
+  validateModelRequest,
+} from "../services/request-validation";
 
 function anthropicPayload(body: any, modelId: string, stream = false) {
   const messages = splitAnthropicMessages(body.messages);
-  const effort = body.reasoning?.effort ?? body.reasoning_effort;
+  const effort = body.__klove_reasoning?.effort;
   const maxTokens =
+    body.max_output_tokens ??
     body.max_tokens ??
     body.max_completion_tokens ??
     (effort && effort !== "none" ? 8192 : 1024);
@@ -39,16 +50,19 @@ function anthropicPayload(body: any, modelId: string, stream = false) {
     xhigh: 8192,
     max: 8192,
   };
+  const configuredBudget = effort ? budgets[effort] : undefined;
   const budget =
-    effort && effort !== "none" && maxTokens > 1024
-      ? Math.min(budgets[effort] ?? 4096, maxTokens - 1)
+    effort !== "none" && configuredBudget !== undefined && maxTokens > 1024
+      ? Math.min(configuredBudget, maxTokens - 1)
       : undefined;
   return {
     model: modelId,
     messages: messages.messages,
     ...(messages.system ? { system: messages.system } : {}),
     max_tokens: maxTokens,
-    ...(body.thinking
+    ...(effort === "none"
+      ? { thinking: { type: "disabled" } }
+      : body.thinking
       ? { thinking: body.thinking }
       : budget
         ? { thinking: { type: "enabled", budget_tokens: budget } }
@@ -87,6 +101,7 @@ function anthropicPayload(body: any, modelId: string, stream = false) {
 }
 
 const forwardedChatFields = [
+  "max_output_tokens",
   "max_tokens",
   "max_completion_tokens",
   "temperature",
@@ -108,6 +123,7 @@ const forwardedChatFields = [
   "service_tier",
   "reasoning",
   "reasoning_effort",
+  "effort",
   "metadata",
   "store",
   "web_search_options",
@@ -146,7 +162,7 @@ function isModelNotFoundError(error: unknown) {
 }
 
 function tokenDetails(usage: any) {
-  return {
+           return {
     cacheRead: Number(
       usage?.prompt_tokens_details?.cached_tokens ??
         usage?.input_tokens_details?.cached_tokens ??
@@ -394,6 +410,7 @@ function recordSseUsageResponse(
     details?: { cacheRead: number; cacheWrite: number },
   ) => void,
   start: number,
+  onError?: (error: Error) => void,
 ) {
   const reader = response.body?.getReader();
   if (!reader) return response;
@@ -405,6 +422,7 @@ function recordSseUsageResponse(
   let cacheWrite = 0;
   let recorded = false;
   let firstTokenAt: number | null = null;
+  let streamError: Error | null = null;
   const record = () => {
     if (recorded) return;
     recorded = true;
@@ -440,7 +458,15 @@ function recordSseUsageResponse(
                 const raw = line.slice(5).trim();
                 if (raw === "[DONE]") continue;
                 try {
-                  const data = JSON.parse(raw);
+                   const data = JSON.parse(raw);
+                   if (data.error) {
+                     streamError = new Error(
+                       typeof data.error === "string"
+                         ? data.error
+                         : data.error.message ?? "Upstream stream failed",
+                     );
+                     continue;
+                   }
                   const usage =
                     data.usage ??
                     data.response?.usage ??
@@ -467,9 +493,12 @@ function recordSseUsageResponse(
             }
             if (done) break;
           }
-          record();
-        } catch (error: any) {
-          record();
+           if (streamError) onError?.(streamError);
+           else record();
+         } catch (error: any) {
+           onError?.(
+             error instanceof Error ? error : new Error(String(error)),
+           );
           controller.enqueue(
             encoder.encode(
               `data: ${JSON.stringify({ error: { message: error?.message ?? "Upstream stream disconnected" } })}\n\n`,
@@ -516,15 +545,34 @@ export const proxyPlugin = (app: Elysia) =>
               : m.model_id,
             object: "model",
             created: Math.floor(new Date(m.created_at).getTime() / 1000),
-            owned_by: provider?.name.toLowerCase() ?? "unknown",
-          };
+             owned_by: provider?.name.toLowerCase() ?? "unknown",
+             context_window: m.context_window,
+             max_output_tokens: m.max_output_tokens,
+             limit: {
+               context: m.context_window,
+               output: m.max_output_tokens,
+               context_window: m.context_window,
+               max_output_tokens: m.max_output_tokens,
+             },
+             capabilities: m.capabilities,
+             reasoning_efforts: m.reasoning_efforts,
+             reasoning_default:
+               m.reasoning_efforts.find((effort) => effort.is_default)?.effort ??
+               null,
+             reasoning: {
+               efforts: m.reasoning_efforts,
+               default:
+                 m.reasoning_efforts.find((effort) => effort.is_default)
+                   ?.effort ?? null,
+             },
+           };
         }),
       };
     })
     .post(
       "/v1/chat/completions",
       async ({ body, set, headers, request, server }) => {
-        if (
+         if (
           !body ||
           typeof body !== "object" ||
           typeof body.model !== "string" ||
@@ -567,9 +615,6 @@ export const proxyPlugin = (app: Elysia) =>
           }
         }
 
-        body.messages = await injectCavemanPrompt(body.messages);
-        body.messages = await customSkillsProxy.injectSkills(body.messages);
-
         // Parse providername/modelname
         const parsed = parseModelName(body.model);
         if (!parsed) {
@@ -589,7 +634,36 @@ export const proxyPlugin = (app: Elysia) =>
             error: "Provider not found or inactive",
             message: `No active provider named "${parsed.providerName}"`,
           };
+         }
+
+        const modelRecord = modelService.findByProviderAndModel(
+          provider.id,
+          parsed.modelId,
+        );
+        if (!modelRecord || !modelRecord.is_active) {
+          set.status = 404;
+          return {
+            error: "Model not found or inactive",
+            message: `No active model "${parsed.modelId}" is configured for provider "${provider.name}"`,
+          };
         }
+        try {
+          validateModelRequest(body, modelRecord);
+        } catch (error) {
+          if (!(error instanceof ModelRequestError)) throw error;
+          set.status = 400;
+          return { error: "Invalid model request", message: error.message };
+        }
+        try {
+          applyResolvedReasoning(body, modelRecord);
+        } catch (error) {
+          if (!(error instanceof ReasoningRequestError)) throw error;
+          set.status = 400;
+          return { error: "Invalid reasoning effort", message: error.message };
+        }
+
+        body.messages = await injectCavemanPrompt(body.messages);
+        body.messages = await customSkillsProxy.injectSkills(body.messages);
 
         if (
           provider.protocol === "antigravity" &&
@@ -767,7 +841,7 @@ export const proxyPlugin = (app: Elysia) =>
           };
         }
 
-        if (provider.protocol === "codex") {
+         if (provider.protocol === "codex") {
           const attempted = new Set<string>();
           const failures: string[] = [];
           while (credential && !attempted.has(credential.id)) {
@@ -778,13 +852,45 @@ export const proxyPlugin = (app: Elysia) =>
                 await codexResponses(body, parsed.modelId, credential),
                 parsed.modelId,
               );
-              const modelRecord = modelService.findByProviderAndModel(
+               const modelRecord = modelService.findByProviderAndModel(
                 provider.id,
                 parsed.modelId,
-              );
-              credentialService.clearError(credential.id);
-              credentialService.clearCooldown(credential.id);
-              return recordSseUsageResponse(
+               );
+               const credentialId = credential.id;
+               if (!body.stream) {
+                 const { completion, firstDeltaAt } =
+                   await openAICompletionFromSse(
+                     response,
+                     parsed.modelId,
+                   );
+                 const durationMs = Math.round(performance.now() - start);
+                 const generationDurationMs = Math.round(
+                   performance.now() - (firstDeltaAt ?? start),
+                 );
+                 const details = tokenDetails(completion.usage);
+                 const usage = usageService.record(
+                   provider.id,
+                   modelRecord?.id ?? parsed.modelId,
+                   parsed.modelId,
+                   completion.usage?.prompt_tokens ?? 0,
+                   completion.usage?.completion_tokens ?? 0,
+                   durationMs,
+                   generationDurationMs,
+                   details,
+                 );
+                 requestLogService.complete(requestLogId, {
+                   promptTokens: completion.usage?.prompt_tokens ?? 0,
+                   completionTokens: completion.usage?.completion_tokens ?? 0,
+                   cacheRead: details.cacheRead,
+                   cacheWrite: details.cacheWrite,
+                   cost: usage.estimated_cost_usd,
+                   durationMs,
+                 });
+                 credentialService.clearError(credentialId);
+                 credentialService.clearCooldown(credentialId);
+                 return completion;
+               }
+               return recordSseUsageResponse(
                 response,
                 (
                   promptTokens,
@@ -803,17 +909,27 @@ export const proxyPlugin = (app: Elysia) =>
                     generationDurationMs,
                     details,
                   );
-                  requestLogService.complete(requestLogId, {
+                   requestLogService.complete(requestLogId, {
                     promptTokens,
                     completionTokens,
                     cacheRead: details?.cacheRead,
                     cacheWrite: details?.cacheWrite,
                     cost: usage.estimated_cost_usd,
-                    durationMs,
-                  });
-                },
-                start,
-              );
+                     durationMs,
+                   });
+                   credentialService.clearError(credentialId);
+                   credentialService.clearCooldown(credentialId);
+                 },
+                 start,
+                 (error) => {
+                   credentialService.markError(credentialId, error.message);
+                   requestLogService.complete(requestLogId, {
+                     status: "error",
+                     statusCode: 502,
+                     error: error.message,
+                   });
+                 },
+               );
             } catch (error: any) {
               failures.push(error.message);
               credentialService.markError(credential.id, error.message);
@@ -848,25 +964,57 @@ export const proxyPlugin = (app: Elysia) =>
           };
         }
 
-        if (provider.protocol === "antigravity") {
+         if (provider.protocol === "antigravity") {
           const attempted = new Set<string>();
           const failures: string[] = [];
           while (credential && !attempted.has(credential.id)) {
             attempted.add(credential.id);
             try {
               const start = performance.now();
-              const response = await antigravityResponses(
+               const response = await antigravityResponses(
                 body,
                 parsed.modelId,
                 credential,
-              );
-              credentialService.clearError(credential.id);
-              credentialService.clearCooldown(credential.id);
-              const modelRecord = modelService.findByProviderAndModel(
+               );
+               const credentialId = credential.id;
+               const modelRecord = modelService.findByProviderAndModel(
                 provider.id,
                 parsed.modelId,
-              );
-              return recordSseUsageResponse(
+               );
+               if (!body.stream) {
+                 const { completion, firstDeltaAt } =
+                   await openAICompletionFromSse(
+                     response,
+                     parsed.modelId,
+                   );
+                 const durationMs = Math.round(performance.now() - start);
+                 const generationDurationMs = Math.round(
+                   performance.now() - (firstDeltaAt ?? start),
+                 );
+                 const details = tokenDetails(completion.usage);
+                 const usage = usageService.record(
+                   provider.id,
+                   modelRecord?.id ?? parsed.modelId,
+                   parsed.modelId,
+                   completion.usage?.prompt_tokens ?? 0,
+                   completion.usage?.completion_tokens ?? 0,
+                   durationMs,
+                   generationDurationMs,
+                   details,
+                 );
+                 requestLogService.complete(requestLogId, {
+                   promptTokens: completion.usage?.prompt_tokens ?? 0,
+                   completionTokens: completion.usage?.completion_tokens ?? 0,
+                   cacheRead: details.cacheRead,
+                   cacheWrite: details.cacheWrite,
+                   cost: usage.estimated_cost_usd,
+                   durationMs,
+                 });
+                 credentialService.clearError(credentialId);
+                 credentialService.clearCooldown(credentialId);
+                 return completion;
+               }
+               return recordSseUsageResponse(
                 response,
                 (
                   promptTokens,
@@ -885,17 +1033,27 @@ export const proxyPlugin = (app: Elysia) =>
                     generationDurationMs,
                     details,
                   );
-                  requestLogService.complete(requestLogId, {
+                   requestLogService.complete(requestLogId, {
                     promptTokens,
                     completionTokens,
                     cacheRead: details?.cacheRead,
                     cacheWrite: details?.cacheWrite,
                     cost: usage.estimated_cost_usd,
-                    durationMs,
-                  });
-                },
-                start,
-              );
+                     durationMs,
+                   });
+                   credentialService.clearError(credentialId);
+                   credentialService.clearCooldown(credentialId);
+                 },
+                 start,
+                 (error) => {
+                   credentialService.markError(credentialId, error.message);
+                   requestLogService.complete(requestLogId, {
+                     status: "error",
+                     statusCode: 502,
+                     error: error.message,
+                   });
+                 },
+               );
             } catch (error: any) {
               if (isModelNotFoundError(error)) {
                 failures.push(error.message);
@@ -1036,8 +1194,15 @@ export const proxyPlugin = (app: Elysia) =>
               const modelRecord = modelService.findByProviderAndModel(provider.id, parsed.modelId);
               if (!body.stream) {
                 const completion = await response.json();
-                if (completion.choices?.[0]?.message?.content)
-                  completion.choices[0].message.content = cleanQwenContent(completion.choices[0].message.content);
+                if (completion.choices?.[0]?.message?.content) {
+                  const extracted = extractQwenContent(
+                    completion.choices[0].message.content,
+                  );
+                  completion.choices[0].message.content = extracted.content;
+                  if (extracted.reasoningContent)
+                    completion.choices[0].message.reasoning_content =
+                      extracted.reasoningContent;
+                }
                 const durationMs = Math.round(performance.now() - start);
                 const details = tokenDetails(completion.usage);
                 const usage = usageService.record(
@@ -1078,6 +1243,36 @@ export const proxyPlugin = (app: Elysia) =>
           set.status = 502;
           requestLogService.complete(requestLogId, { status: "error", statusCode: 502, error: failures.at(-1) });
           return { error: "Qwen request failed", message: failures.at(-1) };
+        }
+
+        if (provider.protocol === "atomesus") {
+          const attempted = new Set<string>();
+          const failures: string[] = [];
+          while (credential && !attempted.has(credential.id)) {
+            attempted.add(credential.id);
+            try {
+              const start = performance.now();
+              const result = await atomesusResponses(body, parsed.modelId, credential, provider.base_url);
+              const durationMs = Math.round(performance.now() - start);
+              credentialService.clearError(credential.id);
+              credentialService.clearCooldown(credential.id);
+              requestLogService.complete(requestLogId, { durationMs });
+              return result;
+            } catch (error: any) {
+              failures.push(error.message);
+              credentialService.markError(credential.id, error.message);
+              if (provider.credential_mode !== "round_robin") break;
+              credentialService.markCooldown(credential.id, 10, error.message, requestSequence);
+              const next = credentialService.select(provider.id, "round_robin", null, requestSequence);
+              if (!next || attempted.has(next.id)) break;
+              credential = next;
+              requestLogService.setCredential(requestLogId, credential);
+            }
+          }
+          const statusCode = failures.every(isQuotaError) ? 429 : 502;
+          set.status = statusCode;
+          requestLogService.complete(requestLogId, { status: "error", statusCode, error: failures.at(-1) });
+          return { error: "AtomeSus request failed", message: failures.at(-1) };
         }
 
         // Handle streaming

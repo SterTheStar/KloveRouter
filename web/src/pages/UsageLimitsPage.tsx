@@ -362,6 +362,7 @@ export default function UsageLimitsPage() {
                   usage: null,
                   credits: [],
                   antigravityQuota: null,
+                  freebuffUsage: null,
                 };
               }
             }),

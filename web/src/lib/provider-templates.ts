@@ -40,7 +40,7 @@ import freebuffLogo from "../assets/providers/freebuff.png";
 
 export type ProviderTemplate = {
   id: string;
-  protocol: "openai" | "antigravity" | "anthropic" | "codex" | "freebuff" | "qwen";
+  protocol: "openai" | "antigravity" | "anthropic" | "codex" | "freebuff" | "qwen" | "atomesus";
   name: string;
   description: string;
   logo: string;
@@ -156,6 +156,8 @@ const providerDescriptions: Record<string, string> = {
     "Free Codebuff/Freebuff models through a token-authenticated OpenAI-compatible gateway.",
   qwen:
     "Qwen AI models through an OpenAI-compatible gateway. Uses a Bearer token extracted from chat.qwen.ai.",
+  atomesus:
+    "AtomeSus models with effort controls, persistent upstream sessions, streaming, and encrypted token storage.",
   blueminds:
     "An OpenAI-compatible gateway for accessing hosted language models through BlueMinds.",
   agnes:
@@ -278,6 +280,15 @@ export const PROVIDER_TEMPLATES: readonly ProviderTemplate[] = [
     description: providerDescriptions.qwen,
     logo: "https://assets.alicdn.com/g/qwenweb/qwen-webui-fe/0.0.201/favicon.png",
     placeholder: "https://qwen.aikit.club",
+    preset: false,
+  },
+  {
+    id: "atomesus",
+    protocol: "atomesus",
+    name: "AtomeSus",
+    description: providerDescriptions.atomesus,
+    logo: "https://atomesus.com/favicon.ico",
+    placeholder: "https://api.atomesus.com",
     preset: false,
   },
   ...openAiCompatiblePresets.map(([id, name, placeholder]) => ({

@@ -121,11 +121,13 @@ export async function antigravityModels(credential: any) {
       const raw = data?.availableModels ?? data?.models ?? [];
       const entries = Array.isArray(raw)
         ? raw.map((m: any) => ({
+            ...m,
             id: m.model?.name || m.name || m.displayName,
             display_name:
               m.displayMetadata?.label || m.displayName || m.model?.name,
           }))
         : Object.entries(raw).map(([id, m]: any) => ({
+            ...m,
             id: id.replace(/^models\//, ""),
             display_name: m.displayMetadata?.label || m.displayName || id,
           }));
@@ -133,6 +135,7 @@ export async function antigravityModels(credential: any) {
         entries
           .filter((m: any) => m.id)
           .map((m: any) => ({
+            ...m,
             id: m.id,
             display_name: m.display_name || m.id,
           })),

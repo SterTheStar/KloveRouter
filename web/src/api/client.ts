@@ -67,7 +67,7 @@ export const providers = {
     api_key?: string;
     auth_code?: string;
     avatar?: string;
-     protocol?: "openai" | "anthropic" | "codex" | "antigravity" | "freebuff" | "qwen";
+     protocol?: "openai" | "anthropic" | "codex" | "antigravity" | "freebuff" | "qwen" | "atomesus";
    }) =>
      request<import("../types").Provider>("/api/providers", {
        method: "POST",
@@ -80,7 +80,7 @@ export const providers = {
        base_url?: string;
        api_key?: string;
        avatar?: string | null;
-       protocol?: "openai" | "anthropic" | "codex" | "antigravity" | "freebuff" | "qwen";
+       protocol?: "openai" | "anthropic" | "codex" | "antigravity" | "freebuff" | "qwen" | "atomesus";
       credential_mode?: "fixed" | "round_robin";
       fixed_credential_id?: string | null;
       is_active?: number;
@@ -106,7 +106,7 @@ export const providers = {
     id: string,
     data: {
       label: string;
-      kind?: "api_key" | "codex" | "antigravity" | "freebuff" | "qwen";
+       kind?: "api_key" | "codex" | "antigravity" | "freebuff" | "qwen" | "atomesus";
       secret?: string;
       access_token?: string;
       refresh_token?: string;
@@ -250,7 +250,7 @@ export const models = {
       model_id: string;
       display_name?: string;
       pricing_tiers?: import("../types").PricingTier[];
-    },
+    } & import("../types").ModelMetadataInput,
   ) =>
     request<import("../types").Model>(`/api/providers/${providerId}/models`, {
       method: "POST",
@@ -258,7 +258,7 @@ export const models = {
     }),
   sync: (
     providerId: string,
-    options: { preview?: boolean; freeOnly?: boolean } = {},
+    options: { preview?: boolean; freeOnly?: boolean; existingOnly?: boolean; resetExisting?: boolean } = {},
   ) =>
     request<{
       preview?: boolean;
@@ -270,9 +270,10 @@ export const models = {
       free_existing_models?: number;
       free_models_to_add?: number;
       free_only?: boolean;
+      existing_only?: boolean;
       message?: string;
     }>(
-      `/api/providers/${providerId}/sync?preview=${options.preview ? "true" : "false"}&free_only=${options.freeOnly ? "true" : "false"}`,
+      `/api/providers/${providerId}/sync?preview=${options.preview ? "true" : "false"}&free_only=${options.freeOnly ? "true" : "false"}&existing_only=${options.existingOnly ? "true" : "false"}&reset_existing=${options.resetExisting ? "true" : "false"}`,
       { method: "POST" },
     ),
   toggle: (id: string) =>
@@ -285,7 +286,7 @@ export const models = {
       model_id?: string;
       display_name?: string | null;
       pricing_tiers?: import("../types").PricingTier[];
-    },
+    } & Partial<import("../types").ModelMetadataInput>,
   ) =>
     request<import("../types").Model>(`/api/models/${id}`, {
       method: "PUT",

@@ -12,9 +12,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { models } from "../api/client";
-import type { Model } from "../types";
+import type { Model, ModelMetadataInput } from "../types";
 import { useToast } from "./ui/toast";
-import { PricingEditor } from "./AddModelModal";
+import {
+  emptyModelMetadata,
+  ModelMetadataEditor,
+  PricingEditor,
+} from "./AddModelModal";
 import type { PricingTier } from "../types";
 import { generateDisplayName } from "../lib/model-name";
 
@@ -34,13 +38,34 @@ export default function EditModelModal({
   const [displayName, setDisplayName] = useState("");
   const [displayEdited, setDisplayEdited] = useState(false);
   const [pricingTiers, setPricingTiers] = useState<PricingTier[]>([]);
+  const [metadata, setMetadata] = useState<ModelMetadataInput>(() =>
+    emptyModelMetadata(),
+  );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     if (model) {
+      const defaultEffortIndex = Math.max(
+        0,
+        (model.reasoning_efforts ?? []).findIndex((effort) => effort.is_default),
+      );
       setModelId(model.model_id);
       setDisplayName(model.display_name ?? generateDisplayName(model.model_id));
       setDisplayEdited(Boolean(model.display_name));
+      setMetadata({
+        context_window: model.context_window ?? null,
+        max_output_tokens: model.max_output_tokens ?? null,
+        capabilities: {
+          ...emptyModelMetadata().capabilities,
+          ...(model.capabilities ?? {}),
+        },
+        reasoning_efforts: (model.reasoning_efforts ?? []).map(
+          (effort, index) => ({
+            ...effort,
+            is_default: index === defaultEffortIndex,
+          }),
+        ),
+      });
       setPricingTiers(
         model.pricing_tiers?.length
           ? model.pricing_tiers
@@ -65,12 +90,19 @@ export default function EditModelModal({
     );
   const submit = async () => {
     if (!model || !modelId.trim()) return setError("Model ID is required.");
+    if (
+      metadata.reasoning_efforts.length > 0 &&
+      metadata.reasoning_efforts.filter((effort) => effort.is_default)
+        .length !== 1
+    )
+      return setError("Select exactly one default reasoning effort.");
     setLoading(true);
     try {
       await models.update(model.id, {
         model_id: modelId.trim(),
         display_name: displayName || null,
         pricing_tiers: pricingTiers,
+        ...metadata,
       });
       success("Model updated");
       onSuccess();
@@ -125,6 +157,7 @@ export default function EditModelModal({
             updateTier={updateTier}
             setTiers={setPricingTiers}
           />
+          <ModelMetadataEditor value={metadata} onChange={setMetadata} />
           {error && (
             <Alert variant="destructive">
               <AlertDescription>{error}</AlertDescription>

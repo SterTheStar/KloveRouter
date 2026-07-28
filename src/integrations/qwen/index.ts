@@ -6,4 +6,5 @@ export {
   qwenTest,
   qwenUsage,
   cleanQwenContent,
+  extractQwenContent,
 } from "./qwen.client";

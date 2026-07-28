@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { googleStreamToOpenAI } from "./antigravity.transform";
+import { googleStreamToOpenAI, toGoogleBody } from "./antigravity.transform";
 
 const encoder = new TextEncoder();
 
@@ -86,5 +86,24 @@ describe("googleStreamToOpenAI", () => {
     const text = await response.text();
 
     expect(text.match(/"finish_reason":"stop"/g)?.length).toBe(1);
+  });
+});
+
+describe("toGoogleBody", () => {
+  test("explicit effort beats model suffix and none disables thoughts", () => {
+    const body = {
+      model: "gemini-3.6-flash-high",
+      messages: [{ role: "user", content: "hello" }],
+      max_output_tokens: 123,
+    } as any;
+    Object.defineProperty(body, "__klove_reasoning", {
+      value: { effort: "none", upstreamValue: "disabled", explicit: true },
+    });
+    const transformed = toGoogleBody(body, "project");
+    expect(transformed.request.generationConfig.maxOutputTokens).toBe(123);
+    expect(transformed.request.generationConfig.thinkingConfig).toEqual({
+      includeThoughts: false,
+      thinkingBudget: 0,
+    });
   });
 });

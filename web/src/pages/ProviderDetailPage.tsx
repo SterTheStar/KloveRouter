@@ -67,9 +67,50 @@ import {
   providers,
   models as modelsApi,
 } from "../api/client";
-import type { Model, Provider, ProviderCredential } from "../types";
+import type {
+  Model,
+  ModelCapabilities,
+  Provider,
+  ProviderCredential,
+} from "../types";
 import { copyToClipboard } from "../lib/clipboard";
 import { useToast } from "../components/ui/toast";
+
+const metadataCapabilityLabels: Record<keyof ModelCapabilities, string> = {
+  reasoning: "Reasoning",
+  tools: "Tools",
+  vision: "Vision",
+  attachments: "Files",
+  streaming: "Streaming",
+  non_streaming: "Non-streaming",
+};
+
+function formatTokenLimit(value: number): string {
+  if (value >= 1_000_000) return `${value / 1_000_000}M`;
+  if (value >= 1_000) return `${value / 1_000}K`;
+  return value.toLocaleString();
+}
+
+function ModelMetadataBadges({ model }: { model: Model }) {
+  const supported = (
+    Object.keys(metadataCapabilityLabels) as (keyof ModelCapabilities)[]
+  ).filter((key) => model.capabilities?.[key] === true);
+  if (model.context_window == null && !supported.length) return null;
+  return (
+    <div className="mt-1 flex flex-wrap gap-1">
+      {model.context_window != null && (
+        <Badge variant="outline" className="font-mono text-[10px]">
+          {formatTokenLimit(model.context_window)} context
+        </Badge>
+      )}
+      {supported.map((key) => (
+        <Badge key={key} variant="secondary" className="text-[10px]">
+          {metadataCapabilityLabels[key]}
+        </Badge>
+      ))}
+    </div>
+  );
+}
 
 export default function ProviderDetailPage({
   providerId,
@@ -158,7 +199,7 @@ export default function ProviderDetailPage({
     () =>
       credentials.filter((credential) => {
         if (!credential.is_active) return false;
-        if (credential.kind === "api_key" || credential.kind === "freebuff" || credential.kind === "qwen")
+        if (credential.kind === "api_key" || credential.kind === "freebuff" || credential.kind === "qwen" || credential.kind === "atomesus")
           return Boolean(credential.masked_secret);
         return Boolean(
           credential.account_id || credential.email || credential.project_id,
@@ -248,10 +289,14 @@ export default function ProviderDetailPage({
     }
   };
 
-  const sync = async (freeOnly = false) => {
+  const sync = async (freeOnly = false, existingOnly = false) => {
     setSyncing(true);
     try {
-      const result = await modelsApi.sync(providerId, { freeOnly });
+      const result = await modelsApi.sync(providerId, {
+        freeOnly,
+        existingOnly,
+        resetExisting: existingOnly,
+      });
       await load();
       setSyncOpen(false);
       setSyncPreview(null);
@@ -519,6 +564,7 @@ export default function ProviderDetailPage({
   };
 
   const addFreebuffAuthCode = async () => {
+    if (!provider) return;
     const label = newKeyLabelRef.current?.value.trim() ?? "";
     const authCode = newAuthCodeRef.current?.value.trim() ?? "";
     if (!label || !authCode) {
@@ -530,13 +576,13 @@ export default function ProviderDetailPage({
     try {
       await providers.addCredential(providerId, {
         label,
-        kind: provider.protocol === "qwen" ? "qwen" : "freebuff",
+        kind: provider.protocol === "qwen" ? "qwen" : provider.protocol === "atomesus" ? "atomesus" : "freebuff",
         secret: authCode,
       });
       if (newKeyLabelRef.current) newKeyLabelRef.current.value = "";
       if (newAuthCodeRef.current) newAuthCodeRef.current.value = "";
       setShowAddKey(false);
-      setSuccess(provider.protocol === "qwen" ? "Qwen auth code added." : "Freebuff auth code added.");
+      setSuccess(provider.protocol === "atomesus" ? "AtomeSus token added." : provider.protocol === "qwen" ? "Qwen auth code added." : "Freebuff auth code added.");
       await load();
     } catch (e: any) {
       setError(e.message);
@@ -677,11 +723,12 @@ export default function ProviderDetailPage({
             {(provider.protocol === "codex" ||
               provider.protocol === "antigravity" ||
               provider.protocol === "freebuff" ||
-              provider.protocol === "qwen") && (
+              provider.protocol === "qwen" ||
+              provider.protocol === "atomesus") && (
               <>
                 <Button
                   variant="outline"
-                  onClick={provider.protocol === "freebuff" || provider.protocol === "qwen" ? () => {
+                  onClick={provider.protocol === "freebuff" || provider.protocol === "qwen" || provider.protocol === "atomesus" ? () => {
                     setShowAddKey(true);
                     document.getElementById("provider-credentials")?.scrollIntoView({ behavior: "smooth" });
                   } : addOAuthAccount}
@@ -692,9 +739,9 @@ export default function ProviderDetailPage({
                   ) : (
                     <LoginIcon className="size-4" />
                   )}
-                  {provider.protocol === "freebuff" || provider.protocol === "qwen" ? "Add auth code" : "Connect account"}
+                  {provider.protocol === "atomesus" ? "Add token" : provider.protocol === "freebuff" || provider.protocol === "qwen" ? "Add auth code" : "Connect account"}
                 </Button>
-                {provider.protocol !== "freebuff" && provider.protocol !== "qwen" && credentials.some(
+                {provider.protocol !== "freebuff" && provider.protocol !== "qwen" && provider.protocol !== "atomesus" && credentials.some(
                   (credential) =>
                     (credential.kind === "codex" ||
                       credential.kind === "antigravity") &&
@@ -892,13 +939,13 @@ export default function ProviderDetailPage({
                 )}
               </div>
             </div>
-          ) : provider.protocol === "freebuff" || provider.protocol === "qwen" ? (
+          ) : provider.protocol === "freebuff" || provider.protocol === "qwen" || provider.protocol === "atomesus" ? (
             <div id="provider-credentials" className="space-y-3">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <Label>{provider.protocol === "qwen" ? "Qwen auth codes" : "Freebuff auth codes"}</Label>
+                   <Label>{provider.protocol === "atomesus" ? "AtomeSus tokens" : provider.protocol === "qwen" ? "Qwen auth codes" : "Freebuff auth codes"}</Label>
                   <p className="text-xs text-muted-foreground">
-                    Auth codes are stored encrypted and rotated according to the selected routing strategy.
+                     Tokens are stored encrypted and rotated according to the selected routing strategy.
                   </p>
                 </div>
                 <Button
@@ -911,7 +958,7 @@ export default function ProviderDetailPage({
                 </Button>
               </div>
               <div className="space-y-2">
-                {credentials.filter((credential) => credential.kind === "freebuff" || credential.kind === "qwen").map((credential) => (
+                {credentials.filter((credential) => credential.kind === "freebuff" || credential.kind === "qwen" || credential.kind === "atomesus").map((credential) => (
                   <div key={credential.id} className="grid items-center gap-2 border-b border-border/60 py-2 md:grid-cols-[minmax(8rem,0.65fr)_minmax(0,1.8fr)_auto]">
                     <Input value={credential.label} readOnly className="h-9 bg-background" />
                     <Input value={credential.masked_secret ?? "Hidden auth code"} readOnly className="h-9 bg-background font-mono" />
@@ -920,14 +967,14 @@ export default function ProviderDetailPage({
                     </Button>
                   </div>
                 ))}
-                {!credentials.some((credential) => credential.kind === "freebuff" || credential.kind === "qwen") && (
+                {!credentials.some((credential) => credential.kind === "freebuff" || credential.kind === "qwen" || credential.kind === "atomesus") && (
                   <div className="text-xs text-muted-foreground">No auth codes configured.</div>
                 )}
               </div>
               {showAddKey && (
                 <div className="grid gap-2 rounded-md border border-dashed p-3 md:grid-cols-[1fr_1.5fr_auto]">
                   <Input ref={newKeyLabelRef} placeholder="Auth code label" />
-                    <Input ref={newAuthCodeRef} type="password" placeholder={provider.protocol === "qwen" ? "Paste Qwen auth token" : "Paste Freebuff auth code"} />
+                    <Input ref={newAuthCodeRef} type="password" placeholder={provider.protocol === "atomesus" ? "Paste AtomeSus bearer token" : provider.protocol === "qwen" ? "Paste Qwen auth token" : "Paste Freebuff auth code"} />
                   <Button onClick={addFreebuffAuthCode} disabled={addingKey}>
                     {addingKey ? <LoaderCircle className="size-4 animate-spin" /> : <Add className="size-4" />}
                     Add code
@@ -1149,9 +1196,12 @@ export default function ProviderDetailPage({
                     </div>
                   </TableCell>
                   <TableCell>
-                    {model.display_name || (
-                      <span className="text-muted-foreground">—</span>
-                    )}
+                    <div>
+                      {model.display_name || (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                      <ModelMetadataBadges model={model} />
+                    </div>
                   </TableCell>
                   <TableCell>
                     <Badge variant={model.is_manual ? "outline" : "secondary"}>
@@ -1286,6 +1336,14 @@ export default function ProviderDetailPage({
               disabled={syncing}
             >
               Sync free models ({syncPreview?.free_models_to_add ?? 0} new)
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => sync(false, true)}
+              disabled={syncing || !syncPreview?.existing_models}
+              title="Replace metadata for configured models without adding new models"
+            >
+              {syncing ? "Updating..." : `Reset existing (${syncPreview?.existing_models ?? 0})`}
             </Button>
             <Button onClick={() => sync(false)} disabled={syncing}>
               {syncing ? "Synchronizing..." : "Sync all models"}

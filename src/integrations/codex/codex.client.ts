@@ -12,6 +12,7 @@ type CodexModel = {
   display_name?: string;
   visibility?: string;
   supported_in_api?: boolean;
+  [key: string]: unknown;
 };
 
 export type CodexUsage = {
@@ -166,6 +167,7 @@ export async function codexModels(credentials?: CodexCredentials) {
         model.supported_in_api !== false,
     )
     .map((model) => ({
+      ...model,
       id: model.slug!,
       object: "model",
       owned_by: "codex",
@@ -341,37 +343,7 @@ export async function codexResponses(
   const converted = body.input
     ? { input: body.input, instructions: body.instructions ?? "" }
     : toResponsesInput(body.messages);
-  const text = toResponsesTextFormat(body.response_format);
-  const reasoning =
-    body.reasoning && typeof body.reasoning === "object"
-      ? { ...body.reasoning, summary: body.reasoning.summary ?? "auto" }
-      : {
-          ...(body.reasoning_effort ? { effort: body.reasoning_effort } : {}),
-          summary: "auto",
-        };
-  const requestBody = {
-    model,
-    input: converted.input,
-    instructions: converted.instructions,
-    store: body.store ?? false,
-    stream: true,
-    ...(body.tools?.length ? { tools: toResponsesTools(body.tools) } : {}),
-    ...(body.tool_choice !== undefined
-      ? { tool_choice: toResponsesToolChoice(body.tool_choice) }
-      : {}),
-    ...(body.parallel_tool_calls !== undefined
-      ? { parallel_tool_calls: body.parallel_tool_calls }
-      : {}),
-    ...(body.temperature !== undefined
-      ? { temperature: body.temperature }
-      : {}),
-    ...(body.top_p !== undefined ? { top_p: body.top_p } : {}),
-    ...(body.max_output_tokens !== undefined
-      ? { max_output_tokens: body.max_output_tokens }
-      : {}),
-    ...(reasoning ? { reasoning } : {}),
-    ...(text ? { text } : {}),
-  };
+  const requestBody = codexRequestBody(body, model, converted);
   const requestStarted = performance.now();
   const response = await fetch(
     "https://chatgpt.com/backend-api/codex/responses",
@@ -401,6 +373,56 @@ export async function codexResponses(
     throw new Error(text || `Codex request failed (${response.status})`);
   }
   return response;
+}
+
+export function codexRequestBody(
+  body: any,
+  model: string,
+  converted = body.input
+    ? { input: body.input, instructions: body.instructions ?? "" }
+    : toResponsesInput(body.messages),
+) {
+  const text = toResponsesTextFormat(body.response_format);
+  const resolved = body.__klove_reasoning;
+  const reasoningInput =
+    body.reasoning && typeof body.reasoning === "object" ? body.reasoning : {};
+  const reasoning =
+    resolved?.effort === "none"
+      ? undefined
+      : resolved?.upstreamValue
+        ? {
+            ...reasoningInput,
+            effort: resolved.upstreamValue,
+            summary: reasoningInput.summary ?? "auto",
+          }
+        : Object.keys(reasoningInput).length
+          ? reasoningInput
+          : undefined;
+  const maxOutputTokens =
+    body.max_output_tokens ?? body.max_completion_tokens ?? body.max_tokens;
+  return {
+    model,
+    input: converted.input,
+    instructions: converted.instructions,
+    store: body.store ?? false,
+    stream: true,
+    ...(body.tools?.length ? { tools: toResponsesTools(body.tools) } : {}),
+    ...(body.tool_choice !== undefined
+      ? { tool_choice: toResponsesToolChoice(body.tool_choice) }
+      : {}),
+    ...(body.parallel_tool_calls !== undefined
+      ? { parallel_tool_calls: body.parallel_tool_calls }
+      : {}),
+    ...(body.temperature !== undefined
+      ? { temperature: body.temperature }
+      : {}),
+    ...(body.top_p !== undefined ? { top_p: body.top_p } : {}),
+    ...(maxOutputTokens !== undefined
+      ? { max_output_tokens: maxOutputTokens }
+      : {}),
+    ...(reasoning ? { reasoning } : {}),
+    ...(text ? { text } : {}),
+  };
 }
 
 export function codexStreamToOpenAI(response: Response, model: string) {

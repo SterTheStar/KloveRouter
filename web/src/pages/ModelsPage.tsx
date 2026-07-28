@@ -32,11 +32,47 @@ import {
   DropdownMenuGroup,
 } from "@/components/ui/dropdown-menu";
 import { models, stats } from "../api/client";
-import type { ModelWithProvider } from "../types";
+import type { ModelCapabilities, ModelWithProvider } from "../types";
 import { useToast } from "../components/ui/toast";
 import ProviderIcon from "../components/ProviderIcon";
 
 type SourceFilter = "all" | "manual" | "synced";
+
+const metadataCapabilityLabels: Record<keyof ModelCapabilities, string> = {
+  reasoning: "Reasoning",
+  tools: "Tools",
+  vision: "Vision",
+  attachments: "Files",
+  streaming: "Streaming",
+  non_streaming: "Non-streaming",
+};
+
+function formatTokenLimit(value: number): string {
+  if (value >= 1_000_000) return `${value / 1_000_000}M`;
+  if (value >= 1_000) return `${value / 1_000}K`;
+  return value.toLocaleString();
+}
+
+function ModelMetadataBadges({ model }: { model: ModelWithProvider }) {
+  const supported = (
+    Object.keys(metadataCapabilityLabels) as (keyof ModelCapabilities)[]
+  ).filter((key) => model.capabilities?.[key] === true);
+  if (model.context_window == null && !supported.length) return null;
+  return (
+    <div className="mt-1 flex flex-wrap gap-1">
+      {model.context_window != null && (
+        <Badge variant="outline" className="font-mono text-[10px]">
+          {formatTokenLimit(model.context_window)} context
+        </Badge>
+      )}
+      {supported.map((key) => (
+        <Badge key={key} variant="secondary" className="text-[10px]">
+          {metadataCapabilityLabels[key]}
+        </Badge>
+      ))}
+    </div>
+  );
+}
 
 export default function ModelsPage() {
   const { success, error: notifyError } = useToast();
@@ -323,9 +359,12 @@ export default function ModelsPage() {
                               {fullModelId}
                             </TableCell>
                             <TableCell>
-                              {model.display_name || (
-                                <span className="text-muted-foreground">—</span>
-                              )}
+                              <div>
+                                {model.display_name || (
+                                  <span className="text-muted-foreground">—</span>
+                                )}
+                                <ModelMetadataBadges model={model} />
+                              </div>
                             </TableCell>
                             <TableCell>{model.provider_name}</TableCell>
                             <TableCell>

@@ -41,7 +41,7 @@ export const providersPlugin = (app: Elysia) =>
           api_key:
             body.api_key ??
             body.auth_code ??
-            (body.protocol === "codex" ? "codex-session" : "freebuff-token"),
+            (body.protocol === "codex" ? "codex-session" : `${body.protocol ?? "provider"}-token`),
         });
         logger.success("Provider created", {
           provider: provider.name,
@@ -64,6 +64,7 @@ export const providersPlugin = (app: Elysia) =>
               t.Literal("antigravity"),
               t.Literal("freebuff"),
               t.Literal("qwen"),
+              t.Literal("atomesus"),
             ]),
           ),
           credential_mode: t.Optional(
@@ -103,6 +104,7 @@ export const providersPlugin = (app: Elysia) =>
               t.Literal("antigravity"),
               t.Literal("freebuff"),
               t.Literal("qwen"),
+              t.Literal("atomesus"),
             ]),
           ),
           credential_mode: t.Optional(
@@ -138,7 +140,7 @@ export const providersPlugin = (app: Elysia) =>
         if (
           !credential ||
           credential.provider_id !== id ||
-           credential.kind !== "api_key" && credential.kind !== "freebuff" && credential.kind !== "qwen"
+            credential.kind !== "api_key" && credential.kind !== "freebuff" && credential.kind !== "qwen" && credential.kind !== "atomesus"
         ) {
           set.status = 404;
           return { error: "Credential secret not found" };
@@ -177,6 +179,7 @@ export const providersPlugin = (app: Elysia) =>
               t.Literal("antigravity"),
               t.Literal("freebuff"),
               t.Literal("qwen"),
+              t.Literal("atomesus"),
             ]),
           ),
           secret: t.Optional(t.String()),

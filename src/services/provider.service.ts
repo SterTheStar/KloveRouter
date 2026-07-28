@@ -1,6 +1,7 @@
 import { getDb } from "../db/connection";
 import type { CredentialMode } from "./credential.service";
 import { resolveProviderAvatar, type ProviderProtocol } from "./provider-appearance";
+import { decryptSecret, encryptSecret } from "./secret.service";
 
 export interface Provider {
   id: string;
@@ -71,6 +72,14 @@ function toPublic(p: Provider): ProviderPublic {
   };
 }
 
+function withDecryptedApiKey(provider: Provider | null): Provider | null {
+  if (!provider) return null;
+  return {
+    ...provider,
+    api_key: decryptSecret(provider.api_key) ?? "",
+  };
+}
+
 export const providerService = {
   findAll(): ProviderPublic[] {
     const db = getDb();
@@ -83,9 +92,9 @@ export const providerService = {
 
   findById(id: string): Provider | null {
     const db = getDb();
-    return db
-      .query("SELECT * FROM providers WHERE id = ?")
-      .get(id) as Provider | null;
+    return withDecryptedApiKey(
+      db.query("SELECT * FROM providers WHERE id = ?").get(id) as Provider | null,
+    );
   },
 
   findPublicById(id: string): ProviderPublic | null {
@@ -95,23 +104,26 @@ export const providerService = {
 
   findByName(name: string): Provider | null {
     const db = getDb();
-    return db
-      .query(
-        "SELECT * FROM providers WHERE LOWER(REPLACE(name, ' ', '')) = LOWER(?)",
-      )
-      .get(providerPrefix(name.trim())) as Provider | null;
+    return withDecryptedApiKey(
+      db
+        .query(
+          "SELECT * FROM providers WHERE LOWER(REPLACE(name, ' ', '')) = LOWER(?)",
+        )
+        .get(providerPrefix(name.trim())) as Provider | null,
+    );
   },
 
   create(input: CreateProviderInput): ProviderPublic {
     const db = getDb();
     const id = crypto.randomUUID();
+    const encryptedApiKey = encryptSecret(input.api_key)!;
     db.query(
       "INSERT INTO providers (id, name, base_url, api_key, avatar, protocol) VALUES (?, ?, ?, ?, ?, ?)",
     ).run(
       id,
       input.name,
       input.base_url.replace(/\/+$/, ""),
-      input.api_key,
+      encryptedApiKey,
       input.avatar ?? null,
       input.protocol ?? "openai",
     );
@@ -127,19 +139,23 @@ export const providerService = {
           ? "Google account"
           : input.protocol === "freebuff"
             ? "Freebuff token"
-            : input.protocol === "qwen"
-              ? "Qwen token"
-              : "Default API key",
+             : input.protocol === "qwen"
+               ? "Qwen token"
+               : input.protocol === "atomesus"
+                 ? "AtomeSus token"
+               : "Default API key",
       input.protocol === "codex"
         ? "codex"
         : input.protocol === "antigravity"
           ? "antigravity"
           : input.protocol === "freebuff"
             ? "freebuff"
-            : input.protocol === "qwen"
-              ? "qwen"
-              : "api_key",
-      input.protocol === "antigravity" ? null : input.api_key,
+             : input.protocol === "qwen"
+               ? "qwen"
+               : input.protocol === "atomesus"
+                 ? "atomesus"
+               : "api_key",
+      input.protocol === "antigravity" ? null : encryptedApiKey,
     );
     db.query("UPDATE providers SET fixed_credential_id = ? WHERE id = ?").run(
       credentialId,
@@ -165,11 +181,12 @@ export const providerService = {
       values.push(input.base_url.replace(/\/+$/, ""));
     }
     if (input.api_key !== undefined) {
+      const encryptedApiKey = encryptSecret(input.api_key)!;
       updates.push("api_key = ?");
-      values.push(input.api_key);
+      values.push(encryptedApiKey);
       db.query(
-        "UPDATE provider_credentials SET secret = ?, updated_at = datetime('now') WHERE provider_id = ? AND id = COALESCE((SELECT fixed_credential_id FROM providers WHERE id = ?), id) AND kind = 'api_key'",
-      ).run(input.api_key, id, id);
+        "UPDATE provider_credentials SET secret = ?, updated_at = datetime('now') WHERE provider_id = ? AND id = COALESCE((SELECT fixed_credential_id FROM providers WHERE id = ?), id) AND kind IN ('api_key', 'codex', 'freebuff', 'qwen', 'atomesus')",
+      ).run(encryptedApiKey, id, id);
     }
     if (input.avatar !== undefined) {
       updates.push("avatar = ?");
