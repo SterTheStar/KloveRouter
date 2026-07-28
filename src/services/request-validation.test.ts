@@ -38,13 +38,13 @@ describe("metadata-backed request validation", () => {
       );
   });
 
-  test("maps the selected output alias to one canonical field", () => {
+  test("preserves original output token fields and does not map to a single alias", () => {
     const body: Record<string, unknown> = {
       max_completion_tokens: 20,
       max_tokens: 20,
     };
     validateModelRequest(body, model);
-    expect(body).toEqual({ max_output_tokens: 20 });
+    expect(body).toEqual({ max_completion_tokens: 20, max_tokens: 20 });
   });
 
   test("enforces explicitly false tools while unknown metadata stays permissive", () => {
