@@ -157,7 +157,7 @@ const providerDescriptions: Record<string, string> = {
   qwen:
     "Qwen AI models through an OpenAI-compatible gateway. Uses a Bearer token extracted from chat.qwen.ai.",
   atomesus:
-    "AtomeSus models with effort controls, persistent upstream sessions, streaming, and encrypted token storage.",
+    "Atomesus models with effort controls, persistent upstream sessions, streaming, and encrypted token storage.",
   blueminds:
     "An OpenAI-compatible gateway for accessing hosted language models through BlueMinds.",
   agnes:
@@ -285,7 +285,7 @@ export const PROVIDER_TEMPLATES: readonly ProviderTemplate[] = [
   {
     id: "atomesus",
     protocol: "atomesus",
-    name: "AtomeSus",
+    name: "Atomesus",
     description: providerDescriptions.atomesus,
     logo: "https://atomesus.com/favicon.ico",
     placeholder: "https://api.atomesus.com",

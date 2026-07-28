@@ -1272,7 +1272,7 @@ export const proxyPlugin = (app: Elysia) =>
           const statusCode = failures.every(isQuotaError) ? 429 : 502;
           set.status = statusCode;
           requestLogService.complete(requestLogId, { status: "error", statusCode, error: failures.at(-1) });
-          return { error: "AtomeSus request failed", message: failures.at(-1) };
+          return { error: "Atomesus request failed", message: failures.at(-1) };
         }
 
         // Handle streaming

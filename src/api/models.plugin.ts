@@ -318,7 +318,7 @@ export const modelsPlugin = (app: Elysia) =>
                 is_manual: 0,
                 ...await resolveModelMetadata(provider.protocol, model.id, model),
               });
-            return { success: true, models_found: selected.length, message: `Synced ${selected.length} AtomeSus models from ${provider.name}` };
+            return { success: true, models_found: selected.length, message: `Synced ${selected.length} Atomesus models from ${provider.name}` };
           }
 
           const credential =

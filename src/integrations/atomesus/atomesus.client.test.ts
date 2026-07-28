@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "bun:test";
 import { encodeAtomesusConfig } from "./atomesus.client";
 
-describe("AtomeSus integration", () => {
+describe("Atomesus integration", () => {
   const originalFetch = globalThis.fetch;
   afterEach(() => { globalThis.fetch = originalFetch; });
 

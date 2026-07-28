@@ -11,12 +11,14 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Tabs } from "@/components/ui/tabs";
 import { models } from "../api/client";
 import type { Model, ModelMetadataInput } from "../types";
 import { useToast } from "./ui/toast";
 import {
   emptyModelMetadata,
   ModelMetadataEditor,
+  modelFormTabs,
   PricingEditor,
 } from "./AddModelModal";
 import type { PricingTier } from "../types";
@@ -43,6 +45,7 @@ export default function EditModelModal({
   );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState("general");
   useEffect(() => {
     if (model) {
       const defaultEffortIndex = Math.max(
@@ -80,6 +83,7 @@ export default function EditModelModal({
             ],
       );
       setError(null);
+      setActiveTab("general");
     }
   }, [model]);
   const updateTier = (index: number, field: keyof PricingTier, value: string) =>
@@ -120,11 +124,25 @@ export default function EditModelModal({
         <DialogHeader>
           <DialogTitle>Edit model</DialogTitle>
           <DialogDescription>
-            Update the model identifier and pricing.
+            Update model identity, capabilities, limits, and pricing.
           </DialogDescription>
         </DialogHeader>
-        <div className="min-w-0 max-h-[72vh] space-y-5 overflow-y-auto overflow-x-hidden pr-1">
-          <div className="grid min-w-0 gap-4 sm:grid-cols-2">
+        <Tabs
+          tabs={modelFormTabs}
+          active={activeTab}
+          onChange={setActiveTab}
+          className="-mx-1 overflow-x-auto px-1"
+        />
+        <div className="min-w-0 min-h-[27rem] max-h-[64vh] overflow-y-auto overflow-x-hidden pr-1">
+          {activeTab === "general" && (
+            <div className="space-y-5 py-1">
+              <div>
+                <div className="text-sm font-medium">Model identity</div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Upstream identifier and friendly name shown in Klove.
+                </p>
+              </div>
+              <div className="grid min-w-0 gap-4 sm:grid-cols-2">
             <div className="min-w-0 space-y-2">
               <Label htmlFor="edit-model-id">Model ID</Label>
               <Input
@@ -151,15 +169,21 @@ export default function EditModelModal({
                 }}
               />
             </div>
-          </div>
-          <PricingEditor
-            tiers={pricingTiers}
-            updateTier={updateTier}
-            setTiers={setPricingTiers}
-          />
-          <ModelMetadataEditor value={metadata} onChange={setMetadata} />
+              </div>
+            </div>
+          )}
+          {activeTab === "capabilities" && (
+            <ModelMetadataEditor value={metadata} onChange={setMetadata} />
+          )}
+          {activeTab === "pricing" && (
+            <PricingEditor
+              tiers={pricingTiers}
+              updateTier={updateTier}
+              setTiers={setPricingTiers}
+            />
+          )}
           {error && (
-            <Alert variant="destructive">
+            <Alert variant="destructive" className="mt-5">
               <AlertDescription>{error}</AlertDescription>
             </Alert>
           )}

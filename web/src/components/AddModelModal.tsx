@@ -12,6 +12,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Tabs } from "@/components/ui/tabs";
 import { models } from "../api/client";
 import { useToast } from "./ui/toast";
 import type {
@@ -51,6 +52,7 @@ export default function AddModelModal({
   ]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState("general");
   const close = () => {
     if (loading) return;
     setModelId("");
@@ -67,6 +69,7 @@ export default function AddModelModal({
       },
     ]);
     setError(null);
+    setActiveTab("general");
     onClose();
   };
   const updateTier = (index: number, field: keyof PricingTier, value: string) =>
@@ -110,8 +113,22 @@ export default function AddModelModal({
             Add a model and its pricing to this provider.
           </DialogDescription>
         </DialogHeader>
-        <div className="min-w-0 max-h-[72vh] space-y-5 overflow-y-auto overflow-x-hidden pr-1">
-          <div className="grid min-w-0 gap-4 sm:grid-cols-2">
+        <Tabs
+          tabs={modelFormTabs}
+          active={activeTab}
+          onChange={setActiveTab}
+          className="-mx-1 overflow-x-auto px-1"
+        />
+        <div className="min-w-0 min-h-[27rem] max-h-[64vh] overflow-y-auto overflow-x-hidden pr-1">
+          {activeTab === "general" && (
+            <div className="space-y-5 py-1">
+              <div>
+                <div className="text-sm font-medium">Model identity</div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Upstream identifier and friendly name shown in Klove.
+                </p>
+              </div>
+              <div className="grid min-w-0 gap-4 sm:grid-cols-2">
             <div className="min-w-0 space-y-2">
               <Label htmlFor="model-id">Model ID</Label>
               <Input
@@ -140,15 +157,21 @@ export default function AddModelModal({
                 placeholder="Auto-generated from model ID"
               />
             </div>
-          </div>
-          <PricingEditor
-            tiers={pricingTiers}
-            updateTier={updateTier}
-            setTiers={setPricingTiers}
-          />
-          <ModelMetadataEditor value={metadata} onChange={setMetadata} />
+              </div>
+            </div>
+          )}
+          {activeTab === "capabilities" && (
+            <ModelMetadataEditor value={metadata} onChange={setMetadata} />
+          )}
+          {activeTab === "pricing" && (
+            <PricingEditor
+              tiers={pricingTiers}
+              updateTier={updateTier}
+              setTiers={setPricingTiers}
+            />
+          )}
           {error && (
-            <Alert variant="destructive">
+            <Alert variant="destructive" className="mt-5">
               <AlertDescription>{error}</AlertDescription>
             </Alert>
           )}
@@ -165,6 +188,12 @@ export default function AddModelModal({
     </Dialog>
   );
 }
+
+export const modelFormTabs = [
+  { id: "general", label: "General" },
+  { id: "capabilities", label: "Capabilities" },
+  { id: "pricing", label: "Pricing" },
+];
 
 const capabilityLabels: Record<keyof ModelCapabilities, string> = {
   reasoning: "Reasoning",
@@ -259,7 +288,7 @@ export function ModelMetadataEditor({
     });
 
   return (
-    <div className="space-y-5 border-t border-border/60 pt-5">
+    <div className="space-y-5 py-1">
       <div>
         <div className="text-sm font-medium">Model metadata</div>
         <p className="mt-1 text-xs text-muted-foreground">
@@ -361,7 +390,7 @@ export function PricingEditor({
     value === 0 ? "Base" : `${(value / 1_000_000).toLocaleString()}M+`;
   if (!currentTier) return null;
   return (
-    <div className="min-w-0 space-y-5 pt-1">
+    <div className="min-w-0 space-y-5 py-1">
       <div>
         <div className="text-sm font-medium">Pricing per 1M tokens</div>
         <div className="mt-1 text-xs text-muted-foreground">

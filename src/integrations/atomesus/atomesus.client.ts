@@ -9,7 +9,7 @@ type AtomesusCredential = { id: string; secret?: string | null };
 type ChatMessage = { role?: string; content?: unknown };
 
 function tokenOf(credential: AtomesusCredential) {
-  if (!credential.secret) throw new Error("AtomeSus token is not configured");
+  if (!credential.secret) throw new Error("Atomesus token is not configured");
   return credential.secret;
 }
 
@@ -58,7 +58,7 @@ function resolveEffort(body: any): (typeof EFFORTS)[number] {
     max: "High",
   };
   const effort = aliases[normalized];
-  if (!effort) throw new Error(`Unsupported AtomeSus effort: ${raw}`);
+  if (!effort) throw new Error(`Unsupported Atomesus effort: ${raw}`);
   return effort;
 }
 
@@ -132,7 +132,7 @@ function saveSession(
 function replyFromJson(data: any): { content: string; sessionId?: string } {
   const content = data?.data?.reply ?? data?.content ?? data?.text ?? data?.response;
   if (typeof content !== "string")
-    throw new Error("AtomeSus returned an invalid response");
+    throw new Error("Atomesus returned an invalid response");
   return { content, sessionId: data?.data?.sessionId ?? data?.sessionId };
 }
 
@@ -161,7 +161,7 @@ async function readAtomesusResponse(response: Response) {
     if (data?.type === "start" && data.sessionId) sessionId = data.sessionId;
     if (data?.type === "content" && typeof data.content === "string") content += data.content;
   }
-  if (!content) throw new Error("AtomeSus returned an empty response");
+  if (!content) throw new Error("Atomesus returned an empty response");
   return { content, sessionId };
 }
 
@@ -221,7 +221,7 @@ function liveStreamCompletion(
   fileKey: string,
 ) {
   const reader = response.body?.getReader();
-  if (!reader) throw new Error("AtomeSus returned an empty stream");
+  if (!reader) throw new Error("Atomesus returned an empty stream");
   const encoder = new TextEncoder();
   const decoder = new TextDecoder();
   const id = `chatcmpl-${crypto.randomUUID()}`;
@@ -286,7 +286,7 @@ function liveStreamCompletion(
           }
         } catch (error) {
           if (!cancelled) {
-            const message = error instanceof Error ? error.message : "AtomeSus stream disconnected";
+            const message = error instanceof Error ? error.message : "Atomesus stream disconnected";
             controller.enqueue(encoder.encode(`data: ${JSON.stringify({ error: { message } })}\n\n`));
             controller.enqueue(encoder.encode("data: [DONE]\n\n"));
             controller.close();
@@ -313,7 +313,7 @@ function appendFile(form: FormData, file: any) {
   const name = typeof file.name === "string" ? file.name : "attachment";
   const type = typeof file.type === "string" ? file.type : "application/octet-stream";
   if (typeof file.data !== "string")
-    throw new Error("AtomeSus file.data must be a base64 string or data URL");
+    throw new Error("Atomesus file.data must be a base64 string or data URL");
   const encoded = file.data.includes(",") ? file.data.slice(file.data.indexOf(",") + 1) : file.data;
   form.append("file", new Blob([Buffer.from(encoded, "base64")], { type }), name);
 }
@@ -329,13 +329,13 @@ export async function atomesusResponses(
   endpoint?: string,
 ): Promise<Response | ReturnType<typeof completion>> {
   if (!DEFAULT_MODELS.includes(model as any))
-    throw new Error(`Unsupported AtomeSus model: ${model}`);
+    throw new Error(`Unsupported Atomesus model: ${model}`);
   if (body.tools?.length || body.functions?.length)
-    throw new Error("AtomeSus does not support tool calls");
+    throw new Error("Atomesus does not support tool calls");
   const messages: ChatMessage[] = Array.isArray(body.messages) ? body.messages : [];
   const lastUser = [...messages].reverse().find((message) => message?.role === "user");
   const message = textContent(lastUser?.content);
-  if (!message) throw new Error("AtomeSus requires a user text message");
+  if (!message) throw new Error("Atomesus requires a user text message");
   const system = messages
     .filter((item) => item?.role === "system" || item?.role === "developer")
     .map((item) => textContent(item.content))
@@ -379,7 +379,7 @@ export async function atomesusResponses(
   });
   if (!response.ok) {
     const detail = (await response.text().catch(() => "")).slice(0, 500);
-    throw new Error(`AtomeSus request failed (${response.status})${detail ? `: ${detail}` : ""}`);
+    throw new Error(`Atomesus request failed (${response.status})${detail ? `: ${detail}` : ""}`);
   }
   if (body.stream && response.headers.get("content-type")?.includes("text/event-stream"))
     return liveStreamCompletion(

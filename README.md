@@ -26,7 +26,7 @@ Klove provides a single OpenAI-compatible endpoint in front of API-key and OAuth
 | Anthropic         | API key        | Native Messages conversion, tools, thinking, and prompt-cache accounting.               |
 | Codex             | OAuth          | Responses API conversion, reasoning summaries, tools, usage, and account rotation.      |
 | Antigravity       | Google OAuth   | Gemini, Claude, and GPT-family routing with thinking, quotas, tools, and model aliases. |
-| AtomeSus          | Bearer token   | Native models, effort controls, persistent sessions, and streaming responses.          |
+| Atomesus          | Bearer token   | Native models, effort controls, persistent sessions, and streaming responses.          |
 
 ## Quick Start
 

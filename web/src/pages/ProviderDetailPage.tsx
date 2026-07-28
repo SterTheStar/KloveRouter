@@ -582,7 +582,7 @@ export default function ProviderDetailPage({
       if (newKeyLabelRef.current) newKeyLabelRef.current.value = "";
       if (newAuthCodeRef.current) newAuthCodeRef.current.value = "";
       setShowAddKey(false);
-      setSuccess(provider.protocol === "atomesus" ? "AtomeSus token added." : provider.protocol === "qwen" ? "Qwen auth code added." : "Freebuff auth code added.");
+      setSuccess(provider.protocol === "atomesus" ? "Atomesus token added." : provider.protocol === "qwen" ? "Qwen auth code added." : "Freebuff auth code added.");
       await load();
     } catch (e: any) {
       setError(e.message);
@@ -943,7 +943,7 @@ export default function ProviderDetailPage({
             <div id="provider-credentials" className="space-y-3">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                   <Label>{provider.protocol === "atomesus" ? "AtomeSus tokens" : provider.protocol === "qwen" ? "Qwen auth codes" : "Freebuff auth codes"}</Label>
+                   <Label>{provider.protocol === "atomesus" ? "Atomesus tokens" : provider.protocol === "qwen" ? "Qwen auth codes" : "Freebuff auth codes"}</Label>
                   <p className="text-xs text-muted-foreground">
                      Tokens are stored encrypted and rotated according to the selected routing strategy.
                   </p>
@@ -974,7 +974,7 @@ export default function ProviderDetailPage({
               {showAddKey && (
                 <div className="grid gap-2 rounded-md border border-dashed p-3 md:grid-cols-[1fr_1.5fr_auto]">
                   <Input ref={newKeyLabelRef} placeholder="Auth code label" />
-                    <Input ref={newAuthCodeRef} type="password" placeholder={provider.protocol === "atomesus" ? "Paste AtomeSus bearer token" : provider.protocol === "qwen" ? "Paste Qwen auth token" : "Paste Freebuff auth code"} />
+                    <Input ref={newAuthCodeRef} type="password" placeholder={provider.protocol === "atomesus" ? "Paste Atomesus bearer token" : provider.protocol === "qwen" ? "Paste Qwen auth token" : "Paste Freebuff auth code"} />
                   <Button onClick={addFreebuffAuthCode} disabled={addingKey}>
                     {addingKey ? <LoaderCircle className="size-4 animate-spin" /> : <Add className="size-4" />}
                     Add code

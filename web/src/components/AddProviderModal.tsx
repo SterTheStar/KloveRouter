@@ -448,7 +448,7 @@ export default function AddProviderModal({
                           ? setAuthCode(e.target.value)
                           : setApiKey(e.target.value)
                       }
-                       placeholder={selectedType?.protocol === "atomesus" ? "Paste your AtomeSus bearer token" : selectedType?.protocol === "freebuff" || selectedType?.protocol === "qwen" ? "Paste your auth token" : "sk-..."}
+                       placeholder={selectedType?.protocol === "atomesus" ? "Paste your Atomesus bearer token" : selectedType?.protocol === "freebuff" || selectedType?.protocol === "qwen" ? "Paste your auth token" : "sk-..."}
                     />
                     {(selectedType?.protocol === "freebuff" || selectedType?.protocol === "qwen") && (
                       selectedType?.protocol === "qwen" ? (

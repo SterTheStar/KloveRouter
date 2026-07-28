@@ -6,7 +6,7 @@ import {
 } from "./model-metadata";
 
 describe("model metadata resolver", () => {
-  test("raw provider metadata wins over catalog and family defaults", async () => {
+  test("normal API metadata applies only values returned by the API", async () => {
     const metadata = await resolveModelMetadata(
       "openai",
       "gpt-5-test",
@@ -20,18 +20,6 @@ describe("model metadata resolver", () => {
         ],
         default_reasoning_effort: "minimal",
       },
-      {
-        openai: {
-          models: {
-            "gpt-5-test": {
-              id: "gpt-5-test",
-              reasoning: true,
-              tool_call: true,
-              limit: { context: 200_000, output: 100_000 },
-            },
-          },
-        },
-      },
     );
 
     expect(metadata.context_window).toBe(111_111);
@@ -39,44 +27,30 @@ describe("model metadata resolver", () => {
     expect(metadata.capabilities?.tools).toBe(false);
     expect(metadata.capabilities?.vision).toBe(false);
     expect(metadata.capabilities?.reasoning).toBe(true);
-    expect(metadata.capabilities?.streaming).toBe(true);
+    expect(metadata.capabilities?.streaming).toBeUndefined();
     expect(metadata.reasoning_efforts).toEqual([
       expect.objectContaining({ effort: "minimal", is_default: true }),
       expect.objectContaining({ effort: "high", is_default: false }),
     ]);
   });
 
-  test("catalog supplies exact limits without protocol limit guesses", async () => {
-    const catalog = {
-      anthropic: {
-        models: {
-          "claude-sonnet-known": {
-            id: "claude-sonnet-known",
-            reasoning: true,
-            tool_call: true,
-            attachment: true,
-            modalities: { input: ["text", "image"] },
-            limit: { context: 200_000, output: 64_000 },
-          },
-        },
-      },
-    };
-    const known = await resolveModelMetadata("anthropic", "claude-sonnet-known", {}, catalog);
-    const unknown = await resolveModelMetadata("anthropic", "claude-unlisted", {}, catalog);
-
-    expect(known.context_window).toBe(200_000);
-    expect(known.max_output_tokens).toBe(64_000);
-    expect(known.capabilities).toEqual(expect.objectContaining({
-      reasoning: true,
-      tools: true,
-      vision: true,
-      attachments: true,
-      streaming: true,
-      non_streaming: true,
-    }));
-    expect(known.reasoning_efforts?.find((effort) => effort.is_default)?.effort).toBe("medium");
-    expect(unknown.context_window).toBeUndefined();
-    expect(unknown.max_output_tokens).toBeUndefined();
+  test("does not supplement fields absent from a normal API response", async () => {
+    const metadata = await resolveModelMetadata(
+      "openai",
+      "sparse-model",
+      { id: "sparse-model", object: "model" },
+    );
+    expect(metadata.context_window).toBeUndefined();
+    expect(metadata.max_output_tokens).toBeUndefined();
+    expect(metadata.capabilities).toEqual({
+      reasoning: undefined,
+      tools: undefined,
+      vision: undefined,
+      attachments: undefined,
+      streaming: undefined,
+      non_streaming: undefined,
+    });
+    expect(metadata.reasoning_efforts).toBeUndefined();
   });
 
   test("raw null limits allow catalog discovery and capability false remains authoritative", () => {
@@ -108,6 +82,32 @@ describe("model metadata resolver", () => {
     expect(parsed.reasoning_efforts?.find((effort) => effort.is_default)?.effort).toBe("high");
   });
 
+  test("parses OpenRouter-style architecture, top provider, and supported efforts", () => {
+    const parsed = parseRawModelMetadata({
+      context_length: 1_000_000,
+      architecture: {
+        modality: "text+image->text",
+        input_modalities: ["text", "image", "file"],
+      },
+      top_provider: { max_completion_tokens: 32_000 },
+      supported_parameters: ["reasoning", "tools"],
+      reasoning: {
+        supported_efforts: ["low", "medium", "high"],
+        default_effort: "high",
+      },
+    });
+    expect(parsed.context_window).toBe(1_000_000);
+    expect(parsed.max_output_tokens).toBe(32_000);
+    expect(parsed.capabilities).toEqual(expect.objectContaining({
+      reasoning: true,
+      tools: true,
+      vision: true,
+      attachments: true,
+    }));
+    expect(parsed.reasoning_efforts?.find((effort) => effort.is_default)?.effort)
+      .toBe("high");
+  });
+
   test("keeps metadata nested in special provider model records", () => {
     const parsed = parseRawModelMetadata({
       model: {
@@ -120,26 +120,44 @@ describe("model metadata resolver", () => {
     expect(parsed.max_output_tokens).toBe(8_192);
   });
 
-  test("AtomeSus defaults include supported efforts and no fabricated limits", async () => {
-    const metadata = await resolveModelMetadata("atomesus", "atomesus-2", {}, null);
+  test("dedicated integrations only auto-apply reliable numeric limits", async () => {
+    const metadata = await resolveModelMetadata("atomesus", "atomesus-2", {});
     expect(metadata.context_window).toBeUndefined();
     expect(metadata.max_output_tokens).toBeUndefined();
-    expect(metadata.capabilities).toEqual(expect.objectContaining({
-      reasoning: true,
-      tools: false,
-      attachments: true,
-    }));
-    expect(metadata.reasoning_efforts?.find((effort) => effort.is_default)?.effort).toBe("medium");
+    expect(metadata.capabilities).toBeUndefined();
+    expect(metadata.reasoning_efforts).toBeUndefined();
   });
 
-  test("does not advertise effort levels when an authoritative source disables reasoning", async () => {
+  test("dedicated integrations do not auto-apply capability booleans or efforts", async () => {
     const metadata = await resolveModelMetadata(
       "qwen",
       "qwen-test-reasoning-disabled",
-      { capabilities: { reasoning: false } },
-      null,
+      {
+        context_window: 32_768,
+        max_output_tokens: 8_192,
+        capabilities: { reasoning: false, tools: true },
+        reasoning_efforts: ["low", "high"],
+      },
     );
-    expect(metadata.capabilities?.reasoning).toBe(false);
+    expect(metadata.context_window).toBe(32_768);
+    expect(metadata.max_output_tokens).toBe(8_192);
+    expect(metadata.capabilities).toBeUndefined();
     expect(metadata.reasoning_efforts).toBeUndefined();
+  });
+
+  test("normal API providers still auto-apply returned capabilities", async () => {
+    const metadata = await resolveModelMetadata(
+      "openai",
+      "api-model",
+      {
+        context_window: 100_000,
+        capabilities: { reasoning: false, tools: true },
+        supports_streaming: true,
+      },
+    );
+    expect(metadata.context_window).toBe(100_000);
+    expect(metadata.capabilities).toEqual(
+      expect.objectContaining({ reasoning: false, tools: true, streaming: true }),
+    );
   });
 });

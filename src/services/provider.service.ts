@@ -142,7 +142,7 @@ export const providerService = {
              : input.protocol === "qwen"
                ? "Qwen token"
                : input.protocol === "atomesus"
-                 ? "AtomeSus token"
+                 ? "Atomesus token"
                : "Default API key",
       input.protocol === "codex"
         ? "codex"
