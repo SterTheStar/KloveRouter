@@ -7,4 +7,5 @@ export {
   qwenUsage,
   cleanQwenContent,
   extractQwenContent,
+  cleanQwenStream,
 } from "./qwen.client";

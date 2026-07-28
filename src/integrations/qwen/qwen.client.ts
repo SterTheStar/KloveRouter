@@ -24,15 +24,83 @@ export function extractQwenContent(text: string): {
     .map((match) => match[1].replace(/<[^>]+>/g, "").trim())
     .filter(Boolean)
     .join("\n\n");
-  const content = text.replace(/<details[^>]*>[\s\S]*?<\/details>/gi, "").trim();
+  const content = removeQwenFooter(
+    text.replace(/<details[^>]*>[\s\S]*?<\/details>/gi, "").trim(),
+  );
   return {
     content: content || (reasoning ? "" : text),
     ...(reasoning ? { reasoningContent: reasoning } : {}),
   };
 }
 
+function removeQwenFooter(text: string): string {
+  return text
+    .replace(
+      /\s*Howu\s*\n+\s*[A-Z][a-z]+ \d{1,2}, \d{4}\s*$/i,
+      "",
+    )
+    .trim();
+}
+
 export function cleanQwenContent(text: string): string {
   return extractQwenContent(text).content;
+}
+
+export function cleanQwenStream(response: Response): Response {
+  const reader = response.body?.getReader();
+  if (!reader) return response;
+  const decoder = new TextDecoder();
+  const encoder = new TextEncoder();
+  let buffer = "";
+  return new Response(
+    new ReadableStream({
+      async start(controller) {
+        const emit = (event: string) => {
+          const lines = event.split(/\r?\n/);
+          const dataLine = lines.find((line) => line.startsWith("data:"));
+          if (!dataLine) {
+            controller.enqueue(encoder.encode(`${event}\n\n`));
+            return;
+          }
+          const raw = dataLine.slice(5).trim();
+          if (!raw || raw === "[DONE]") {
+            controller.enqueue(encoder.encode(`${event}\n\n`));
+            return;
+          }
+          try {
+            const data = JSON.parse(raw);
+            for (const choice of data.choices ?? []) {
+              if (typeof choice.delta?.content === "string")
+                choice.delta.content = cleanQwenContent(choice.delta.content);
+              if (typeof choice.message?.content === "string")
+                choice.message.content = cleanQwenContent(choice.message.content);
+            }
+            controller.enqueue(
+              encoder.encode(`data: ${JSON.stringify(data)}\n\n`),
+            );
+          } catch {
+            controller.enqueue(encoder.encode(`${event}\n\n`));
+          }
+        };
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            buffer += decoder.decode(value ?? new Uint8Array(), { stream: !done });
+            const events = buffer.split(/\r?\n\r?\n/);
+            buffer = events.pop() ?? "";
+            for (const event of events) emit(event);
+            if (done) {
+              if (buffer.trim()) emit(buffer);
+              break;
+            }
+          }
+        } finally {
+          controller.close();
+        }
+      },
+    }),
+    { headers: response.headers },
+  );
 }
 
 function tokenOf(credential: QwenCredential) {

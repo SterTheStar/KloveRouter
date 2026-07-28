@@ -19,7 +19,7 @@ import { requestLogService } from "../services/request-log.service";
 import { openAIStreamResponse } from "./openai-stream";
 import { openAICompletionFromSse } from "./openai-completion";
 import { freebuffResponses } from "../integrations/freebuff";
-import { extractQwenContent, qwenResponses } from "../integrations/qwen";
+import { cleanQwenStream, extractQwenContent, qwenResponses } from "../integrations/qwen";
 import { atomesusResponses } from "../integrations/atomesus";
 import { injectCavemanPrompt } from "../plugins/caveman";
 import { customSkillsProxy } from "../plugins/custom-skills";
@@ -1160,7 +1160,7 @@ export const proxyPlugin = (app: Elysia) =>
                 requestLogService.complete(requestLogId, { durationMs: Math.round(performance.now() - start) });
                 return response.json();
               }
-              return recordSseUsageResponse(response, (promptTokens, completionTokens, durationMs, generationDurationMs, details) => {
+               return recordSseUsageResponse(cleanQwenStream(response), (promptTokens, completionTokens, durationMs, generationDurationMs, details) => {
                 const usage = usageService.record(provider.id, modelRecord?.id ?? parsed.modelId, parsed.modelId, promptTokens, completionTokens, durationMs, generationDurationMs, details);
                 requestLogService.complete(requestLogId, { promptTokens, completionTokens, cacheRead: details?.cacheRead, cacheWrite: details?.cacheWrite, cost: usage.estimated_cost_usd, durationMs });
               }, start);
