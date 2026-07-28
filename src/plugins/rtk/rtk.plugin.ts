@@ -31,16 +31,16 @@ export const rtkPlugin = (app: Elysia) =>
       try {
         await rtkManager.enable();
         setRtkEnabled(true);
-        return { success: true, message: "RTK enabled for OpenCode shell commands" };
+        return { success: true, message: "RTK enabled for proxy tool output" };
       } catch (error: any) {
         set.status = 500;
         return { success: false, message: error.message };
       }
     })
     .post("/api/rtk/disable", async () => {
-      await rtkManager.disable();
+      rtkManager.disable();
       setRtkEnabled(false);
-      return { success: true, message: "RTK disabled for OpenCode shell commands" };
+      return { success: true, message: "RTK disabled for proxy tool output" };
     })
     .post("/api/rtk/install", async ({ set }) => {
       try {

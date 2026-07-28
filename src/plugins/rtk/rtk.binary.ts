@@ -1,6 +1,5 @@
 import { existsSync, mkdirSync, readdirSync } from "node:fs";
 import { readFile, writeFile, chmod, rm } from "node:fs/promises";
-import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { createHash } from "node:crypto";
 import { logger } from "../../logger";
@@ -86,65 +85,6 @@ function checksumPath(): string {
 
 function versionFilePath(): string {
   return join(rtkDir(), "version.txt");
-}
-
-function opencodePluginPath(): string {
-  return join(homedir(), ".config", "opencode", "plugins", "rtk.ts");
-}
-
-function configPath(): string {
-  return join(homedir(), ".config", "rtk", "config.toml");
-}
-
-function shellQuote(value: string): string {
-  return JSON.stringify(value);
-}
-
-function generateOpenCodePlugin(binPath: string): string {
-  return `import type { Plugin } from "@opencode-ai/plugin";
-
-const RTK = ${shellQuote(binPath)};
-
-export const RtkOpenCodePlugin: Plugin = async ({ $ }) => ({
-  "tool.execute.before": async (input, output) => {
-    const tool = String(input?.tool ?? "").toLowerCase();
-    if (tool !== "bash" && tool !== "shell") return;
-
-    const args = output?.args;
-    if (!args || typeof args !== "object") return;
-
-    const command = (args as Record<string, unknown>).command;
-    if (typeof command !== "string" || !command) return;
-
-    try {
-      const result = await $\`\${RTK} rewrite \${command}\`.quiet().nothrow();
-      const rewritten = String(result.stdout).trim();
-      if (rewritten && rewritten !== command) {
-        (args as Record<string, unknown>).command = rewritten;
-      }
-    } catch {
-      // Keep the original command when RTK cannot rewrite it.
-    }
-  },
-});
-`;
-}
-
-async function initializeOpenCode(): Promise<string> {
-  const path = opencodePluginPath();
-  const dir = join(homedir(), ".config", "opencode", "plugins");
-  const { mkdir } = await import("node:fs/promises");
-  await mkdir(dir, { recursive: true });
-  await writeFile(path, generateOpenCodePlugin(binaryPath()), "utf-8");
-  logger.info(`RTK OpenCode plugin installed at ${path}`);
-  return path;
-}
-
-async function disableOpenCode(): Promise<void> {
-  const path = opencodePluginPath();
-  const { rm } = await import("node:fs/promises");
-  await rm(path, { force: true });
-  logger.info(`RTK OpenCode plugin removed from ${path}`);
 }
 
 async function readVersion(): Promise<string | null> {
@@ -246,9 +186,6 @@ export const rtkBinary = {
   binaryPath,
   rtkDir,
   checksumPath,
-  configPath,
-  initializeOpenCode,
-  disableOpenCode,
 
   async currentVersion(): Promise<string | null> {
     const stored = await readVersion();

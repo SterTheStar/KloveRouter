@@ -21,6 +21,7 @@ import { freebuffResponses } from "../integrations/freebuff";
 import { cleanQwenContent, qwenResponses } from "../integrations/qwen";
 import { injectCavemanPrompt } from "../plugins/caveman";
 import { customSkillsProxy } from "../plugins/custom-skills";
+import { rtkManager } from "../plugins/rtk";
 
 function anthropicPayload(body: any, modelId: string, stream = false) {
   const messages = splitAnthropicMessages(body.messages);
@@ -538,6 +539,20 @@ export const proxyPlugin = (app: Elysia) =>
         if (!apiKey) {
           set.status = 401;
           return { error: "Unauthorized", message: "Valid API key required" };
+        }
+
+        if (rtkManager.enabled) {
+          body.messages = await Promise.all(
+            body.messages.map(async (message: any) => {
+              if (message?.role !== "tool" || typeof message.content !== "string") {
+                return message;
+              }
+              const filtered = await rtkManager.filterToolOutput(message.content);
+              return filtered === message.content
+                ? message
+                : { ...message, content: filtered };
+            }),
+          );
         }
 
         body.messages = await injectCavemanPrompt(body.messages);

@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { rtkBinary } from "./rtk.binary";
 import { getDb } from "../../db/connection";
 import { logger } from "../../logger";
@@ -34,8 +35,6 @@ class RtkManager {
       logger.info("Enabling RTK...");
 
       await rtkBinary.ensureBinary();
-      await rtkBinary.initializeOpenCode();
-
       this._enabled = true;
       logger.success("RTK enabled");
     } catch (error) {
@@ -45,10 +44,49 @@ class RtkManager {
     }
   }
 
-  async disable(): Promise<void> {
+  disable(): void {
     this._enabled = false;
-    await rtkBinary.disableOpenCode();
     logger.info("RTK disabled");
+  }
+
+  async filterToolOutput(content: string): Promise<string> {
+    if (!this._enabled || !content.trim()) return content;
+
+    const binPath = rtkBinary.binaryPath();
+    if (!existsSync(binPath)) return content;
+
+    try {
+      const proc = Bun.spawn([binPath, "pipe"], {
+        stdin: "pipe",
+        stdout: "pipe",
+        stderr: "pipe",
+        env: { ...process.env, RTK_TELEMETRY_DISABLED: "1" },
+      });
+      proc.stdin.write(content);
+      proc.stdin.end();
+
+      const [stdout, stderr, exitCode] = await Promise.all([
+        new Response(proc.stdout).text(),
+        new Response(proc.stderr).text(),
+        proc.exited,
+      ]);
+
+      if (exitCode !== 0 || !stdout) {
+        logger.warn("RTK pipe failed, preserving tool output", {
+          exitCode,
+          error: stderr.trim().slice(0, 300),
+        });
+        return content;
+      }
+
+      if (stdout.length < content.length) {
+        logger.info(`RTK filtered tool output: ${content.length} to ${stdout.length} chars`);
+      }
+      return stdout;
+    } catch (error) {
+      logger.warn("RTK pipe unavailable, preserving tool output", { error });
+      return content;
+    }
   }
 
   async getStatus(): Promise<RtkStatus> {
@@ -79,7 +117,7 @@ class RtkManager {
       binaryPath: installed ? binPath : null,
       platform: installed ? (rtkBinary.detectPlatform() as any) : null,
       arch: installed ? (rtkBinary.detectArch() as any) : null,
-      configPath: installed ? rtkBinary.configPath() : null,
+      configPath: null,
       downloadUrl: rtkBinary.getDownloadUrl(),
       latestVersion,
       updateAvailable,
