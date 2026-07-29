@@ -155,7 +155,7 @@ logger.badge(
 logger.success("Server running", {
   panel: `http://0.0.0.0:${config.port}`,
   api: `http://0.0.0.0:${config.port}/api`,
-  responses: `/v1/responses`,
+  responses_api: `http://0.0.0.0:${config.port}/v1/responses`,
 });
 logger.info("Codex callback listener", {
   address: "http://0.0.0.0:1455/auth/callback",
