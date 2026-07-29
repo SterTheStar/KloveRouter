@@ -22,7 +22,7 @@ Klove provides a single OpenAI-compatible endpoint in front of API-key and OAuth
 
 | Protocol          | Authentication | Notes                                                                                   |
 | ----------------- | -------------- | --------------------------------------------------------------------------------------- |
-| OpenAI-compatible | API key        | Chat completions, streaming, tools, usage, and cache metadata.                          |
+| OpenAI-compatible | API key        | Chat completions, streaming, tools, usage, and cache metadata. Responses API is also supported.                          |
 | Anthropic         | API key        | Native Messages conversion, tools, thinking, and prompt-cache accounting.               |
 | Codex             | OAuth          | Responses API conversion, reasoning summaries, tools, usage, and account rotation.      |
 | Antigravity       | Google OAuth   | Gemini, Claude, and GPT-family routing with thinking, quotas, tools, and model aliases. |

@@ -33,6 +33,13 @@ initRtkOnStartup();
 
 const app = new Elysia()
   .onRequest(requestHooks.onRequest)
+  .onBeforeHandle(({ request, set }) => {
+    const pathname = new URL(request.url).pathname;
+    if (/(^|\/)\.(?:env(?:\..*)?|git)(?:\/|$)/i.test(pathname)) {
+      set.status = 404;
+      return new Response("Not Found", { status: 404 });
+    }
+  })
   .onAfterHandle(requestHooks.onAfterHandle)
   .onError(requestHooks.onError)
   .use(cors())
