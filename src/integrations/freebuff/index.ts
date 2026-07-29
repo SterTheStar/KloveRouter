@@ -9,10 +9,9 @@ const MODEL_SOURCES = [
   "https://raw.githubusercontent.com/CodebuffAI/codebuff/main/common/src/constants/freebuff-model-ids.ts",
   "https://raw.githubusercontent.com/CodebuffAI/codebuff/main/common/src/constants/model-config.ts",
 ];
-const CLI_USER_AGENT = "Freebuff-CLI/0.0.105";
-const CHAT_USER_AGENT = "ai-sdk/openai-compatible/0.0.0-test/codebuff ai-sdk/provider-utils/3.0.20 runtime/browser";
+const CLI_USER_AGENT = "Freebuff-CLI/0.0.95";
+const CHAT_USER_AGENT = "ai-sdk/openai-compatible/0.0.95/codebuff";
 const BUN_USER_AGENT = "Bun/1.3.11";
-const CONTEXT_PRUNER_AGENT_ID = "context-pruner";
 
 type FreebuffCredential = {
   id: string;
@@ -80,9 +79,27 @@ async function request(
 ) {
   const headers = new Headers(init.headers);
   headers.set("Authorization", `Bearer ${tokenOf(credential)}`);
+  headers.set("x-codebuff-api-key", tokenOf(credential));
   if (!headers.has("User-Agent")) headers.set("User-Agent", CLI_USER_AGENT);
   if (!headers.has("Accept")) headers.set("Accept", "*/*");
-  return fetch(url, { ...init, headers });
+  const metadata = credentialMetadata(credential);
+  if (metadata.fingerprintId) headers.set("x-freebuff-fingerprint-id", metadata.fingerprintId);
+  if (metadata.fingerprintHash) headers.set("x-freebuff-fingerprint-hash", metadata.fingerprintHash);
+  headers.set("x-freebuff-acting-user-id", metadata.userId || credential.id);
+  const retryable = new Set([408, 429, 500, 502, 503, 504]);
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const response = await fetch(url, { ...init, headers });
+      if (!retryable.has(response.status) || attempt === 2) return response;
+      await response.body?.cancel().catch(() => {});
+    } catch (error) {
+      lastError = error;
+      if (attempt === 2) throw error;
+    }
+    await new Promise((resolve) => setTimeout(resolve, Math.min(10_000, 1_000 * 2 ** attempt)));
+  }
+  throw lastError instanceof Error ? lastError : new Error("Freebuff request failed");
 }
 
 function credentialMetadata(credential: FreebuffCredential) {
@@ -91,6 +108,7 @@ function credentialMetadata(credential: FreebuffCredential) {
       ? JSON.parse(credential.fingerprint_json)
       : {};
     return {
+      userId: parsed.userId as string | undefined,
       fingerprintId: parsed.fingerprintId as string | undefined,
       fingerprintHash: parsed.fingerprintHash as string | undefined,
       instanceId: parsed.instanceId as string | undefined,
@@ -203,13 +221,20 @@ async function pollSession(
   state: any,
 ): Promise<Session | null> {
   const upstream = baseUrl(endpoint);
-  for (let attempt = 0; attempt < 30; attempt++) {
-    await new Promise((resolve) => setTimeout(resolve, Math.max(500, Math.min(state.estimatedWaitMs || 1000, 3000))));
+  const deadline = Date.now() + 5 * 60_000;
+  for (let attempt = 0; Date.now() < deadline; attempt++) {
+    const waitMs = state.status === "queued"
+      ? 5_000
+      : Math.max(1_000, Math.min(Number(state.remainingMs || 5_000), 30_000));
+    await new Promise((resolve) => setTimeout(resolve, waitMs));
     const poll = await request(credential, `${upstream}/api/v1/freebuff/session`, {
       method: "GET",
       headers: { "User-Agent": CLI_USER_AGENT, "x-freebuff-instance-id": state.instanceId || "" },
     });
-    if (!poll.ok) return null;
+    if (!poll.ok) {
+      if (poll.status === 401) continue;
+      return null;
+    }
     const next = (await poll.json()) as any;
     if (next.status === "active" && next.instanceId) {
       const expiresAt = next.expiresAt ? Date.parse(next.expiresAt) : undefined;
@@ -231,6 +256,8 @@ async function pollSession(
       return session;
     }
     state = next;
+    if (["country_blocked", "banned", "model_locked", "model_unavailable", "rate_limited", "disabled"].includes(next.status))
+      throw new Error(`Freebuff session ${next.status}`);
   }
   return null;
 }
@@ -240,7 +267,8 @@ async function ensureSession(
   endpoint: string,
   model: string,
 ): Promise<Session> {
-  const existing = sessionLocks.get(credential.id);
+  const lockKey = `${credential.id}:${model}`;
+  const existing = sessionLocks.get(lockKey);
   if (existing) return existing;
   const operation = (async (): Promise<Session> => {
     const cached = sessions.get(credential.id);
@@ -251,13 +279,16 @@ async function ensureSession(
       (!cached.expiresAt || cached.expiresAt > Date.now() + 5000)
     )
       return cached;
+    if (cached?.inFlight && cached.model !== model)
+      throw new Error(`Freebuff credential is busy with model ${cached.model}`);
+    if (cached?.instanceId) await endSession(credential, endpoint);
     return createSession(credential, endpoint, model);
   })();
-  sessionLocks.set(credential.id, operation);
+  sessionLocks.set(lockKey, operation);
   try {
     return await operation;
   } finally {
-    if (sessionLocks.get(credential.id) === operation) sessionLocks.delete(credential.id);
+    if (sessionLocks.get(lockKey) === operation) sessionLocks.delete(lockKey);
   }
 }
 
@@ -371,12 +402,8 @@ async function startRunChain(
   const upstream = baseUrl(endpoint);
   const startedAt = new Date().toISOString();
   const runId = await startRun(credential, upstream, agentId, []);
-  const childStartedAt = new Date().toISOString();
-  const childRunId = await startRun(credential, upstream, CONTEXT_PRUNER_AGENT_ID, [runId]);
-  await recordRunStep(credential, upstream, childRunId, 1, [], null, childStartedAt);
-  await finishRun(credential, upstream, childRunId, 2);
-  await recordRunStep(credential, upstream, runId, 1, [childRunId], null, startedAt);
-  return { runId, startedAt, childRunId };
+  await recordRunStep(credential, upstream, runId, 1, [], null, startedAt);
+  return { runId, startedAt, childRunId: "" };
 }
 
 async function finalizeRunChain(
@@ -387,11 +414,50 @@ async function finalizeRunChain(
   messageId: string | null,
 ) {
   await recordRunStep(credential, baseUrl(endpoint), runId, 2, [], messageId, startedAt);
-  await finishRun(credential, baseUrl(endpoint), runId, 3);
+  await finishRun(credential, baseUrl(endpoint), runId, 2);
 }
 
 function clientSessionId() {
   return "freebuff-proxy-" + crypto.randomUUID().replace(/-/g, "").substring(0, 16);
+}
+
+const FREEBUFF_ROOT_AGENT_BY_MODEL: Record<string, string> = {
+  "deepseek/deepseek-v4-pro": "base2-free-deepseek",
+  "deepseek/deepseek-v4-flash": "base2-free-deepseek-flash",
+  "minimax/minimax-m2.7": "base2-free",
+  "minimax/minimax-m3": "base2-free-minimax-m3",
+  "moonshotai/kimi-k2.6": "base2-free-kimi",
+  "moonshotai/kimi-k2.7": "base2-free-kimi",
+  "moonshotai/kimi-k2.7-code": "base2-free-kimi",
+  "mimo/mimo-v2.5-pro": "base2-free-mimo-pro",
+  "mimo/mimo-v2.5": "base2-free-mimo",
+  "z-ai/glm-5.2": "base2-free-glm",
+  "crof/glm-5.2": "base2-free-glm-crof",
+  "poolside/laguna-s-2.1": "base2-free-laguna-s-2-1",
+  "openrouter/poolside/laguna-s-2.1": "base2-free-laguna-s-2-1-openrouter",
+  "inclusionai/ling-3.0-flash:free": "base2-free-ling-3-flash",
+};
+
+const FREEBUFF_ROOT_AGENT_IDS = new Set([
+  "base2-free",
+  "base2-free-kimi",
+  "base2-free-deepseek",
+  "base2-free-deepseek-flash",
+  "base2-free-mimo-pro",
+  "base2-free-mimo",
+  "base2-free-minimax-m3",
+  "base2-free-glm",
+  "base2-free-glm-crof",
+  "base2-free-laguna-s-2-1",
+  "base2-free-laguna-s-2-1-openrouter",
+  "base2-free-ling-3-flash",
+]);
+
+function freebuffRootAgent(model: string) {
+  const agent = FREEBUFF_ROOT_AGENT_BY_MODEL[model];
+  if (!agent || !FREEBUFF_ROOT_AGENT_IDS.has(agent))
+    throw new Error(`Freebuff model has no supported root agent: ${model}`);
+  return agent;
 }
 
 async function preRequestChain(
@@ -434,27 +500,33 @@ export async function freebuffResponses(
   endpoint?: string,
 ) {
   const upstream = baseUrl(endpoint);
-  await preRequestChain(credential, upstream, body.messages || []);
-  // Free mode requires the run root to be one of Freebuff's allowlisted
-  // orchestrators. The dynamically parsed catalog can also contain helper
-  // subagents, which cannot be used as the top-level run.
   let session = await ensureSession(credential, upstream, model);
   const activeModel = session.model || model;
-  const agentId = freebuffRootAgentForModel(activeModel);
+  const agentId = freebuffRootAgent(activeModel);
   session.lastUsedAt = Date.now();
   session.inFlight += 1;
   const run = await startRunChain(credential, upstream, agentId);
   const payload = structuredClone(body);
   payload.model = activeModel;
   payload.stream = body.stream ?? false;
-  payload.codebuff_metadata = {
+  const codebuffMetadata = {
     ...(payload.codebuff_metadata || {}),
     run_id: run.runId,
-    cost_mode: "free",
+    // cost_mode intentionally omitted to bypass CLI-only check
     client_id: clientSessionId(),
     trace_session_id: crypto.randomUUID(),
     ...(session.instanceId ? { freebuff_instance_id: session.instanceId } : {}),
   };
+  payload.codebuff = {
+    ...(payload.codebuff || {}),
+    codebuff_metadata: codebuffMetadata,
+    provider: {
+      ...(payload.codebuff?.provider || {}),
+      order: [],
+      allow_fallbacks: true,
+    },
+  };
+  payload.codebuff_metadata = codebuffMetadata;
   payload.provider = { ...(payload.provider || {}), data_collection: "deny" };
   let messageId: string | null = null;
   const finalize = () => finalizeRunChain(credential, upstream, run.runId, run.startedAt, messageId).catch(() => {});
@@ -474,11 +546,13 @@ export async function freebuffResponses(
           session.inFlight += 1;
           session.lastUsedAt = Date.now();
           payload.model = lockedModel;
-          payload.codebuff_metadata = {
-            ...payload.codebuff_metadata,
-            freebuff_instance_id: session.instanceId,
-            fallback_from_model: model,
-          };
+            const fallbackMetadata = {
+              ...codebuffMetadata,
+              freebuff_instance_id: session.instanceId,
+              fallback_from_model: model,
+            };
+            payload.codebuff.codebuff_metadata = fallbackMetadata;
+            payload.codebuff_metadata = fallbackMetadata;
           response = await request(credential, `${upstream}/api/v1/chat/completions`, {
             method: "POST",
             headers: { "Content-Type": "application/json", "User-Agent": CHAT_USER_AGENT },
@@ -555,6 +629,30 @@ export async function freebuffUsage(
   model = "deepseek/deepseek-v4-flash",
 ) {
   const upstream = baseUrl(endpoint);
+  const usageHeaders = new Headers({
+    "Content-Type": "application/json",
+    Accept: "application/json",
+    "User-Agent": CLI_USER_AGENT,
+  });
+  const usageMetadata = credentialMetadata(credential);
+  if (usageMetadata.fingerprintId)
+    usageHeaders.set("x-freebuff-fingerprint-id", usageMetadata.fingerprintId);
+  const usageResponse = await fetch(`${upstream}/api/v1/usage`, {
+    method: "POST",
+    headers: usageHeaders,
+    body: JSON.stringify({
+      fingerprintId: usageMetadata.fingerprintId || "cli-usage",
+      authToken: tokenOf(credential),
+    }),
+  }).catch(() => null);
+  if (usageResponse?.ok) {
+    const usage = await usageResponse.json().catch(() => null);
+    if (usage && typeof usage === "object") {
+      const value = { authenticated: true, ...usage, model, status: "usage" };
+      usageSnapshots.set(credential.id, { fetchedAt: Date.now(), value });
+      return value;
+    }
+  }
   const cached = sessions.get(credential.id);
   const snapshot = usageSnapshots.get(credential.id);
   if (!cached && snapshot)

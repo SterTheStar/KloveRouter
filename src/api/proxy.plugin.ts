@@ -34,6 +34,12 @@ import {
   validateModelRequest,
 } from "../services/request-validation";
 import { MultimodalRequestError } from "../services/multimodal";
+import { config } from "../config";
+import {
+  chatCompletionToResponse,
+  chatSseToResponses,
+  responsesToChatBody,
+} from "./responses-api";
 
 function anthropicPayload(body: any, modelId: string, stream = false) {
   const messages = splitAnthropicMessages(body.messages);
@@ -570,6 +576,51 @@ export const proxyPlugin = (app: Elysia) =>
         }),
       };
     })
+    .post(
+      "/v1/responses",
+      async ({ body, set, headers }) => {
+        if (!body || typeof body !== "object" || typeof body.model !== "string" || body.input === undefined) {
+          set.status = 400;
+          return {
+            error: {
+              message: "model and input are required",
+              type: "invalid_request_error",
+              param: body?.model ? "input" : "model",
+              code: null,
+            },
+          };
+        }
+        const apiKey = await verifyApiKey(headers);
+        if (!apiKey) {
+          set.status = 401;
+          return { error: { message: "Valid API key required", type: "authentication_error", code: null } };
+        }
+        const chatBody = responsesToChatBody(body);
+        const chatResponse = await fetch(`http://127.0.0.1:${config.port}/v1/chat/completions`, {
+          method: "POST",
+          headers: {
+            Authorization: headers.authorization!,
+            "Content-Type": "application/json",
+            Accept: body.stream ? "text/event-stream" : "application/json",
+          },
+          body: JSON.stringify(chatBody),
+        });
+        if (!chatResponse.ok) {
+          set.status = chatResponse.status;
+          const error = await chatResponse.json().catch(async () => ({ message: await chatResponse.text() }));
+          return {
+            error: {
+              message: error?.message ?? error?.error?.message ?? error?.error ?? "Provider request failed",
+              type: error?.type ?? "server_error",
+              code: error?.code ?? null,
+            },
+          };
+        }
+        if (body.stream) return chatSseToResponses(chatResponse, body.model);
+        return chatCompletionToResponse(await chatResponse.json());
+      },
+      { body: t.Any() },
+    )
     .post(
       "/v1/chat/completions",
       async ({ body, set, headers, request, server }) => {
