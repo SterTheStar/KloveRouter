@@ -35,7 +35,11 @@ const app = new Elysia()
   .onRequest(requestHooks.onRequest)
   .onBeforeHandle(({ request, set }) => {
     const pathname = new URL(request.url).pathname;
-    if (/(^|\/)\.(?:env(?:\..*)?|git)(?:\/|$)/i.test(pathname)) {
+    if (
+      /(^|\/)\.(?:env(?:\..*)?|git)(?:\/|$)/i.test(pathname) ||
+      /(^|\/)data(?:\/|$)/i.test(pathname) ||
+      /\.(?:db|sqlite|sqlite3|db-wal|db-shm)$/i.test(pathname)
+    ) {
       set.status = 404;
       return new Response("Not Found", { status: 404 });
     }
