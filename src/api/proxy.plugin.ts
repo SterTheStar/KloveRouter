@@ -1160,7 +1160,7 @@ export const proxyPlugin = (app: Elysia) =>
                 requestLogService.complete(requestLogId, { durationMs: Math.round(performance.now() - start) });
                 return response.json();
               }
-               return recordSseUsageResponse(cleanQwenStream(response), (promptTokens, completionTokens, durationMs, generationDurationMs, details) => {
+               return recordSseUsageResponse(response, (promptTokens, completionTokens, durationMs, generationDurationMs, details) => {
                 const usage = usageService.record(provider.id, modelRecord?.id ?? parsed.modelId, parsed.modelId, promptTokens, completionTokens, durationMs, generationDurationMs, details);
                 requestLogService.complete(requestLogId, { promptTokens, completionTokens, cacheRead: details?.cacheRead, cacheWrite: details?.cacheWrite, cost: usage.estimated_cost_usd, durationMs });
               }, start);
@@ -1227,7 +1227,7 @@ export const proxyPlugin = (app: Elysia) =>
                 credentialService.clearError(credential.id);
                 return completion;
               }
-              return recordSseUsageResponse(response, (promptTokens, completionTokens, durationMs, generationDurationMs, details) => {
+              return recordSseUsageResponse(cleanQwenStream(response), (promptTokens, completionTokens, durationMs, generationDurationMs, details) => {
                 const usage = usageService.record(provider.id, modelRecord?.id ?? parsed.modelId, parsed.modelId, promptTokens, completionTokens, durationMs, generationDurationMs, details);
                 requestLogService.complete(requestLogId, { promptTokens, completionTokens, cacheRead: details?.cacheRead, cacheWrite: details?.cacheWrite, cost: usage.estimated_cost_usd, durationMs });
               }, start);
