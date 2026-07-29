@@ -155,6 +155,7 @@ logger.badge(
 logger.success("Server running", {
   panel: `http://0.0.0.0:${config.port}`,
   api: `http://0.0.0.0:${config.port}/api`,
+  chat_completions: `http://0.0.0.0:${config.port}/v1/chat/completions`,
   responses_api: `http://0.0.0.0:${config.port}/v1/responses`,
 });
 logger.info("Codex callback listener", {
