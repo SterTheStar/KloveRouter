@@ -43,20 +43,6 @@ export const codexPublicPlugin = (app: Elysia) =>
         error: t.Optional(t.String()),
       }),
     },
-  ).post(
-    "/api/freebuff/unlock",
-    async ({ body, set }) => {
-      try {
-        const credential = credentialService.findById(body.credential_id);
-        if (!credential || credential.kind !== "freebuff")
-          throw new Error("Freebuff credential not found");
-        return await freebuffUnlock(credential);
-      } catch (error: any) {
-        set.status = 502;
-        return { error: error.message };
-      }
-    },
-    { body: t.Object({ credential_id: t.String() }) },
   );
 
 export const antigravityPublicPlugin = (app: Elysia) =>
@@ -88,6 +74,21 @@ export const antigravityPublicPlugin = (app: Elysia) =>
 
 export const codexPlugin = (app: Elysia) =>
   app
+    .post(
+      "/api/freebuff/unlock",
+      async ({ body, set }) => {
+        try {
+          const credential = credentialService.findById(body.credential_id);
+          if (!credential || credential.kind !== "freebuff")
+            throw new Error("Freebuff credential not found");
+          return await freebuffUnlock(credential);
+        } catch (error: any) {
+          set.status = 502;
+          return { error: error.message };
+        }
+      },
+      { body: t.Object({ credential_id: t.String() }) },
+    )
     .get("/api/codex/status", () => codexAuthService.status())
     .post(
       "/api/codex/login",

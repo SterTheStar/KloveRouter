@@ -24,6 +24,7 @@ import { freebuffModels, freebuffResponses } from "../integrations/freebuff";
 import { qwenModels, qwenResponses } from "../integrations/qwen";
 import { atomesusModels, atomesusTest } from "../integrations/atomesus";
 import { parseRawModelMetadata, resolveModelMetadata } from "../services/model-metadata";
+import { assertSafeRemoteUrl } from "../services/ssrf";
 
 const nullableBoolean = t.Union([t.Boolean(), t.Null()]);
 const capabilitiesSchema = t.Object({
@@ -338,6 +339,7 @@ export const modelsPlugin = (app: Elysia) =>
             provider.protocol === "anthropic"
               ? provider.base_url.replace(/\/+$/, "") + "/models"
               : provider.base_url.replace(/\/+$/, "") + "/models";
+          await assertSafeRemoteUrl(url);
           const res = await fetch(url, {
             headers: {
               "Content-Type": "application/json",

@@ -1,4 +1,5 @@
 import type { Model } from "./model.service";
+import { assertSafeRemoteUrl } from "./ssrf";
 
 const DATA_IMAGE_RE = /^data:(image\/[a-z0-9.+-]+);base64,([a-z0-9+/=]+)$/i;
 const REMOTE_IMAGE_RE = /^https:\/\//i;
@@ -66,7 +67,17 @@ export async function resolveImageData(source: string) {
   const embedded = dataImageInfo(source);
   if (embedded) return embedded;
   if (!REMOTE_IMAGE_RE.test(source)) return null;
-  const response = await fetch(source, { redirect: "follow" });
+  let url = await assertSafeRemoteUrl(source);
+  let response: Response | null = null;
+  for (let redirects = 0; redirects <= 3; redirects += 1) {
+    response = await fetch(url, { redirect: "manual" });
+    if (response.status < 300 || response.status >= 400) break;
+    const location = response.headers.get("location");
+    if (!location) throw new MultimodalRequestError("Image redirect missing location");
+    url = await assertSafeRemoteUrl(new URL(location, url).toString());
+    if (redirects === 3) throw new MultimodalRequestError("Too many image redirects");
+  }
+  if (!response) throw new MultimodalRequestError("Image download failed");
   if (!response.ok) throw new MultimodalRequestError(`Image download failed (${response.status})`);
   const mimeType = response.headers.get("content-type")?.split(";", 1)[0]?.toLowerCase();
   if (!mimeType?.startsWith("image/")) throw new MultimodalRequestError("Remote image URL did not return an image");

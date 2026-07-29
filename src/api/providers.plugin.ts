@@ -4,6 +4,7 @@ import { credentialService } from "../services/credential.service";
 import { codexAuthService } from "../integrations/codex";
 import { logger } from "../logger";
 import { isValidAvatar } from "../services/provider-appearance";
+import { assertSafeRemoteUrl } from "../services/ssrf";
 
 export const providersPlugin = (app: Elysia) =>
   app
@@ -26,7 +27,13 @@ export const providersPlugin = (app: Elysia) =>
     })
     .post(
       "/api/providers",
-      ({ body, set }) => {
+       async ({ body, set }) => {
+         try {
+           await assertSafeRemoteUrl(body.base_url);
+         } catch (error: any) {
+           set.status = 400;
+           return { error: error.message };
+         }
         if (!isValidAvatar(body.avatar)) {
           set.status = 400;
           return { error: "Avatar must be an image URL or an image up to 1 MB" };
@@ -76,7 +83,7 @@ export const providersPlugin = (app: Elysia) =>
     )
     .put(
       "/api/providers/:id",
-      ({ params: { id }, body, set }) => {
+       async ({ params: { id }, body, set }) => {
         const existing = providerService.findById(id);
         if (!existing) {
           set.status = 404;
@@ -85,6 +92,14 @@ export const providersPlugin = (app: Elysia) =>
         if (!isValidAvatar(body.avatar)) {
           set.status = 400;
           return { error: "Avatar must be an image URL or an image up to 1 MB" };
+        }
+        if (body.base_url !== undefined) {
+          try {
+            await assertSafeRemoteUrl(body.base_url);
+          } catch (error: any) {
+            set.status = 400;
+            return { error: error.message };
+          }
         }
         const updated = providerService.update(id, body);
         return updated;

@@ -1,6 +1,7 @@
 import { Elysia, t } from "elysia";
 import { getDb } from "../db/connection";
 import { logger } from "../logger";
+import { config } from "../config";
 
 export const authPlugin = (app: Elysia) =>
   app
@@ -23,7 +24,10 @@ export const authPlugin = (app: Elysia) =>
           return { error: "Invalid password" };
         }
 
-        const token = await jwt.sign({ role: "admin" });
+         const token = await jwt.sign({
+           role: "admin",
+           exp: Math.floor(Date.now() / 1000) + config.jwtExpirationSeconds,
+         });
         logger.success("Panel login accepted");
         return { token };
       },
