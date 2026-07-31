@@ -328,27 +328,23 @@ export const modelsPlugin = (app: Elysia) =>
               provider.credential_mode,
               provider.fixed_credential_id,
             ) || credentialService.select(provider.id, "round_robin");
-          if (!credential?.secret) {
-            set.status = 503;
-            return {
-              error: "No active API key configured",
-              message: `Provider "${provider.name}" has no active API key`,
-            };
-          }
           const url =
             provider.protocol === "anthropic"
               ? provider.base_url.replace(/\/+$/, "") + "/models"
               : provider.base_url.replace(/\/+$/, "") + "/models";
           await assertSafeRemoteUrl(url);
+          const authHeaders: Record<string, string> = credential?.secret
+            ? provider.protocol === "anthropic"
+              ? {
+                  "x-api-key": credential.secret,
+                  "anthropic-version": "2023-06-01",
+                }
+              : { Authorization: `Bearer ${credential.secret}` }
+            : {};
           const res = await fetch(url, {
             headers: {
               "Content-Type": "application/json",
-              ...(provider.protocol === "anthropic"
-                ? {
-                    "x-api-key": credential.secret,
-                    "anthropic-version": "2023-06-01",
-                  }
-                : { Authorization: `Bearer ${credential.secret}` }),
+              ...authHeaders,
             },
           });
 
