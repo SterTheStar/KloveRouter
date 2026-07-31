@@ -34,7 +34,7 @@ export interface ProviderPublic {
 export type CreateProviderInput = {
   name: string;
   base_url: string;
-  api_key: string;
+  api_key?: string;
   avatar?: string;
   protocol?: ProviderProtocol;
   credential_mode?: CredentialMode;
@@ -116,14 +116,16 @@ export const providerService = {
   create(input: CreateProviderInput): ProviderPublic {
     const db = getDb();
     const id = crypto.randomUUID();
-    const encryptedApiKey = encryptSecret(input.api_key)!;
+    const encryptedApiKey = input.api_key
+      ? encryptSecret(input.api_key)
+      : null;
     db.query(
       "INSERT INTO providers (id, name, base_url, api_key, avatar, protocol) VALUES (?, ?, ?, ?, ?, ?)",
     ).run(
       id,
       input.name,
       input.base_url.replace(/\/+$/, ""),
-      encryptedApiKey,
+      encryptedApiKey ?? "",
       input.avatar ?? null,
       input.protocol ?? "openai",
     );

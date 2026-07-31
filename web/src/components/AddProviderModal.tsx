@@ -225,8 +225,8 @@ export default function AddProviderModal({
         "Connect your Codex account before adding this provider.",
       );
     }
-    if (!name || !baseUrl || (selectedType?.protocol === "freebuff" || selectedType?.protocol === "qwen" || selectedType?.protocol === "atomesus" ? !authCode : !apiKey))
-      return setError("All fields are required.");
+    if (!name || !baseUrl)
+      return setError("Provider name and base URL are required.");
     setLoading(true);
     setError(null);
     try {
@@ -434,7 +434,7 @@ export default function AddProviderModal({
                 selectedType?.protocol !== "antigravity" && (
                   <div className="space-y-2">
                      <Label htmlFor="provider-key">
-                       {selectedType?.protocol === "atomesus" ? "Bearer token" : selectedType?.protocol === "freebuff" || selectedType?.protocol === "qwen" ? "Auth code" : "API key"}
+                        {selectedType?.protocol === "atomesus" ? "Bearer token (optional)" : selectedType?.protocol === "freebuff" || selectedType?.protocol === "qwen" ? "Auth code (optional)" : "API key (optional)"}
                     </Label>
                     <Input
                       id="provider-key"

@@ -45,10 +45,7 @@ export const providersPlugin = (app: Elysia) =>
         }
         const provider = providerService.create({
           ...body,
-          api_key:
-            body.api_key ??
-            body.auth_code ??
-            (body.protocol === "codex" ? "codex-session" : `${body.protocol ?? "provider"}-token`),
+          api_key: body.api_key ?? body.auth_code,
         });
         logger.success("Provider created", {
           provider: provider.name,
