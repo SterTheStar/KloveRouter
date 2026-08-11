@@ -18,19 +18,54 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import ConfirmDialog from "@/components/ConfirmDialog";
 import { requestLogs } from "../api/client";
 import type { RequestLog } from "../types";
 import { copyToClipboard } from "../lib/clipboard";
 
+const PAGE_SIZE = 50;
+
 function formatNumber(value: number) {
   return value.toLocaleString();
 }
+
 function formatCost(value: number) {
   return value ? `$${value < 0.01 ? value.toFixed(4) : value.toFixed(2)}` : "—";
 }
-function formatDate(value: string) {
-  return new Date(`${value}Z`).toLocaleString();
+
+function formatDuration(ms: number | null): string {
+  if (ms == null) return "—";
+  if (ms >= 1000) return `${(ms / 1000).toFixed(2)}s`;
+  return `${ms.toFixed(0)}ms`;
 }
+
+function formatTime(value: string) {
+  const date = new Date(`${value}Z`);
+  return Number.isNaN(date.getTime())
+    ? value
+    : date.toLocaleString(undefined, {
+        dateStyle: "medium",
+        timeStyle: "medium",
+      });
+}
+
+function formatRelative(value: string) {
+  const date = new Date(`${value}Z`);
+  if (Number.isNaN(date.getTime())) return value;
+  const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
+  if (seconds < 45) return "just now";
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d ago`;
+  return date.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+  });
+}
+
 function mask(value: string | null) {
   if (!value) return "—";
   return value.length > 16
@@ -38,23 +73,46 @@ function mask(value: string | null) {
     : value;
 }
 
+function StatusBadge({ log }: { log: RequestLog }) {
+  return (
+    <Badge
+      variant={
+        log.status === "success"
+          ? "secondary"
+          : log.status === "error"
+            ? "destructive"
+            : "outline"
+      }
+    >
+      {log.status}
+      {log.status_code ? ` ${log.status_code}` : ""}
+    </Badge>
+  );
+}
+
 export default function RequestLogsPage() {
   const [logs, setLogs] = useState<RequestLog[]>([]);
   const [total, setTotal] = useState(0);
+  const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
   const [offset, setOffset] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [clearing, setClearing] = useState(false);
   const loadedRef = useRef(false);
   const requestRef = useRef(false);
+
   const load = useCallback(async () => {
     if (requestRef.current) return;
     requestRef.current = true;
+    setRefreshing(true);
     if (!loadedRef.current) setLoading(true);
     try {
       const result = await requestLogs.list({
-        limit: 50,
+        limit: PAGE_SIZE,
         offset,
         status: status || undefined,
         search: search || undefined,
@@ -68,24 +126,48 @@ export default function RequestLogsPage() {
     } finally {
       requestRef.current = false;
       setLoading(false);
+      setRefreshing(false);
     }
   }, [offset, search, status]);
+
   useEffect(() => {
     load();
   }, [load]);
+
   useEffect(() => {
     const interval = window.setInterval(load, 5000);
     return () => window.clearInterval(interval);
   }, [load]);
+
+  // Debounce the search input so each keystroke does not hit the API.
+  useEffect(() => {
+    if (searchInput === search) return;
+    const timer = window.setTimeout(() => {
+      setOffset(0);
+      setSearch(searchInput);
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [searchInput, search]);
+
   const copy = async (value: string) => {
     await copyToClipboard(value);
   };
-  const clear = async () => {
-    if (!window.confirm("Delete all request logs?")) return;
-    await requestLogs.clear();
-    setOffset(0);
-    load();
+
+  const handleClear = async () => {
+    setClearing(true);
+    try {
+      await requestLogs.clear();
+      setOffset(0);
+      setConfirmOpen(false);
+      await load();
+    } catch (e: any) {
+      setError(e.message);
+      setConfirmOpen(false);
+    } finally {
+      setClearing(false);
+    }
   };
+
   return (
     <div className="w-full space-y-6 p-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
@@ -109,7 +191,7 @@ export default function RequestLogsPage() {
           <Button
             variant="outline"
             className="text-destructive"
-            onClick={clear}
+            onClick={() => setConfirmOpen(true)}
             disabled={!total}
           >
             <DeleteIcon className="size-4" />
@@ -117,16 +199,24 @@ export default function RequestLogsPage() {
           </Button>
         </div>
       </div>
+
       {error && (
         <Alert variant="destructive">
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
+
       <Card className="gap-0 overflow-hidden p-0">
         <CardHeader className="flex flex-wrap items-center justify-between gap-3 py-(--card-spacing)">
           <CardTitle>
             All requests{" "}
             <span className="text-muted-foreground">({total})</span>
+            {refreshing && (
+              <LoaderCircle
+                className="ml-2 inline size-3.5 animate-spin text-muted-foreground"
+                aria-label="Refreshing logs"
+              />
+            )}
           </CardTitle>
           <div className="flex flex-wrap gap-2">
             <div className="relative">
@@ -134,11 +224,8 @@ export default function RequestLogsPage() {
               <Input
                 className="h-9 w-64 pl-9"
                 placeholder="Search ID, model or account"
-                value={search}
-                onChange={(e) => {
-                  setOffset(0);
-                  setSearch(e.target.value);
-                }}
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
               />
             </div>
             <DropdownMenu>
@@ -227,26 +314,36 @@ export default function RequestLogsPage() {
                           <CopyIcon className="size-3" />
                         </Button>
                       </div>
-                      <Badge
-                        variant={
-                          log.status === "success"
-                            ? "secondary"
-                            : log.status === "error"
-                              ? "destructive"
-                              : "outline"
-                        }
-                      >
-                        {log.status}
-                        {log.status_code ? ` ${log.status_code}` : ""}
-                      </Badge>
+                      <StatusBadge log={log} />
+                      {log.error_message && (
+                        <div
+                          className="mt-1 max-w-[220px] truncate text-xs text-destructive"
+                          title={log.error_message}
+                        >
+                          {log.error_message}
+                        </div>
+                      )}
                     </td>
                     <td className="p-3">
                       <div className="font-medium">{log.provider_name}</div>
-                      <div
-                        className="mt-1 max-w-[260px] truncate font-mono text-xs text-muted-foreground"
-                        title={log.model_name}
-                      >
-                        {log.model_name}
+                      <div className="mt-1 flex items-center gap-1">
+                        <div
+                          className="max-w-[240px] truncate font-mono text-xs text-muted-foreground"
+                          title={log.model_name}
+                        >
+                          {log.model_name}
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="size-6 shrink-0"
+                          onClick={() =>
+                            copy(`${log.provider_name}/${log.model_name}`)
+                          }
+                          title="Copy provider/model"
+                        >
+                          <CopyIcon className="size-3" />
+                        </Button>
                       </div>
                     </td>
                     <td className="p-3">
@@ -262,7 +359,12 @@ export default function RequestLogsPage() {
                     </td>
                     <td className="p-3 align-middle">
                       {log.tokens_total === 0 && log.status === "success" ? (
-                        <Badge variant="outline" className="text-muted-foreground">Not supported</Badge>
+                        <Badge
+                          variant="outline"
+                          className="text-muted-foreground"
+                        >
+                          Not supported
+                        </Badge>
                       ) : (
                         <>
                           <div>{formatNumber(log.tokens_total)} tokens</div>
@@ -282,18 +384,31 @@ export default function RequestLogsPage() {
                       {formatCost(log.estimated_cost_usd)}
                     </td>
                     <td className="p-3">
-                      <div>{log.tps ? `${log.tps.toFixed(1)} TPS` : "—"}</div>
+                      <div>
+                        {log.tps != null ? `${log.tps.toFixed(1)} TPS` : "—"}
+                      </div>
                       <div className="text-xs text-muted-foreground">
-                        {log.duration_ms
-                          ? `${(log.duration_ms / 1000).toFixed(2)}s`
-                          : "—"}
+                        {formatDuration(log.duration_ms)}
                       </div>
                     </td>
-                    <td className="whitespace-nowrap p-3 text-xs text-muted-foreground">
-                      {formatDate(log.created_at)}
+                    <td
+                      className="whitespace-nowrap p-3 text-xs text-muted-foreground"
+                      title={formatTime(log.created_at)}
+                    >
+                      {formatRelative(log.created_at)}
                     </td>
                   </tr>
                 ))}
+                {loading && !logs.length && (
+                  <tr>
+                    <td
+                      colSpan={7}
+                      className="p-6 text-center text-sm text-muted-foreground"
+                    >
+                      <LoaderCircle className="mx-auto size-4 animate-spin" />
+                    </td>
+                  </tr>
+                )}
                 {!loading && !logs.length && (
                   <tr>
                     <td
@@ -318,15 +433,15 @@ export default function RequestLogsPage() {
                 size="sm"
                 variant="outline"
                 disabled={offset === 0 || loading}
-                onClick={() => setOffset(Math.max(0, offset - 50))}
+                onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}
               >
                 Previous
               </Button>
               <Button
                 size="sm"
                 variant="outline"
-                disabled={offset + 50 >= total || loading}
-                onClick={() => setOffset(offset + 50)}
+                disabled={offset + PAGE_SIZE >= total || loading}
+                onClick={() => setOffset(offset + PAGE_SIZE)}
               >
                 Next
               </Button>
@@ -334,6 +449,16 @@ export default function RequestLogsPage() {
           </div>
         </CardContent>
       </Card>
+
+      <ConfirmDialog
+        open={confirmOpen}
+        title="Clear request logs"
+        message="This permanently deletes all request logs. Token usage statistics are not affected."
+        confirmLabel="Clear logs"
+        loading={clearing}
+        onConfirm={handleClear}
+        onCancel={() => setConfirmOpen(false)}
+      />
     </div>
   );
 }
