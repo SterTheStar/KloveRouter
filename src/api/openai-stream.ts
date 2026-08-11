@@ -39,10 +39,13 @@ export function openAIStreamResponse(
   const encoder = new TextEncoder();
   const now = options.now ?? (() => performance.now());
   let iterator: AsyncIterator<any> | undefined;
+  let keepAlive: ReturnType<typeof setInterval> | undefined;
   let promptTokens = 0;
   let completionTokens = 0;
   let cacheRead = 0;
   let cacheWrite = 0;
+  let streamedChars = 0;
+  let sawUsage = false;
   let firstTokenAt: number | null = null;
   let cancelled = false;
   let settled = false;
@@ -61,8 +64,13 @@ export function openAIStreamResponse(
   const stats = (): OpenAIStreamStats => {
     const endedAt = now();
     return {
-      promptTokens,
-      completionTokens,
+      // Without a final usage chunk (stream aborted by the client, or the
+      // upstream does not report usage) fall back to a character-based
+      // estimate so partial streams are not recorded as zero tokens.
+      promptTokens: sawUsage ? promptTokens : 0,
+      completionTokens: sawUsage
+        ? completionTokens
+        : Math.ceil(streamedChars / 4),
       cacheRead,
       cacheWrite,
       durationMs: Math.round(endedAt - options.start),
@@ -78,6 +86,14 @@ export function openAIStreamResponse(
         const enqueue = (text: string) => {
           if (!cancelled) controller.enqueue(encoder.encode(text));
         };
+        // SSE comment lines are ignored by clients but count as activity,
+        // keeping read-timeouts alive while the upstream is still waiting
+        // on its first chunk (slow or free-tier providers).
+        controller.enqueue(encoder.encode(": connected\n\n"));
+        keepAlive = setInterval(() => {
+          if (!cancelled && !settled)
+            controller.enqueue(encoder.encode(": keep-alive\n\n"));
+        }, 10000);
         void (async () => {
           try {
             iterator = stream[Symbol.asyncIterator]();
@@ -85,7 +101,15 @@ export function openAIStreamResponse(
               const { done, value: chunk } = await iterator.next();
               if (done || cancelled) break;
               if (hasSemanticDelta(chunk)) firstTokenAt ??= now();
+              for (const choice of chunk.choices ?? []) {
+                const delta = choice?.delta;
+                if (typeof delta?.content === "string")
+                  streamedChars += delta.content.length;
+                if (typeof delta?.reasoning_content === "string")
+                  streamedChars += delta.reasoning_content.length;
+              }
               if (chunk.usage) {
+                sawUsage = true;
                 promptTokens = Number(
                   chunk.usage.prompt_tokens ?? promptTokens,
                 );
@@ -115,6 +139,7 @@ export function openAIStreamResponse(
               notify("error", () => options.onError(normalized, finalStats));
             }
           } finally {
+            clearInterval(keepAlive);
             if (!cancelled) controller.close();
           }
         })();
@@ -122,6 +147,7 @@ export function openAIStreamResponse(
       cancel() {
         if (cancelled || settled) return;
         cancelled = true;
+        clearInterval(keepAlive);
         stream.controller?.abort();
         void iterator?.return?.();
         const finalStats = stats();

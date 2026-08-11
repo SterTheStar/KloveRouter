@@ -36,6 +36,9 @@ describe("openAIStreamResponse", () => {
     });
     const reader = response.body!.getReader();
 
+    expect(new TextDecoder().decode((await reader.read()).value)).toBe(
+      ": connected\n\n",
+    );
     expect(new TextDecoder().decode((await reader.read()).value)).toContain(
       '"role":"assistant"',
     );
@@ -164,6 +167,7 @@ describe("openAIStreamResponse", () => {
     });
     const sdkController = new AbortController();
     let cancelled = false;
+    let cancelStats: OpenAIStreamStats | undefined;
     const stream = {
       controller: sdkController,
       async *[Symbol.asyncIterator]() {
@@ -176,16 +180,22 @@ describe("openAIStreamResponse", () => {
       tokenDetails: details,
       onComplete: () => {},
       onError: () => {},
-      onCancel: () => {
+      onCancel: (stats) => {
         cancelled = true;
+        cancelStats = stats;
       },
     });
     const reader = response.body!.getReader();
+    await reader.read();
+    // Wait for the first data chunk to be produced so the char counter
+    // has run before the cancel stats are computed.
     await reader.read();
     await reader.cancel();
 
     expect(sdkController.signal.aborted).toBeTrue();
     expect(cancelled).toBeTrue();
+    // No usage chunk arrived, so completion is estimated from streamed text.
+    expect(cancelStats?.completionTokens).toBe(2);
     release();
   });
 });

@@ -132,7 +132,7 @@ if (!config.isDev) {
   }
 }
 
-app.listen({ port: config.port, hostname: "0.0.0.0" });
+app.listen({ port: config.port, hostname: "0.0.0.0", idleTimeout: 300 });
 
 const b = "\x1b[1m",
   r = "\x1b[0m";
