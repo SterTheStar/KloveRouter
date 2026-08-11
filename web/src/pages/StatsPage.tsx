@@ -28,6 +28,7 @@ import {
   ResponsiveContainer,
   AreaChart,
   Area,
+  Line,
   PieChart,
   Pie,
   Cell,
@@ -67,33 +68,61 @@ function formatDate(value: string): string {
     : date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
-function ChartTooltipContent({ active, payload, label }: any) {
+type ChartFormatters = Record<string, (value: number) => string>;
+
+function ChartTooltipContent({
+  active,
+  payload,
+  label,
+  formatters,
+}: {
+  active?: boolean;
+  payload?: any[];
+  label?: string | number;
+  formatters?: ChartFormatters;
+}) {
   if (!active || !payload?.length) return null;
+  const rows = payload.filter(
+    (item) => item.value !== undefined && item.value !== null,
+  );
+  if (!rows.length) return null;
   return (
     <div className="rounded-lg border border-border bg-popover px-3 py-2 text-xs text-popover-foreground shadow-md">
       {label !== undefined && (
-        <div className="mb-1 font-medium">
+        <div className="mb-1.5 border-b border-border/60 pb-1 font-medium">
           {typeof label === "string" && /^\d{4}-\d{2}-\d{2}$/.test(label)
             ? formatDate(label)
             : label}
         </div>
       )}
       <div className="space-y-1">
-        {payload.map((item: any, index: number) => (
-          <div
-            key={`${item.dataKey ?? item.name}-${index}`}
-            className="flex items-center justify-between gap-5"
-          >
-            <span className="text-muted-foreground">
-              {item.name ?? item.dataKey}
-            </span>
-            <span className="font-mono font-medium">
-              {typeof item.value === "number"
-                ? item.value.toLocaleString()
-                : item.value}
-            </span>
-          </div>
-        ))}
+        {rows.map((item, index) => {
+          const key = String(item.dataKey ?? item.name);
+          const format = formatters?.[key];
+          return (
+            <div
+              key={`${key}-${index}`}
+              className="flex items-center justify-between gap-6"
+            >
+              <span className="flex items-center gap-1.5 text-muted-foreground">
+                {item.color && (
+                  <span
+                    className="size-2 shrink-0 rounded-full"
+                    style={{ background: item.color }}
+                  />
+                )}
+                {item.name ?? key}
+              </span>
+              <span className="font-mono font-medium tabular-nums">
+                {typeof item.value === "number"
+                  ? format
+                    ? format(item.value)
+                    : item.value.toLocaleString()
+                  : item.value}
+              </span>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -118,6 +147,113 @@ function ChartPanel({
       </CardHeader>
       <CardContent className="pt-5">{children}</CardContent>
     </Card>
+  );
+}
+
+type DonutItem = {
+  name: string;
+  value: number;
+  color: string;
+};
+
+function DonutLegend({
+  items,
+  total,
+  format,
+}: {
+  items: DonutItem[];
+  total: number;
+  format: (value: number) => string;
+}) {
+  return (
+    <ul className="flex flex-col gap-1.5">
+      {items.map((item) => {
+        const share = total > 0 ? (item.value / total) * 100 : 0;
+        return (
+          <li
+            key={item.name}
+            className="flex items-center gap-2 text-xs"
+            title={item.name}
+          >
+            <span
+              className="size-2.5 shrink-0 rounded-sm"
+              style={{ background: item.color }}
+            />
+            <span className="min-w-0 flex-1 truncate text-muted-foreground">
+              {item.name}
+            </span>
+            <span className="font-mono tabular-nums">{format(item.value)}</span>
+            <span className="w-11 text-right font-medium tabular-nums">
+              {share.toFixed(0)}%
+            </span>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+function DonutChart({
+  data,
+  dataKey,
+  nameKey,
+  format,
+  centerLabel,
+}: {
+  data: StatsByProvider[];
+  dataKey: keyof StatsByProvider;
+  nameKey: keyof StatsByProvider;
+  format: (value: number) => string;
+  centerLabel: string;
+}) {
+  const items: DonutItem[] = data
+    .map((entry, index) => ({
+      name: String(entry[nameKey] ?? ""),
+      value: Number(entry[dataKey]) || 0,
+      color: COLORS[index % COLORS.length],
+    }))
+    .filter((item) => item.value > 0)
+    .sort((a, b) => b.value - a.value);
+  const total = items.reduce((sum, item) => sum + item.value, 0);
+  if (!items.length) return null;
+
+  return (
+    <div className="flex h-full flex-col gap-5">
+      <div className="relative mx-auto aspect-square w-44 sm:w-52">
+        <ResponsiveContainer width="100%" height="100%">
+          <PieChart>
+            <Pie
+              data={items}
+              dataKey="value"
+              nameKey="name"
+              cx="50%"
+              cy="50%"
+              innerRadius="70%"
+              outerRadius="100%"
+              paddingAngle={2}
+              cornerRadius={6}
+              strokeWidth={0}
+            >
+              {items.map((item) => (
+                <Cell key={item.name} fill={item.color} />
+              ))}
+            </Pie>
+            <ChartTooltip
+              content={<ChartTooltipContent formatters={{ value: format }} />}
+            />
+          </PieChart>
+        </ResponsiveContainer>
+        <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center">
+          <span className="text-[11px] uppercase tracking-wide text-muted-foreground">
+            {centerLabel}
+          </span>
+          <span className="font-heading text-xl font-semibold tabular-nums">
+            {format(total)}
+          </span>
+        </div>
+      </div>
+      <DonutLegend items={items} total={total} format={format} />
+    </div>
   );
 }
 
@@ -300,14 +436,14 @@ export default function StatsPage() {
       {daily.length > 0 && (
         <ChartPanel
           title="Daily usage"
-          description="Token volume over the selected period"
+          description="Token volume and estimated cost over the selected period"
           className="min-h-[22rem]"
         >
           <div className="h-72">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart
                 data={daily}
-                margin={{ top: 8, right: 8, left: -18, bottom: 0 }}
+                margin={{ top: 8, right: 8, left: 4, bottom: 0 }}
               >
                 <defs>
                   <linearGradient
@@ -336,14 +472,34 @@ export default function StatsPage() {
                   minTickGap={24}
                 />
                 <YAxis
+                  yAxisId="tokens"
                   tick={AXIS}
                   axisLine={false}
                   tickLine={false}
                   tickFormatter={formatNumber}
                   width={48}
                 />
-                <ChartTooltip content={<ChartTooltipContent />} />
+                <YAxis
+                  yAxisId="cost"
+                  orientation="right"
+                  tick={AXIS}
+                  axisLine={false}
+                  tickLine={false}
+                  tickFormatter={formatCost}
+                  width={52}
+                />
+                <ChartTooltip
+                  content={
+                    <ChartTooltipContent
+                      formatters={{
+                        tokens_total: formatNumber,
+                        estimated_cost_usd: formatCost,
+                      }}
+                    />
+                  }
+                />
                 <Area
+                  yAxisId="tokens"
                   type="monotone"
                   dataKey="tokens_total"
                   stroke="#5BCEFA"
@@ -352,6 +508,16 @@ export default function StatsPage() {
                   name="Tokens"
                   dot={false}
                   activeDot={{ r: 4, strokeWidth: 2, fill: "var(--popover)" }}
+                />
+                <Line
+                  yAxisId="cost"
+                  type="monotone"
+                  dataKey="estimated_cost_usd"
+                  stroke="#F5A9B8"
+                  strokeWidth={2}
+                  dot={false}
+                  activeDot={{ r: 4, strokeWidth: 2, fill: "var(--popover)" }}
+                  name="Est. cost"
                 />
               </AreaChart>
             </ResponsiveContainer>
@@ -368,39 +534,54 @@ export default function StatsPage() {
             <ResponsiveContainer width="100%" height="100%">
               <BarChart
                 data={byProvider}
-                margin={{ top: 8, right: 8, left: -18, bottom: 8 }}
+                layout="vertical"
+                margin={{ top: 8, right: 16, left: 8, bottom: 8 }}
               >
                 <CartesianGrid
-                  vertical={false}
+                  horizontal={false}
                   strokeDasharray="4 4"
                   className="stroke-border/60"
                 />
                 <XAxis
-                  dataKey="provider_name"
-                  tick={AXIS}
-                  axisLine={false}
-                  tickLine={false}
-                  interval={0}
-                  angle={-20}
-                  textAnchor="end"
-                  height={55}
-                />
-                <YAxis
+                  type="number"
                   tick={AXIS}
                   axisLine={false}
                   tickLine={false}
                   tickFormatter={formatNumber}
-                  width={48}
                 />
-                <ChartTooltip content={<ChartTooltipContent />} />
+                <YAxis
+                  type="category"
+                  dataKey="provider_name"
+                  tick={AXIS}
+                  axisLine={false}
+                  tickLine={false}
+                  width={Math.min(
+                    150,
+                    Math.max(
+                      72,
+                      ...byProvider.map((p) => p.provider_name.length * 7.5),
+                    ),
+                  )}
+                  tickFormatter={(value: string) =>
+                    value.length > 18 ? `${value.slice(0, 17)}…` : value
+                  }
+                />
+                <ChartTooltip
+                  content={
+                    <ChartTooltipContent
+                      formatters={{ tokens_total: formatNumber }}
+                    />
+                  }
+                  cursor={{ fill: "var(--muted)", opacity: 0.4 }}
+                />
                 <Bar
                   dataKey="tokens_total"
                   name="Tokens"
-                  radius={[8, 8, 2, 2]}
-                  maxBarSize={56}
+                  radius={[0, 6, 6, 0]}
+                  maxBarSize={26}
                 >
-                  {byProvider.map((_, i) => (
-                    <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                  {byProvider.map((_, index) => (
+                    <Cell key={index} fill={COLORS[index % COLORS.length]} />
                   ))}
                 </Bar>
               </BarChart>
@@ -415,31 +596,14 @@ export default function StatsPage() {
             title="Token share"
             description="Share of total tokens by provider"
           >
-            <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={byProvider}
-                    dataKey="tokens_total"
-                    nameKey="provider_name"
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={56}
-                    outerRadius={88}
-                    paddingAngle={3}
-                    stroke="var(--card)"
-                    strokeWidth={3}
-                    label={({ name, percent }: any) =>
-                      `${name} ${(percent * 100).toFixed(0)}%`
-                    }
-                  >
-                    {byProvider.map((_, i) => (
-                      <Cell key={i} fill={COLORS[i % COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <ChartTooltip content={<ChartTooltipContent />} />
-                </PieChart>
-              </ResponsiveContainer>
+            <div className="min-h-80">
+              <DonutChart
+                data={byProvider}
+                dataKey="tokens_total"
+                nameKey="provider_name"
+                format={formatNumber}
+                centerLabel="Tokens"
+              />
             </div>
           </ChartPanel>
 
@@ -447,31 +611,14 @@ export default function StatsPage() {
             title="Requests by provider"
             description="Request distribution by provider"
           >
-            <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={byProvider}
-                    dataKey="requests"
-                    nameKey="provider_name"
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={56}
-                    outerRadius={88}
-                    paddingAngle={3}
-                    stroke="var(--card)"
-                    strokeWidth={3}
-                    label={({ name, percent }: any) =>
-                      `${name} ${(percent * 100).toFixed(0)}%`
-                    }
-                  >
-                    {byProvider.map((_, i) => (
-                      <Cell key={i} fill={COLORS[i % COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <ChartTooltip content={<ChartTooltipContent />} />
-                </PieChart>
-              </ResponsiveContainer>
+            <div className="min-h-80">
+              <DonutChart
+                data={byProvider}
+                dataKey="requests"
+                nameKey="provider_name"
+                format={formatNumber}
+                centerLabel="Requests"
+              />
             </div>
           </ChartPanel>
         </div>
