@@ -20,16 +20,17 @@ export default function ContextUsageIndicator({
   cacheReadTokens,
   cacheWriteTokens,
 }: ContextUsageIndicatorProps) {
-  if (!contextWindow) return null;
-
   const totalTokens = promptTokens + completionTokens;
-  const percentage = Math.min(100, (totalTokens / contextWindow) * 100);
+  const hasContextLimit = Boolean(contextWindow && contextWindow > 0);
+  const percentage = hasContextLimit
+    ? Math.min(100, (totalTokens / contextWindow!) * 100)
+    : 0;
   return (
     <Tooltip>
       <TooltipTrigger
         render={<span />}
         className="inline-flex size-8 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
-        aria-label="Context usage"
+        aria-label={hasContextLimit ? "Context usage" : "Context usage, limit not configured"}
       >
         <span
           className="inline-flex size-[18px] items-center justify-center rounded-full"
@@ -40,7 +41,11 @@ export default function ContextUsageIndicator({
       </TooltipTrigger>
       <TooltipContent>
         <div className="space-y-0.5">
-          <div>{formatTokens(totalTokens)} / {formatTokens(contextWindow)} context tokens ({Math.round(percentage)}%)</div>
+          <div>
+            {hasContextLimit
+              ? `${formatTokens(totalTokens)} / ${formatTokens(contextWindow!)} context tokens (${Math.round(percentage)}%)`
+              : `${formatTokens(totalTokens)} context tokens used (limit not configured)`}
+          </div>
           {(cacheReadTokens > 0 || cacheWriteTokens > 0) && (
             <div className="text-muted-foreground">
               Cache: {formatTokens(cacheReadTokens)} read · {formatTokens(cacheWriteTokens)} write
