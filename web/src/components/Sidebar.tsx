@@ -44,14 +44,16 @@ export default function Sidebar({
   onNavigate,
   onLogout,
   profile,
+  mobileOpen,
 }: {
   currentPage: Page;
   onNavigate: (page: Page) => void;
   onLogout: () => void;
   profile: UserProfile;
+  mobileOpen: boolean;
 }) {
   return (
-    <aside className="hidden sticky top-0 h-svh w-72 shrink-0 flex-col border-r bg-sidebar text-sidebar-foreground md:flex">
+    <aside className={`fixed inset-y-0 left-0 z-40 flex h-svh w-72 shrink-0 flex-col border-r bg-sidebar text-sidebar-foreground shadow-2xl transition-transform duration-200 md:sticky md:z-auto md:shadow-none ${mobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"}`}>
       <div className="flex h-16 items-center justify-center gap-3 px-5">
         <svg
           viewBox="0 0 16 16"

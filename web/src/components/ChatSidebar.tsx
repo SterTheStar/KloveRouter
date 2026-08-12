@@ -27,6 +27,7 @@ export default function ChatSidebar({
   onBack,
   onLogout,
   generatingChatId,
+  mobileOpen,
 }: {
   chats: ChatSession[];
   activeChatId: string | null;
@@ -38,6 +39,7 @@ export default function ChatSidebar({
   onBack: () => void;
   onLogout: () => void;
   generatingChatId: string | null;
+  mobileOpen: boolean;
 }) {
   const [editing, setEditing] = useState<string | null>(null);
   const [title, setTitle] = useState("");
@@ -92,7 +94,7 @@ export default function ChatSidebar({
   }
 
   return (
-    <aside className="sticky top-0 hidden h-svh w-72 shrink-0 flex-col border-r bg-sidebar text-sidebar-foreground md:flex">
+    <aside className={`fixed inset-y-0 left-0 z-40 flex h-svh w-72 shrink-0 flex-col border-r bg-sidebar text-sidebar-foreground shadow-2xl transition-transform duration-200 md:sticky md:z-auto md:shadow-none ${mobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"}`}>
       <div className="flex h-14 items-center justify-between px-3">
         <button type="button" onClick={onBack} className="flex min-w-0 items-center gap-2 px-1">
           <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" className="size-6 text-foreground" aria-hidden="true">

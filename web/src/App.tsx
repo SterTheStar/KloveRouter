@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { RiLoader4Line as LoaderCircle } from "@remixicon/react";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useAuth } from "./hooks/useAuth";
@@ -27,6 +27,8 @@ export default function App() {
   const [chatSessions, setChatSessions] = useState<ChatSession[]>([]);
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [generatingChatId, setGeneratingChatId] = useState<string | null>(null);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const touchStartX = useRef<number | null>(null);
   const [selectedProviderId, setSelectedProviderId] = useState<string | null>(
     null,
   );
@@ -42,6 +44,30 @@ export default function App() {
     document.documentElement.classList.toggle("dark", darkMode);
     localStorage.setItem("klove_theme", darkMode ? "dark" : "light");
   }, [darkMode]);
+
+  useEffect(() => {
+    const onTouchStart = (event: TouchEvent) => {
+      touchStartX.current = event.touches[0]?.clientX ?? null;
+    };
+    const onTouchEnd = (event: TouchEvent) => {
+      const start = touchStartX.current;
+      const end = event.changedTouches[0]?.clientX;
+      touchStartX.current = null;
+      if (start === null || end === undefined) return;
+      if (start < 28 && end - start > 56) setMobileSidebarOpen(true);
+      if (mobileSidebarOpen && start - end > 56) setMobileSidebarOpen(false);
+    };
+    document.addEventListener("touchstart", onTouchStart, { passive: true });
+    document.addEventListener("touchend", onTouchEnd, { passive: true });
+    return () => {
+      document.removeEventListener("touchstart", onTouchStart);
+      document.removeEventListener("touchend", onTouchEnd);
+    };
+  }, [mobileSidebarOpen]);
+
+  useEffect(() => {
+    setMobileSidebarOpen(false);
+  }, [currentPage, activeChatId]);
 
   useEffect(() => {
     if (isAuth)
@@ -113,6 +139,7 @@ export default function App() {
               onBack={() => handleNavigate("dashboard")}
               onLogout={logout}
               generatingChatId={generatingChatId}
+              mobileOpen={mobileSidebarOpen}
             />
           ) : (
             <Sidebar
@@ -120,6 +147,15 @@ export default function App() {
               onNavigate={(page) => handleNavigate(page)}
               onLogout={logout}
               profile={profile}
+              mobileOpen={mobileSidebarOpen}
+            />
+          )}
+          {mobileSidebarOpen && (
+            <button
+              type="button"
+              aria-label="Close sidebar"
+              className="fixed inset-0 z-30 bg-black/40 md:hidden"
+              onClick={() => setMobileSidebarOpen(false)}
             />
           )}
           <main className="min-w-0 flex-1 overflow-auto">
