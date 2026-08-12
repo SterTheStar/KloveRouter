@@ -76,7 +76,7 @@ export default function ChatSidebar({
     setEditing(null);
   };
 
-  if (collapsed) {
+  if (collapsed && !mobileOpen) {
     return (
       <>
         <button

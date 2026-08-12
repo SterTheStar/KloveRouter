@@ -28,7 +28,7 @@ export default function App() {
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [generatingChatId, setGeneratingChatId] = useState<string | null>(null);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
-  const touchStartX = useRef<number | null>(null);
+  const touchStart = useRef<{ x: number; y: number } | null>(null);
   const [selectedProviderId, setSelectedProviderId] = useState<string | null>(
     null,
   );
@@ -47,21 +47,37 @@ export default function App() {
 
   useEffect(() => {
     const onTouchStart = (event: TouchEvent) => {
-      touchStartX.current = event.touches[0]?.clientX ?? null;
+      const touch = event.touches[0];
+      if (touch) touchStart.current = { x: touch.clientX, y: touch.clientY };
     };
     const onTouchEnd = (event: TouchEvent) => {
-      const start = touchStartX.current;
-      const end = event.changedTouches[0]?.clientX;
-      touchStartX.current = null;
-      if (start === null || end === undefined) return;
-      if (start < 28 && end - start > 56) setMobileSidebarOpen(true);
-      if (mobileSidebarOpen && start - end > 56) setMobileSidebarOpen(false);
+      const start = touchStart.current;
+      const touch = event.changedTouches[0];
+      touchStart.current = null;
+      if (!start || !touch) return;
+
+      const deltaX = touch.clientX - start.x;
+      const deltaY = touch.clientY - start.y;
+      const isHorizontalSwipe = Math.abs(deltaX) > Math.abs(deltaY);
+      if (!isHorizontalSwipe) return;
+
+      if (!mobileSidebarOpen && start.x <= 64 && deltaX > 48) {
+        setMobileSidebarOpen(true);
+      } else if (mobileSidebarOpen && deltaX < -48) {
+        setMobileSidebarOpen(false);
+      }
     };
+    const onTouchCancel = () => {
+      touchStart.current = null;
+    };
+
     document.addEventListener("touchstart", onTouchStart, { passive: true });
     document.addEventListener("touchend", onTouchEnd, { passive: true });
+    document.addEventListener("touchcancel", onTouchCancel, { passive: true });
     return () => {
       document.removeEventListener("touchstart", onTouchStart);
       document.removeEventListener("touchend", onTouchEnd);
+      document.removeEventListener("touchcancel", onTouchCancel);
     };
   }, [mobileSidebarOpen]);
 

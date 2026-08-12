@@ -56,6 +56,18 @@ function chatStatsStream(
   let sawUsage = false;
   let statsEmitted = false;
   let titleEmitted = false;
+  let lastProgressPersist = start;
+
+  const persistProgress = (force = false) => {
+    if (!assistantMessageId) return;
+    const now = performance.now();
+    if (!force && now - lastProgressPersist < 250) return;
+    lastProgressPersist = now;
+    chatService.updateMessage(assistantMessageId, {
+      content: assistantContent,
+      reasoning: assistantReasoning,
+    });
+  };
 
   const emitTitle = async (controller: ReadableStreamDefaultController) => {
     if (titleEmitted || !titleGenerator || !chatId) return;
@@ -142,6 +154,7 @@ function chatStatsStream(
               }
               const raw = dataLine.slice(5).trim();
               if (raw === "[DONE]") {
+                persistProgress(true);
                 await emitTitle(controller);
                 emitStats(controller);
                 controller.enqueue(encoder.encode(DONE_MARKER));
@@ -161,15 +174,18 @@ function chatStatsStream(
                 Array.isArray(chunk.choices)
               ) {
                 sniff(chunk);
+                persistProgress();
               }
               controller.enqueue(encoder.encode(`data: ${raw}\n\n`));
             }
             if (done) break;
           }
           // Upstream ended without a [DONE] marker — emit title and stats anyway.
+          persistProgress(true);
           await emitTitle(controller);
           if (!statsEmitted) emitStats(controller);
         } catch (error: any) {
+          persistProgress(true);
           controller.enqueue(
             encoder.encode(
               statsEvent({

@@ -98,7 +98,6 @@ export default function ChatPage({
       });
     return () => {
       cancelled = true;
-      abortRef.current?.abort();
     };
   }, []);
 
@@ -112,12 +111,33 @@ export default function ChatPage({
       skipNextChatLoadRef.current = null;
       return;
     }
-    chatsApi.get(chatId).then((result) => {
-      if (!cancelled) setMessages(result.messages);
-    }).catch(() => {
-      if (!cancelled) setMessages([]);
-    });
-    return () => { cancelled = true; };
+    let pollTimer: number | null = null;
+
+    const hasPendingResponse = (chatMessages: ChatMessage[]) => {
+      const lastMessage = chatMessages.at(-1);
+      return lastMessage?.role === "assistant" && !lastMessage.stats && !lastMessage.error;
+    };
+
+    const loadChat = () => {
+      chatsApi.get(chatId).then((result) => {
+        if (cancelled) return;
+        setMessages(result.messages);
+        if (!hasPendingResponse(result.messages) && pollTimer !== null) {
+          window.clearInterval(pollTimer);
+          pollTimer = null;
+        }
+      }).catch(() => {
+        if (!cancelled) setMessages([]);
+      });
+    };
+
+    loadChat();
+    pollTimer = window.setInterval(loadChat, 500);
+
+    return () => {
+      cancelled = true;
+      if (pollTimer !== null) window.clearInterval(pollTimer);
+    };
   }, [chatId]);
 
   useEffect(() => {

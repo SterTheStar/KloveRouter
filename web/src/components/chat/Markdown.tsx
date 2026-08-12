@@ -4,6 +4,7 @@ import remarkGfm from "remark-gfm";
 import { RiCheckLine, RiClipboardLine } from "@remixicon/react";
 import { Button } from "@/components/ui/button";
 import { copyToClipboard } from "@/lib/clipboard";
+import { HtmlPreview } from "./HtmlPreview";
 
 function CodeBlock({
   language,
@@ -13,6 +14,8 @@ function CodeBlock({
   code: string;
 }) {
   const [copied, setCopied] = useState(false);
+  const [activeTab, setActiveTab] = useState<"code" | "preview">("code");
+  const isHtml = /^(html?|xhtml)$/i.test(language);
 
   const copy = async () => {
     try {
@@ -27,27 +30,61 @@ function CodeBlock({
   return (
     <div className="my-3 overflow-hidden rounded-lg border bg-muted/40 dark:bg-muted/20">
       <div className="flex items-center justify-between border-b bg-muted/60 py-1 pr-1 pl-3 dark:bg-muted/30">
-        <span className="font-mono text-xs font-medium text-muted-foreground">
-          {language || "code"}
-        </span>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="h-6 gap-1 px-1.5 text-xs text-muted-foreground"
-          onClick={copy}
-        >
-          {copied ? (
-            <RiCheckLine className="size-3.5 text-green-500" />
-          ) : (
-            <RiClipboardLine className="size-3.5" />
+        {isHtml ? (
+          <div className="flex items-center gap-1" role="tablist" aria-label="Codebox view">
+            {(["code", "preview"] as const).map((tab) => (
+              <button
+                key={tab}
+                type="button"
+                role="tab"
+                aria-selected={activeTab === tab}
+                onClick={() => setActiveTab(tab)}
+                className={`relative px-2.5 py-1 text-xs font-medium transition-colors after:absolute after:inset-x-1 after:-bottom-[5px] after:h-0.5 after:rounded-full after:transition-colors ${
+                  activeTab === tab
+                    ? "text-foreground after:bg-foreground"
+                    : "text-muted-foreground after:bg-transparent hover:text-foreground hover:after:bg-muted-foreground/40"
+                }`}
+              >
+                {tab === "code" ? "Code" : "Preview"}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <span className="font-mono text-xs font-medium text-muted-foreground">
+            {language || "code"}
+          </span>
+        )}
+        <div className="flex items-center gap-1">
+          {isHtml && (
+            <span className="mr-1 font-mono text-xs text-muted-foreground">{language}</span>
           )}
-          {copied ? "Copied" : "Copy"}
-        </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-6 gap-1 px-1.5 text-xs text-muted-foreground"
+            onClick={copy}
+          >
+            {copied ? (
+              <RiCheckLine className="size-3.5 text-green-500" />
+            ) : (
+              <RiClipboardLine className="size-3.5" />
+            )}
+            {copied ? "Copied" : "Copy"}
+          </Button>
+        </div>
       </div>
-      <pre className="overflow-x-auto p-3 font-mono text-[13px] leading-relaxed">
-        {code}
-      </pre>
+      {activeTab === "preview" && isHtml ? (
+        <HtmlPreview code={code} />
+      ) : (
+        <pre
+          className={`${
+            isHtml ? "overflow-x-auto" : "max-h-[min(65vh,720px)] overflow-auto"
+          } p-3 font-mono text-[13px] leading-relaxed`}
+        >
+          {code}
+        </pre>
+      )}
     </div>
   );
 }

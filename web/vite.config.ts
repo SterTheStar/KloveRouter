@@ -1,40 +1,30 @@
+import { fileURLToPath, URL } from "node:url";
 import { defineConfig, loadEnv } from "vite";
-import react from "@vitejs/plugin-react";
-import path from "node:path";
 import tailwindcss from "@tailwindcss/vite";
-
-const rootDir = path.resolve(__dirname, "..");
+import react from "@vitejs/plugin-react";
 
 export default defineConfig(({ mode }) => {
-  // Vite runs with cwd = web/, so resolve PORT from the project root .env
-  // (loaded by Bun for the backend) plus the process environment.
-  const env = loadEnv(mode, rootDir, "");
-  const backendPort = process.env.PORT || env.PORT || "3000";
-  const proxyTarget = `http://localhost:${backendPort}`;
+  const env = loadEnv(mode, fileURLToPath(new URL("..", import.meta.url)), "");
+  const backendPort = env.PORT || "3000";
 
   return {
     plugins: [react(), tailwindcss()],
     resolve: {
       alias: {
-        "@": path.resolve(__dirname, "./src"),
+        "@": fileURLToPath(new URL("./src", import.meta.url)),
       },
     },
     server: {
-      port: 5173,
       proxy: {
         "/api": {
-          target: proxyTarget,
+          target: `http://localhost:${backendPort}`,
           changeOrigin: true,
         },
         "/v1": {
-          target: proxyTarget,
+          target: `http://localhost:${backendPort}`,
           changeOrigin: true,
         },
       },
-    },
-    build: {
-      outDir: "dist",
-      emptyOutDir: true,
     },
   };
 });
