@@ -35,19 +35,33 @@ export default function ChatPage({
     localStorage.getItem(MODEL_STORAGE_KEY),
   );
   const [selectedReasoningEffort, setSelectedReasoningEffort] = useState<string | null>(null);
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [messagesByChat, setMessagesByChat] = useState<Record<string, ChatMessage[]>>({});
   const [input, setInput] = useState("");
   const [attachments, setAttachments] = useState<ChatAttachmentPreview[]>([]);
-  const [usage, setUsage] = useState({
+  const [usageByChat, setUsageByChat] = useState<Record<string, {
+    prompt_tokens: number;
+    completion_tokens: number;
+    cache_read_tokens: number;
+    cache_write_tokens: number;
+  }>>({});
+  const [streamingByChat, setStreamingByChat] = useState<Record<string, boolean>>({});
+  const controllersRef = useRef(new Map<string, AbortController>());
+  const streamingChatsRef = useRef(new Set<string>());
+  const skipNextChatLoadRef = useRef<string | null>(null);
+  const messagesRef = useRef<ChatMessage[]>([]);
+  const messages = chatId ? messagesByChat[chatId] ?? [] : [];
+  const usage = chatId ? usageByChat[chatId] ?? {
     prompt_tokens: 0,
     completion_tokens: 0,
     cache_read_tokens: 0,
     cache_write_tokens: 0,
-  });
-  const [streaming, setStreaming] = useState(false);
-  const abortRef = useRef<AbortController | null>(null);
-  const skipNextChatLoadRef = useRef<string | null>(null);
-  const messagesRef = useRef<ChatMessage[]>([]);
+  } : {
+    prompt_tokens: 0,
+    completion_tokens: 0,
+    cache_read_tokens: 0,
+    cache_write_tokens: 0,
+  };
+  const streaming = Boolean(chatId && streamingByChat[chatId]);
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
   const endRef = useRef<HTMLDivElement | null>(null);
   const autoScrollRef = useRef(true);
@@ -110,10 +124,7 @@ export default function ChatPage({
   }, []);
 
   useEffect(() => {
-    if (!chatId) {
-      setMessages([]);
-      return;
-    }
+    if (!chatId) return;
     let cancelled = false;
     if (skipNextChatLoadRef.current === chatId) {
       skipNextChatLoadRef.current = null;
@@ -129,31 +140,41 @@ export default function ChatPage({
     const loadChat = () => {
       chatsApi.get(chatId).then((result) => {
         if (cancelled) return;
-        setMessages(result.messages);
+        if (!streamingChatsRef.current.has(chatId)) {
+          setMessagesByChat((previous) => ({ ...previous, [chatId]: result.messages }));
+        }
         const latestStats = [...result.messages]
           .reverse()
           .find((message) => message.role === "assistant" && message.stats)?.stats;
         if (latestStats) {
-          setUsage({
-            prompt_tokens: latestStats.prompt_tokens,
-            completion_tokens: latestStats.completion_tokens,
-            cache_read_tokens: latestStats.cache_read_tokens ?? 0,
-            cache_write_tokens: latestStats.cache_write_tokens ?? 0,
-          });
+          setUsageByChat((previous) => ({
+            ...previous,
+            [chatId]: {
+              prompt_tokens: latestStats.prompt_tokens,
+              completion_tokens: latestStats.completion_tokens,
+              cache_read_tokens: latestStats.cache_read_tokens ?? 0,
+              cache_write_tokens: latestStats.cache_write_tokens ?? 0,
+            },
+          }));
         } else if (result.messages.length === 0) {
-          setUsage({
-            prompt_tokens: 0,
-            completion_tokens: 0,
-            cache_read_tokens: 0,
-            cache_write_tokens: 0,
-          });
+          setUsageByChat((previous) => ({
+            ...previous,
+            [chatId]: {
+              prompt_tokens: 0,
+              completion_tokens: 0,
+              cache_read_tokens: 0,
+              cache_write_tokens: 0,
+            },
+          }));
         }
         if (!hasPendingResponse(result.messages) && pollTimer !== null) {
           window.clearInterval(pollTimer);
           pollTimer = null;
         }
       }).catch(() => {
-        if (!cancelled) setMessages([]);
+        if (!cancelled && !streamingChatsRef.current.has(chatId)) {
+          setMessagesByChat((previous) => ({ ...previous, [chatId]: [] }));
+        }
       });
     };
 
@@ -189,12 +210,13 @@ export default function ChatPage({
   }, [messages]);
 
   const updateMessage = useCallback(
-    (id: string, updater: (message: ChatMessage) => ChatMessage) => {
-      setMessages((prev) =>
-        prev.map((message) =>
+    (chatId: string, id: string, updater: (message: ChatMessage) => ChatMessage) => {
+      setMessagesByChat((previous) => ({
+        ...previous,
+        [chatId]: (previous[chatId] ?? []).map((message) =>
           message.id === id ? updater(message) : message,
         ),
-      );
+      }));
     },
     [],
   );
@@ -210,8 +232,9 @@ export default function ChatPage({
   };
 
   const stop = () => {
-    abortRef.current?.abort();
-    setStreaming(false);
+    if (!chatId) return;
+    controllersRef.current.get(chatId)?.abort();
+    setStreamingByChat((previous) => ({ ...previous, [chatId]: false }));
   };
 
   const addFiles = async (files: FileList | null) => {
@@ -303,15 +326,23 @@ export default function ChatPage({
     if (activeChatId && messagesRef.current.length === 0) {
       onTitleGenerationStart(activeChatId);
     }
-    setMessages((prev) => [...prev, userMessage, assistantMessage]);
+    setMessagesByChat((previous) => ({
+      ...previous,
+      [activeChatId!]: [
+        ...(previous[activeChatId!] ?? messagesRef.current),
+        userMessage,
+        assistantMessage,
+      ],
+    }));
     setInput("");
     setAttachments([]);
     // Keep the previous context visible until this request reports new usage.
     // Providers usually send usage only in the final stream chunk.
-    setStreaming(true);
+    streamingChatsRef.current.add(activeChatId!);
+    setStreamingByChat((previous) => ({ ...previous, [activeChatId!]: true }));
 
     const controller = new AbortController();
-    abortRef.current = controller;
+    controllersRef.current.set(activeChatId!, controller);
 
     try {
       const response = await chat.completions(
@@ -326,39 +357,51 @@ export default function ChatPage({
       );
       await readChatStream(response, {
         onContent: (delta) =>
-          updateMessage(assistantMessage.id, (message) => ({
+          updateMessage(activeChatId!, assistantMessage.id, (message) => ({
             ...message,
             content:
               (typeof message.content === "string" ? message.content : "") +
               delta,
           })),
         onReasoning: (delta) =>
-          updateMessage(assistantMessage.id, (message) => ({
+          updateMessage(activeChatId!, assistantMessage.id, (message) => ({
             ...message,
             reasoning: (message.reasoning ?? "") + delta,
           })),
         onUsage: (nextUsage) =>
-          setUsage((previous) => ({
-            prompt_tokens: Number(nextUsage.prompt_tokens ?? previous.prompt_tokens),
-            completion_tokens: Number(nextUsage.completion_tokens ?? previous.completion_tokens),
-            cache_read_tokens: Number(nextUsage.cache_read_tokens ?? previous.cache_read_tokens),
-            cache_write_tokens: Number(nextUsage.cache_write_tokens ?? previous.cache_write_tokens),
-          })),
+          setUsageByChat((previous) => {
+            const current = previous[activeChatId!] ?? usage;
+            return {
+              ...previous,
+              [activeChatId!]: {
+                prompt_tokens: Number(nextUsage.prompt_tokens ?? current.prompt_tokens),
+                completion_tokens: Number(nextUsage.completion_tokens ?? current.completion_tokens),
+                cache_read_tokens: Number(nextUsage.cache_read_tokens ?? current.cache_read_tokens),
+                cache_write_tokens: Number(nextUsage.cache_write_tokens ?? current.cache_write_tokens),
+              },
+            };
+          }),
         onStats: (stats) => {
-          setUsage((previous) => ({
-            prompt_tokens: stats.prompt_tokens,
-            completion_tokens: stats.completion_tokens,
-            cache_read_tokens: stats.cache_read_tokens ?? previous.cache_read_tokens,
-            cache_write_tokens: stats.cache_write_tokens ?? previous.cache_write_tokens,
-          }));
-          updateMessage(assistantMessage.id, (message) => ({
+          setUsageByChat((previous) => {
+            const current = previous[activeChatId!] ?? usage;
+            return {
+              ...previous,
+              [activeChatId!]: {
+                prompt_tokens: stats.prompt_tokens,
+                completion_tokens: stats.completion_tokens,
+                cache_read_tokens: stats.cache_read_tokens ?? current.cache_read_tokens,
+                cache_write_tokens: stats.cache_write_tokens ?? current.cache_write_tokens,
+              },
+            };
+          });
+          updateMessage(activeChatId!, assistantMessage.id, (message) => ({
             ...message,
             stats,
           }));
         },
         onTitle,
         onError: (errorMessage) =>
-          updateMessage(assistantMessage.id, (message) => ({
+          updateMessage(activeChatId!, assistantMessage.id, (message) => ({
             ...message,
             error: message.error
               ? `${message.error}\n${errorMessage}`
@@ -367,14 +410,17 @@ export default function ChatPage({
       });
     } catch (error: any) {
       if (error?.name !== "AbortError") {
-        updateMessage(assistantMessage.id, (message) => ({
+        updateMessage(activeChatId!, assistantMessage.id, (message) => ({
           ...message,
           error: error?.message ?? "Chat request failed",
         }));
       }
     } finally {
-      if (abortRef.current === controller) abortRef.current = null;
-      setStreaming(false);
+      if (controllersRef.current.get(activeChatId!) === controller) {
+        controllersRef.current.delete(activeChatId!);
+        streamingChatsRef.current.delete(activeChatId!);
+        setStreamingByChat((previous) => ({ ...previous, [activeChatId!]: false }));
+      }
     }
   };
 
