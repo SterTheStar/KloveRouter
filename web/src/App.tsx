@@ -26,7 +26,7 @@ export default function App() {
   const [currentPage, setCurrentPage] = useState<Page>("dashboard");
   const [chatSessions, setChatSessions] = useState<ChatSession[]>([]);
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
-  const [generatingChatId, setGeneratingChatId] = useState<string | null>(null);
+  const [generatingChats, setGeneratingChats] = useState<Record<string, boolean>>({});
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const touchStart = useRef<{ x: number; y: number } | null>(null);
   const [selectedProviderId, setSelectedProviderId] = useState<string | null>(
@@ -154,7 +154,7 @@ export default function App() {
               onDelete={deleteChat}
               onBack={() => handleNavigate("dashboard")}
               onLogout={logout}
-              generatingChatId={generatingChatId}
+              generatingChats={generatingChats}
               mobileOpen={mobileSidebarOpen}
             />
           ) : (
@@ -182,7 +182,11 @@ export default function App() {
               <ChatPage
                 chatId={activeChatId}
                 onTitle={({ chat_id, title }) => {
-                  setGeneratingChatId((current) => current === chat_id ? null : current);
+                  setGeneratingChats((current) => {
+                    const next = { ...current };
+                    delete next[chat_id];
+                    return next;
+                  });
                   setChatSessions((current) => {
                     const existing = current.find((chat) => chat.id === chat_id);
                     const updated = existing
@@ -197,7 +201,9 @@ export default function App() {
                     return [updated, ...current.filter((chat) => chat.id !== chat_id)];
                   });
                 }}
-                onTitleGenerationStart={(id) => setGeneratingChatId(id)}
+                onTitleGenerationStart={(id) => {
+                  setGeneratingChats((current) => ({ ...current, [id]: true }));
+                }}
                 onChatCreated={(id) => {
                   setActiveChatId(id);
                   chatsApi.list().then((list) => {
