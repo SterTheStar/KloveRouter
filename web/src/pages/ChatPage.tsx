@@ -38,6 +38,12 @@ export default function ChatPage({
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [attachments, setAttachments] = useState<ChatAttachmentPreview[]>([]);
+  const [usage, setUsage] = useState({
+    prompt_tokens: 0,
+    completion_tokens: 0,
+    cache_read_tokens: 0,
+    cache_write_tokens: 0,
+  });
   const [streaming, setStreaming] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const skipNextChatLoadRef = useRef<string | null>(null);
@@ -124,6 +130,24 @@ export default function ChatPage({
       chatsApi.get(chatId).then((result) => {
         if (cancelled) return;
         setMessages(result.messages);
+        const latestStats = [...result.messages]
+          .reverse()
+          .find((message) => message.role === "assistant" && message.stats)?.stats;
+        if (latestStats) {
+          setUsage({
+            prompt_tokens: latestStats.prompt_tokens,
+            completion_tokens: latestStats.completion_tokens,
+            cache_read_tokens: latestStats.cache_read_tokens ?? 0,
+            cache_write_tokens: latestStats.cache_write_tokens ?? 0,
+          });
+        } else if (result.messages.length === 0) {
+          setUsage({
+            prompt_tokens: 0,
+            completion_tokens: 0,
+            cache_read_tokens: 0,
+            cache_write_tokens: 0,
+          });
+        }
         if (!hasPendingResponse(result.messages) && pollTimer !== null) {
           window.clearInterval(pollTimer);
           pollTimer = null;
@@ -282,6 +306,8 @@ export default function ChatPage({
     setMessages((prev) => [...prev, userMessage, assistantMessage]);
     setInput("");
     setAttachments([]);
+    // Keep the previous context visible until this request reports new usage.
+    // Providers usually send usage only in the final stream chunk.
     setStreaming(true);
 
     const controller = new AbortController();
@@ -311,14 +337,25 @@ export default function ChatPage({
             ...message,
             reasoning: (message.reasoning ?? "") + delta,
           })),
-        onUsage: () => {
-          /* The final klove_stats event carries the authoritative counts. */
-        },
-        onStats: (stats) =>
+        onUsage: (nextUsage) =>
+          setUsage((previous) => ({
+            prompt_tokens: Number(nextUsage.prompt_tokens ?? previous.prompt_tokens),
+            completion_tokens: Number(nextUsage.completion_tokens ?? previous.completion_tokens),
+            cache_read_tokens: Number(nextUsage.cache_read_tokens ?? previous.cache_read_tokens),
+            cache_write_tokens: Number(nextUsage.cache_write_tokens ?? previous.cache_write_tokens),
+          })),
+        onStats: (stats) => {
+          setUsage((previous) => ({
+            prompt_tokens: stats.prompt_tokens,
+            completion_tokens: stats.completion_tokens,
+            cache_read_tokens: stats.cache_read_tokens ?? previous.cache_read_tokens,
+            cache_write_tokens: stats.cache_write_tokens ?? previous.cache_write_tokens,
+          }));
           updateMessage(assistantMessage.id, (message) => ({
             ...message,
             stats,
-          })),
+          }));
+        },
         onTitle,
         onError: (errorMessage) =>
           updateMessage(assistantMessage.id, (message) => ({
@@ -408,6 +445,11 @@ export default function ChatPage({
             reasoningEfforts={reasoningEfforts}
             selectedReasoningEffort={selectedReasoningEffort}
             onSelectReasoningEffort={onSelectReasoningEffort}
+            contextWindow={selectedModelRecord?.context_window}
+            promptTokens={usage.prompt_tokens}
+            completionTokens={usage.completion_tokens}
+            cacheReadTokens={usage.cache_read_tokens}
+            cacheWriteTokens={usage.cache_write_tokens}
             streaming={streaming}
           />
         </div>

@@ -7,6 +7,7 @@ import {
 import { Button } from "@/components/ui/button";
 import ModelInput from "./ModelInput";
 import ReasoningInput from "./ReasoningInput";
+import ContextUsageIndicator from "./ContextUsageIndicator";
 import type {
   ChatAttachmentPreview,
   ModelWithProvider,
@@ -27,6 +28,11 @@ type ChatComposerProps = {
   reasoningEfforts: ModelWithProvider["reasoning_efforts"];
   selectedReasoningEffort: string | null;
   onSelectReasoningEffort: (effort: string) => void;
+  contextWindow: number | null | undefined;
+  promptTokens: number;
+  completionTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
   streaming: boolean;
 };
 
@@ -45,6 +51,11 @@ export default function ChatComposer({
   reasoningEfforts,
   selectedReasoningEffort,
   onSelectReasoningEffort,
+  contextWindow,
+  promptTokens,
+  completionTokens,
+  cacheReadTokens,
+  cacheWriteTokens,
   streaming,
 }: ChatComposerProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -112,6 +123,13 @@ export default function ChatComposer({
               >
                 <AddLine className="size-[18px]" />
               </Button>
+              <ContextUsageIndicator
+                contextWindow={contextWindow}
+                promptTokens={promptTokens}
+                completionTokens={completionTokens}
+                cacheReadTokens={cacheReadTokens}
+                cacheWriteTokens={cacheWriteTokens}
+              />
             </div>
             <div className="flex shrink-0 items-center gap-2">
               <ModelInput

@@ -26,7 +26,13 @@ export function formatTps(tps: number): string {
 export interface ChatStreamHandlers {
   onContent: (delta: string) => void;
   onReasoning: (delta: string) => void;
-  onUsage: (usage: { prompt_tokens?: number; completion_tokens?: number }) => void;
+  onUsage: (usage: {
+    prompt_tokens?: number;
+    completion_tokens?: number;
+    total_tokens?: number;
+    cache_read_tokens?: number;
+    cache_write_tokens?: number;
+  }) => void;
   onStats: (stats: ChatStats) => void;
   onTitle: (title: { chat_id: string; title: string }) => void;
   onError: (message: string) => void;
@@ -70,6 +76,16 @@ export async function readChatStream(
         handlers.onTitle({ chat_id: String(chunk.chat_id), title: String(chunk.title) });
         continue;
       }
+      if (chunk.type === "klove_usage") {
+        handlers.onUsage({
+          prompt_tokens: chunk.prompt_tokens,
+          completion_tokens: chunk.completion_tokens,
+          total_tokens: chunk.total_tokens,
+          cache_read_tokens: chunk.cache_read_tokens,
+          cache_write_tokens: chunk.cache_write_tokens,
+        });
+        continue;
+      }
       if (chunk.type === "klove_stats") {
         handlers.onStats({
           model: chunk.model ?? null,
@@ -77,6 +93,8 @@ export async function readChatStream(
           completion_tokens: Number(chunk.completion_tokens ?? 0),
           total_tokens: Number(chunk.total_tokens ?? 0),
           duration_ms: Number(chunk.duration_ms ?? 0),
+          cache_read_tokens: Number(chunk.cache_read_tokens ?? 0),
+          cache_write_tokens: Number(chunk.cache_write_tokens ?? 0),
           tps: Number(chunk.tps ?? 0),
         });
         continue;
@@ -93,6 +111,7 @@ export async function readChatStream(
         handlers.onUsage({
           prompt_tokens: chunk.usage.prompt_tokens,
           completion_tokens: chunk.usage.completion_tokens,
+          total_tokens: chunk.usage.total_tokens,
         });
       }
       const delta = chunk.choices?.[0]?.delta;

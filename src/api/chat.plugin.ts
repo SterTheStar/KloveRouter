@@ -50,10 +50,13 @@ function chatStatsStream(
   let buffer = "";
   let promptTokens = 0;
   let completionTokens = 0;
+  let cacheReadTokens = 0;
+  let cacheWriteTokens = 0;
   let streamedChars = 0;
   let assistantContent = "";
   let assistantReasoning = "";
   let sawUsage = false;
+  let usageEmitted = false;
   let statsEmitted = false;
   let titleEmitted = false;
   let lastProgressPersist = start;
@@ -94,6 +97,8 @@ function chatStatsStream(
       prompt_tokens: promptTokens,
       completion_tokens: completionTokens,
       total_tokens: promptTokens + completionTokens,
+      cache_read_tokens: cacheReadTokens,
+      cache_write_tokens: cacheWriteTokens,
       duration_ms: durationMs,
       tps,
     };
@@ -107,7 +112,20 @@ function chatStatsStream(
     controller.enqueue(encoder.encode(statsEvent(stats)));
   };
 
-  const sniff = (chunk: any) => {
+  const emitUsage = (controller: ReadableStreamDefaultController) => {
+    if (usageEmitted) return;
+    usageEmitted = true;
+    controller.enqueue(encoder.encode(statsEvent({
+      type: "klove_usage",
+      prompt_tokens: promptTokens,
+      completion_tokens: completionTokens,
+      total_tokens: promptTokens + completionTokens,
+      cache_read_tokens: cacheReadTokens,
+      cache_write_tokens: cacheWriteTokens,
+    })));
+  };
+
+  const sniff = (chunk: any, controller: ReadableStreamDefaultController) => {
     const usage = chunk?.usage;
     if (usage) {
       sawUsage = true;
@@ -117,6 +135,22 @@ function chatStatsStream(
       completionTokens = Number(
         usage.completion_tokens ?? usage.output_tokens ?? completionTokens,
       );
+      cacheReadTokens = Number(
+        usage.prompt_tokens_details?.cached_tokens ??
+          usage.input_tokens_details?.cached_tokens ??
+          usage.cache_read_input_tokens ??
+          usage.cache_read_tokens ??
+          usage.cached_tokens ??
+          0,
+      );
+      cacheWriteTokens = Number(
+        usage.cache_creation_input_tokens ??
+          usage.cache_creation_input_tokens_details?.cached_tokens ??
+          usage.cache_write_tokens ??
+          usage.cache_write_input_tokens ??
+          0,
+      );
+      emitUsage(controller);
     }
     for (const choice of chunk?.choices ?? []) {
       const delta = choice?.delta;
@@ -173,7 +207,7 @@ function chatStatsStream(
                 chunk.usage ||
                 Array.isArray(chunk.choices)
               ) {
-                sniff(chunk);
+                sniff(chunk, controller);
                 persistProgress();
               }
               controller.enqueue(encoder.encode(`data: ${raw}\n\n`));
