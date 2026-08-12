@@ -158,6 +158,35 @@ export function initSchema(db: Database): void {
       UNIQUE(model_id, threshold_tokens)
     );
 
+    CREATE TABLE IF NOT EXISTS chat_sessions (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL DEFAULT 'New chat',
+      model TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_chat_sessions_updated_at
+      ON chat_sessions(updated_at DESC);
+
+    CREATE TABLE IF NOT EXISTS chat_messages (
+      id TEXT PRIMARY KEY,
+      chat_id TEXT NOT NULL,
+      role TEXT NOT NULL,
+      content TEXT NOT NULL DEFAULT '',
+      attachments TEXT,
+      reasoning TEXT,
+      stats TEXT,
+      error TEXT,
+      sequence INTEGER NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (chat_id) REFERENCES chat_sessions(id) ON DELETE CASCADE,
+      UNIQUE(chat_id, sequence)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_chat_messages_chat_sequence
+      ON chat_messages(chat_id, sequence);
+
     CREATE TABLE IF NOT EXISTS request_logs (
       id TEXT PRIMARY KEY,
       provider_id TEXT,
@@ -215,6 +244,13 @@ export function initSchema(db: Database): void {
   if (!modelCols.find((c) => c.name === "updated_at")) {
     db.exec("ALTER TABLE models ADD COLUMN updated_at TEXT NOT NULL DEFAULT ''");
     db.exec("UPDATE models SET updated_at = created_at WHERE updated_at = ''");
+  }
+
+  const chatMessageCols = db.query("PRAGMA table_info(chat_messages)").all() as {
+    name: string;
+  }[];
+  if (!chatMessageCols.find((c) => c.name === "reasoning")) {
+    db.exec("ALTER TABLE chat_messages ADD COLUMN reasoning TEXT");
   }
   db.exec(`
     CREATE TRIGGER IF NOT EXISTS models_fill_updated_at

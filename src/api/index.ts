@@ -5,6 +5,8 @@ import { keysPlugin } from "./keys.plugin";
 import { settingsPlugin } from "./settings.plugin";
 import { proxyPlugin } from "./proxy.plugin";
 import { statsPlugin } from "./stats.plugin";
+import { chatPlugin } from "./chat.plugin";
+import { chatsPlugin } from "./chats.plugin";
 import {
   codexPlugin,
   codexPublicPlugin,
@@ -30,4 +32,6 @@ export {
   freebuffUsagePlugin,
   requestLogsPlugin,
   rtkPlugin,
+  chatPlugin,
+  chatsPlugin,
 };

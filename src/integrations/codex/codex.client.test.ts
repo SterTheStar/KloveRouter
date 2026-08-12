@@ -88,6 +88,32 @@ describe("codexStreamToOpenAI", () => {
     }
   });
 
+  test("does not enqueue or close after the client cancels", async () => {
+    let releaseUpstream!: () => void;
+    const blocked = new Promise<void>((resolve) => {
+      releaseUpstream = resolve;
+    });
+    const source = new Response(
+      new ReadableStream({
+        async start(controller) {
+          controller.enqueue(
+            encoder.encode(
+              'data: {"type":"response.output_text.delta","delta":"partial"}\n\n',
+            ),
+          );
+          await blocked;
+          controller.close();
+        },
+      }),
+    );
+    const reader = codexStreamToOpenAI(source, "gpt-test").body!.getReader();
+
+    await reader.read();
+    await reader.cancel();
+    releaseUpstream();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+
   test("processes a final event without a trailing separator", async () => {
     const response = codexStreamToOpenAI(
       upstream(['data: {"type":"response.output_text.delta","delta":"last"}']),

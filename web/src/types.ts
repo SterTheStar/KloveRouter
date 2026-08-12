@@ -173,6 +173,7 @@ export interface AntigravityQuota {
 
 export type Page =
   | "dashboard"
+  | "chat"
   | "models"
   | "stats"
   | "usage"
@@ -209,6 +210,54 @@ export interface RequestLog {
 export interface UserProfile {
   name: string;
   avatar: string | null;
+}
+
+export interface ChatSession {
+  id: string;
+  title: string;
+  model: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PersistedChatMessage extends ChatMessage {
+  chat_id: string;
+  sequence: number;
+  created_at: string;
+}
+
+export interface ChatStats {
+  model: string | null;
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+  duration_ms: number;
+  tps: number;
+}
+
+export interface ChatContentPart {
+  type: "text" | "image_url";
+  text?: string;
+  image_url?: { url: string };
+}
+
+export interface ChatAttachmentPreview {
+  id: string;
+  name: string;
+  kind: "image" | "text";
+  mimeType: string;
+  data: string;
+  preview?: string;
+}
+
+export interface ChatMessage {
+  id: string;
+  role: "user" | "assistant";
+  content: string | ChatContentPart[];
+  attachments?: ChatAttachmentPreview[];
+  reasoning?: string;
+  stats?: ChatStats | null;
+  error?: string | null;
 }
 
 export interface RtkStatus {

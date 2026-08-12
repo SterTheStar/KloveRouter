@@ -1,5 +1,6 @@
 import {
   RiDashboardLine as DashboardLine,
+  RiChatAiLine as ChatAiLine,
   RiKey2Line as Key2Line,
   RiLogoutBoxRLine as LogoutBoxRLine,
   RiBubbleChartLine as BubbleChartLine,
@@ -15,6 +16,7 @@ import type { UserProfile } from "../types";
 
 const items = [
   { page: "dashboard" as Page, label: "Providers", icon: DashboardLine },
+  { page: "chat" as Page, label: "Chat", icon: ChatAiLine },
   { page: "models" as Page, label: "Models", icon: BubbleChartLine },
   { page: "stats" as Page, label: "Stats", icon: BarChartBoxLine },
   { page: "request-logs" as Page, label: "Request Logs", icon: FileListLine },
@@ -49,7 +51,7 @@ export default function Sidebar({
   profile: UserProfile;
 }) {
   return (
-    <aside className="hidden sticky top-0 h-svh w-64 shrink-0 flex-col border-r bg-sidebar text-sidebar-foreground md:flex">
+    <aside className="hidden sticky top-0 h-svh w-72 shrink-0 flex-col border-r bg-sidebar text-sidebar-foreground md:flex">
       <div className="flex h-16 items-center justify-center gap-3 px-5">
         <svg
           viewBox="0 0 16 16"
@@ -114,22 +116,24 @@ export default function Sidebar({
       </nav>
       <div className="p-3">
         <BuyMeACoffeeButton />
-        <div className="flex w-full items-center gap-2 rounded-xl bg-sidebar-accent/70 p-3 ring-1 ring-sidebar-border/60">
+        <div className="flex items-center gap-2 rounded-xl bg-sidebar-accent/70 p-2.5">
           <button
             type="button"
-            className="flex min-w-0 flex-1 items-center gap-3 rounded-md text-left"
             onClick={() => onNavigate("settings")}
+            className="flex min-w-0 flex-1 items-center gap-2 text-left"
           >
-            <DisplayAvatar name={profile.name} src={profile.avatar} className="size-10" />
-            <span className="min-w-0 flex-1 truncate text-sm font-medium">
-              {profile.name}
-            </span>
+            <DisplayAvatar
+              name={profile.name}
+              src={profile.avatar}
+              className="size-8"
+            />
+            <span className="truncate text-sm">{profile.name}</span>
           </button>
           <Button
             type="button"
             size="icon-sm"
             variant="ghost"
-            className="shrink-0 text-muted-foreground hover:text-destructive"
+            className="shrink-0"
             onClick={onLogout}
             title="Logout"
             aria-label="Logout"

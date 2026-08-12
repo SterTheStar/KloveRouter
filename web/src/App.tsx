@@ -3,12 +3,16 @@ import { RiLoader4Line as LoaderCircle } from "@remixicon/react";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useAuth } from "./hooks/useAuth";
 import Sidebar from "./components/Sidebar";
+import ChatSidebar from "./components/ChatSidebar";
+import { chats as chatsApi } from "./api/client";
+import type { ChatSession } from "./types";
 import LoginPage from "./pages/LoginPage";
 import DashboardPage from "./pages/DashboardPage";
 import ProviderDetailPage from "./pages/ProviderDetailPage";
 import ApiKeysPage from "./pages/ApiKeysPage";
 import SettingsPage from "./pages/SettingsPage";
 import ModelsPage from "./pages/ModelsPage";
+import ChatPage from "./pages/ChatPage";
 import StatsPage from "./pages/StatsPage";
 import UsageLimitsPage from "./pages/UsageLimitsPage";
 import RequestLogsPage from "./pages/RequestLogsPage";
@@ -20,6 +24,8 @@ import type { UserProfile } from "./types";
 export default function App() {
   const { isAuth, loading, error, login, logout } = useAuth();
   const [currentPage, setCurrentPage] = useState<Page>("dashboard");
+  const [chatSessions, setChatSessions] = useState<ChatSession[]>([]);
+  const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [selectedProviderId, setSelectedProviderId] = useState<string | null>(
     null,
   );
@@ -44,6 +50,14 @@ export default function App() {
         .catch(() => undefined);
   }, [isAuth]);
 
+  useEffect(() => {
+    if (!isAuth || currentPage !== "chat") return;
+    chatsApi.list().then((list) => {
+      setChatSessions(list);
+      setActiveChatId((current) => current && list.some((chat) => chat.id === current) ? current : list[0]?.id ?? null);
+    }).catch(() => setChatSessions([]));
+  }, [isAuth, currentPage]);
+
   const handleNavigate = (page: Page, providerId?: string) => {
     if (page === "provider-detail" && providerId) {
       setSelectedProviderId(providerId);
@@ -65,19 +79,63 @@ export default function App() {
   if (!isAuth)
     return <LoginPage onLogin={login} error={error} loading={loading} />;
 
+  const createChat = async () => {
+    const chat = await chatsApi.create();
+    setChatSessions((current) => [chat, ...current]);
+    setActiveChatId(chat.id);
+    handleNavigate("chat");
+  };
+  const renameChat = async (id: string, title: string) => {
+    const chat = await chatsApi.update(id, { title });
+    setChatSessions((current) => current.map((item) => item.id === id ? chat : item));
+  };
+  const deleteChat = async (id: string) => {
+    await chatsApi.remove(id);
+    const remaining = chatSessions.filter((chat) => chat.id !== id);
+    setChatSessions(remaining);
+    if (activeChatId === id) setActiveChatId(remaining[0]?.id ?? null);
+  };
+
   return (
     <ToastProvider>
       <TooltipProvider>
         <div className="flex min-h-svh bg-background text-foreground">
-          <Sidebar
-            currentPage={currentPage}
-            onNavigate={(page) => handleNavigate(page)}
-            onLogout={logout}
-            profile={profile}
-          />
+          {currentPage === "chat" ? (
+            <ChatSidebar
+              chats={chatSessions}
+              activeChatId={activeChatId}
+              profile={profile}
+              onNew={createChat}
+              onSelect={setActiveChatId}
+              onRename={renameChat}
+              onDelete={deleteChat}
+              onBack={() => handleNavigate("dashboard")}
+              onLogout={logout}
+            />
+          ) : (
+            <Sidebar
+              currentPage={currentPage}
+              onNavigate={(page) => handleNavigate(page)}
+              onLogout={logout}
+              profile={profile}
+            />
+          )}
           <main className="min-w-0 flex-1 overflow-auto">
             {currentPage === "dashboard" && (
               <DashboardPage onNavigate={handleNavigate} />
+            )}
+            {currentPage === "chat" && (
+              <ChatPage
+                chatId={activeChatId}
+                onChatCreated={(id) => {
+                  setActiveChatId(id);
+                  chatsApi.list().then((list) => {
+                    const created = list.find((chat) => chat.id === id);
+                    setChatSessions(created ? [created, ...list.filter((chat) => chat.id !== id)] : list);
+                  }).catch(() => undefined);
+                }}
+                username={profile.name}
+              />
             )}
             {currentPage === "provider-detail" && selectedProviderId && (
               <ProviderDetailPage

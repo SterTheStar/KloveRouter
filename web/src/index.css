@@ -118,6 +118,94 @@
   --sidebar-ring: oklch(0.556 0 0);
 }
 
+.chat-greeting-title {
+  font-family: "Playwrite NZ Basic", cursive;
+  font-weight: 400;
+  line-height: 1.35;
+}
+
+.chat-greeting-name {
+  color: var(--foreground);
+}
+
+.chat-greeting-hello {
+  position: relative;
+  display: inline-block;
+  color: var(--foreground);
+}
+
+.chat-greeting-hello::after {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  white-space: nowrap;
+  content: attr(data-text);
+  color: transparent;
+  background: linear-gradient(to top, #38bdf8 0%, #7dd3fc 52%, #bae6fd 100%);
+  background-size: 100% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  clip-path: polygon(
+    0 100%, 8% 100%, 16% 100%, 24% 100%, 32% 100%,
+    40% 100%, 48% 100%, 56% 100%, 64% 100%, 72% 100%,
+    80% 100%, 88% 100%, 100% 100%, 100% 100%, 0 100%
+  );
+  animation: chat-greeting-water 28s linear infinite;
+}
+
+@keyframes chat-greeting-water {
+  0%, 14% {
+    clip-path: polygon(0 100%, 10% 100%, 20% 100%, 30% 100%, 40% 100%, 50% 100%, 60% 100%, 70% 100%, 80% 100%, 90% 100%, 100% 100%, 100% 100%, 0 100%);
+  }
+  20% {
+    clip-path: polygon(0 65%, 10% 61%, 20% 66%, 30% 60%, 40% 64%, 50% 59%, 60% 65%, 70% 60%, 80% 64%, 90% 60%, 100% 64%, 100% 100%, 0 100%);
+  }
+  26% {
+    clip-path: polygon(0 18%, 10% 14%, 20% 19%, 30% 13%, 40% 18%, 50% 12%, 60% 18%, 70% 13%, 80% 18%, 90% 14%, 100% 18%, 100% 100%, 0 100%);
+  }
+  28%, 88% {
+    clip-path: polygon(0 3%, 10% 0%, 20% 4%, 30% 1%, 40% 4%, 50% 0%, 60% 4%, 70% 1%, 80% 4%, 90% 0%, 100% 3%, 100% 100%, 0 100%);
+  }
+  94%, 100% {
+    clip-path: polygon(0 100%, 10% 100%, 20% 100%, 30% 100%, 40% 100%, 50% 100%, 60% 100%, 70% 100%, 80% 100%, 90% 100%, 100% 100%, 100% 100%, 0 100%);
+  }
+}
+
+.chat-sidebar-item {
+  animation: chat-sidebar-item-in 220ms ease-out both;
+  transition: background-color 160ms ease, transform 160ms ease;
+}
+
+.chat-sidebar-item:hover {
+  transform: translateX(2px);
+}
+
+@keyframes chat-sidebar-item-in {
+  from {
+    opacity: 0;
+    transform: translateY(-5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-sidebar-item {
+    animation: none;
+    transition: none;
+  }
+
+  .chat-greeting-hello::after {
+    animation: none;
+    clip-path: polygon(0 100%, 100% 100%, 100% 100%, 0 100%);
+  }
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

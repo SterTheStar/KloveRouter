@@ -379,6 +379,45 @@ export const requestLogs = {
     }),
 };
 
+// Panel chat (streams OpenAI-compatible SSE via the panel JWT)
+export const chat = {
+  completions: (
+    body: {
+      model: string;
+      chat_id?: string;
+      attachments?: unknown[];
+      messages: { role: string; content: unknown }[];
+    },
+    signal?: AbortSignal,
+  ) =>
+    request<Response>("/api/chat/completions", {
+      method: "POST",
+      body: JSON.stringify(body),
+      signal,
+    }),
+};
+
+export const chats = {
+  list: () => request<import("../types").ChatSession[]>("/api/chats"),
+  create: (data: { title?: string; model?: string } = {}) =>
+    request<import("../types").ChatSession>("/api/chats", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  get: (id: string) =>
+    request<{
+      session: import("../types").ChatSession;
+      messages: import("../types").PersistedChatMessage[];
+    }>(`/api/chats/${id}`),
+  update: (id: string, data: { title?: string; model?: string }) =>
+    request<import("../types").ChatSession>(`/api/chats/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }),
+  remove: (id: string) =>
+    request<{ success: boolean }>(`/api/chats/${id}`, { method: "DELETE" }),
+};
+
 // RTK
 export const rtk = {
   status: () =>

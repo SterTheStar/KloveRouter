@@ -428,16 +428,19 @@ export function codexStreamToOpenAI(response: Response, model: string) {
   const id = `chatcmpl-${crypto.randomUUID()}`;
   const tools = new Map<number, { id?: string; name?: string }>();
   let buffer = "";
+  let cancelled = false;
   const streamStarted = performance.now();
   let firstDeltaLogged = false;
 
   return new Response(
     new ReadableStream({
       async start(controller) {
-        const emit = (chunk: any) =>
+        const emit = (chunk: any) => {
+          if (cancelled) return;
           controller.enqueue(
             encoder.encode(`data: ${JSON.stringify(chunk)}\n\n`),
           );
+        };
         const processEvent = (event: string) => {
           const raw = event
             .split(/\r\n|\r|\n/)
@@ -609,17 +612,21 @@ export function codexStreamToOpenAI(response: Response, model: string) {
             const events = buffer.split(/\r\n\r\n|\n\n|\r\r/);
             buffer = events.pop() ?? "";
             for (const event of events) processEvent(event);
-            if (done) {
-              if (buffer.trim()) processEvent(buffer);
+            if (done || cancelled) {
+              if (done && !cancelled && buffer.trim()) processEvent(buffer);
               break;
             }
           }
-          controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+          if (!cancelled) controller.enqueue(encoder.encode("data: [DONE]\n\n"));
         } catch (error: any) {
-          emit({ error: { message: error.message } });
+          if (!cancelled) emit({ error: { message: error.message } });
         } finally {
-          controller.close();
+          if (!cancelled) controller.close();
         }
+      },
+      cancel() {
+        cancelled = true;
+        void reader.cancel();
       },
     }),
     {

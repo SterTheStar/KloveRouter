@@ -20,6 +20,8 @@ import {
   freebuffUsagePlugin,
   requestLogsPlugin,
   rtkPlugin,
+  chatPlugin,
+  chatsPlugin,
 } from "./api";
 import { initRtkOnStartup, rtkPublicPlugin } from "./plugins/rtk";
 import { cavemanPublicPlugin, cavemanPlugin } from "./plugins/caveman";
@@ -99,7 +101,9 @@ const protectedApp = new Elysia()
   .use(codexPlugin)
   .use(rtkPlugin)
   .use(cavemanPlugin)
-  .use(customSkillsPlugin);
+  .use(customSkillsPlugin)
+  .use(chatsPlugin)
+  .use(chatPlugin);
 
 app.use(protectedApp as any);
 
@@ -132,7 +136,7 @@ if (!config.isDev) {
   }
 }
 
-app.listen({ port: config.port, hostname: "0.0.0.0", idleTimeout: 300 });
+app.listen({ port: config.port, hostname: "0.0.0.0", idleTimeout: 255 });
 
 const b = "\x1b[1m",
   r = "\x1b[0m";
