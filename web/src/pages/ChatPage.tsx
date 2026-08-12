@@ -34,6 +34,7 @@ export default function ChatPage({
   const [attachments, setAttachments] = useState<ChatAttachmentPreview[]>([]);
   const [streaming, setStreaming] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
+  const skipNextChatLoadRef = useRef<string | null>(null);
   const messagesRef = useRef<ChatMessage[]>([]);
   const endRef = useRef<HTMLDivElement | null>(null);
 
@@ -77,6 +78,10 @@ export default function ChatPage({
       return;
     }
     let cancelled = false;
+    if (skipNextChatLoadRef.current === chatId) {
+      skipNextChatLoadRef.current = null;
+      return;
+    }
     chatsApi.get(chatId).then((result) => {
       if (!cancelled) setMessages(result.messages);
     }).catch(() => {
@@ -193,6 +198,7 @@ export default function ChatPage({
     if (!activeChatId) {
       const created = await chatsApi.create({ model: selectedModel });
       activeChatId = created.id;
+      skipNextChatLoadRef.current = created.id;
       onChatCreated(created.id);
     }
     setMessages((prev) => [...prev, userMessage, assistantMessage]);

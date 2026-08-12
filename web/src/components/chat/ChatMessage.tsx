@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   RiArrowDownSLine as ChevronDown,
   RiArrowRightSLine as ChevronRight,
@@ -90,8 +90,13 @@ function ChatStatsFooter({
   );
 }
 
-function ThinkingBlock({ content }: { content: string }) {
-  const [open, setOpen] = useState(false);
+function ThinkingBlock({ content, streaming }: { content: string; streaming?: boolean }) {
+  const [open, setOpen] = useState(Boolean(streaming));
+
+  useEffect(() => {
+    setOpen(Boolean(streaming));
+  }, [streaming]);
+
   return (
     <div className="mb-2">
       <button
@@ -151,7 +156,7 @@ export default function ChatMessageView({
   return (
     <div className="min-w-0 max-w-full">
       {message.reasoning ? (
-        <ThinkingBlock content={message.reasoning} />
+        <ThinkingBlock content={message.reasoning} streaming={streaming} />
       ) : null}
       {typeof message.content === "string" && message.content ? (
         <Markdown content={message.content} />
