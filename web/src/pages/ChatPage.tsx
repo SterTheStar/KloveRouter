@@ -42,7 +42,9 @@ export default function ChatPage({
   const abortRef = useRef<AbortController | null>(null);
   const skipNextChatLoadRef = useRef<string | null>(null);
   const messagesRef = useRef<ChatMessage[]>([]);
+  const messagesContainerRef = useRef<HTMLDivElement | null>(null);
   const endRef = useRef<HTMLDivElement | null>(null);
+  const autoScrollRef = useRef(true);
 
   useEffect(() => {
     messagesRef.current = messages;
@@ -141,7 +143,25 @@ export default function ChatPage({
   }, [chatId]);
 
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    const container = messagesContainerRef.current;
+    if (!container) return;
+
+    const updateAutoScroll = () => {
+      const distanceFromBottom =
+        container.scrollHeight - container.scrollTop - container.clientHeight;
+      autoScrollRef.current = distanceFromBottom <= 48;
+    };
+
+    updateAutoScroll();
+    container.addEventListener("scroll", updateAutoScroll, { passive: true });
+    return () => container.removeEventListener("scroll", updateAutoScroll);
+  }, [chatId]);
+
+  useEffect(() => {
+    const container = messagesContainerRef.current;
+    if (autoScrollRef.current && container) {
+      container.scrollTo({ top: container.scrollHeight, behavior: "auto" });
+    }
   }, [messages]);
 
   const updateMessage = useCallback(
@@ -346,7 +366,7 @@ export default function ChatPage({
         </div>
       )}
 
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div ref={messagesContainerRef} className="min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto flex min-h-full w-full max-w-4xl flex-col gap-5 px-6 pb-6 pt-6">
           {messages.length === 0 ? (
             <div className="flex min-h-0 flex-1 items-center justify-center px-4 text-center">

@@ -159,7 +159,7 @@ export default function ChatMessageView({
         <ThinkingBlock content={message.reasoning} streaming={streaming} />
       ) : null}
       {typeof message.content === "string" && message.content ? (
-        <Markdown content={message.content} />
+        <Markdown content={message.content} streaming={streaming} />
       ) : streaming ? (
         <div className="flex items-center gap-2 py-1 text-muted-foreground">
           <LoaderCircle className="size-4 animate-spin" />

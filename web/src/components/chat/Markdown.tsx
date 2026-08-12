@@ -1,7 +1,14 @@
 import { Children, memo, useState, type ReactElement, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { RiCheckLine, RiClipboardLine } from "@remixicon/react";
+import {
+  RiCheckLine,
+  RiClipboardLine,
+  RiFullscreenExitLine,
+  RiFullscreenLine,
+  RiArrowDownSLine,
+  RiArrowUpSLine,
+} from "@remixicon/react";
 import { Button } from "@/components/ui/button";
 import { copyToClipboard } from "@/lib/clipboard";
 import { HtmlPreview } from "./HtmlPreview";
@@ -9,13 +16,18 @@ import { HtmlPreview } from "./HtmlPreview";
 function CodeBlock({
   language,
   code,
+  streaming,
 }: {
   language: string;
   code: string;
+  streaming?: boolean;
 }) {
   const [copied, setCopied] = useState(false);
   const [activeTab, setActiveTab] = useState<"code" | "preview">("code");
+  const [expanded, setExpanded] = useState(false);
+  const [previewMaximized, setPreviewMaximized] = useState(false);
   const isHtml = /^(html?|xhtml)$/i.test(language);
+  const isLongCode = code.split("\n").length > 24;
 
   const copy = async () => {
     try {
@@ -28,8 +40,14 @@ function CodeBlock({
   };
 
   return (
-    <div className="my-3 overflow-hidden rounded-lg border bg-muted/40 dark:bg-muted/20">
-      <div className="flex items-center justify-between border-b bg-muted/60 py-1 pr-1 pl-3 dark:bg-muted/30">
+    <div
+      className={
+        previewMaximized && isHtml && activeTab === "preview"
+          ? "fixed inset-3 z-50 flex flex-col overflow-hidden rounded-lg border bg-muted shadow-2xl dark:bg-muted/20"
+          : "my-3 overflow-hidden rounded-lg border bg-muted/40 dark:bg-muted/20"
+      }
+    >
+      <div className="flex shrink-0 items-center justify-between border-b bg-muted py-1 pr-1 pl-3 dark:bg-muted">
         {isHtml ? (
           <div className="flex items-center gap-1" role="tablist" aria-label="Codebox view">
             {(["code", "preview"] as const).map((tab) => (
@@ -58,6 +76,24 @@ function CodeBlock({
           {isHtml && (
             <span className="mr-1 font-mono text-xs text-muted-foreground">{language}</span>
           )}
+          {isHtml && activeTab === "preview" && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-6 gap-1 px-1.5 text-xs text-muted-foreground"
+              onClick={() => setPreviewMaximized((current) => !current)}
+              title={previewMaximized ? "Restore preview" : "Maximize preview"}
+              aria-label={previewMaximized ? "Restore preview" : "Maximize preview"}
+            >
+              {previewMaximized ? (
+                <RiFullscreenExitLine className="size-3.5" />
+              ) : (
+                <RiFullscreenLine className="size-3.5" />
+              )}
+              {previewMaximized ? "Restore" : "Maximize"}
+            </Button>
+          )}
           <Button
             type="button"
             variant="ghost"
@@ -75,15 +111,38 @@ function CodeBlock({
         </div>
       </div>
       {activeTab === "preview" && isHtml ? (
-        <HtmlPreview code={code} />
+        <HtmlPreview
+          code={code}
+          className={previewMaximized ? "min-h-0 flex-1" : undefined}
+        />
       ) : (
-        <pre
-          className={`${
-            isHtml ? "overflow-x-auto" : "max-h-[min(65vh,720px)] overflow-auto"
-          } p-3 font-mono text-[13px] leading-relaxed`}
-        >
-          {code}
-        </pre>
+        <>
+          <pre
+            className={`${
+              expanded || streaming
+                ? "overflow-x-auto"
+                : "max-h-[16rem] overflow-hidden"
+            } p-3 font-mono text-[13px] leading-relaxed`}
+          >
+            {code}
+          </pre>
+          {isLongCode && !streaming && (
+            <div className="flex justify-center px-3 py-1.5">
+              <button
+                type="button"
+                onClick={() => setExpanded((current) => !current)}
+                className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground"
+              >
+                {expanded ? (
+                  <RiArrowUpSLine className="size-4" />
+                ) : (
+                  <RiArrowDownSLine className="size-4" />
+                )}
+                {expanded ? "Show less" : "Show more"}
+              </button>
+            </div>
+          )}
+        </>
       )}
     </div>
   );
@@ -97,8 +156,10 @@ const headingClass =
 
 export const Markdown = memo(function Markdown({
   content,
+  streaming = false,
 }: {
   content: string;
+  streaming?: boolean;
 }) {
   return (
     <div className="min-w-0 space-y-2.5 text-sm leading-relaxed text-foreground [&_*:last-child]:mb-0">
@@ -117,7 +178,7 @@ export const Markdown = memo(function Markdown({
               /\n$/,
               "",
             );
-            return <CodeBlock language={language} code={code} />;
+            return <CodeBlock language={language} code={code} streaming={streaming} />;
           },
           code: ({ className, children }) => {
             // Block code is handled entirely by the `pre` override above.
