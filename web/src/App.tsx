@@ -26,6 +26,7 @@ export default function App() {
   const [currentPage, setCurrentPage] = useState<Page>("dashboard");
   const [chatSessions, setChatSessions] = useState<ChatSession[]>([]);
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
+  const [generatingChatId, setGeneratingChatId] = useState<string | null>(null);
   const [selectedProviderId, setSelectedProviderId] = useState<string | null>(
     null,
   );
@@ -111,6 +112,7 @@ export default function App() {
               onDelete={deleteChat}
               onBack={() => handleNavigate("dashboard")}
               onLogout={logout}
+              generatingChatId={generatingChatId}
             />
           ) : (
             <Sidebar
@@ -127,6 +129,23 @@ export default function App() {
             {currentPage === "chat" && (
               <ChatPage
                 chatId={activeChatId}
+                onTitle={({ chat_id, title }) => {
+                  setGeneratingChatId((current) => current === chat_id ? null : current);
+                  setChatSessions((current) => {
+                    const existing = current.find((chat) => chat.id === chat_id);
+                    const updated = existing
+                      ? { ...existing, title }
+                      : {
+                          id: chat_id,
+                          title,
+                          model: "",
+                          created_at: new Date().toISOString(),
+                          updated_at: new Date().toISOString(),
+                        };
+                    return [updated, ...current.filter((chat) => chat.id !== chat_id)];
+                  });
+                }}
+                onTitleGenerationStart={(id) => setGeneratingChatId(id)}
                 onChatCreated={(id) => {
                   setActiveChatId(id);
                   chatsApi.list().then((list) => {

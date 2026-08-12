@@ -6,6 +6,7 @@ import {
 } from "@remixicon/react";
 import { Button } from "@/components/ui/button";
 import ModelInput from "./ModelInput";
+import ReasoningInput from "./ReasoningInput";
 import type {
   ChatAttachmentPreview,
   ModelWithProvider,
@@ -23,6 +24,9 @@ type ChatComposerProps = {
   models: ModelWithProvider[];
   selectedModel: string | null;
   onSelectModel: (id: string) => void;
+  reasoningEfforts: ModelWithProvider["reasoning_efforts"];
+  selectedReasoningEffort: string | null;
+  onSelectReasoningEffort: (effort: string) => void;
   streaming: boolean;
 };
 
@@ -38,6 +42,9 @@ export default function ChatComposer({
   models,
   selectedModel,
   onSelectModel,
+  reasoningEfforts,
+  selectedReasoningEffort,
+  onSelectReasoningEffort,
   streaming,
 }: ChatComposerProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -45,7 +52,7 @@ export default function ChatComposer({
   const canSend = Boolean(selectedModel && (value.trim() || attachments.length) && !streaming);
 
   return (
-    <div className="shrink-0 px-6 pb-5 pt-3">
+    <div className="chat-composer-shell shrink-0 px-6 pb-5 pt-3">
       <div className="mx-auto w-full max-w-3xl">
         <div className="rounded-2xl border border-border bg-card px-4 pt-3.5 pb-3 shadow-sm">
           <input
@@ -111,6 +118,12 @@ export default function ChatComposer({
                 models={models}
                 value={selectedModel ?? ""}
                 onChange={onSelectModel}
+                disabled={streaming}
+              />
+              <ReasoningInput
+                efforts={reasoningEfforts}
+                value={selectedReasoningEffort}
+                onChange={onSelectReasoningEffort}
                 disabled={streaming}
               />
               {streaming ? (

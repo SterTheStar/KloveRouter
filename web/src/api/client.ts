@@ -504,6 +504,12 @@ export const customSkills = {
 
 // Settings
 export const settings = {
+  chat: () => request<import("../types").ChatSettings>("/api/settings/chat"),
+  updateChat: (data: import("../types").ChatSettings) =>
+    request<import("../types").ChatSettings>("/api/settings/chat", {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
   profile: () =>
     request<{ name: string; avatar: string | null }>("/api/settings/profile"),
   updateProfile: (data: { name: string; avatar: string | null }) =>

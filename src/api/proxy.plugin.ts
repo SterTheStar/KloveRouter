@@ -642,7 +642,8 @@ export const proxyPlugin = (app: Elysia) =>
           return { error: "Unauthorized", message: "Valid API key required" };
         }
 
-        if (rtkManager.enabled) {
+        const isTitleGeneration = headers["x-klove-title-generation"] === "true";
+        if (rtkManager.enabled && !isTitleGeneration) {
           const lastMessage = body.messages.at(-1);
           logger.info("RTK checking last message", {
             messageCount: body.messages.length,
@@ -706,16 +707,20 @@ export const proxyPlugin = (app: Elysia) =>
           set.status = 400;
           return { error: "Invalid model request", message: error.message };
         }
-        try {
-          applyResolvedReasoning(body, modelRecord);
-        } catch (error) {
-          if (!(error instanceof ReasoningRequestError)) throw error;
-          set.status = 400;
-          return { error: "Invalid reasoning effort", message: error.message };
+        if (!isTitleGeneration) {
+          try {
+            applyResolvedReasoning(body, modelRecord);
+          } catch (error) {
+            if (!(error instanceof ReasoningRequestError)) throw error;
+            set.status = 400;
+            return { error: "Invalid reasoning effort", message: error.message };
+          }
         }
 
-        body.messages = await injectCavemanPrompt(body.messages);
-        body.messages = await customSkillsProxy.injectSkills(body.messages);
+        if (!isTitleGeneration) {
+          body.messages = await injectCavemanPrompt(body.messages);
+          body.messages = await customSkillsProxy.injectSkills(body.messages);
+        }
 
         if (
           provider.protocol === "antigravity" &&

@@ -2,11 +2,22 @@ import { Elysia, t } from "elysia";
 import { config } from "../config";
 import { keyService } from "../services/key.service";
 import { chatService } from "../services/chat.service";
+import { chatTitleService } from "../services/chat-title.service";
 
 const DONE_MARKER = "data: [DONE]\n\n";
 
 function statsEvent(input: Record<string, unknown>): string {
   return `data: ${JSON.stringify(input)}\n\n`;
+}
+
+function textFromContent(content: unknown): string {
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return "";
+  return content
+    .filter((part): part is { type: "text"; text?: unknown } => part?.type === "text")
+    .map((part) => typeof part.text === "string" ? part.text : "")
+    .join("\n")
+    .trim();
 }
 
 /**
@@ -27,6 +38,8 @@ function chatStatsStream(
   model: string,
   chatId?: string,
   assistantMessageId?: string,
+  titleGenerator?: (() => Promise<string>) | undefined,
+  titleFallback = "New chat",
 ): Response {
   const reader = response.body?.getReader();
   if (!reader) return response;
@@ -42,6 +55,17 @@ function chatStatsStream(
   let assistantReasoning = "";
   let sawUsage = false;
   let statsEmitted = false;
+  let titleEmitted = false;
+
+  const emitTitle = async (controller: ReadableStreamDefaultController) => {
+    if (titleEmitted || !titleGenerator || !chatId) return;
+    titleEmitted = true;
+    const title = await titleGenerator();
+    if (chatService.findById(chatId)?.title === "New chat") {
+      const session = chatService.update(chatId, { title });
+      if (session) controller.enqueue(encoder.encode(statsEvent({ type: "klove_chat_title", chat_id: chatId, title: session.title })));
+    }
+  };
 
   const emitStats = (controller: ReadableStreamDefaultController) => {
     if (statsEmitted) return;
@@ -118,6 +142,7 @@ function chatStatsStream(
               }
               const raw = dataLine.slice(5).trim();
               if (raw === "[DONE]") {
+                await emitTitle(controller);
                 emitStats(controller);
                 controller.enqueue(encoder.encode(DONE_MARKER));
                 continue;
@@ -141,7 +166,8 @@ function chatStatsStream(
             }
             if (done) break;
           }
-          // Upstream ended without a [DONE] marker — emit stats anyway.
+          // Upstream ended without a [DONE] marker — emit title and stats anyway.
+          await emitTitle(controller);
           if (!statsEmitted) emitStats(controller);
         } catch (error: any) {
           controller.enqueue(
@@ -199,6 +225,9 @@ export const chatPlugin = (app: Elysia) =>
       const input = body as any;
       const chatId = typeof input.chat_id === "string" ? input.chat_id : undefined;
       let assistantMessageId: string | undefined;
+      let titleGenerator: (() => Promise<string>) | undefined;
+      let titleMessage: string | undefined;
+      let shouldGenerateTitle = false;
       if (chatId) {
         if (!chatService.findById(chatId)) {
           set.status = 404;
@@ -215,8 +244,10 @@ export const chatPlugin = (app: Elysia) =>
           set.status = 404;
           return { error: "Chat not found" };
         }
-        if (typeof lastMessage?.content === "string")
-          chatService.setTitleFromMessage(chatId, lastMessage.content);
+        titleMessage = textFromContent(lastMessage?.content);
+        shouldGenerateTitle = Boolean(
+          titleMessage && chatService.findById(chatId)?.title === "New chat",
+        );
         assistantMessageId = crypto.randomUUID();
         chatService.addMessage({
           chatId,
@@ -255,7 +286,11 @@ export const chatPlugin = (app: Elysia) =>
         };
       }
 
-      return chatStatsStream(response, input.model, chatId, assistantMessageId);
+      if (shouldGenerateTitle && titleMessage) {
+        titleGenerator = () => chatTitleService.generate(titleMessage!, input.model);
+      }
+
+      return chatStatsStream(response, input.model, chatId, assistantMessageId, titleGenerator);
     },
     {
       // Forward-compatible like the proxy: required fields are validated at

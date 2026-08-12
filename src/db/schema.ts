@@ -492,6 +492,11 @@ export function initSchema(db: Database): void {
     }
   }
 
+  db.query("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)").run(
+    "chat_title_model",
+    "auto",
+  );
+
   // Seed default password if not exists
   const existing = db
     .query("SELECT value FROM settings WHERE key = ?")

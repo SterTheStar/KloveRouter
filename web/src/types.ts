@@ -212,6 +212,10 @@ export interface UserProfile {
   avatar: string | null;
 }
 
+export interface ChatSettings {
+  chat_title_model: string;
+}
+
 export interface ChatSession {
   id: string;
   title: string;

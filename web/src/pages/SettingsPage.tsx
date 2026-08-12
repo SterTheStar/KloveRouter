@@ -35,12 +35,13 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import AvatarUpload from "../components/AvatarUpload";
-import { settings, rtk, caveman, customSkills } from "../api/client";
+import { settings, models, rtk, caveman, customSkills } from "../api/client";
 import { useToast } from "../components/ui/toast";
 import type { UserProfile, RtkStatus, CavemanStatus } from "../types";
 
 const tabs: Tab[] = [
   { id: "general", label: "General" },
+  { id: "chat", label: "Chat" },
   { id: "plugins", label: "Plugins" },
   { id: "security", label: "Security" },
 ];
@@ -62,6 +63,9 @@ export default function SettingsPage({
   const [name, setName] = useState(profile.name);
   const [avatar, setAvatar] = useState(profile.avatar);
   const [profileSaving, setProfileSaving] = useState(false);
+  const [chatTitleModel, setChatTitleModel] = useState("auto");
+  const [chatTitleModels, setChatTitleModels] = useState<import("../types").ModelWithProvider[]>([]);
+  const [chatSaving, setChatSaving] = useState(false);
 
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
@@ -86,12 +90,26 @@ export default function SettingsPage({
 
   useEffect(() => {
     customSkills.list().then(setCustomSkillList).catch(() => {});
+    settings.chat().then((value) => setChatTitleModel(value.chat_title_model)).catch(() => {});
+    models.listAll().then(setChatTitleModels).catch(() => {});
   }, []);
 
   useEffect(() => {
     rtk.status().then(setRtkStatus).catch(() => {});
     caveman.status().then(setCavemanStatus).catch(() => {});
   }, []);
+
+  const saveChatSettings = async () => {
+    setChatSaving(true);
+    try {
+      await settings.updateChat({ chat_title_model: chatTitleModel });
+      notifySuccess("Chat settings updated");
+    } catch (e: any) {
+      notifyError("Could not update chat settings", e.message);
+    } finally {
+      setChatSaving(false);
+    }
+  };
 
   const saveProfile = async () => {
     setProfileSaving(true);
@@ -348,6 +366,30 @@ export default function SettingsPage({
           </CardContent>
         </Card>
         </div>
+      )}
+
+      {activeTab === "chat" && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2"><RobotLine className="size-5" />Chat titles</CardTitle>
+              <Button onClick={saveChatSettings} disabled={chatSaving}>
+                {chatSaving ? <LoaderCircle className="size-4 animate-spin" /> : <Check className="size-4" />} Save
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <Label htmlFor="chat-title-model">Title generation model</Label>
+            <select id="chat-title-model" value={chatTitleModel} onChange={(event) => setChatTitleModel(event.target.value)} className="h-9 w-full rounded-md border bg-background px-3 text-sm">
+              <option value="auto">Auto (active model)</option>
+              {chatTitleModels.map((model) => {
+                const id = `${model.provider_name.toLowerCase().replace(/\s+/g, "")}/${model.model_id}`;
+                return <option key={id} value={id}>{model.display_name || model.model_id} ({model.provider_name})</option>;
+              })}
+            </select>
+            <p className="text-xs text-muted-foreground">Titles are generated after the first message and never replace a custom title.</p>
+          </CardContent>
+        </Card>
       )}
 
       {activeTab === "plugins" && (

@@ -26,6 +26,7 @@ export default function ChatSidebar({
   onDelete,
   onBack,
   onLogout,
+  generatingChatId,
 }: {
   chats: ChatSession[];
   activeChatId: string | null;
@@ -36,6 +37,7 @@ export default function ChatSidebar({
   onDelete: (id: string) => Promise<void>;
   onBack: () => void;
   onLogout: () => void;
+  generatingChatId: string | null;
 }) {
   const [editing, setEditing] = useState<string | null>(null);
   const [title, setTitle] = useState("");
@@ -147,7 +149,9 @@ export default function ChatSidebar({
                 ) : (
                   <div className="flex items-center gap-1 px-2 py-1">
                     <button type="button" onClick={() => onSelect(chat.id)} className="flex min-w-0 flex-1 items-center py-1.5 text-left">
-                      <span className="truncate text-sm">{chat.title}</span>
+                      <span className={`truncate text-sm ${generatingChatId === chat.id ? "chat-title-generating" : ""}`}>
+                        {generatingChatId === chat.id ? "Generating title" : chat.title}
+                      </span>
                     </button>
                     <div className="hidden items-center gap-0.5 group-hover:flex">
                       <Button size="icon-xs" variant="ghost" onClick={() => startRename(chat)} title="Rename"><EditLine className="size-3.5" /></Button>

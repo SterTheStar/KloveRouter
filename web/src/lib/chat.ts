@@ -28,6 +28,7 @@ export interface ChatStreamHandlers {
   onReasoning: (delta: string) => void;
   onUsage: (usage: { prompt_tokens?: number; completion_tokens?: number }) => void;
   onStats: (stats: ChatStats) => void;
+  onTitle: (title: { chat_id: string; title: string }) => void;
   onError: (message: string) => void;
 }
 
@@ -63,6 +64,10 @@ export async function readChatStream(
       try {
         chunk = JSON.parse(raw);
       } catch {
+        continue;
+      }
+      if (chunk.type === "klove_chat_title") {
+        handlers.onTitle({ chat_id: String(chunk.chat_id), title: String(chunk.title) });
         continue;
       }
       if (chunk.type === "klove_stats") {

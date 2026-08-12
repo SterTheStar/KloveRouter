@@ -13,14 +13,19 @@ import ChatMessageView from "../components/chat/ChatMessage";
 import ChatComposer from "../components/chat/ChatComposer";
 
 const MODEL_STORAGE_KEY = "klove_chat_model";
+const REASONING_STORAGE_PREFIX = "klove_chat_reasoning:";
 
 export default function ChatPage({
   chatId,
   onChatCreated,
+  onTitle,
+  onTitleGenerationStart,
   username,
 }: {
   chatId: string | null;
   onChatCreated: (id: string) => void;
+  onTitle: (event: { chat_id: string; title: string }) => void;
+  onTitleGenerationStart: (id: string) => void;
   username: string;
 }) {
   const [modelList, setModelList] = useState<ModelWithProvider[]>([]);
@@ -29,6 +34,7 @@ export default function ChatPage({
   const [selectedModel, setSelectedModel] = useState<string | null>(() =>
     localStorage.getItem(MODEL_STORAGE_KEY),
   );
+  const [selectedReasoningEffort, setSelectedReasoningEffort] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [attachments, setAttachments] = useState<ChatAttachmentPreview[]>([]);
@@ -41,6 +47,30 @@ export default function ChatPage({
   useEffect(() => {
     messagesRef.current = messages;
   }, [messages]);
+
+  const selectedModelRecord = modelList.find(
+    (model) => modelApiId(model.provider_name, model.model_id) === selectedModel,
+  );
+  const reasoningEfforts = selectedModelRecord?.reasoning_efforts ?? [];
+
+  useEffect(() => {
+    if (!selectedModel) {
+      setSelectedReasoningEffort(null);
+      return;
+    }
+    const efforts = modelList.find(
+      (model) => modelApiId(model.provider_name, model.model_id) === selectedModel,
+    )?.reasoning_efforts ?? [];
+    const stored = localStorage.getItem(`${REASONING_STORAGE_PREFIX}${selectedModel}`);
+    const next = efforts.some((effort) => effort.effort === stored)
+      ? stored
+      : efforts.find((effort) => effort.is_default)?.effort ?? efforts[0]?.effort ?? null;
+    setSelectedReasoningEffort(next);
+  }, [modelList, selectedModel]);
+
+  useEffect(() => {
+    if (selectedModel) localStorage.setItem(MODEL_STORAGE_KEY, selectedModel);
+  }, [selectedModel]);
 
   useEffect(() => {
     let cancelled = false;
@@ -108,6 +138,11 @@ export default function ChatPage({
   const onSelectModel = (id: string) => {
     setSelectedModel(id);
     localStorage.setItem(MODEL_STORAGE_KEY, id);
+  };
+
+  const onSelectReasoningEffort = (effort: string) => {
+    setSelectedReasoningEffort(effort);
+    if (selectedModel) localStorage.setItem(`${REASONING_STORAGE_PREFIX}${selectedModel}`, effort);
   };
 
   const stop = () => {
@@ -201,6 +236,9 @@ export default function ChatPage({
       skipNextChatLoadRef.current = created.id;
       onChatCreated(created.id);
     }
+    if (activeChatId && messagesRef.current.length === 0) {
+      onTitleGenerationStart(activeChatId);
+    }
     setMessages((prev) => [...prev, userMessage, assistantMessage]);
     setInput("");
     setAttachments([]);
@@ -213,6 +251,7 @@ export default function ChatPage({
       const response = await chat.completions(
         {
           model: selectedModel,
+          ...(selectedReasoningEffort ? { reasoning_effort: selectedReasoningEffort } : {}),
           chat_id: activeChatId ?? undefined,
           attachments,
           messages: history,
@@ -240,6 +279,7 @@ export default function ChatPage({
             ...message,
             stats,
           })),
+        onTitle,
         onError: (errorMessage) =>
           updateMessage(assistantMessage.id, (message) => ({
             ...message,
@@ -277,7 +317,7 @@ export default function ChatPage({
   }
 
   return (
-    <div className="flex h-svh flex-col">
+    <div className="relative flex h-svh flex-col">
       {modelsError && (
         <div className="flex justify-center px-6 pt-4">
           <Alert variant="destructive" className="w-full max-w-3xl">
@@ -287,7 +327,7 @@ export default function ChatPage({
       )}
 
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto flex h-full min-h-full w-full max-w-3xl flex-col gap-5 px-6 py-6">
+        <div className="mx-auto flex min-h-full w-full max-w-4xl flex-col gap-5 px-6 pb-6 pt-6">
           {messages.length === 0 ? (
             <div className="flex min-h-0 flex-1 items-center justify-center px-4 text-center">
               <h2 className="chat-greeting-title text-4xl tracking-tight sm:text-5xl">
@@ -305,26 +345,33 @@ export default function ChatPage({
               />
             ))
           )}
-          <div ref={endRef} />
+          <div ref={endRef} className="h-48 shrink-0" />
         </div>
       </div>
 
-      <ChatComposer
-        value={input}
-        onChange={setInput}
-        onKeyDown={onKeyDown}
-        onSend={() => void send()}
-        onStop={stop}
-        attachments={attachments}
-        onAddFiles={addFiles}
-        onRemoveAttachment={(id) =>
-          setAttachments((current) => current.filter((item) => item.id !== id))
-        }
-        models={modelList}
-        selectedModel={selectedModel}
-        onSelectModel={onSelectModel}
-        streaming={streaming}
-      />
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20">
+        <div className="pointer-events-auto">
+          <ChatComposer
+            value={input}
+            onChange={setInput}
+            onKeyDown={onKeyDown}
+            onSend={() => void send()}
+            onStop={stop}
+            attachments={attachments}
+            onAddFiles={addFiles}
+            onRemoveAttachment={(id) =>
+              setAttachments((current) => current.filter((item) => item.id !== id))
+            }
+            models={modelList}
+            selectedModel={selectedModel}
+            onSelectModel={onSelectModel}
+            reasoningEfforts={reasoningEfforts}
+            selectedReasoningEffort={selectedReasoningEffort}
+            onSelectReasoningEffort={onSelectReasoningEffort}
+            streaming={streaming}
+          />
+        </div>
+      </div>
     </div>
   );
 }

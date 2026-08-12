@@ -2,6 +2,7 @@ import { Elysia, t } from "elysia";
 import { userInfo } from "node:os";
 import { getDb } from "../db/connection";
 import { isValidAvatar } from "../services/provider-appearance";
+import { modelService } from "../services/model.service";
 
 function defaultProfileName() {
   try {
@@ -21,6 +22,28 @@ function defaultProfileName() {
 
 export const settingsPlugin = (app: Elysia) =>
   app
+    .get("/api/settings/chat", () => {
+      const row = getDb().query("SELECT value FROM settings WHERE key = ?").get("chat_title_model") as { value: string } | undefined;
+      return { chat_title_model: row?.value || "auto" };
+    })
+    .put(
+      "/api/settings/chat",
+      ({ body, set }) => {
+        const value = body.chat_title_model.trim();
+        if (value !== "auto") {
+          const valid = modelService.findAllActiveWithProvider().some(
+            (model) => `${model.provider_name.toLowerCase().replace(/\s+/g, "")}/${model.model_id}` === value,
+          );
+          if (!valid) {
+            set.status = 400;
+            return { error: "Chat title model must be auto or an active configured model" };
+          }
+        }
+        getDb().query("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)").run("chat_title_model", value);
+        return { chat_title_model: value };
+      },
+      { body: t.Object({ chat_title_model: t.String({ minLength: 1 }) }) },
+    )
     .get("/api/settings/profile", () => {
       const db = getDb();
       const name =
