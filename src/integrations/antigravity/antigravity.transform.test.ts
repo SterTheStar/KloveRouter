@@ -72,7 +72,9 @@ describe("googleStreamToOpenAI", () => {
       "chatcmpl-test",
     );
 
-    expect(await response.text()).toContain('"total_tokens":6');
+    const text = await response.text();
+    expect(text).toContain('"total_tokens":6');
+    expect(text).toContain('"cached_tokens":0');
   });
 
   test("does not emit a duplicate finish chunk", async () => {

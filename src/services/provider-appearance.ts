@@ -25,12 +25,20 @@ export function faviconUrl(baseUrl: string): string | null {
   }
 }
 
+export function providerAvatarSources(
+  avatar: string | null | undefined,
+  protocol: ProviderProtocol,
+  baseUrl: string,
+): string[] {
+  return [...new Set([avatar || null, protocolIcons[protocol] || null, faviconUrl(baseUrl)].filter((value): value is string => Boolean(value)))];
+}
+
 export function resolveProviderAvatar(
   avatar: string | null | undefined,
   protocol: ProviderProtocol,
   baseUrl: string,
 ): string | null {
-  return avatar || protocolIcons[protocol] || faviconUrl(baseUrl);
+  return providerAvatarSources(avatar, protocol, baseUrl)[0] ?? null;
 }
 
 export function isValidAvatar(value: string | null | undefined): boolean {

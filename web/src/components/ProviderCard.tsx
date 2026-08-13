@@ -35,7 +35,7 @@ export default function ProviderCard({
       <CardContent>
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <ProviderIcon name={provider.name} src={provider.avatar} className="size-12" />
+            <ProviderIcon name={provider.name} src={provider.avatar} sources={provider.avatar_sources} className="size-12" />
             <div>
               <div className="font-medium">{provider.name}</div>
               <Badge variant={provider.is_active ? "secondary" : "outline"}>

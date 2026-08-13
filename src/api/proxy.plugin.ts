@@ -175,6 +175,7 @@ function tokenDetails(usage: any) {
         usage?.input_tokens_details?.cached_tokens ??
         usage?.cache_read_input_tokens ??
         usage?.cache_read_tokens ??
+        usage?.cached_input_tokens ??
         usage?.cachedContentTokenCount ??
         usage?.cached_content_token_count ??
         usage?.cached_tokens ??
@@ -378,6 +379,9 @@ function anthropicStreamResponse(
                     prompt_tokens: promptTokens,
                     completion_tokens: completionTokens,
                     total_tokens: promptTokens + completionTokens,
+                    prompt_tokens_details: {
+                      cached_tokens: cacheRead,
+                    },
                   },
                 });
               }
@@ -491,7 +495,9 @@ function recordSseUsageResponse(
                         usage.candidatesTokenCount ??
                         completionTokens,
                     );
-                    ({ cacheRead, cacheWrite } = tokenDetails(usage));
+                    const details = tokenDetails(usage);
+                    cacheRead = Math.max(cacheRead, details.cacheRead);
+                    cacheWrite = Math.max(cacheWrite, details.cacheWrite);
                   }
                 } catch {
                   /* Ignore non-JSON SSE events. */

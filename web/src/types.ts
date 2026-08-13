@@ -3,6 +3,7 @@ export interface Provider {
   name: string;
   base_url: string;
   avatar: string | null;
+  avatar_sources: string[];
   avatar_override?: string | null;
   protocol: "openai" | "anthropic" | "codex" | "antigravity" | "freebuff" | "qwen" | "atomesus";
   is_active: number;
@@ -83,6 +84,7 @@ export interface PricingTier {
 export interface ModelWithProvider extends Model {
   provider_name: string;
   provider_avatar: string | null;
+  provider_avatar_sources: string[];
 }
 
 export interface ApiKey {

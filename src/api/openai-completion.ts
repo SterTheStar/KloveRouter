@@ -54,7 +54,28 @@ export async function openAICompletionFromSse(
     id ??= chunk.id;
     created ??= chunk.created;
     model ??= chunk.model;
-    if (chunk.usage) usage = chunk.usage;
+    if (chunk.usage) {
+      usage = {
+        ...usage,
+        ...chunk.usage,
+        ...(usage?.prompt_tokens_details || chunk.usage.prompt_tokens_details
+          ? {
+              prompt_tokens_details: {
+                ...usage?.prompt_tokens_details,
+                ...chunk.usage.prompt_tokens_details,
+              },
+            }
+          : {}),
+        ...(usage?.input_tokens_details || chunk.usage.input_tokens_details
+          ? {
+              input_tokens_details: {
+                ...usage?.input_tokens_details,
+                ...chunk.usage.input_tokens_details,
+              },
+            }
+          : {}),
+      };
+    }
 
     for (const incoming of chunk.choices ?? []) {
       const index = Number(incoming.index ?? 0);

@@ -59,6 +59,37 @@ describe("openAIStreamResponse", () => {
     });
   });
 
+  test("does not overwrite cache usage with a later partial usage chunk", async () => {
+    let completed: OpenAIStreamStats | undefined;
+    const stream = {
+      async *[Symbol.asyncIterator]() {
+        yield {
+          choices: [{ delta: { content: "ok" } }],
+          usage: { prompt_tokens: 10, completion_tokens: 1, cached_tokens: 8 },
+        };
+        yield {
+          choices: [],
+          usage: { prompt_tokens: 10, completion_tokens: 1 },
+        };
+      },
+    };
+    const response = openAIStreamResponse(stream, {
+      start: 0,
+      tokenDetails: (usage) => ({
+        cacheRead: Number(usage.cached_tokens ?? 0),
+        cacheWrite: 0,
+      }),
+      onComplete: (stats) => {
+        completed = stats;
+      },
+      onError: () => {},
+      onCancel: () => {},
+    });
+
+    await response.text();
+    expect(completed?.cacheRead).toBe(8);
+  });
+
   test("emits an error and DONE and records a body failure", async () => {
     let recorded = "";
     const stream = {

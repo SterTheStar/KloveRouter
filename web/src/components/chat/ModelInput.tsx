@@ -103,6 +103,7 @@ export default function ModelInput({
                     <ProviderIcon
                       name={model.provider_name}
                       src={model.provider_avatar}
+                      sources={model.provider_avatar_sources}
                       className="size-8 shrink-0 text-[10px]"
                     />
                     <span className="min-w-0 flex-1">

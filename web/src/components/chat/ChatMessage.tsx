@@ -40,6 +40,7 @@ function UserAttachments({
 }
 import { formatDuration, formatTokens, formatTps } from "../../lib/chat";
 import { Markdown } from "./Markdown";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 
 function ChatStatsFooter({
   stats,
@@ -67,7 +68,16 @@ function ChatStatsFooter({
       {stats.model && <span className="max-w-48 truncate font-mono" title={stats.model}>{modelName || stats.model}</span>}
       <span className="font-mono">
         {formatTokens(stats.completion_tokens)} out ·{" "}
-        {formatTokens(stats.prompt_tokens)} in
+        <Tooltip>
+          <TooltipTrigger className="cursor-help underline decoration-dotted underline-offset-2">
+            {formatTokens(Math.max(0, stats.prompt_tokens - (stats.cache_read_tokens ?? 0)))} in
+          </TooltipTrigger>
+          <TooltipContent className="flex flex-col items-start gap-0.5">
+            <span>Input total: {formatTokens(stats.prompt_tokens)}</span>
+            <span>Cache read: {formatTokens(stats.cache_read_tokens ?? 0)}</span>
+            <span>Input without cache: {formatTokens(Math.max(0, stats.prompt_tokens - (stats.cache_read_tokens ?? 0)))}</span>
+          </TooltipContent>
+        </Tooltip>
       </span>
       <span className="font-mono">{formatDuration(stats.duration_ms)}</span>
       {stats.tps > 0 && (

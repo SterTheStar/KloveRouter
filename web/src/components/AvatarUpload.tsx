@@ -6,12 +6,14 @@ export default function AvatarUpload({
   value,
   name,
   onChange,
+  sources,
   label = "Avatar",
   onError,
 }: {
   value: string | null;
   name: string;
   onChange: (value: string | null) => void;
+  sources?: string[];
   label?: string;
   onError?: (message: string) => void;
 }) {
@@ -40,7 +42,7 @@ export default function AvatarUpload({
         accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml,image/x-icon"
         onChange={select}
       />
-      <DisplayAvatar name={name || "Avatar"} src={value} className="size-14" />
+      <DisplayAvatar name={name || "Avatar"} src={value} sources={sources} className="size-14" />
       <div className="space-y-1">
         <div className="text-sm font-medium">{label}</div>
         <div className="flex gap-2">

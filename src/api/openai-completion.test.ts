@@ -43,6 +43,29 @@ describe("openAICompletionFromSse", () => {
     });
   });
 
+  test("preserves cache details when a later usage chunk omits them", async () => {
+    const first = {
+      choices: [{ index: 0, delta: { content: "ok" }, finish_reason: null }],
+      usage: {
+        prompt_tokens: 10,
+        completion_tokens: 1,
+        prompt_tokens_details: { cached_tokens: 8 },
+      },
+    };
+    const final = {
+      choices: [{ index: 0, delta: {}, finish_reason: "stop" }],
+      usage: { prompt_tokens: 10, completion_tokens: 1, total_tokens: 11 },
+    };
+
+    const { completion } = await openAICompletionFromSse(
+      response([`data: ${JSON.stringify(first)}\n\ndata: ${JSON.stringify(final)}\n\n`]),
+      "test",
+    );
+
+    expect(completion.usage.prompt_tokens_details.cached_tokens).toBe(8);
+    expect(completion.usage.total_tokens).toBe(11);
+  });
+
   test("returns null content for a tool-only completion", async () => {
     const chunk = { choices: [{ index: 0, delta: { tool_calls: [{ index: 0, id: "call", type: "function", function: { name: "run", arguments: "{}" } }] }, finish_reason: "tool_calls" }] };
     const { completion } = await openAICompletionFromSse(response([`data: ${JSON.stringify(chunk)}\n\n`]), "test");

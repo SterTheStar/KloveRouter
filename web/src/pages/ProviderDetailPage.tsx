@@ -772,7 +772,14 @@ export default function ProviderDetailPage({
           </div>
         </CardHeader>
         <CardContent className="space-y-5">
-          <AvatarUpload value={avatar} name={name} onChange={setAvatar} label="Provider avatar" onError={(message) => notifyError("Invalid avatar", message)} />
+          <AvatarUpload
+            value={avatar}
+            sources={provider.avatar_sources}
+            name={name}
+            onChange={setAvatar}
+            label="Provider avatar"
+            onError={(message) => notifyError("Invalid avatar", message)}
+          />
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="provider-name">Provider name</Label>

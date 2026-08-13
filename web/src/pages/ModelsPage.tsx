@@ -340,7 +340,7 @@ export default function ModelsPage() {
                               <ChevronDown className="size-4" />
                             )}
                           </Button>
-                          <ProviderIcon name={providerName} src={models[0].provider_avatar} className="size-5 text-[10px]" />
+                          <ProviderIcon name={providerName} src={models[0].provider_avatar} sources={models[0].provider_avatar_sources} className="size-5 text-[10px]" />
                           {providerName}
                           <span className="text-xs text-muted-foreground">
                             ({models.length})

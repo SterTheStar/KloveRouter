@@ -1,6 +1,6 @@
 import { getDb } from "../db/connection";
 import type { CredentialMode } from "./credential.service";
-import { resolveProviderAvatar, type ProviderProtocol } from "./provider-appearance";
+import { providerAvatarSources, resolveProviderAvatar, type ProviderProtocol } from "./provider-appearance";
 import { decryptSecret, encryptSecret } from "./secret.service";
 
 export interface Provider {
@@ -22,6 +22,7 @@ export interface ProviderPublic {
   name: string;
   base_url: string;
   avatar: string | null;
+  avatar_sources: string[];
   avatar_override: string | null;
   protocol: ProviderProtocol;
   credential_mode: CredentialMode;
@@ -62,6 +63,7 @@ function toPublic(p: Provider): ProviderPublic {
     name: p.name,
     base_url: p.base_url,
     avatar: resolveProviderAvatar(p.avatar, p.protocol, p.base_url),
+    avatar_sources: providerAvatarSources(p.avatar, p.protocol, p.base_url),
     avatar_override: p.avatar,
     protocol: p.protocol ?? "openai",
     credential_mode: p.credential_mode ?? "fixed",

@@ -1,7 +1,7 @@
 import { getDb } from "../db/connection";
 import { isBlockedAntigravityModel } from "../integrations/antigravity/antigravity.models";
 import { generateDisplayName } from "./model-name";
-import { resolveProviderAvatar, type ProviderProtocol } from "./provider-appearance";
+import { providerAvatarSources, resolveProviderAvatar, type ProviderProtocol } from "./provider-appearance";
 
 export interface Model {
   id: string;
@@ -57,6 +57,7 @@ export interface PricingTier {
 export interface ModelWithProvider extends Model {
   provider_name: string;
   provider_avatar: string | null;
+  provider_avatar_sources: string[];
 }
 
 export type CreateModelInput = ModelMetadataInput & {
@@ -508,6 +509,11 @@ export const modelService = {
         ...model,
          ...hydrate(model),
         provider_avatar: resolveProviderAvatar(
+          model.provider_avatar,
+          provider_protocol,
+          provider_base_url,
+        ),
+        provider_avatar_sources: providerAvatarSources(
           model.provider_avatar,
           provider_protocol,
           provider_base_url,

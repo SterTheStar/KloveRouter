@@ -140,6 +140,7 @@ function chatStatsStream(
           usage.input_tokens_details?.cached_tokens ??
           usage.cache_read_input_tokens ??
           usage.cache_read_tokens ??
+          usage.cached_input_tokens ??
           usage.cached_tokens ??
           0,
       );

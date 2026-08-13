@@ -116,7 +116,9 @@ export function openAIStreamResponse(
                 completionTokens = Number(
                   chunk.usage.completion_tokens ?? completionTokens,
                 );
-                ({ cacheRead, cacheWrite } = options.tokenDetails(chunk.usage));
+                const details = options.tokenDetails(chunk.usage);
+                cacheRead = Math.max(cacheRead, details.cacheRead);
+                cacheWrite = Math.max(cacheWrite, details.cacheWrite);
               }
               enqueue(`data: ${JSON.stringify(chunk)}\n\n`);
             }
