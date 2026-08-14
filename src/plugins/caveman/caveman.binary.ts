@@ -8,7 +8,7 @@ import { logger } from "../../logger";
 const SKILL_FILE = "SKILL.md";
 const FALLBACK_VERSION = "v1.9.1";
 const DOWNLOAD_TIMEOUT_MS = 30_000;
-const MAX_ARCHIVE_BYTES = 5 * 1024 * 1024;
+const MAX_ARCHIVE_BYTES = 25 * 1024 * 1024;
 const LATEST_VERSION_CACHE_MS = 10 * 60_000;
 let operation: Promise<unknown> | null = null;
 let latestCache: { value: string | null; expiresAt: number } | null = null;
