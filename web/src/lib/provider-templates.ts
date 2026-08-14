@@ -38,9 +38,11 @@ import portkeyLogo from "../assets/providers/portkey.png";
 import opencodeLogo from "../assets/providers/opencode.png";
 import freebuffLogo from "../assets/providers/freebuff.png";
 
+const chatgptLogo = "https://chatgpt.com/favicon.ico";
+
 export type ProviderTemplate = {
   id: string;
-  protocol: "openai" | "antigravity" | "anthropic" | "codex" | "freebuff" | "qwen" | "atomesus";
+  protocol: "openai" | "antigravity" | "anthropic" | "codex" | "chatgpt" | "freebuff" | "qwen" | "atomesus";
   name: string;
   description: string;
   logo: string;
@@ -152,6 +154,8 @@ const providerDescriptions: Record<string, string> = {
     "Anthropic's native Messages API for Claude models, reasoning, and tool use.",
   codex:
     "ChatGPT OAuth access for OpenAI Codex models with account-based usage limits.",
+  chatgpt:
+    "Authorized ChatGPT session access through the ChatGPT backend API. Use only credentials you are permitted to use.",
   freebuff:
     "Free Codebuff/Freebuff models through a token-authenticated OpenAI-compatible gateway.",
   qwen:
@@ -262,6 +266,15 @@ export const PROVIDER_TEMPLATES: readonly ProviderTemplate[] = [
     description: providerDescriptions.codex,
     logo: codexLogo,
     placeholder: "https://chatgpt.com/backend-api/codex",
+    preset: false,
+  },
+  {
+    id: "chatgpt",
+    protocol: "chatgpt",
+    name: "ChatGPT",
+    description: providerDescriptions.chatgpt,
+    logo: chatgptLogo,
+    placeholder: "https://chatgpt.com/backend-api",
     preset: false,
   },
   {

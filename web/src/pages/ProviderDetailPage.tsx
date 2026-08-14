@@ -199,7 +199,7 @@ export default function ProviderDetailPage({
     () =>
       credentials.filter((credential) => {
         if (!credential.is_active) return false;
-        if (credential.kind === "api_key" || credential.kind === "freebuff" || credential.kind === "qwen" || credential.kind === "atomesus")
+        if (credential.kind === "api_key" || credential.kind === "chatgpt" || credential.kind === "freebuff" || credential.kind === "qwen" || credential.kind === "atomesus")
           return Boolean(credential.masked_secret);
         return Boolean(
           credential.account_id || credential.email || credential.project_id,
@@ -568,7 +568,7 @@ export default function ProviderDetailPage({
     const label = newKeyLabelRef.current?.value.trim() ?? "";
     const authCode = newAuthCodeRef.current?.value.trim() ?? "";
     if (!label || !authCode) {
-      setError("Auth code label and value are required.");
+      setError(`${provider.protocol === "chatgpt" ? "Credential" : "Auth code"} label and value are required.`);
       return;
     }
     setAddingKey(true);
@@ -576,17 +576,17 @@ export default function ProviderDetailPage({
     try {
       await providers.addCredential(providerId, {
         label,
-        kind: provider.protocol === "qwen" ? "qwen" : provider.protocol === "atomesus" ? "atomesus" : "freebuff",
+        kind: provider.protocol === "chatgpt" ? "chatgpt" : provider.protocol === "qwen" ? "qwen" : provider.protocol === "atomesus" ? "atomesus" : "freebuff",
         secret: authCode,
       });
       if (newKeyLabelRef.current) newKeyLabelRef.current.value = "";
       if (newAuthCodeRef.current) newAuthCodeRef.current.value = "";
       setShowAddKey(false);
-      setSuccess(provider.protocol === "atomesus" ? "Atomesus token added." : provider.protocol === "qwen" ? "Qwen auth code added." : "Freebuff auth code added.");
+      setSuccess(provider.protocol === "chatgpt" ? "ChatGPT session credential added." : provider.protocol === "atomesus" ? "Atomesus token added." : provider.protocol === "qwen" ? "Qwen auth code added." : "Freebuff auth code added.");
       await load();
     } catch (e: any) {
       setError(e.message);
-      notifyError("Could not add auth code", e.message);
+      notifyError(provider.protocol === "chatgpt" ? "Could not add session credential" : "Could not add auth code", e.message);
     } finally {
       setAddingKey(false);
     }
@@ -600,6 +600,18 @@ export default function ProviderDetailPage({
     } catch (e: any) {
       setError(e.message);
       notifyError("Could not remove API key", e.message);
+    }
+  };
+
+  const toggleCredentialActive = async (credential: ProviderCredential) => {
+    try {
+      await providers.updateCredential(providerId, credential.id, {
+        is_active: credential.is_active ? 0 : 1,
+      });
+      await load();
+    } catch (e: any) {
+      setError(e.message);
+      notifyError("Could not update credential", e.message);
     }
   };
 
@@ -724,11 +736,12 @@ export default function ProviderDetailPage({
               provider.protocol === "antigravity" ||
               provider.protocol === "freebuff" ||
               provider.protocol === "qwen" ||
-              provider.protocol === "atomesus") && (
+              provider.protocol === "atomesus" ||
+              provider.protocol === "chatgpt") && (
               <>
                 <Button
                   variant="outline"
-                  onClick={provider.protocol === "freebuff" || provider.protocol === "qwen" || provider.protocol === "atomesus" ? () => {
+                  onClick={provider.protocol === "freebuff" || provider.protocol === "qwen" || provider.protocol === "atomesus" || provider.protocol === "chatgpt" ? () => {
                     setShowAddKey(true);
                     document.getElementById("provider-credentials")?.scrollIntoView({ behavior: "smooth" });
                   } : addOAuthAccount}
@@ -739,7 +752,7 @@ export default function ProviderDetailPage({
                   ) : (
                     <LoginIcon className="size-4" />
                   )}
-                  {provider.protocol === "atomesus" ? "Add token" : provider.protocol === "freebuff" || provider.protocol === "qwen" ? "Add auth code" : "Connect account"}
+                  {provider.protocol === "chatgpt" ? "Add session credential" : provider.protocol === "atomesus" ? "Add token" : provider.protocol === "freebuff" || provider.protocol === "qwen" ? "Add auth code" : "Connect account"}
                 </Button>
                 {provider.protocol !== "freebuff" && provider.protocol !== "qwen" && provider.protocol !== "atomesus" && credentials.some(
                   (credential) =>
@@ -945,6 +958,35 @@ export default function ProviderDetailPage({
                   </span>
                 )}
               </div>
+            </div>
+          ) : provider.protocol === "chatgpt" ? (
+            <div id="provider-credentials" className="space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <Label>ChatGPT session credentials</Label>
+                  <p className="text-xs text-muted-foreground">Authorized session tokens are stored encrypted.</p>
+                </div>
+                <Button variant="outline" size="sm" onClick={() => setShowAddKey((value) => !value)}>
+                  {showAddKey ? <CloseCircle className="size-4" /> : <Add className="size-4" />}
+                  {showAddKey ? "Cancel" : "Add credential"}
+                </Button>
+              </div>
+              <div className="space-y-2">
+                {credentials.filter((credential) => credential.kind === "chatgpt").map((credential) => {
+                  const revealed = revealedKeys[credential.id];
+                  return <div key={credential.id} className="grid items-center gap-2 border-b border-border/60 py-2 md:grid-cols-[minmax(8rem,0.65fr)_minmax(0,1.8fr)_auto]">
+                    <Input value={credential.label} readOnly className="h-9 bg-background" />
+                    <div className="relative"><Input value={revealed ?? credential.masked_secret ?? "Hidden credential"} readOnly className="h-9 bg-background pr-24 font-mono" /><div className="absolute right-1 top-1/2 flex -translate-y-1/2 gap-0.5">
+                      <Button variant="ghost" size="icon" className="size-8" onClick={() => toggleApiKeyVisibility(credential)} disabled={loadingSecretId === credential.id} title={revealed === undefined ? "Reveal credential" : "Hide credential"}>{revealed === undefined ? <Eye className="size-4" /> : <EyeOff className="size-4" />}</Button>
+                      <Button variant="ghost" size="icon" className="size-8" onClick={() => copyCredentialSecret(credential)} disabled={loadingSecretId === credential.id} title="Copy credential"><Copy className="size-4" /></Button>
+                    </div></div>
+                    <Switch checked={credential.is_active === 1} onCheckedChange={() => toggleCredentialActive(credential)} aria-label={`${credential.label} active`} />
+                    <Button variant="destructive" size="icon" className="size-9" onClick={() => removeApiKey(credential.id)} title="Remove credential"><Trash2 className="size-4" /></Button>
+                  </div>;
+                })}
+                {!credentials.some((credential) => credential.kind === "chatgpt") && <div className="text-xs text-muted-foreground">No session credentials configured.</div>}
+              </div>
+              {showAddKey && <div className="grid gap-2 rounded-md border border-dashed p-3 md:grid-cols-[1fr_1.5fr_auto]"><Input ref={newKeyLabelRef} placeholder="Credential label" /><Input ref={newAuthCodeRef} type="password" placeholder="Paste an authorized session token" /><Button onClick={addFreebuffAuthCode} disabled={addingKey}>{addingKey ? <LoaderCircle className="size-4 animate-spin" /> : <><Add className="size-4" /> Add credential</>}</Button></div>}
             </div>
           ) : provider.protocol === "freebuff" || provider.protocol === "qwen" || provider.protocol === "atomesus" ? (
             <div id="provider-credentials" className="space-y-3">

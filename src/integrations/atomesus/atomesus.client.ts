@@ -367,18 +367,27 @@ export async function atomesusResponses(
   if (sessionId) form.append("sessionId", sessionId);
   appendFile(form, body.file);
 
-  const response = await fetch(apiUrl(endpoint), {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${tokenOf(credential)}`,
-      Accept: "text/event-stream, application/json",
-      Cookie: `__ax_cfg_v1=${encodeAtomesusConfig(model, effort)}`,
-    },
-    body: form,
-    signal: AbortSignal.timeout(120_000),
-  });
+  let response: Response;
+  try {
+    response = await fetch(apiUrl(endpoint), {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${tokenOf(credential)}`,
+        Accept: "text/event-stream, application/json",
+        Cookie: `__ax_cfg_v1=${encodeAtomesusConfig(model, effort)}`,
+      },
+      body: form,
+      signal: AbortSignal.timeout(15 * 60_000),
+    });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "TimeoutError")
+      throw new Error("Atomesus gateway timed out after 15 minutes; the service may be unavailable");
+    throw error;
+  }
   if (!response.ok) {
-    const detail = (await response.text().catch(() => "")).slice(0, 500);
+    const detail = (await response.text().catch(() => "")).replace(/\s+/g, " ").trim().slice(0, 500);
+    if (response.status === 502 || response.status === 503 || response.status === 504)
+      throw new Error(`Atomesus gateway unavailable (${response.status}); this does not confirm that the token is invalid${detail ? `: ${detail}` : ""}`);
     throw new Error(`Atomesus request failed (${response.status})${detail ? `: ${detail}` : ""}`);
   }
   if (body.stream && response.headers.get("content-type")?.includes("text/event-stream"))

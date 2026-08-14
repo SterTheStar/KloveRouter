@@ -23,6 +23,10 @@ import { generateDisplayName } from "../services/model-name";
 import { freebuffModels, freebuffResponses } from "../integrations/freebuff";
 import { qwenModels, qwenResponses } from "../integrations/qwen";
 import { atomesusModels, atomesusTest } from "../integrations/atomesus";
+import {
+  chatgptModels,
+  chatgptTest,
+} from "../integrations/chatgpt";
 import { parseRawModelMetadata, resolveModelMetadata } from "../services/model-metadata";
 import { assertSafeRemoteUrl } from "../services/ssrf";
 
@@ -322,6 +326,31 @@ export const modelsPlugin = (app: Elysia) =>
             return { success: true, models_found: selected.length, message: `Synced ${selected.length} Atomesus models from ${provider.name}` };
           }
 
+          if (provider.protocol === "chatgpt") {
+            const credential =
+              credentialService.select(
+                provider.id,
+                provider.credential_mode,
+                provider.fixed_credential_id,
+              ) || credentialService.select(provider.id, "round_robin");
+            if (!credential) {
+              set.status = 503;
+              return { error: "No active ChatGPT credential" };
+            }
+            const available = await chatgptModels(credential);
+            if (query.preview === true) return preview(available);
+            const selected = selectModels(available);
+            for (const model of selected)
+              saveSyncedModel({
+                provider_id: id,
+                model_id: model.id,
+                display_name: model.display_name || generateDisplayName(model.id),
+                is_manual: 0,
+                ...await resolveModelMetadata(provider.protocol, model.id, model),
+              });
+            return { success: true, models_found: selected.length, message: `Synced ${selected.length} ChatGPT models from ${provider.name}` };
+          }
+
           const credential =
             credentialService.select(
               provider.id,
@@ -505,6 +534,17 @@ export const modelsPlugin = (app: Elysia) =>
                    ? await qwenTest(model.model_id, credential, provider.base_url)
                    : provider.protocol === "atomesus"
                      ? await atomesusTest(model.model_id, credential, provider.base_url)
+                   : provider.protocol === "chatgpt"
+                     ? {
+                         choices: [
+                           {
+                             message: {
+                               content: await chatgptTest(model.model_id, credential),
+                             },
+                           },
+                         ],
+                         usage: null,
+                       }
                    : await createOpenAIClient(
                     credentialProvider,
                   ).chat.completions.create({

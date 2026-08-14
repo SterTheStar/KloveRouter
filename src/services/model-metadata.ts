@@ -108,6 +108,7 @@ export function parseRawModelMetadata(raw: any): ModelMetadataInput {
 
 const dedicatedIntegrations = new Set<ProviderProtocol>([
   "codex",
+  "chatgpt",
   "antigravity",
   "qwen",
   "freebuff",

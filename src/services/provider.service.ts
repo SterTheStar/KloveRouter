@@ -1,7 +1,8 @@
 import { getDb } from "../db/connection";
-import type { CredentialMode } from "./credential.service";
+import type { CredentialKind, CredentialMode } from "./credential.service";
 import { providerAvatarSources, resolveProviderAvatar, type ProviderProtocol } from "./provider-appearance";
 import { decryptSecret, encryptSecret } from "./secret.service";
+import { credentialKindForProtocol, validateCredential } from "./credential-validation";
 
 export interface Provider {
   id: string;
@@ -117,6 +118,11 @@ export const providerService = {
 
   create(input: CreateProviderInput): ProviderPublic {
     const db = getDb();
+    const protocol = input.protocol ?? "openai";
+    const kind = credentialKindForProtocol(protocol);
+    validateCredential(protocol, kind, protocol === "codex" || protocol === "antigravity" ? undefined : input.api_key, {
+      allowIncompleteOAuth: protocol === "codex" || protocol === "antigravity",
+    });
     const id = crypto.randomUUID();
     const encryptedApiKey = input.api_key
       ? encryptSecret(input.api_key)
@@ -129,7 +135,7 @@ export const providerService = {
       input.base_url.replace(/\/+$/, ""),
       encryptedApiKey ?? "",
       input.avatar ?? null,
-      input.protocol ?? "openai",
+      protocol,
     );
     const credentialId = crypto.randomUUID();
     db.query(
@@ -137,29 +143,33 @@ export const providerService = {
     ).run(
       credentialId,
       id,
-      input.protocol === "codex"
+      protocol === "codex"
         ? "Codex session"
-        : input.protocol === "antigravity"
+        : protocol === "chatgpt"
+          ? "ChatGPT session"
+          : protocol === "antigravity"
           ? "Google account"
-          : input.protocol === "freebuff"
+          : protocol === "freebuff"
             ? "Freebuff token"
-             : input.protocol === "qwen"
+             : protocol === "qwen"
                ? "Qwen token"
-               : input.protocol === "atomesus"
+               : protocol === "atomesus"
                  ? "Atomesus token"
                : "Default API key",
-      input.protocol === "codex"
+      protocol === "codex"
         ? "codex"
-        : input.protocol === "antigravity"
+        : protocol === "chatgpt"
+          ? "chatgpt"
+          : protocol === "antigravity"
           ? "antigravity"
-          : input.protocol === "freebuff"
+          : protocol === "freebuff"
             ? "freebuff"
-             : input.protocol === "qwen"
+             : protocol === "qwen"
                ? "qwen"
-               : input.protocol === "atomesus"
+               : protocol === "atomesus"
                  ? "atomesus"
                : "api_key",
-      input.protocol === "antigravity" ? null : encryptedApiKey,
+      protocol === "antigravity" ? null : encryptedApiKey,
     );
     db.query("UPDATE providers SET fixed_credential_id = ? WHERE id = ?").run(
       credentialId,
@@ -175,6 +185,18 @@ export const providerService = {
 
     const updates: string[] = [];
     const values: any[] = [];
+    const protocol = input.protocol ?? existing.protocol;
+    if (input.api_key !== undefined && (protocol === "codex" || protocol === "antigravity")) {
+      throw new Error(`Provider protocol '${protocol}' does not accept api_key credentials`);
+    }
+    if (input.protocol !== undefined || input.api_key !== undefined) {
+      const automatic = db.query("SELECT kind, secret FROM provider_credentials WHERE provider_id = ? AND id = COALESCE(?, id) LIMIT 1").get(id, existing.fixed_credential_id) as { kind: CredentialKind; secret: string | null } | null;
+      if (automatic && input.protocol !== undefined) {
+        validateCredential(protocol, automatic.kind, input.api_key !== undefined ? input.api_key : decryptSecret(automatic.secret));
+      } else {
+        validateCredential(protocol, credentialKindForProtocol(protocol), input.api_key !== undefined ? input.api_key : existing.api_key);
+      }
+    }
 
     if (input.name !== undefined) {
       updates.push("name = ?");
@@ -189,7 +211,7 @@ export const providerService = {
       updates.push("api_key = ?");
       values.push(encryptedApiKey);
       db.query(
-        "UPDATE provider_credentials SET secret = ?, updated_at = datetime('now') WHERE provider_id = ? AND id = COALESCE((SELECT fixed_credential_id FROM providers WHERE id = ?), id) AND kind IN ('api_key', 'codex', 'freebuff', 'qwen', 'atomesus')",
+        "UPDATE provider_credentials SET secret = ?, updated_at = datetime('now') WHERE provider_id = ? AND id = COALESCE((SELECT fixed_credential_id FROM providers WHERE id = ?), id) AND kind IN ('api_key', 'codex', 'chatgpt', 'freebuff', 'qwen', 'atomesus')",
       ).run(encryptedApiKey, id, id);
     }
     if (input.avatar !== undefined) {
@@ -205,6 +227,15 @@ export const providerService = {
       values.push(input.credential_mode);
     }
     if (input.fixed_credential_id !== undefined) {
+      if (input.fixed_credential_id !== null) {
+        const fixed = db
+          .query("SELECT kind FROM provider_credentials WHERE id = ? AND provider_id = ?")
+          .get(input.fixed_credential_id, id) as { kind: CredentialKind } | null;
+        if (!fixed) {
+          throw new Error("fixed_credential_id must reference a credential belonging to this provider");
+        }
+        validateCredential(protocol, fixed.kind, undefined, { allowIncompleteOAuth: true });
+      }
       updates.push("fixed_credential_id = ?");
       values.push(input.fixed_credential_id);
     }

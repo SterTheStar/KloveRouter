@@ -58,6 +58,16 @@ export const auth = {
 
 // Providers
 export const providers = {
+  validateCredential: (data: {
+    base_url: string;
+    protocol?: "openai" | "anthropic" | "codex" | "chatgpt" | "antigravity" | "freebuff" | "qwen" | "atomesus";
+    api_key?: string;
+    auth_code?: string;
+    model?: string;
+  }) => request<{ valid: boolean; verified: boolean; message?: string }>("/api/providers/validate-credential", {
+    method: "POST",
+    body: JSON.stringify(data),
+  }),
   list: () => request<import("../types").Provider[]>("/api/providers"),
   get: (id: string) =>
     request<import("../types").ProviderDetail>(`/api/providers/${id}`),
@@ -67,7 +77,7 @@ export const providers = {
     api_key?: string;
     auth_code?: string;
     avatar?: string;
-     protocol?: "openai" | "anthropic" | "codex" | "antigravity" | "freebuff" | "qwen" | "atomesus";
+     protocol?: "openai" | "anthropic" | "codex" | "chatgpt" | "antigravity" | "freebuff" | "qwen" | "atomesus";
    }) =>
      request<import("../types").Provider>("/api/providers", {
        method: "POST",
@@ -80,7 +90,7 @@ export const providers = {
        base_url?: string;
        api_key?: string;
        avatar?: string | null;
-       protocol?: "openai" | "anthropic" | "codex" | "antigravity" | "freebuff" | "qwen" | "atomesus";
+       protocol?: "openai" | "anthropic" | "codex" | "chatgpt" | "antigravity" | "freebuff" | "qwen" | "atomesus";
       credential_mode?: "fixed" | "round_robin";
       fixed_credential_id?: string | null;
       is_active?: number;
@@ -106,7 +116,7 @@ export const providers = {
     id: string,
     data: {
       label: string;
-       kind?: "api_key" | "codex" | "antigravity" | "freebuff" | "qwen" | "atomesus";
+       kind?: "api_key" | "codex" | "chatgpt" | "antigravity" | "freebuff" | "qwen" | "atomesus";
       secret?: string;
       access_token?: string;
       refresh_token?: string;

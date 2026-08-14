@@ -46,6 +46,8 @@ export default function AddProviderModal({
   const [authCode, setAuthCode] = useState("");
   const [avatar, setAvatar] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [verifying, setVerifying] = useState(false);
+  const [verificationWarning, setVerificationWarning] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pendingOAuth, setPendingOAuth] = useState<{
     protocol: "codex" | "antigravity";
@@ -74,6 +76,7 @@ export default function AddProviderModal({
     setAuthCode("");
     setAvatar(null);
     setError(null);
+    setVerificationWarning(null);
     setStep("select");
     setSelectedType(null);
     setSearchQuery("");
@@ -81,6 +84,7 @@ export default function AddProviderModal({
     setCallbackUrl("");
     setCompletingOAuth(false);
     setLoading(false);
+    setVerifying(false);
   };
 
   const close = () => {
@@ -216,7 +220,7 @@ export default function AddProviderModal({
     setStep("form");
   };
 
-  const submit = async () => {
+  const submit = async (skipVerification = false) => {
     if (
       selectedType?.protocol === "codex" ||
       selectedType?.protocol === "antigravity"
@@ -227,13 +231,24 @@ export default function AddProviderModal({
     }
     if (!name || !baseUrl)
       return setError("Provider name and base URL are required.");
+    const shouldVerify = !skipVerification;
     setLoading(true);
+    setVerifying(shouldVerify);
     setError(null);
+    setVerificationWarning(null);
     try {
+      if (shouldVerify) await providers.validateCredential({
+        base_url: baseUrl,
+        ...(selectedType?.protocol === "freebuff" || selectedType?.protocol === "qwen" || selectedType?.protocol === "atomesus" || selectedType?.protocol === "chatgpt"
+          ? { auth_code: authCode }
+          : { api_key: apiKey }),
+        protocol: selectedType?.protocol,
+      });
+      setVerifying(false);
       await providers.create({
         name,
         base_url: baseUrl,
-        ...(selectedType?.protocol === "freebuff" || selectedType?.protocol === "qwen" || selectedType?.protocol === "atomesus"
+        ...(selectedType?.protocol === "freebuff" || selectedType?.protocol === "qwen" || selectedType?.protocol === "atomesus" || selectedType?.protocol === "chatgpt"
           ? { auth_code: authCode }
           : { api_key: apiKey }),
         protocol: selectedType?.protocol,
@@ -243,6 +258,12 @@ export default function AddProviderModal({
       onSuccess();
       close();
     } catch (e: any) {
+      setVerifying(false);
+      if (shouldVerify) {
+        setVerificationWarning(e.message || "We could not verify this credential.");
+        setError(null);
+        return;
+      }
       setError(e.message);
       notifyError("Could not add provider", e.message);
     } finally {
@@ -434,20 +455,29 @@ export default function AddProviderModal({
                 selectedType?.protocol !== "antigravity" && (
                   <div className="space-y-2">
                      <Label htmlFor="provider-key">
-                        {selectedType?.protocol === "atomesus" ? "Bearer token (optional)" : selectedType?.protocol === "freebuff" || selectedType?.protocol === "qwen" ? "Auth code (optional)" : "API key (optional)"}
+                        {selectedType?.protocol === "chatgpt" ? "Session token (required)" : selectedType?.protocol === "atomesus" ? "Bearer token (optional)" : selectedType?.protocol === "freebuff" || selectedType?.protocol === "qwen" ? "Auth code (optional)" : "API key (optional)"}
                     </Label>
                     <Input
                       id="provider-key"
                       type="password"
-                       value={selectedType?.protocol === "freebuff" || selectedType?.protocol === "qwen" || selectedType?.protocol === "atomesus" ? authCode : apiKey}
+                       value={selectedType?.protocol === "freebuff" || selectedType?.protocol === "qwen" || selectedType?.protocol === "atomesus" || selectedType?.protocol === "chatgpt" ? authCode : apiKey}
                       onChange={(e) =>
-                         selectedType?.protocol === "freebuff" || selectedType?.protocol === "qwen" || selectedType?.protocol === "atomesus"
+                         selectedType?.protocol === "freebuff" || selectedType?.protocol === "qwen" || selectedType?.protocol === "atomesus" || selectedType?.protocol === "chatgpt"
                           ? setAuthCode(e.target.value)
                           : setApiKey(e.target.value)
                       }
-                       placeholder={selectedType?.protocol === "atomesus" ? "Paste your Atomesus bearer token" : selectedType?.protocol === "freebuff" || selectedType?.protocol === "qwen" ? "Paste your auth token" : "sk-..."}
+                       placeholder={selectedType?.protocol === "chatgpt" ? "Paste an authorized session token" : selectedType?.protocol === "atomesus" ? "Paste your Atomesus bearer token" : selectedType?.protocol === "freebuff" || selectedType?.protocol === "qwen" ? "Paste your auth token" : "sk-..."}
                     />
-                    {(selectedType?.protocol === "freebuff" || selectedType?.protocol === "qwen") && (
+                    {selectedType?.protocol === "chatgpt" ? (
+                      <div className="space-y-2 rounded-lg border border-dashed p-3 text-xs text-muted-foreground">
+                        <p className="font-medium text-foreground">How to get your ChatGPT session token:</p>
+                        <p>Open ChatGPT, then follow this path in your browser:</p>
+                        <p className="rounded bg-muted p-2 font-mono text-[11px] leading-relaxed">
+                          Use the authorized ChatGPT session token provided by your account
+                        </p>
+                        <p>Paste the session token directly. It is encrypted before being stored.</p>
+                      </div>
+                    ) : (selectedType?.protocol === "freebuff" || selectedType?.protocol === "qwen") && (
                       selectedType?.protocol === "qwen" ? (
                         <div className="space-y-3 rounded-lg border border-dashed p-3 text-xs text-muted-foreground">
                           <p className="font-medium text-foreground">How to get your Qwen token:</p>
@@ -523,6 +553,18 @@ export default function AddProviderModal({
                   </p>
                 </div>
               )}
+              {verifying && (
+                <Alert>
+                  <AlertDescription>Verifying the credential before saving the provider...</AlertDescription>
+                </Alert>
+              )}
+              {verificationWarning && (
+                <Alert>
+                  <AlertDescription>
+                    We could not verify this credential. The provider may not work with these credentials. Do you want to continue anyway?
+                  </AlertDescription>
+                </Alert>
+              )}
               {error && (
                 <Alert variant="destructive">
                   <AlertDescription>{error}</AlertDescription>
@@ -557,9 +599,18 @@ export default function AddProviderModal({
                 <Button onClick={connectAntigravity} disabled={loading}>
                   {loading ? "Opening login..." : "Connect Google"}
                 </Button>
+              ) : verificationWarning ? (
+                <>
+                  <Button variant="outline" onClick={() => setVerificationWarning(null)} disabled={loading}>
+                    Back
+                  </Button>
+                  <Button onClick={() => submit(true)} disabled={loading}>
+                    Continue anyway
+                  </Button>
+                </>
               ) : (
-                <Button onClick={submit} disabled={loading}>
-                  {loading ? "Saving..." : "Save provider"}
+                <Button onClick={() => submit(false)} disabled={loading}>
+                  {verifying ? "Verifying..." : loading ? "Saving..." : "Save provider"}
                 </Button>
               )}
             </DialogFooter>

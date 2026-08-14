@@ -21,6 +21,13 @@ import { openAICompletionFromSse } from "./openai-completion";
 import { freebuffResponses } from "../integrations/freebuff";
 import { cleanQwenStream, extractQwenContent, qwenResponses } from "../integrations/qwen";
 import { atomesusResponses } from "../integrations/atomesus";
+import {
+  chatgptResponses,
+  chatgptStreamToOpenAI,
+  conversationFingerprint,
+  conversationIdCache,
+  normalizeChatGptAuth,
+} from "../integrations/chatgpt";
 import { injectCavemanPrompt } from "../plugins/caveman";
 import { customSkillsProxy } from "../plugins/custom-skills";
 import { rtkManager } from "../plugins/rtk";
@@ -1336,6 +1343,129 @@ export const proxyPlugin = (app: Elysia) =>
           set.status = statusCode;
           requestLogService.complete(requestLogId, { status: "error", statusCode, error: failures.at(-1) });
           return { error: "Atomesus request failed", message: failures.at(-1) };
+        }
+
+        if (provider.protocol === "chatgpt") {
+          const attempted = new Set<string>();
+          const failures: string[] = [];
+          while (credential && !attempted.has(credential.id)) {
+            attempted.add(credential.id);
+            try {
+              const start = performance.now();
+              const upstream = await chatgptResponses(
+                body,
+                parsed.modelId,
+                credential,
+              );
+              const modelRecord = modelService.findByProviderAndModel(
+                provider.id,
+                parsed.modelId,
+              );
+              const credentialId = credential.id;
+              const conversationFingerprintValue = body.stream
+                ? await conversationFingerprint(
+                    body,
+                    parsed.modelId,
+                    normalizeChatGptAuth(credential).accountId,
+                  )
+                : null;
+              if (!body.stream) {
+                const completion = await upstream.json();
+                const durationMs = Math.round(performance.now() - start);
+                const details = tokenDetails(completion.usage);
+                const usage = usageService.record(
+                  provider.id,
+                  modelRecord?.id ?? parsed.modelId,
+                  parsed.modelId,
+                  completion.usage?.prompt_tokens ?? 0,
+                  completion.usage?.completion_tokens ?? 0,
+                  durationMs,
+                  durationMs,
+                  details,
+                );
+                requestLogService.complete(requestLogId, {
+                  promptTokens: completion.usage?.prompt_tokens,
+                  completionTokens: completion.usage?.completion_tokens,
+                  cacheRead: details.cacheRead,
+                  cacheWrite: details.cacheWrite,
+                  cost: usage.estimated_cost_usd,
+                  durationMs,
+                });
+                credentialService.clearError(credentialId);
+                credentialService.clearCooldown(credentialId);
+                return completion;
+              }
+              return recordSseUsageResponse(
+                chatgptStreamToOpenAI(
+                  upstream,
+                  parsed.modelId,
+                  (conversationId) => {
+                    if (conversationFingerprintValue)
+                      conversationIdCache.set(
+                        conversationFingerprintValue,
+                        conversationId,
+                      );
+                  },
+                ),
+                (
+                  promptTokens,
+                  completionTokens,
+                  durationMs,
+                  generationDurationMs,
+                  details,
+                ) => {
+                  const usage = usageService.record(
+                    provider.id,
+                    modelRecord?.id ?? parsed.modelId,
+                    parsed.modelId,
+                    promptTokens,
+                    completionTokens,
+                    durationMs,
+                    generationDurationMs,
+                    details,
+                  );
+                  requestLogService.complete(requestLogId, {
+                    promptTokens,
+                    completionTokens,
+                    cacheRead: details?.cacheRead,
+                    cacheWrite: details?.cacheWrite,
+                    cost: usage.estimated_cost_usd,
+                    durationMs,
+                  });
+                  credentialService.clearError(credentialId);
+                  credentialService.clearCooldown(credentialId);
+                },
+                start,
+              );
+            } catch (error: any) {
+              failures.push(error.message);
+              credentialService.markError(credential.id, error.message);
+              if (provider.credential_mode !== "round_robin") break;
+              credentialService.markCooldown(
+                credential.id,
+                10,
+                error.message,
+                requestSequence,
+              );
+              const next = credentialService.select(
+                provider.id,
+                "round_robin",
+                null,
+                requestSequence,
+              );
+              if (!next || attempted.has(next.id)) break;
+              credential = next;
+              requestLogService.setCredential(requestLogId, credential);
+            }
+          }
+          const statusCode = failures.every(isQuotaError) ? 429 : 502;
+          set.status = statusCode;
+          requestLogService.complete(requestLogId, {
+            status: "error",
+            statusCode,
+            error: failures.at(-1),
+          });
+          return { error: "ChatGPT request failed", message: failures.at(-1) };
         }
 
         // Handle streaming

@@ -2,6 +2,7 @@ export type ProviderProtocol =
   | "openai"
   | "anthropic"
   | "codex"
+  | "chatgpt"
   | "antigravity"
   | "freebuff"
   | "qwen"
@@ -9,6 +10,7 @@ export type ProviderProtocol =
 
 const protocolIcons: Partial<Record<ProviderProtocol, string>> = {
   antigravity: "https://antigravity.google/assets/image/brand/antigravity-icon__full-color.png",
+  chatgpt: "https://chatgpt.com/favicon.ico",
   codex: "https://openai.com/favicon.ico",
   freebuff: "https://freebuff.com/favicon.ico",
   qwen: "https://assets.alicdn.com/g/qwenweb/qwen-webui-fe/0.0.201/favicon.png",

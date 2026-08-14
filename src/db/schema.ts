@@ -461,8 +461,16 @@ export function initSchema(db: Database): void {
       ).run(
         credentialId,
         provider.id,
-        provider.protocol === "codex" ? "Codex session" : "Default API key",
-        provider.protocol === "codex" ? "codex" : "api_key",
+        provider.protocol === "codex"
+          ? "Codex session"
+          : provider.protocol === "chatgpt"
+            ? "ChatGPT session"
+            : "Default API key",
+        provider.protocol === "codex"
+          ? "codex"
+          : provider.protocol === "chatgpt"
+            ? "chatgpt"
+            : "api_key",
         encryptSecret(provider.api_key),
       );
       db.query("UPDATE providers SET fixed_credential_id = ? WHERE id = ?").run(

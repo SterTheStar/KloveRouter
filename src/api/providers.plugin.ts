@@ -5,12 +5,74 @@ import { codexAuthService } from "../integrations/codex";
 import { logger } from "../logger";
 import { isValidAvatar } from "../services/provider-appearance";
 import { assertSafeRemoteUrl } from "../services/ssrf";
+import { chatgptModels } from "../integrations/chatgpt";
+import { qwenModels } from "../integrations/qwen";
+import { credentialKindForProtocol, validateCredential } from "../services/credential-validation";
+import type { ProviderProtocol } from "../services/provider-appearance";
 
 export const providersPlugin = (app: Elysia) =>
   app
     .get("/api/providers", () => {
       return providerService.findAll();
     })
+    .post(
+      "/api/providers/validate-credential",
+      async ({ body, set }) => {
+        const protocol = (body.protocol ?? "openai") as ProviderProtocol;
+        const secret = body.api_key ?? body.auth_code;
+        try {
+          const kind = credentialKindForProtocol(protocol);
+          validateCredential(protocol, kind, secret, { allowIncompleteOAuth: true });
+          const provider = {
+            id: "validation",
+            name: "validation",
+            base_url: body.base_url.replace(/\/+$/, ""),
+            api_key: secret ?? "",
+            protocol,
+            avatar: null,
+            credential_mode: "fixed",
+            fixed_credential_id: null,
+            is_active: 1,
+            created_at: "",
+            updated_at: "",
+          } as any;
+          const credential = { id: "validation", secret: secret ?? "" };
+          if (protocol === "chatgpt") {
+            const models = await chatgptModels(credential, { strict: true });
+            if (!models.length) throw new Error("ChatGPT returned no models");
+          } else if (protocol === "qwen") {
+            const models = await qwenModels(credential, provider.base_url);
+            if (!models.length) throw new Error("Qwen returned no models");
+          } else if (protocol === "openai" || protocol === "anthropic") {
+            const url = `${provider.base_url}/models`;
+            await assertSafeRemoteUrl(url);
+            const headers: Record<string, string> = protocol === "anthropic"
+              ? { "x-api-key": secret ?? "", "anthropic-version": "2023-06-01" }
+              : { Authorization: `Bearer ${secret ?? ""}` };
+            const response = await fetch(url, { headers });
+            const data: any = await response.json().catch(() => null);
+            if (!response.ok) throw new Error(`${protocol} model listing failed (${response.status})`);
+            const models = Array.isArray(data) ? data : data?.data ?? data?.models;
+            if (!Array.isArray(models) || !models.length) throw new Error(`${protocol} returned no models`);
+          } else {
+            return { valid: true, verified: false, message: "This integration has no authenticated model catalog endpoint; verification will occur when models are synced." };
+          }
+          return { valid: true, verified: true, message: "Credential verified: models were loaded successfully." };
+        } catch (error: any) {
+          set.status = 400;
+          return { valid: false, verified: false, error: error.message || "Credential verification failed" };
+        }
+      },
+      {
+        body: t.Object({
+          base_url: t.String({ minLength: 1 }),
+          protocol: t.Optional(t.Union([t.Literal("openai"), t.Literal("anthropic"), t.Literal("codex"), t.Literal("chatgpt"), t.Literal("antigravity"), t.Literal("freebuff"), t.Literal("qwen"), t.Literal("atomesus")])),
+          api_key: t.Optional(t.String()),
+          auth_code: t.Optional(t.String()),
+          model: t.Optional(t.String()),
+        }),
+      },
+    )
     .get("/api/providers/:id", ({ params: { id }, set }) => {
       const provider = providerService.findById(id);
       if (!provider) {
@@ -43,10 +105,13 @@ export const providersPlugin = (app: Elysia) =>
           set.status = 409;
           return { error: "Provider name already exists" };
         }
-        const provider = providerService.create({
-          ...body,
-          api_key: body.api_key ?? body.auth_code,
-        });
+        let provider;
+        try {
+          provider = providerService.create({ ...body, api_key: body.api_key ?? body.auth_code });
+        } catch (error: any) {
+          set.status = 400;
+          return { error: error.message };
+        }
         logger.success("Provider created", {
           provider: provider.name,
           protocol: provider.protocol,
@@ -65,6 +130,7 @@ export const providersPlugin = (app: Elysia) =>
               t.Literal("openai"),
               t.Literal("anthropic"),
               t.Literal("codex"),
+              t.Literal("chatgpt"),
               t.Literal("antigravity"),
               t.Literal("freebuff"),
               t.Literal("qwen"),
@@ -98,8 +164,12 @@ export const providersPlugin = (app: Elysia) =>
             return { error: error.message };
           }
         }
-        const updated = providerService.update(id, body);
-        return updated;
+        try {
+          return providerService.update(id, { ...body, api_key: body.api_key ?? body.auth_code });
+        } catch (error: any) {
+          set.status = 400;
+          return { error: error.message };
+        }
       },
       {
         body: t.Object({
@@ -113,6 +183,7 @@ export const providersPlugin = (app: Elysia) =>
               t.Literal("openai"),
               t.Literal("anthropic"),
               t.Literal("codex"),
+              t.Literal("chatgpt"),
               t.Literal("antigravity"),
               t.Literal("freebuff"),
               t.Literal("qwen"),
@@ -152,7 +223,7 @@ export const providersPlugin = (app: Elysia) =>
         if (
           !credential ||
           credential.provider_id !== id ||
-            credential.kind !== "api_key" && credential.kind !== "freebuff" && credential.kind !== "qwen" && credential.kind !== "atomesus"
+            credential.kind !== "api_key" && credential.kind !== "chatgpt" && credential.kind !== "freebuff" && credential.kind !== "qwen" && credential.kind !== "atomesus"
         ) {
           set.status = 404;
           return { error: "Credential secret not found" };
@@ -174,12 +245,12 @@ export const providersPlugin = (app: Elysia) =>
                 fingerprintHash: body.fingerprint_hash,
               })
             : body.fingerprint_json;
-        return credentialService.create({
-          ...body,
-          provider_id: id,
-          kind: body.kind ?? "api_key",
-          fingerprint_json,
-        });
+        try {
+          return credentialService.create({ ...body, provider_id: id, kind: body.kind ?? "api_key", fingerprint_json });
+        } catch (error: any) {
+          set.status = 400;
+          return { error: error.message };
+        }
       },
       {
         body: t.Object({
@@ -188,6 +259,7 @@ export const providersPlugin = (app: Elysia) =>
             t.Union([
               t.Literal("api_key"),
               t.Literal("codex"),
+              t.Literal("chatgpt"),
               t.Literal("antigravity"),
               t.Literal("freebuff"),
               t.Literal("qwen"),
@@ -215,12 +287,28 @@ export const providersPlugin = (app: Elysia) =>
           set.status = 404;
           return { error: "Credential not found" };
         }
-        return credentialService.update(credentialId, body);
+        try {
+          return credentialService.update(credentialId, body);
+        } catch (error: any) {
+          set.status = 400;
+          return { error: error.message };
+        }
       },
       {
         body: t.Object({
           label: t.Optional(t.String({ minLength: 1 })),
-          secret: t.Optional(t.String()),
+          kind: t.Optional(
+            t.Union([
+              t.Literal("api_key"),
+              t.Literal("codex"),
+              t.Literal("chatgpt"),
+              t.Literal("antigravity"),
+              t.Literal("freebuff"),
+              t.Literal("qwen"),
+              t.Literal("atomesus"),
+            ]),
+          ),
+          secret: t.Optional(t.Union([t.String(), t.Null()])),
           is_active: t.Optional(t.Numeric()),
         }),
       },

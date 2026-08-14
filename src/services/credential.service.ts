@@ -1,8 +1,10 @@
 import { getDb } from "../db/connection";
 import { decryptSecret, encryptSecret } from "./secret.service";
 import { logger } from "../logger";
+import { validateCredential } from "./credential-validation";
+import type { ProviderProtocol } from "./provider-appearance";
 
-export type CredentialKind = "api_key" | "codex" | "antigravity" | "freebuff" | "qwen" | "atomesus";
+export type CredentialKind = "api_key" | "codex" | "chatgpt" | "antigravity" | "freebuff" | "qwen" | "atomesus";
 export type CredentialMode = "fixed" | "round_robin";
 
 export interface ProviderCredential {
@@ -99,7 +101,9 @@ export const credentialService = {
     const credential = this.findById(id);
     if (!credential) return null;
     return {
-      authenticated: Boolean(credential.access_token),
+      authenticated: credential.kind === "chatgpt"
+        ? Boolean(credential.secret)
+        : Boolean(credential.access_token),
       account_id: credential.account_id,
       email: credential.email ?? null,
       project_id: credential.project_id ?? null,
@@ -146,6 +150,12 @@ export const credentialService = {
     fingerprint_json?: string;
     quota_json?: string;
   }): ProviderCredentialPublic {
+    const provider = getDb().query("SELECT protocol FROM providers WHERE id = ?").get(input.provider_id) as { protocol: ProviderProtocol } | null;
+    if (!provider) throw new Error("Provider not found");
+    validateCredential(provider.protocol, input.kind, input.secret, {
+      accessToken: input.access_token,
+      refreshToken: input.refresh_token,
+    });
     const id = crypto.randomUUID();
     getDb()
       .query(
@@ -175,6 +185,7 @@ export const credentialService = {
     id: string,
     input: {
       label?: string;
+      kind?: CredentialKind;
       secret?: string | null;
       is_active?: number;
       access_token?: string | null;
@@ -189,10 +200,21 @@ export const credentialService = {
       quota_json?: string | null;
     },
   ) {
+    const existing = this.findById(id);
+    if (!existing) return null;
+    if (input.kind !== undefined || input.secret !== undefined) {
+      const provider = getDb().query("SELECT protocol FROM providers WHERE id = ?").get(existing.provider_id) as { protocol: ProviderProtocol } | null;
+      if (!provider) throw new Error("Provider not found");
+      validateCredential(provider.protocol, input.kind ?? existing.kind, input.secret !== undefined ? input.secret : existing.secret, {
+        accessToken: input.access_token !== undefined ? input.access_token : existing.access_token,
+        refreshToken: input.refresh_token !== undefined ? input.refresh_token : existing.refresh_token,
+      });
+    }
     const updates: string[] = [];
     const values: any[] = [];
     for (const field of [
       "label",
+      "kind",
       "secret",
       "is_active",
       "access_token",
@@ -269,6 +291,8 @@ export const credentialService = {
     const eligible =
       provider?.protocol === "codex"
         ? "kind = 'codex' AND access_token IS NOT NULL"
+          : provider?.protocol === "chatgpt"
+            ? "kind = 'chatgpt' AND (secret IS NOT NULL OR access_token IS NOT NULL)"
           : provider?.protocol === "antigravity"
             ? "kind = 'antigravity' AND refresh_token IS NOT NULL"
             : provider?.protocol === "freebuff"
