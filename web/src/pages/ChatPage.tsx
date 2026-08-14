@@ -71,7 +71,7 @@ export default function ChatPage({
   }, [messages]);
 
   const selectedModelRecord = modelList.find(
-    (model) => modelApiId(model.provider_name, model.model_id) === selectedModel,
+    (model) => modelApiId(model.provider_name, model.model_id, model.pretty_id) === selectedModel,
   );
   const reasoningEfforts = selectedModelRecord?.reasoning_efforts ?? [];
 
@@ -81,7 +81,7 @@ export default function ChatPage({
       return;
     }
     const efforts = modelList.find(
-      (model) => modelApiId(model.provider_name, model.model_id) === selectedModel,
+      (model) => modelApiId(model.provider_name, model.model_id, model.pretty_id) === selectedModel,
     )?.reasoning_efforts ?? [];
     const stored = localStorage.getItem(`${REASONING_STORAGE_PREFIX}${selectedModel}`);
     const next = efforts.some((effort) => effort.effort === stored)
@@ -106,7 +106,7 @@ export default function ChatPage({
         setSelectedModel((prev) => {
           if (!prev) return prev;
           return list.some(
-            (m) => modelApiId(m.provider_name, m.model_id) === prev,
+            (m) => modelApiId(m.provider_name, m.model_id, m.pretty_id) === prev,
           )
             ? prev
             : null;
@@ -463,7 +463,7 @@ export default function ChatPage({
               <ChatMessageView
                 key={message.id}
                 message={message}
-                modelName={message.stats?.model ? modelList.find((model) => modelApiId(model.provider_name, model.model_id) === message.stats?.model)?.display_name ?? undefined : undefined}
+                modelName={message.stats?.model ? modelList.find((model) => modelApiId(model.provider_name, model.model_id, model.pretty_id) === message.stats?.model)?.display_name ?? undefined : undefined}
                 streaming={streaming && message.id === messages.at(-1)?.id}
               />
             ))

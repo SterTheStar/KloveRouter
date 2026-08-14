@@ -1,7 +1,7 @@
 import { Elysia, t } from "elysia";
 import { keyService } from "../services/key.service";
-import { providerPrefix, providerService } from "../services/provider.service";
-import { modelService } from "../services/model.service";
+import { providerService } from "../services/provider.service";
+import { modelService, providerModelPublicId } from "../services/model.service";
 import { usageService } from "../services/usage.service";
 import { createOpenAIClient, parseModelName } from "../clients/openai";
 import {
@@ -490,8 +490,8 @@ export const proxyPlugin = (app: Elysia) =>
           const provider = providers.find((p) => p.id === m.provider_id);
           return {
             id: provider
-              ? `${providerPrefix(provider.name)}/${m.model_id}`
-              : m.model_id,
+              ? providerModelPublicId(provider.name, m)
+              : m.pretty_id ?? m.model_id,
             object: "model",
             created: Math.floor(new Date(m.created_at).getTime() / 1000),
              owned_by: provider?.name.toLowerCase() ?? "unknown",
@@ -636,10 +636,7 @@ export const proxyPlugin = (app: Elysia) =>
           };
          }
 
-        const modelRecord = modelService.findByProviderAndModel(
-          provider.id,
-          parsed.modelId,
-        );
+        const modelRecord = modelService.findByPublicId(provider.id, parsed.modelId);
         if (!modelRecord || !modelRecord.is_active) {
           set.status = 404;
           return {
@@ -647,6 +644,8 @@ export const proxyPlugin = (app: Elysia) =>
             message: `No active model "${parsed.modelId}" is configured for provider "${provider.name}"`,
           };
         }
+        // Public identifier resolved; use upstream technical ID only internally.
+        parsed.modelId = modelRecord.model_id;
         try {
           validateModelRequest(body, modelRecord);
         } catch (error) {

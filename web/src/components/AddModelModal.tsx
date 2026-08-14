@@ -36,6 +36,7 @@ export default function AddModelModal({
 }) {
   const { success, error: notifyError } = useToast();
   const [modelId, setModelId] = useState("");
+  const [prettyId, setPrettyId] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [displayEdited, setDisplayEdited] = useState(false);
   const [metadata, setMetadata] = useState<ModelMetadataInput>(() =>
@@ -56,6 +57,7 @@ export default function AddModelModal({
   const close = () => {
     if (loading) return;
     setModelId("");
+    setPrettyId("");
     setDisplayName("");
     setDisplayEdited(false);
     setMetadata(emptyModelMetadata());
@@ -90,6 +92,7 @@ export default function AddModelModal({
     try {
       await models.create(providerId, {
         model_id: modelId.trim(),
+        pretty_id: prettyId.trim() || null,
         display_name: displayName || undefined,
         pricing_tiers: pricingTiers,
         ...metadata,
@@ -143,6 +146,11 @@ export default function AddModelModal({
                 }}
                 placeholder="gpt-4o"
               />
+            </div>
+            <div className="min-w-0 space-y-2">
+              <Label htmlFor="model-pretty">Pretty ID (optional)</Label>
+              <Input className="h-10 bg-muted/30 dark:bg-muted/30" id="model-pretty" value={prettyId} onChange={(e) => setPrettyId(e.target.value)} placeholder="friendly-model" />
+              <p className="text-xs text-muted-foreground">Public ID: letters, numbers, dots, hyphens, underscores.</p>
             </div>
             <div className="min-w-0 space-y-2">
               <Label htmlFor="model-display">Display name</Label>

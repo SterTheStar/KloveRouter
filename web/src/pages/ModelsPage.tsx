@@ -35,6 +35,7 @@ import { models, stats } from "../api/client";
 import type { ModelCapabilities, ModelWithProvider } from "../types";
 import { useToast } from "../components/ui/toast";
 import ProviderIcon from "../components/ProviderIcon";
+import { modelDisplayId, modelPublicId } from "../lib/model-id";
 
 type SourceFilter = "all" | "manual" | "synced";
 
@@ -130,7 +131,7 @@ export default function ModelsPage() {
       const q = searchQuery.toLowerCase();
       result = result.filter(
         (m) =>
-          m.model_id.toLowerCase().includes(q) ||
+          (m.pretty_id ? modelPublicId(m) : modelDisplayId(m)).toLowerCase().includes(q) ||
           (m.display_name?.toLowerCase().includes(q) ?? false) ||
           m.provider_name.toLowerCase().includes(q),
       );
@@ -306,7 +307,7 @@ export default function ModelsPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Model ID</TableHead>
+                <TableHead>Public ID</TableHead>
                 <TableHead>Display name</TableHead>
                 <TableHead>Provider</TableHead>
                 <TableHead>Source</TableHead>
@@ -352,7 +353,7 @@ export default function ModelsPage() {
                       models.map((model) => {
                         const tps = tpsMap[model.id];
                         const result = testResult[model.id];
-                        const fullModelId = `${model.provider_name.toLowerCase().replace(/\s+/g, "")}/${model.model_id}`;
+                        const fullModelId = modelPublicId(model);
                         return (
                           <TableRow key={model.id}>
                             <TableCell className="font-mono text-xs">

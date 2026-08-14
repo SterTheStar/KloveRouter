@@ -2,7 +2,7 @@ import { Elysia, t } from "elysia";
 import { userInfo } from "node:os";
 import { getDb } from "../db/connection";
 import { isValidAvatar } from "../services/provider-appearance";
-import { modelService } from "../services/model.service";
+import { modelService, providerModelPublicId } from "../services/model.service";
 
 function defaultProfileName() {
   try {
@@ -32,7 +32,7 @@ export const settingsPlugin = (app: Elysia) =>
         const value = body.chat_title_model.trim();
         if (value !== "auto") {
           const valid = modelService.findAllActiveWithProvider().some(
-            (model) => `${model.provider_name.toLowerCase().replace(/\s+/g, "")}/${model.model_id}` === value,
+            (model) => providerModelPublicId(model.provider_name, model) === value,
           );
           if (!valid) {
             set.status = 400;

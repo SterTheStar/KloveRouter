@@ -38,6 +38,7 @@ import AvatarUpload from "../components/AvatarUpload";
 import { settings, models, rtk, caveman, customSkills } from "../api/client";
 import { useToast } from "../components/ui/toast";
 import type { UserProfile, RtkStatus, CavemanStatus } from "../types";
+import { modelDisplayId, modelPublicId } from "../lib/model-id";
 
 const tabs: Tab[] = [
   { id: "general", label: "General" },
@@ -383,8 +384,8 @@ export default function SettingsPage({
             <select id="chat-title-model" value={chatTitleModel} onChange={(event) => setChatTitleModel(event.target.value)} className="h-9 w-full rounded-md border bg-background px-3 text-sm">
               <option value="auto">Auto (active model)</option>
               {chatTitleModels.map((model) => {
-                const id = `${model.provider_name.toLowerCase().replace(/\s+/g, "")}/${model.model_id}`;
-                return <option key={id} value={id}>{model.display_name || model.model_id} ({model.provider_name})</option>;
+                const id = modelPublicId(model);
+                return <option key={id} value={id}>{model.display_name || modelDisplayId(model)} ({model.provider_name})</option>;
               })}
             </select>
             <p className="text-xs text-muted-foreground">Titles are generated after the first message and never replace a custom title.</p>

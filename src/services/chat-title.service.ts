@@ -1,17 +1,13 @@
 import { config } from "../config";
 import { getDb } from "../db/connection";
 import { keyService } from "./key.service";
-import { modelService } from "./model.service";
+import { modelService, providerModelPublicId } from "./model.service";
 import { logger } from "../logger";
 
 const DEFAULT_MODEL = "auto";
 const FALLBACK_TITLE = "New conversation";
 const FALLBACK_LIMIT = 80;
 const TITLE_REQUEST_TIMEOUT_MS = 15_000;
-
-function modelApiId(providerName: string, modelId: string): string {
-  return `${providerName.toLowerCase().replace(/\s+/g, "")}/${modelId}`;
-}
 
 function comparable(value: string): string {
   return value
@@ -50,7 +46,7 @@ function configuredModel(activeModel: string): string | null {
   const setting = row?.value || DEFAULT_MODEL;
   if (setting === DEFAULT_MODEL) return activeModel;
   const models = modelService.findAllActiveWithProvider();
-  return models.some((model) => modelApiId(model.provider_name, model.model_id) === setting) ? setting : null;
+  return models.some((model) => providerModelPublicId(model.provider_name, model) === setting) ? setting : null;
 }
 
 export const chatTitleService = {

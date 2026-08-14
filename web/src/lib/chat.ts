@@ -4,8 +4,8 @@ import type { ChatStats } from "../types";
  * Builds the provider-prefixed model id used by the routing proxy, matching
  * `providerPrefix()` on the backend: "googleantigravity/gemini-3-flash".
  */
-export function modelApiId(providerName: string, modelId: string): string {
-  return `${providerName.toLowerCase().replace(/\s+/g, "")}/${modelId}`;
+export function modelApiId(providerName: string, modelId: string, prettyId?: string | null): string {
+  return `${providerName.toLowerCase().replace(/\s+/g, "")}/${prettyId || modelId}`;
 }
 
 export function formatTokens(value: number): string {

@@ -1,6 +1,7 @@
 import { Elysia, t } from "elysia";
 import {
   DuplicateProviderModelError,
+  DuplicatePrettyModelIdError,
   InvalidModelMetadataError,
   type ModelMetadataInput,
   modelService,
@@ -52,6 +53,10 @@ const reasoningEffortsSchema = t.Array(
 );
 
 export const parseGenericModelMetadata = parseRawModelMetadata;
+
+function publicModel(model: any) {
+  return model;
+}
 
 async function freebuffTest(
   model: string,
@@ -109,7 +114,7 @@ async function qwenTest(
 export const modelsPlugin = (app: Elysia) =>
   app
     .get("/api/models", () => {
-      return modelService.findAllActiveWithProvider();
+      return modelService.findAllActiveWithProvider().map(publicModel);
     })
     .get("/api/providers/:id/models", ({ params: { id }, set }) => {
       const provider = providerService.findById(id);
@@ -117,7 +122,7 @@ export const modelsPlugin = (app: Elysia) =>
         set.status = 404;
         return { error: "Provider not found" };
       }
-      return modelService.findByProvider(id);
+      return modelService.findByProvider(id).map(publicModel);
     })
     .post(
       "/api/providers/:id/models",
@@ -134,22 +139,40 @@ export const modelsPlugin = (app: Elysia) =>
           set.status = 400;
           return { error: "This model is blocked for Antigravity" };
         }
-        const model = modelService.create({
-          provider_id: id,
-          model_id: body.model_id,
-          display_name: body.display_name || generateDisplayName(body.model_id),
-          pricing_tiers: body.pricing_tiers,
-          context_window: body.context_window,
-          max_output_tokens: body.max_output_tokens,
-          capabilities: body.capabilities,
-          reasoning_efforts: body.reasoning_efforts,
-          is_manual: 1,
-        });
-        return model;
+        try {
+          const model = modelService.create({
+            provider_id: id,
+            model_id: body.model_id,
+            pretty_id: body.pretty_id,
+            display_name: body.display_name || generateDisplayName(body.model_id),
+            pricing_tiers: body.pricing_tiers,
+            context_window: body.context_window,
+            max_output_tokens: body.max_output_tokens,
+            capabilities: body.capabilities,
+            reasoning_efforts: body.reasoning_efforts,
+            is_manual: 1,
+          });
+          return publicModel(model);
+        } catch (error) {
+          if (error instanceof DuplicatePrettyModelIdError) {
+            set.status = 409;
+            return { error: "Duplicate public model ID", message: error.message, pretty_id: error.prettyId };
+          }
+          if (error instanceof DuplicateProviderModelError) {
+            set.status = 409;
+            return { error: "Duplicate model", message: error.message, model_id: error.modelId };
+          }
+          if (error instanceof InvalidModelMetadataError) {
+            set.status = 400;
+            return { error: "Invalid model metadata", message: error.message };
+          }
+          throw error;
+        }
       },
       {
         body: t.Object({
           model_id: t.String({ minLength: 1 }),
+          pretty_id: t.Optional(t.Union([t.String({ minLength: 1, maxLength: 80 }), t.Null()])),
           display_name: t.Optional(t.String()),
           context_window: t.Optional(t.Union([t.Integer({ minimum: 1 }), t.Null()])),
           max_output_tokens: t.Optional(t.Union([t.Integer({ minimum: 1 }), t.Null()])),
@@ -355,6 +378,7 @@ export const modelsPlugin = (app: Elysia) =>
               saveSyncedModel({
                 provider_id: id,
                 model_id: model.id,
+                pretty_id: modelService.findByProviderAndModel(id, model.id)?.pretty_id ?? modelService.generateUniquePrettyId(id, model.agentModel || model.modelPreset || model.agentName || model.display_name || model.id),
                 display_name: model.display_name || generateDisplayName(model.id),
                 is_manual: 0,
                 ...await resolveModelMetadata(provider.protocol, model.id, model),
@@ -624,7 +648,7 @@ export const modelsPlugin = (app: Elysia) =>
         set.status = 404;
         return { error: "Model not found" };
       }
-      return model;
+      return publicModel(model);
     })
     .put(
       "/api/models/:id",
@@ -635,8 +659,12 @@ export const modelsPlugin = (app: Elysia) =>
             set.status = 404;
             return { error: "Model not found" };
           }
-          return model;
+          return publicModel(model);
         } catch (error) {
+          if (error instanceof DuplicatePrettyModelIdError) {
+            set.status = 409;
+            return { error: "Duplicate public model ID", message: error.message, pretty_id: error.prettyId };
+          }
           if (error instanceof DuplicateProviderModelError) {
             set.status = 409;
             return {
@@ -655,6 +683,7 @@ export const modelsPlugin = (app: Elysia) =>
       {
         body: t.Object({
           model_id: t.Optional(t.String({ minLength: 1 })),
+          pretty_id: t.Optional(t.Union([t.String({ minLength: 1, maxLength: 80 }), t.Null()])),
           display_name: t.Optional(t.Union([t.String(), t.Null()])),
           context_window: t.Optional(t.Union([t.Integer({ minimum: 1 }), t.Null()])),
           max_output_tokens: t.Optional(t.Union([t.Integer({ minimum: 1 }), t.Null()])),

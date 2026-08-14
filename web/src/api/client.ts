@@ -262,6 +262,7 @@ export const models = {
     providerId: string,
     data: {
       model_id: string;
+      pretty_id?: string | null;
       display_name?: string;
       pricing_tiers?: import("../types").PricingTier[];
     } & import("../types").ModelMetadataInput,
@@ -298,6 +299,7 @@ export const models = {
     id: string,
     data: {
       model_id?: string;
+      pretty_id?: string | null;
       display_name?: string | null;
       pricing_tiers?: import("../types").PricingTier[];
     } & Partial<import("../types").ModelMetadataInput>,

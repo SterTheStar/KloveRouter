@@ -37,6 +37,7 @@ export default function EditModelModal({
 }) {
   const { success, error: notifyError } = useToast();
   const [modelId, setModelId] = useState("");
+  const [prettyId, setPrettyId] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [displayEdited, setDisplayEdited] = useState(false);
   const [pricingTiers, setPricingTiers] = useState<PricingTier[]>([]);
@@ -53,6 +54,7 @@ export default function EditModelModal({
         (model.reasoning_efforts ?? []).findIndex((effort) => effort.is_default),
       );
       setModelId(model.model_id);
+      setPrettyId(model.pretty_id ?? "");
       setDisplayName(model.display_name ?? generateDisplayName(model.model_id));
       setDisplayEdited(Boolean(model.display_name));
       setMetadata({
@@ -104,6 +106,7 @@ export default function EditModelModal({
     try {
       await models.update(model.id, {
         model_id: modelId.trim(),
+        pretty_id: prettyId.trim() || null,
         display_name: displayName || null,
         pricing_tiers: pricingTiers,
         ...metadata,
@@ -156,6 +159,10 @@ export default function EditModelModal({
                     setDisplayName(generateDisplayName(value));
                 }}
               />
+            </div>
+            <div className="min-w-0 space-y-2">
+              <Label htmlFor="edit-model-pretty">Pretty ID (optional)</Label>
+              <Input className="h-10 bg-muted/30 dark:bg-muted/30" id="edit-model-pretty" value={prettyId} onChange={(e) => setPrettyId(e.target.value)} placeholder="friendly-model" />
             </div>
             <div className="min-w-0 space-y-2">
               <Label htmlFor="edit-model-display">Display name</Label>

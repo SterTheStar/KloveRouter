@@ -6,9 +6,10 @@ import {
 } from "@remixicon/react";
 import type { ModelWithProvider } from "../../types";
 import ProviderIcon from "../ProviderIcon";
+import { modelDisplayId, modelPublicId } from "../../lib/model-id";
 
 function modelId(model: ModelWithProvider) {
-  return `${model.provider_name.toLowerCase().replace(/\s+/g, "")}/${model.model_id}`;
+  return modelPublicId(model);
 }
 
 export default function ModelInput({
@@ -32,7 +33,7 @@ export default function ModelInput({
     const normalized = query.trim().toLowerCase();
     if (!normalized) return models;
     return models.filter((model) =>
-      [model.provider_name, model.model_id, model.display_name ?? "", modelId(model)]
+      [model.provider_name, modelDisplayId(model), model.display_name ?? "", modelId(model)]
         .join(" ")
         .toLowerCase()
         .includes(normalized),
@@ -64,10 +65,10 @@ export default function ModelInput({
         disabled={disabled}
         aria-haspopup="dialog"
         aria-expanded={open}
-        title={current ? `${current.provider_name}/${current.model_id}` : "Selecione um modelo"}
+        title={current ? modelId(current) : "Selecione um modelo"}
       >
         <span className="min-w-0 truncate">
-          {current ? current.display_name || current.model_id : "Selecione um modelo"}
+          {current ? current.display_name || modelDisplayId(current) : "Selecione um modelo"}
         </span>
         <ChevronDown className={`size-3.5 shrink-0 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
@@ -108,10 +109,10 @@ export default function ModelInput({
                     />
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-sm text-foreground">
-                        {model.display_name || model.model_id}
+                        {model.display_name || modelDisplayId(model)}
                       </span>
                       <span className="mt-0.5 block truncate text-xs text-muted-foreground">
-                        {model.provider_name} · {model.model_id}
+                        {model.provider_name} · {modelDisplayId(model)}
                       </span>
                     </span>
                     {selected && <CheckLine className="size-4 shrink-0 text-primary" />}

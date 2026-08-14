@@ -37,6 +37,7 @@ export interface Model {
   id: string;
   provider_id: string;
   model_id: string;
+  pretty_id: string | null;
   display_name: string | null;
   is_manual: number;
   is_active: number;

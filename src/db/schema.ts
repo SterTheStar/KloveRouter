@@ -22,6 +22,7 @@ export function initSchema(db: Database): void {
       id            TEXT PRIMARY KEY,
       provider_id   TEXT NOT NULL,
       model_id      TEXT NOT NULL,
+      pretty_id     TEXT,
       display_name  TEXT,
       context_window INTEGER,
       max_output_tokens INTEGER,
@@ -237,6 +238,9 @@ export function initSchema(db: Database): void {
   const modelCols = db.query("PRAGMA table_info(models)").all() as {
     name: string;
   }[];
+  if (!modelCols.find((c) => c.name === "pretty_id"))
+    db.exec("ALTER TABLE models ADD COLUMN pretty_id TEXT");
+  db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_models_provider_pretty_id ON models(provider_id, pretty_id) WHERE pretty_id IS NOT NULL");
   if (!modelCols.find((c) => c.name === "context_window"))
     db.exec("ALTER TABLE models ADD COLUMN context_window INTEGER");
   if (!modelCols.find((c) => c.name === "max_output_tokens"))

@@ -7,6 +7,7 @@ export interface Model {
   id: string;
   provider_id: string;
   model_id: string;
+  pretty_id: string | null;
   display_name: string | null;
   is_manual: number;
   is_active: number;
@@ -63,6 +64,7 @@ export interface ModelWithProvider extends Model {
 export type CreateModelInput = ModelMetadataInput & {
   provider_id: string;
   model_id: string;
+  pretty_id?: string | null;
   display_name?: string;
   is_manual?: number;
   is_active?: number;
@@ -83,6 +85,33 @@ export class DuplicateProviderModelError extends Error {
     );
     this.name = "DuplicateProviderModelError";
   }
+}
+
+export class DuplicatePrettyModelIdError extends Error {
+  constructor(public readonly prettyId: string) {
+    super(`The public model ID "${prettyId}" already exists for this provider.`);
+    this.name = "DuplicatePrettyModelIdError";
+  }
+}
+
+export function validatePrettyId(value: string | null | undefined): string | null {
+  if (value == null || value.trim() === "") return null;
+  const normalized = value.trim();
+  if (normalized.length > 80 || !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(normalized))
+    throw new InvalidModelMetadataError("pretty_id must use 1-80 letters, numbers, dots, hyphens, or underscores");
+  return normalized;
+}
+
+export function providerModelPublicId(providerName: string, model: Pick<Model, "model_id" | "pretty_id">): string {
+  const prefix = providerName.toLowerCase().replace(/\s+/g, "");
+  return `${prefix}/${model.pretty_id ?? model.model_id}`;
+}
+
+export function generatePrettyId(source: string): string {
+  const value = source.trim().toLowerCase()
+    .normalize("NFKD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  return (value || "model").slice(0, 80).replace(/-+$/g, "") || "model";
 }
 
 const codexPricingDefaults: Record<string, PricingTier> = {
@@ -453,6 +482,23 @@ export const modelService = {
     );
   },
 
+  findByPublicId(providerId: string, publicId: string): Model | null {
+    const db = getDb();
+    const model = db.query("SELECT * FROM models WHERE provider_id = ? AND (pretty_id = ? OR (pretty_id IS NULL AND model_id = ?))").get(providerId, publicId, publicId) as Model | null;
+    return hydrate(model);
+  },
+
+  generateUniquePrettyId(providerId: string, source: string): string {
+    const base = generatePrettyId(source);
+    const db = getDb();
+    let candidate = base;
+    let suffix = 2;
+    while (db.query("SELECT 1 FROM models WHERE provider_id = ? AND pretty_id = ? LIMIT 1").get(providerId, candidate)) {
+      candidate = `${base.slice(0, Math.max(1, 80 - String(suffix).length - 1))}-${suffix++}`;
+    }
+    return candidate;
+  },
+
   findByProvider(providerId: string): Model[] {
     const db = getDb();
     return db
@@ -531,19 +577,27 @@ export const modelService = {
   upsert(input: CreateModelInput): Model {
     const db = getDb();
     validateMetadata(input);
+    const requestedPrettyId = validatePrettyId(input.pretty_id);
     const pricingTiers =
       input.pricing_tiers ?? defaultPricing(input.provider_id, input.model_id);
     const existing = db
       .query("SELECT * FROM models WHERE provider_id = ? AND model_id = ?")
       .get(input.provider_id, input.model_id) as Model | null;
 
+    if (requestedPrettyId) {
+      const duplicate = db.query("SELECT id FROM models WHERE provider_id = ? AND pretty_id = ? AND id != ?").get(input.provider_id, requestedPrettyId, existing?.id ?? "") as { id: string } | null;
+      if (duplicate) throw new DuplicatePrettyModelIdError(requestedPrettyId);
+    }
     if (existing) {
       db.transaction(() => {
         const syncingManualModel = Boolean(existing.is_manual && input.is_manual === 0);
+        const prettyId = requestedPrettyId ?? existing.pretty_id;
+
         const displayName = syncingManualModel
           ? existing.display_name
           : input.display_name?.trim() || generateDisplayName(input.model_id);
-         db.query("UPDATE models SET display_name = ?, is_active = ?, updated_at = datetime('now') WHERE id = ?").run(
+         db.query("UPDATE models SET pretty_id = ?, display_name = ?, is_active = ?, updated_at = datetime('now') WHERE id = ?").run(
+          prettyId,
           displayName,
           syncingManualModel ? existing.is_active : input.is_active ?? existing.is_active,
           existing.id,
@@ -562,11 +616,12 @@ export const modelService = {
     const id = crypto.randomUUID();
     db.transaction(() => {
       db.query(
-        "INSERT INTO models (id, provider_id, model_id, display_name, is_manual, is_active, updated_at) VALUES (?, ?, ?, ?, ?, ?, datetime('now'))",
+        "INSERT INTO models (id, provider_id, model_id, pretty_id, display_name, is_manual, is_active, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))",
       ).run(
         id,
         input.provider_id,
         input.model_id,
+        requestedPrettyId,
         input.display_name?.trim() || generateDisplayName(input.model_id),
         input.is_manual ?? 0,
         input.is_active ?? 1,
@@ -580,16 +635,22 @@ export const modelService = {
   resetExisting(input: CreateModelInput): Model | null {
     const db = getDb();
     validateMetadata(input);
+    const requestedPrettyId = validatePrettyId(input.pretty_id);
     const existing = db
       .query("SELECT * FROM models WHERE provider_id = ? AND model_id = ?")
       .get(input.provider_id, input.model_id) as Model | null;
     if (!existing) return null;
+    if (requestedPrettyId) {
+      const duplicate = db.query("SELECT id FROM models WHERE provider_id = ? AND pretty_id = ? AND id != ?").get(input.provider_id, requestedPrettyId, existing.id) as { id: string } | null;
+      if (duplicate) throw new DuplicatePrettyModelIdError(requestedPrettyId);
+    }
     const pricingTiers =
       input.pricing_tiers ?? defaultPricing(input.provider_id, input.model_id);
     db.transaction(() => {
       db.query(
-        "UPDATE models SET display_name = ?, is_manual = 0, is_active = ?, context_window = NULL, max_output_tokens = NULL, updated_at = datetime('now') WHERE id = ?",
+        "UPDATE models SET pretty_id = ?, display_name = ?, is_manual = 0, is_active = ?, context_window = NULL, max_output_tokens = NULL, updated_at = datetime('now') WHERE id = ?",
       ).run(
+        requestedPrettyId ?? existing.pretty_id,
         input.display_name?.trim() || generateDisplayName(input.model_id),
         input.is_active ?? existing.is_active,
         existing.id,
@@ -610,6 +671,10 @@ export const modelService = {
   },
 
   create(input: CreateModelInput): Model {
+    const existing = getDb()
+      .query("SELECT id FROM models WHERE provider_id = ? AND model_id = ?")
+      .get(input.provider_id, input.model_id) as { id: string } | null;
+    if (existing) throw new DuplicateProviderModelError(input.model_id);
     return this.upsert(input);
   },
 
@@ -626,6 +691,7 @@ export const modelService = {
     id: string,
     input: ModelMetadataInput & {
       model_id?: string;
+      pretty_id?: string | null;
       display_name?: string | null;
       pricing_tiers?: PricingTier[];
     },
@@ -634,10 +700,19 @@ export const modelService = {
     validateMetadata(input);
     const existing = this.findById(id);
     if (!existing) return null;
+    const requestedPrettyId = input.pretty_id === undefined ? existing.pretty_id : validatePrettyId(input.pretty_id);
+    if (requestedPrettyId) {
+      const duplicate = db.query("SELECT id FROM models WHERE provider_id = ? AND pretty_id = ? AND id != ?").get(existing.provider_id, requestedPrettyId, id) as { id: string } | null;
+      if (duplicate) throw new DuplicatePrettyModelIdError(requestedPrettyId);
+    }
 
     const updates: string[] = [];
     const values: any[] = [];
 
+    if (input.pretty_id !== undefined) {
+      updates.push("pretty_id = ?");
+      values.push(requestedPrettyId);
+    }
     if (input.model_id !== undefined) {
       const duplicate = db
         .query(
