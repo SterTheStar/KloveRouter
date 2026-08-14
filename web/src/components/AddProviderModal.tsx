@@ -490,7 +490,7 @@ export default function AddProviderModal({
                             <button
                               type="button"
                               onClick={async () => {
-                                const code = `javascript:(()=>{\n  if (location.hostname !== "chat.qwen.ai")\n    return alert("🚀 Use em chat.qwen.ai");\n  const token = localStorage.getItem("token");\n  if (!token)\n    return console.log("❌ Token n\u00e3o encontrado");\n  console.log("🔑 Qwen access_token:\\n", token);\n})();`;
+                                const code = `javascript:(()=>{\n  if (location.hostname !== "chat.qwen.ai")\n    return alert("🚀 Use on chat.qwen.ai");\n  const token = localStorage.getItem("token");\n  if (!token)\n    return console.log("❌ Token not found");\n  console.log("🔑 Qwen access_token:\\n", token);\n})();`;
                                 try {
                                   await copyToClipboard(code);
                                   success("Setup code copied");
@@ -505,10 +505,10 @@ export default function AddProviderModal({
                             <pre className="overflow-x-auto rounded bg-muted p-2 pt-5 font-mono text-[11px] leading-relaxed">
 {`javascript:(()=>{
   if (location.hostname !== "chat.qwen.ai")
-    return alert("🚀 Use em chat.qwen.ai");
+    return alert("🚀 Use on chat.qwen.ai");
   const token = localStorage.getItem("token");
   if (!token)
-    return console.log("❌ Token n\u00e3o encontrado");
+    return console.log("❌ Token not found");
   console.log("🔑 Qwen access_token:\\n", token);
 })();`}
                             </pre>
