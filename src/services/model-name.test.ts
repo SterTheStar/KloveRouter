@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { generateDisplayName } from "./model-name";
+import { parseModelName } from "../clients/openai";
 
 describe("generateDisplayName", () => {
   test.each([
@@ -11,4 +12,9 @@ describe("generateDisplayName", () => {
   ])("formats %s", (modelId, expected) => {
     expect(generateDisplayName(modelId)).toBe(expected);
   });
+});
+
+describe("parseModelName", () => {
+  test("allows internal slashes", () => expect(parseModelName("provider/org/model")).toEqual({ providerName: "provider", modelId: "org/model" }));
+  test.each(["", "/model", "provider/", "provider//model", "provider/ model", "provider/\nmodel"])("rejects %j", (model) => expect(parseModelName(model)).toBeNull());
 });

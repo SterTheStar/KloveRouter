@@ -14,10 +14,11 @@ export function createOpenAIClient(
 export function parseModelName(
   model: string,
 ): { providerName: string; modelId: string } | null {
+  if (typeof model !== "string" || !model || /[\s\p{Cc}]/u.test(model)) return null;
   const slashIndex = model.indexOf("/");
-  if (slashIndex === -1) return null;
-  return {
-    providerName: model.slice(0, slashIndex),
-    modelId: model.slice(slashIndex + 1),
-  };
+  if (slashIndex <= 0 || slashIndex === model.length - 1) return null;
+  const providerName = model.slice(0, slashIndex);
+  const modelId = model.slice(slashIndex + 1);
+  if (modelId.startsWith("/") || modelId.endsWith("/")) return null;
+  return { providerName, modelId };
 }
