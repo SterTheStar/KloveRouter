@@ -235,7 +235,7 @@ export const providersPlugin = (app: Elysia) =>
         if (
           !credential ||
           credential.provider_id !== id ||
-            credential.kind !== "api_key" && credential.kind !== "chatgpt" && credential.kind !== "freebuff" && credential.kind !== "qwen" && credential.kind !== "atomesus"
+            credential.kind !== "api_key" && credential.kind !== "chatgpt" && credential.kind !== "freebuff" && credential.kind !== "qwen" && credential.kind !== "atomesus" && credential.kind !== "conol"
         ) {
           set.status = 404;
           return { error: "Credential secret not found" };
