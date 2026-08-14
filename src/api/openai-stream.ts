@@ -15,6 +15,7 @@ type OpenAIStreamOptions = {
   onComplete: (stats: OpenAIStreamStats) => void;
   onError: (error: Error, stats: OpenAIStreamStats) => void;
   onCancel: (stats: OpenAIStreamStats) => void;
+  signal?: AbortSignal;
   now?: () => number;
 };
 
@@ -49,6 +50,7 @@ export function openAIStreamResponse(
   let firstTokenAt: number | null = null;
   let cancelled = false;
   let settled = false;
+  let abortListener: (() => void) | undefined;
 
   const notify = (
     phase: "complete" | "error" | "cancel",
@@ -94,6 +96,16 @@ export function openAIStreamResponse(
           if (!cancelled && !settled)
             controller.enqueue(encoder.encode(": keep-alive\n\n"));
         }, 10000);
+        abortListener = () => {
+          if (cancelled || settled) return;
+          cancelled = true;
+          clearInterval(keepAlive);
+          stream.controller?.abort(options.signal?.reason);
+          void iterator?.return?.();
+          notify("cancel", () => options.onCancel(stats()));
+        };
+        if (options.signal?.aborted) abortListener();
+        else options.signal?.addEventListener("abort", abortListener, { once: true });
         void (async () => {
           try {
             iterator = stream[Symbol.asyncIterator]();
@@ -142,6 +154,8 @@ export function openAIStreamResponse(
             }
           } finally {
             clearInterval(keepAlive);
+            if (options.signal && abortListener)
+              options.signal.removeEventListener("abort", abortListener);
             if (!cancelled) controller.close();
           }
         })();

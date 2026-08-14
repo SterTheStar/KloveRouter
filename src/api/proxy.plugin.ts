@@ -49,6 +49,7 @@ import {
   chatSseToResponses,
   responsesToChatBody,
 } from "./responses-api";
+import { validateChatCompletionRequest } from "./openai-request";
 
 function anthropicPayload(body: any, modelId: string, stream = false) {
   const messages = splitAnthropicMessages(body.messages);
@@ -186,8 +187,18 @@ function errorStatus(error: unknown): number | undefined {
 }
 
 function isTransientProviderError(error: unknown) {
+  if (isAbortError(error)) return false;
   const status = errorStatus(error);
-  return status === 408 || status === 429 || status === 529 || (status !== undefined && status >= 500 && status <= 599);
+  return status === undefined || status === 408 || status === 429 || (status >= 500 && status <= 599);
+}
+
+function canRetry(error: unknown, signal?: AbortSignal) {
+  return !signal?.aborted && isTransientProviderError(error);
+}
+
+function isAbortError(error: unknown) {
+  return error instanceof DOMException && error.name === "AbortError" ||
+    (error as any)?.name === "AbortError";
 }
 
 function retryDelay(attempt: number) {
@@ -222,15 +233,18 @@ function clientIp(
   headers: Record<string, string | undefined>,
   server?: { requestIP?: (request: Request) => { address?: string } | null },
 ) {
-  const forwarded = headers["x-forwarded-for"]?.split(",")[0]?.trim();
   const direct = server?.requestIP?.(request)?.address;
-  return (
-    forwarded ||
-    headers["x-real-ip"] ||
-    request.headers.get("cf-connecting-ip") ||
-    direct ||
-    "unknown"
-  );
+  const trusted = Boolean(direct && config.trustedProxyIps.has(direct));
+  if (trusted) {
+    return (
+      headers["x-forwarded-for"]?.split(",")[0]?.trim() ||
+      headers["x-real-ip"] ||
+      request.headers.get("cf-connecting-ip") ||
+      direct ||
+      "unknown"
+    );
+  }
+  return direct || "unknown";
 }
 
 function streamingHeaders(headers?: HeadersInit) {
@@ -343,7 +357,7 @@ function anthropicStreamResponse(
   );
 }
 
-function recordSseUsageResponse(
+export function recordSseUsageResponse(
   response: Response,
   onUsage: (
     promptTokens: number,
@@ -366,6 +380,9 @@ function recordSseUsageResponse(
   let recorded = false;
   let firstTokenAt: number | null = null;
   let streamError: Error | null = null;
+  let closed = false;
+  let finished = false;
+  let errorReported = false;
   const record = () => {
     if (recorded) return;
     recorded = true;
@@ -382,80 +399,67 @@ function recordSseUsageResponse(
     new ReadableStream({
       async start(controller) {
         const encoder = new TextEncoder();
-        controller.enqueue(encoder.encode(": connected\n\n"));
+        const processEvent = (event: string) => {
+          const lines = event.split(/\r\n|\n|\r/);
+          const raw = lines.filter((line) => line.startsWith("data:"))
+            .map((line) => line.slice(5).trim()).join("\n");
+          if (!raw || raw === "[DONE]") return;
+          try {
+            const data = JSON.parse(raw);
+            if (data.error) {
+              streamError = new Error(typeof data.error === "string" ? data.error : data.error.message ?? "Upstream stream failed");
+              return;
+            }
+            const usage = data.usage ?? data.response?.usage ?? data.response?.response?.usage;
+            if (usage) {
+              promptTokens = Number(usage.prompt_tokens ?? usage.input_tokens ?? usage.promptTokens ?? usage.inputTokens ?? usage.promptTokenCount ?? usage.inputTokenCount ?? promptTokens);
+              completionTokens = Number(usage.completion_tokens ?? usage.output_tokens ?? usage.completionTokens ?? usage.outputTokens ?? usage.candidatesTokenCount ?? usage.outputTokenCount ?? completionTokens);
+              const details = tokenDetails(usage);
+              cacheRead = Math.max(cacheRead, details.cacheRead);
+              cacheWrite = Math.max(cacheWrite, details.cacheWrite);
+            }
+            const semanticDelta = (data.choices ?? []).some((choice: any) => {
+              const delta = choice?.delta;
+              return Boolean(delta && (delta.content || delta.reasoning_content || delta.reasoning || delta.tool_calls?.length || delta.function_call?.arguments));
+            }) || Boolean(data.delta?.content || data.delta?.reasoning_content || data.delta?.reasoning || data.delta?.tool_calls || data.delta?.function_call);
+            if (semanticDelta) firstTokenAt ??= performance.now();
+          } catch {
+            /* Ignore non-JSON SSE events. */
+          }
+        };
         try {
           while (true) {
             const { done, value } = await reader.read();
-            if (value) {
-              const text = decoder.decode(value, { stream: !done });
-              controller.enqueue(new TextEncoder().encode(text));
-              firstTokenAt ??= performance.now();
+            const text = decoder.decode(value ?? new Uint8Array(), { stream: !done });
+            if (text) {
+              controller.enqueue(encoder.encode(text));
               buffer += text;
-              const events = buffer.split("\n\n");
+              const events = buffer.split(/(?:\r\n|\n|\r){2}/);
               buffer = events.pop() ?? "";
-              for (const event of events) {
-                const line = event
-                  .split("\n")
-                  .find((item) => item.startsWith("data:"));
-                if (!line) continue;
-                const raw = line.slice(5).trim();
-                if (raw === "[DONE]") continue;
-                try {
-                   const data = JSON.parse(raw);
-                   if (data.error) {
-                     streamError = new Error(
-                       typeof data.error === "string"
-                         ? data.error
-                         : data.error.message ?? "Upstream stream failed",
-                     );
-                     continue;
-                   }
-                  const usage =
-                    data.usage ??
-                    data.response?.usage ??
-                    data.response?.response?.usage;
-                  if (usage) {
-                    promptTokens = Number(
-                      usage.prompt_tokens ??
-                        usage.input_tokens ??
-                        usage.promptTokenCount ??
-                        promptTokens,
-                    );
-                    completionTokens = Number(
-                      usage.completion_tokens ??
-                        usage.output_tokens ??
-                        usage.candidatesTokenCount ??
-                        completionTokens,
-                    );
-                    const details = tokenDetails(usage);
-                    cacheRead = Math.max(cacheRead, details.cacheRead);
-                    cacheWrite = Math.max(cacheWrite, details.cacheWrite);
-                  }
-                } catch {
-                  /* Ignore non-JSON SSE events. */
-                }
-              }
+              events.forEach(processEvent);
             }
-            if (done) break;
+            if (done) {
+              if (buffer.trim()) processEvent(buffer);
+              break;
+            }
           }
-           if (streamError) onError?.(streamError);
-           else record();
-         } catch (error: any) {
-           onError?.(
-             error instanceof Error ? error : new Error(String(error)),
-           );
-          controller.enqueue(
-            encoder.encode(
-              `data: ${JSON.stringify({ error: { message: error?.message ?? "Upstream stream disconnected" } })}\n\n`,
-            ),
-          );
-          controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+          if (streamError) onError?.(streamError); else record();
+        } catch (error: any) {
+          if (!finished) {
+            onError?.(error instanceof Error ? error : new Error(String(error)));
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ error: { message: error?.message ?? "Upstream stream disconnected" } })}\n\n`));
+            controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+          }
         } finally {
-          controller.close();
+          if (!finished) { finished = true; controller.close(); }
         }
       },
+      cancel(reason) {
+        finished = true;
+        void reader.cancel(reason).catch(() => undefined);
+      },
     }),
-    { headers: streamingHeaders(response.headers) },
+    { headers: streamingHeaders(response.headers), status: response.status, statusText: response.statusText },
   );
 }
 
@@ -567,16 +571,16 @@ export const proxyPlugin = (app: Elysia) =>
     .post(
       "/v1/chat/completions",
       async ({ body, set, headers, request, server }) => {
-         if (
-          !body ||
-          typeof body !== "object" ||
-          typeof body.model !== "string" ||
-          !Array.isArray(body.messages)
-        ) {
+        const validationError = validateChatCompletionRequest(body);
+        if (validationError) {
           set.status = 400;
           return {
-            error: "Invalid request",
-            message: "model and messages are required",
+            error: {
+              message: validationError,
+              type: "invalid_request_error",
+              param: "model",
+              code: null,
+            },
           };
         }
         const apiKey = await verifyApiKey(headers);
@@ -829,6 +833,7 @@ export const proxyPlugin = (app: Elysia) =>
               return toOpenAICompletion(completion);
             } catch (error: any) {
               failures.push(error.message);
+              if (isAbortError(error)) break;
               const status = errorStatus(error);
               if (status !== undefined) failureStatuses.push(status);
               credentialService.markError(credential.id, error.message);
@@ -957,7 +962,7 @@ export const proxyPlugin = (app: Elysia) =>
             } catch (error: any) {
               failures.push(error.message);
               credentialService.markError(credential.id, error.message);
-              if (provider.credential_mode !== "round_robin") break;
+              if (isAbortError(error) || !isTransientProviderError(error) || provider.credential_mode !== "round_robin") break;
               credentialService.markCooldown(
                 credential.id,
                 10,
@@ -1082,7 +1087,7 @@ export const proxyPlugin = (app: Elysia) =>
             } catch (error: any) {
               if (isModelNotFoundError(error)) {
                 failures.push(error.message);
-                if (provider.credential_mode !== "round_robin") break;
+                if (isAbortError(error) || !isTransientProviderError(error) || provider.credential_mode !== "round_robin") break;
                 const next = credentialService.select(
                   provider.id,
                   "round_robin",
@@ -1096,8 +1101,8 @@ export const proxyPlugin = (app: Elysia) =>
               }
               credentialService.markError(credential.id, error.message);
               failures.push(error.message);
-              if (provider.credential_mode !== "round_robin") {
-                const statusCode = isQuotaError(error) ? 429 : 502;
+              if (isAbortError(error) || !isTransientProviderError(error) || provider.credential_mode !== "round_robin") {
+                const statusCode = isQuotaError(error) ? 429 : errorStatus(error) ?? 502;
                 requestLogService.complete(requestLogId, {
                   status: "error",
                   statusCode,
@@ -1178,6 +1183,7 @@ export const proxyPlugin = (app: Elysia) =>
                 parsed.modelId,
                 credential,
                 provider.base_url,
+                request.signal,
               );
               const modelRecord = modelService.findByProviderAndModel(provider.id, parsed.modelId);
               if (!body.stream) {
@@ -1191,7 +1197,7 @@ export const proxyPlugin = (app: Elysia) =>
             } catch (error: any) {
               failures.push(error.message);
               credentialService.markError(credential.id, error.message);
-              if (provider.credential_mode !== "round_robin") break;
+              if (isAbortError(error) || !isTransientProviderError(error) || provider.credential_mode !== "round_robin") break;
               const next = credentialService.select(provider.id, "round_robin", null, requestSequence);
               if (!next || attempted.has(next.id)) break;
               credential = next;
@@ -1258,7 +1264,7 @@ export const proxyPlugin = (app: Elysia) =>
             } catch (error: any) {
               failures.push(error.message);
               credentialService.markError(credential.id, error.message);
-              if (provider.credential_mode !== "round_robin") break;
+              if (isAbortError(error) || !isTransientProviderError(error) || provider.credential_mode !== "round_robin") break;
               const next = credentialService.select(provider.id, "round_robin", null, requestSequence);
               if (!next || attempted.has(next.id)) break;
               credential = next;
@@ -1302,7 +1308,7 @@ export const proxyPlugin = (app: Elysia) =>
             } catch (error: any) {
               failures.push(error.message);
               credentialService.markError(credential.id, error.message);
-              if (provider.credential_mode !== "round_robin") break;
+              if (isAbortError(error) || !isTransientProviderError(error) || provider.credential_mode !== "round_robin") break;
               credentialService.markCooldown(credential.id, 10, error.message, requestSequence);
               const next = credentialService.select(provider.id, "round_robin", null, requestSequence);
               if (!next || attempted.has(next.id)) break;
@@ -1332,7 +1338,7 @@ export const proxyPlugin = (app: Elysia) =>
             } catch (error: any) {
               failures.push(error.message);
               credentialService.markError(credential.id, error.message);
-              if (provider.credential_mode !== "round_robin") break;
+              if (isAbortError(error) || !isTransientProviderError(error) || provider.credential_mode !== "round_robin") break;
               credentialService.markCooldown(credential.id, 10, error.message, requestSequence);
               const next = credentialService.select(provider.id, "round_robin", null, requestSequence);
               if (!next || attempted.has(next.id)) break;
@@ -1441,7 +1447,7 @@ export const proxyPlugin = (app: Elysia) =>
             } catch (error: any) {
               failures.push(error.message);
               credentialService.markError(credential.id, error.message);
-              if (provider.credential_mode !== "round_robin") break;
+              if (isAbortError(error) || !isTransientProviderError(error) || provider.credential_mode !== "round_robin") break;
               credentialService.markCooldown(
                 credential.id,
                 10,
@@ -1486,15 +1492,19 @@ export const proxyPlugin = (app: Elysia) =>
                 ...provider,
                 api_key: credential.secret ?? "",
               });
-              const stream = (await client!.chat.completions.create({
-                ...payload,
-                stream: true,
-                stream_options: { include_usage: true },
-              })) as any;
+              const stream = (await client!.chat.completions.create(
+                {
+                  ...payload,
+                  stream: true,
+                  stream_options: { include_usage: true },
+                },
+                { signal: request.signal },
+              )) as any;
 
               return openAIStreamResponse(stream, {
                 start,
                 tokenDetails,
+                signal: request.signal,
                 onComplete: ({
                   promptTokens,
                   completionTokens,
@@ -1553,7 +1563,7 @@ export const proxyPlugin = (app: Elysia) =>
             } catch (error: any) {
               failures.push(error.message);
               credentialService.markError(credential.id, error.message);
-              if (provider.credential_mode !== "round_robin") break;
+              if (isAbortError(error) || !isTransientProviderError(error) || provider.credential_mode !== "round_robin") break;
               credentialService.markCooldown(
                 credential.id,
                 10,
@@ -1595,7 +1605,7 @@ export const proxyPlugin = (app: Elysia) =>
               const completion = await createOpenAIClient({
                 ...provider,
                 api_key: credential.secret ?? "",
-              }).chat.completions.create(payload);
+              }).chat.completions.create(payload, { signal: request.signal });
               const durationMs = Math.round(performance.now() - start);
 
               // Record token usage
@@ -1628,7 +1638,7 @@ export const proxyPlugin = (app: Elysia) =>
             } catch (error: any) {
               failures.push(error.message);
               credentialService.markError(credential.id, error.message);
-              if (provider.credential_mode !== "round_robin") break;
+              if (isAbortError(error) || !isTransientProviderError(error) || provider.credential_mode !== "round_robin") break;
               credentialService.markCooldown(
                 credential.id,
                 10,
