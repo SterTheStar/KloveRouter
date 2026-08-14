@@ -5,6 +5,7 @@ import { modelService } from "../services/model.service";
 import { usageService } from "../services/usage.service";
 import { createOpenAIClient, parseModelName } from "../clients/openai";
 import {
+  AnthropicRequestError,
   createAnthropicMessage,
   createAnthropicStream,
   splitAnthropicMessages,
@@ -175,6 +176,23 @@ function isModelNotFoundError(error: unknown) {
   );
 }
 
+function errorStatus(error: unknown): number | undefined {
+  return error instanceof AnthropicRequestError
+    ? error.status
+    : typeof (error as any)?.status === "number"
+      ? (error as any).status
+      : undefined;
+}
+
+function isTransientProviderError(error: unknown) {
+  const status = errorStatus(error);
+  return status === 408 || status === 429 || status === 529 || (status !== undefined && status >= 500 && status <= 599);
+}
+
+function retryDelay(attempt: number) {
+  return Math.min(1000, 100 * 2 ** attempt);
+}
+
 function tokenDetails(usage: any) {
            return {
     cacheRead: Number(
@@ -234,184 +252,90 @@ function anthropicStreamResponse(
   ) => void,
   start: number,
   model: string,
+  onCancel?: () => void,
 ) {
   const reader = response.body?.getReader();
   if (!reader) throw new Error("Anthropic returned an empty stream");
   const decoder = new TextDecoder();
+  const encoder = new TextEncoder();
   let buffer = "";
   let promptTokens = 0;
   let completionTokens = 0;
   let cacheRead = 0;
   let cacheWrite = 0;
-  let index = 0;
   let firstTokenAt: number | null = null;
+  let closed = false;
+  let usageRecorded = false;
 
   return new Response(
     new ReadableStream({
       async start(controller) {
         const emit = (chunk: Record<string, unknown>) => {
-          controller.enqueue(
-            new TextEncoder().encode(`data: ${JSON.stringify(chunk)}\n\n`),
-          );
+          if (!closed) controller.enqueue(encoder.encode(`data: ${JSON.stringify(chunk)}\n\n`));
+        };
+        const processEvent = (event: string) => {
+          const data = event
+            .split(/\r?\n/)
+            .filter((line) => line.startsWith("data:"))
+            .map((line) => line.slice(5).trim())
+            .join("\n");
+          if (!data || data === "[DONE]") return;
+          const parsed = JSON.parse(data);
+          if (parsed.type === "message_start") {
+            promptTokens = parsed.message?.usage?.input_tokens ?? 0;
+            ({ cacheRead, cacheWrite } = tokenDetails(parsed.message?.usage));
+          } else if (parsed.type === "content_block_delta" && parsed.delta?.type === "thinking_delta") {
+            firstTokenAt ??= performance.now();
+            emit({ id: parsed.index ?? `chatcmpl-${Date.now()}`, object: "chat.completion.chunk", created: Math.floor(Date.now() / 1000), model, choices: [{ index: parsed.index ?? 0, delta: { reasoning_content: parsed.delta.thinking ?? "" }, finish_reason: null }] });
+          } else if (parsed.type === "content_block_delta" && parsed.delta?.text) {
+            firstTokenAt ??= performance.now();
+            emit({ id: parsed.index ?? `chatcmpl-${Date.now()}`, object: "chat.completion.chunk", created: Math.floor(Date.now() / 1000), model, choices: [{ index: parsed.index ?? 0, delta: { content: parsed.delta.text }, finish_reason: null }] });
+          } else if (parsed.type === "content_block_start" && parsed.content_block?.type === "tool_use") {
+            emit({ id: `chatcmpl-${Date.now()}`, object: "chat.completion.chunk", created: Math.floor(Date.now() / 1000), model, choices: [{ index: parsed.index ?? 0, delta: { tool_calls: [{ index: parsed.index ?? 0, id: parsed.content_block.id, type: "function", function: { name: parsed.content_block.name, arguments: "" } }] }, finish_reason: null }] });
+          } else if (parsed.type === "content_block_delta" && parsed.delta?.type === "input_json_delta") {
+            emit({ id: `chatcmpl-${Date.now()}`, object: "chat.completion.chunk", created: Math.floor(Date.now() / 1000), model, choices: [{ index: parsed.index ?? 0, delta: { tool_calls: [{ index: parsed.index ?? 0, type: "function", function: { arguments: parsed.delta.partial_json ?? "" } }] }, finish_reason: null }] });
+          } else if (parsed.type === "message_delta") {
+            completionTokens = parsed.usage?.output_tokens ?? completionTokens;
+            ({ cacheRead, cacheWrite } = tokenDetails({ ...parsed.usage, ...parsed.message?.usage }));
+            emit({ id: `chatcmpl-${Date.now()}`, object: "chat.completion.chunk", created: Math.floor(Date.now() / 1000), model, choices: [{ index: parsed.index ?? 0, delta: {}, finish_reason: parsed.delta?.stop_reason ?? "stop" }], usage: { prompt_tokens: promptTokens, completion_tokens: completionTokens, total_tokens: promptTokens + completionTokens, prompt_tokens_details: { cached_tokens: cacheRead } } });
+          }
+        };
+        const finish = () => {
+          if (closed) return;
+          closed = true;
+          if (!usageRecorded) {
+            usageRecorded = true;
+            onUsage(promptTokens, completionTokens, Math.round(performance.now() - start), Math.round(performance.now() - (firstTokenAt ?? start)), { cacheRead, cacheWrite });
+          }
+          controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+          controller.close();
         };
         try {
           while (true) {
             const { done, value } = await reader.read();
-            buffer += decoder.decode(value ?? new Uint8Array(), {
-              stream: !done,
-            });
-            const events = buffer.split("\n\n");
+            buffer += decoder.decode(value ?? new Uint8Array(), { stream: !done });
+            const events = buffer.split(/\r?\n\r?\n/);
             buffer = events.pop() ?? "";
-            for (const event of events) {
-              const dataLine = event
-                .split("\n")
-                .find((line) => line.startsWith("data:"));
-              if (!dataLine) continue;
-              const data = JSON.parse(dataLine.slice(5).trim());
-              if (data.type === "message_start") {
-                promptTokens = data.message?.usage?.input_tokens ?? 0;
-                ({ cacheRead, cacheWrite } = tokenDetails(data.message?.usage));
-              } else if (
-                data.type === "content_block_delta" &&
-                data.delta?.type === "thinking_delta"
-              ) {
-                firstTokenAt ??= performance.now();
-                emit({
-                  id: data.index ?? `chatcmpl-${Date.now()}`,
-                  object: "chat.completion.chunk",
-                  created: Math.floor(Date.now() / 1000),
-                  model,
-                  choices: [
-                    {
-                      index,
-                      delta: { reasoning_content: data.delta.thinking ?? "" },
-                      finish_reason: null,
-                    },
-                  ],
-                });
-              } else if (
-                data.type === "content_block_delta" &&
-                data.delta?.text
-              ) {
-                firstTokenAt ??= performance.now();
-                emit({
-                  id: data.index ?? `chatcmpl-${Date.now()}`,
-                  object: "chat.completion.chunk",
-                  created: Math.floor(Date.now() / 1000),
-                  model,
-                  choices: [
-                    {
-                      index,
-                      delta: { content: data.delta.text },
-                      finish_reason: null,
-                    },
-                  ],
-                });
-              } else if (
-                data.type === "content_block_start" &&
-                data.content_block?.type === "tool_use"
-              ) {
-                emit({
-                  id: `chatcmpl-${Date.now()}`,
-                  object: "chat.completion.chunk",
-                  created: Math.floor(Date.now() / 1000),
-                  model,
-                  choices: [
-                    {
-                      index,
-                      delta: {
-                        tool_calls: [
-                          {
-                            index: data.index ?? 0,
-                            id: data.content_block.id,
-                            type: "function",
-                            function: {
-                              name: data.content_block.name,
-                              arguments: "",
-                            },
-                          },
-                        ],
-                      },
-                      finish_reason: null,
-                    },
-                  ],
-                });
-              } else if (
-                data.type === "content_block_delta" &&
-                data.delta?.type === "input_json_delta"
-              ) {
-                emit({
-                  id: `chatcmpl-${Date.now()}`,
-                  object: "chat.completion.chunk",
-                  created: Math.floor(Date.now() / 1000),
-                  model,
-                  choices: [
-                    {
-                      index,
-                      delta: {
-                        tool_calls: [
-                          {
-                            index: data.index ?? 0,
-                            type: "function",
-                            function: {
-                              arguments: data.delta.partial_json ?? "",
-                            },
-                          },
-                        ],
-                      },
-                      finish_reason: null,
-                    },
-                  ],
-                });
-              } else if (data.type === "message_delta") {
-                completionTokens =
-                  data.usage?.output_tokens ?? completionTokens;
-                ({ cacheRead, cacheWrite } = tokenDetails({
-                  ...data.usage,
-                  ...data.message?.usage,
-                }));
-                emit({
-                  id: `chatcmpl-${Date.now()}`,
-                  object: "chat.completion.chunk",
-                  created: Math.floor(Date.now() / 1000),
-                  model,
-                  choices: [
-                    {
-                      index,
-                      delta: {},
-                      finish_reason: data.delta?.stop_reason ?? "stop",
-                    },
-                  ],
-                  usage: {
-                    prompt_tokens: promptTokens,
-                    completion_tokens: completionTokens,
-                    total_tokens: promptTokens + completionTokens,
-                    prompt_tokens_details: {
-                      cached_tokens: cacheRead,
-                    },
-                  },
-                });
-              }
+            for (const event of events) processEvent(event);
+            if (done) {
+              if (buffer.trim()) processEvent(buffer);
+              finish();
+              break;
             }
-            if (done) break;
           }
-          onUsage(
-            promptTokens,
-            completionTokens,
-            Math.round(performance.now() - start),
-            Math.round(performance.now() - (firstTokenAt ?? start)),
-            { cacheRead, cacheWrite },
-          );
-          controller.enqueue(new TextEncoder().encode("data: [DONE]\n\n"));
         } catch (error: any) {
-          controller.enqueue(
-            new TextEncoder().encode(
-              `data: ${JSON.stringify({ error: { message: error.message } })}\n\n`,
-            ),
-          );
-        } finally {
-          controller.close();
+          if (!closed) {
+            closed = true;
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ error: { message: error?.message ?? String(error) } })}\n\n`));
+            controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+            controller.close();
+          }
         }
+      },
+      cancel(reason) {
+        closed = true;
+        onCancel?.();
+        void reader.cancel(reason).catch(() => undefined);
       },
     }),
     { headers: streamingHeaders() },
@@ -801,6 +725,9 @@ export const proxyPlugin = (app: Elysia) =>
         if (provider.protocol === "anthropic") {
           const attempted = new Set<string>();
           const failures: string[] = [];
+          const failureStatuses: number[] = [];
+          const upstreamController = new AbortController();
+          request.signal.addEventListener("abort", () => upstreamController.abort(request.signal.reason), { once: true });
           while (credential && !attempted.has(credential.id)) {
             attempted.add(credential.id);
             try {
@@ -819,6 +746,7 @@ export const proxyPlugin = (app: Elysia) =>
                     credentialProvider,
                     anthropicPayload(body, parsed.modelId),
                     credential.secret ?? undefined,
+                    upstreamController.signal,
                   ),
                   (
                     promptTokens,
@@ -848,11 +776,13 @@ export const proxyPlugin = (app: Elysia) =>
                   },
                   start,
                   parsed.modelId,
+                  () => upstreamController.abort(),
                 );
               const completion = await createAnthropicMessage(
                 credentialProvider,
                 anthropicPayload(body, parsed.modelId),
                 credential.secret ?? undefined,
+                upstreamController.signal,
               );
               const details = tokenDetails(completion.usage);
               const durationMs = Math.round(performance.now() - start);
@@ -879,14 +809,12 @@ export const proxyPlugin = (app: Elysia) =>
               return toOpenAICompletion(completion);
             } catch (error: any) {
               failures.push(error.message);
+              const status = errorStatus(error);
+              if (status !== undefined) failureStatuses.push(status);
               credentialService.markError(credential.id, error.message);
-              if (provider.credential_mode !== "round_robin") break;
-              credentialService.markCooldown(
-                credential.id,
-                10,
-                error.message,
-                requestSequence,
-              );
+              if (!isTransientProviderError(error) || provider.credential_mode !== "round_robin") break;
+              credentialService.markCooldown(credential.id, 10, error.message, requestSequence);
+              await new Promise((resolve) => setTimeout(resolve, retryDelay(attempted.size - 1)));
               const next = credentialService.select(
                 provider.id,
                 "round_robin",
@@ -898,16 +826,22 @@ export const proxyPlugin = (app: Elysia) =>
               requestLogService.setCredential(requestLogId, credential);
             }
           }
-          const statusCode = failures.every(isQuotaError) ? 429 : 502;
+          const lastFailure = failures.at(-1) ?? "Provider request failed";
+          const lastStatus = failureStatuses.at(-1);
+          const statusCode = lastStatus === 429 || failures.every(isQuotaError)
+            ? 429
+            : lastStatus !== undefined && lastStatus >= 400 && lastStatus < 600
+              ? lastStatus
+              : 502;
           requestLogService.complete(requestLogId, {
             status: "error",
             statusCode,
-            error: failures.at(-1),
+            error: lastFailure,
           });
           set.status = statusCode;
           return {
             error: "Provider request failed",
-            message: `All ${attempted.size} available credentials failed. ${failures.at(-1)}`,
+            message: `All ${attempted.size} available credentials failed. ${lastFailure}`,
           };
         }
 
@@ -1021,11 +955,12 @@ export const proxyPlugin = (app: Elysia) =>
               requestLogService.setCredential(requestLogId, credential);
             }
           }
+          const lastFailure = failures.at(-1) ?? "Provider request failed";
           const statusCode = failures.every(isQuotaError) ? 429 : 502;
           requestLogService.complete(requestLogId, {
             status: "error",
             statusCode,
-            error: failures.at(-1),
+            error: lastFailure,
           });
           set.status = statusCode;
           return {
@@ -1569,11 +1504,12 @@ export const proxyPlugin = (app: Elysia) =>
               credential = next;
               requestLogService.setCredential(requestLogId, credential);
             }
+          const lastFailure = failures.at(-1) ?? "Provider request failed";
           const statusCode = failures.every(isQuotaError) ? 429 : 502;
           requestLogService.complete(requestLogId, {
             status: "error",
             statusCode,
-            error: failures.at(-1),
+            error: lastFailure,
           });
           set.status = statusCode;
           return {
@@ -1643,11 +1579,12 @@ export const proxyPlugin = (app: Elysia) =>
               credential = next;
               requestLogService.setCredential(requestLogId, credential);
             }
+          const lastFailure = failures.at(-1) ?? "Provider request failed";
           const statusCode = failures.every(isQuotaError) ? 429 : 502;
           requestLogService.complete(requestLogId, {
             status: "error",
             statusCode,
-            error: failures.at(-1),
+            error: lastFailure,
           });
           set.status = statusCode;
           return {

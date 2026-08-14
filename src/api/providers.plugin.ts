@@ -9,6 +9,7 @@ import { chatgptModels } from "../integrations/chatgpt";
 import { qwenModels } from "../integrations/qwen";
 import { credentialKindForProtocol, validateCredential } from "../services/credential-validation";
 import type { ProviderProtocol } from "../services/provider-appearance";
+import { anthropicEndpoint } from "../clients/anthropic";
 
 export const providersPlugin = (app: Elysia) =>
   app
@@ -44,11 +45,13 @@ export const providersPlugin = (app: Elysia) =>
             const models = await qwenModels(credential, provider.base_url);
             if (!models.length) throw new Error("Qwen returned no models");
           } else if (protocol === "openai" || protocol === "anthropic") {
-            const url = `${provider.base_url}/models`;
+            const url = protocol === "anthropic"
+              ? anthropicEndpoint(provider as any, "models")
+              : `${provider.base_url.replace(/\/+$/, "")}${provider.base_url.replace(/\/+$/, "").endsWith("/v1") ? "" : "/v1"}/models`;
             await assertSafeRemoteUrl(url);
             const headers: Record<string, string> = protocol === "anthropic"
-              ? { "x-api-key": secret ?? "", "anthropic-version": "2023-06-01" }
-              : { Authorization: `Bearer ${secret ?? ""}` };
+              ? { Accept: "application/json", "x-api-key": secret ?? "", "anthropic-version": "2023-06-01" }
+              : { Accept: "application/json", Authorization: `Bearer ${secret ?? ""}` };
             const response = await fetch(url, { headers });
             const data: any = await response.json().catch(() => null);
             if (!response.ok) throw new Error(`${protocol} model listing failed (${response.status})`);

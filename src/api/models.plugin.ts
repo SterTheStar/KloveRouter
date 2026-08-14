@@ -29,6 +29,7 @@ import {
 } from "../integrations/chatgpt";
 import { parseRawModelMetadata, resolveModelMetadata } from "../services/model-metadata";
 import { assertSafeRemoteUrl } from "../services/ssrf";
+import { anthropicEndpoint } from "../clients/anthropic";
 
 const nullableBoolean = t.Union([t.Boolean(), t.Null()]);
 const capabilitiesSchema = t.Object({
@@ -357,10 +358,10 @@ export const modelsPlugin = (app: Elysia) =>
               provider.credential_mode,
               provider.fixed_credential_id,
             ) || credentialService.select(provider.id, "round_robin");
-          const url =
-            provider.protocol === "anthropic"
-              ? provider.base_url.replace(/\/+$/, "") + "/models"
-              : provider.base_url.replace(/\/+$/, "") + "/models";
+          const normalizedBase = provider.base_url.replace(/\/+$/, "");
+          const url = provider.protocol === "anthropic"
+            ? anthropicEndpoint(provider, "models")
+            : `${normalizedBase}${normalizedBase.endsWith("/v1") ? "" : "/v1"}/models`;
           await assertSafeRemoteUrl(url);
           const authHeaders: Record<string, string> = credential?.secret
             ? provider.protocol === "anthropic"
@@ -372,6 +373,7 @@ export const modelsPlugin = (app: Elysia) =>
             : {};
           const res = await fetch(url, {
             headers: {
+              Accept: "application/json",
               "Content-Type": "application/json",
               ...authHeaders,
             },
