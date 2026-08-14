@@ -337,6 +337,7 @@ export default function AddProviderModal({
     }
   };
 
+  const unavailableProtocols = new Set(["chatgpt", "freebuff", "atomesus"]);
   const filteredTypes = PROVIDER_TEMPLATES.filter(
     (t) =>
       t.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -367,18 +368,22 @@ export default function AddProviderModal({
               {filteredTypes.map((type) => (
                 <button
                   key={type.id}
-                   className="flex w-full items-center gap-4 rounded-lg border p-4 text-left transition-colors hover:bg-muted/50"
+                  type="button"
+                  disabled={unavailableProtocols.has(type.protocol)}
+                  className={`flex w-full items-center gap-4 rounded-lg border p-4 text-left transition-colors ${unavailableProtocols.has(type.protocol) ? "cursor-not-allowed opacity-60" : "hover:bg-muted/50"}`}
                   onClick={() => selectType(type)}
                 >
                   <ProviderIcon name={type.name} src={type.logo} className={`size-9 ${type.id === "openai" ? "dark:invert" : ""}`} />
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
                       <div className="font-medium">{type.name}</div>
+                      {unavailableProtocols.has(type.protocol) && (
+                        <Badge variant="destructive">Not working</Badge>
+                      )}
                       {(type.protocol === "codex" ||
                         type.protocol === "antigravity") && (
                         <Badge variant="outline">OAuth</Badge>
                       )}
-
                     </div>
                     <div className="text-xs text-muted-foreground">
                       {type.description}
