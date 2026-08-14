@@ -39,6 +39,12 @@ export const config = {
   encryptionKey,
   jwtExpirationSeconds: 8 * 60 * 60,
   logLevel: process.env.LOG_LEVEL || "info",
+  trustedProxyIps: new Set(
+    (process.env.TRUSTED_PROXY_IPS || "")
+      .split(",")
+      .map((ip) => ip.trim())
+      .filter(Boolean),
+  ),
   get dataDir(): string {
     return dirname(this.dbPath);
   },

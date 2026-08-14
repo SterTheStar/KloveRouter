@@ -72,12 +72,21 @@ function baseUrl(url?: string) {
   return (url || DEFAULT_BASE_URL).replace(/\/+$/, "");
 }
 
+function abortableDelay(ms: number, signal?: AbortSignal) {
+  if (signal?.aborted) return Promise.reject(signal.reason ?? new DOMException("The operation was aborted", "AbortError"));
+  return new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(resolve, ms);
+    signal?.addEventListener("abort", () => { clearTimeout(timer); reject(signal.reason ?? new DOMException("The operation was aborted", "AbortError")); }, { once: true });
+  });
+}
+
 async function request(
   credential: FreebuffCredential,
   url: string,
   init: RequestInit = {},
 ) {
   const headers = new Headers(init.headers);
+  const signal = init.signal;
   headers.set("Authorization", `Bearer ${tokenOf(credential)}`);
   headers.set("x-codebuff-api-key", tokenOf(credential));
   if (!headers.has("User-Agent")) headers.set("User-Agent", CLI_USER_AGENT);
@@ -90,14 +99,15 @@ async function request(
   let lastError: unknown;
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
-      const response = await fetch(url, { ...init, headers });
+      const response = await fetch(url, { ...init, headers, signal });
       if (!retryable.has(response.status) || attempt === 2) return response;
       await response.body?.cancel().catch(() => {});
     } catch (error) {
       lastError = error;
-      if (attempt === 2) throw error;
+      if (signal?.aborted || attempt === 2) throw error;
     }
-    await new Promise((resolve) => setTimeout(resolve, Math.min(10_000, 1_000 * 2 ** attempt)));
+    if (signal?.aborted) throw signal.reason ?? new DOMException("The operation was aborted", "AbortError");
+    await abortableDelay(Math.min(10_000, 1_000 * 2 ** attempt), signal ?? undefined);
   }
   throw lastError instanceof Error ? lastError : new Error("Freebuff request failed");
 }
@@ -135,13 +145,16 @@ async function persistInstanceId(credential: FreebuffCredential, instanceId: str
 
 async function jsonError(response: Response, action: string) {
   const text = await response.text().catch(() => "");
-  throw new Error(`${action} failed (${response.status}): ${text.slice(0, 1000)}`);
+  const error = new Error(`${action} failed (${response.status}): ${text.slice(0, 1000)}`);
+  Object.assign(error, { status: response.status });
+  throw error;
 }
 
 async function createSession(
   credential: FreebuffCredential,
   endpoint: string,
   model: string,
+  signal?: AbortSignal,
 ): Promise<Session> {
   let response = await request(credential, `${baseUrl(endpoint)}/api/v1/freebuff/session`, {
     method: "POST",
@@ -151,6 +164,7 @@ async function createSession(
       "x-freebuff-model": model,
     },
     body: "{}",
+    signal,
   });
   if (response.status === 409) {
     const locked = (await response.json().catch(() => null)) as {
@@ -158,7 +172,7 @@ async function createSession(
       currentModel?: string;
     } | null;
     if (locked?.status === "model_locked" && locked.currentModel && locked.currentModel !== model) {
-      await endSession(credential, baseUrl(endpoint));
+      await endSession(credential, baseUrl(endpoint), signal);
       response = await request(credential, `${baseUrl(endpoint)}/api/v1/freebuff/session`, {
         method: "POST",
         headers: {
@@ -167,6 +181,7 @@ async function createSession(
           "x-freebuff-model": model,
         },
         body: "{}",
+        signal,
       });
     } else {
       throw new Error(`Freebuff session model locked (${response.status})`);
@@ -185,7 +200,7 @@ async function createSession(
   if (!response.ok) await jsonError(response, "Freebuff session");
   const state = (await response.json()) as any;
   if (state.status === "queued") {
-    const polled = await pollSession(credential, endpoint, state);
+    const polled = await pollSession(credential, endpoint, state, signal);
     if (polled) return polled;
     throw new Error("Freebuff waiting room did not become active");
   }
@@ -219,6 +234,7 @@ async function pollSession(
   credential: FreebuffCredential,
   endpoint: string,
   state: any,
+  signal?: AbortSignal,
 ): Promise<Session | null> {
   const upstream = baseUrl(endpoint);
   const deadline = Date.now() + 5 * 60_000;
@@ -226,10 +242,11 @@ async function pollSession(
     const waitMs = state.status === "queued"
       ? 5_000
       : Math.max(1_000, Math.min(Number(state.remainingMs || 5_000), 30_000));
-    await new Promise((resolve) => setTimeout(resolve, waitMs));
+    await abortableDelay(waitMs, signal);
     const poll = await request(credential, `${upstream}/api/v1/freebuff/session`, {
       method: "GET",
       headers: { "User-Agent": CLI_USER_AGENT, "x-freebuff-instance-id": state.instanceId || "" },
+      signal,
     });
     if (!poll.ok) {
       if (poll.status === 401) continue;
@@ -266,6 +283,7 @@ async function ensureSession(
   credential: FreebuffCredential,
   endpoint: string,
   model: string,
+  signal?: AbortSignal,
 ): Promise<Session> {
   const lockKey = `${credential.id}:${model}`;
   const existing = sessionLocks.get(lockKey);
@@ -281,8 +299,8 @@ async function ensureSession(
       return cached;
     if (cached?.inFlight && cached.model !== model)
       throw new Error(`Freebuff credential is busy with model ${cached.model}`);
-    if (cached?.instanceId) await endSession(credential, endpoint);
-    return createSession(credential, endpoint, model);
+    if (cached?.instanceId) await endSession(credential, endpoint, signal);
+    return createSession(credential, endpoint, model, signal);
   })();
   sessionLocks.set(lockKey, operation);
   try {
@@ -315,7 +333,7 @@ function lockedModelFrom(body: string) {
   }
 }
 
-async function endSession(credential: FreebuffCredential, endpoint: string) {
+async function endSession(credential: FreebuffCredential, endpoint: string, signal?: AbortSignal) {
   const current = sessions.get(credential.id);
   const response = await request(
     credential,
@@ -326,6 +344,7 @@ async function endSession(credential: FreebuffCredential, endpoint: string) {
         "User-Agent": CLI_USER_AGENT,
         "x-freebuff-instance-id": current?.instanceId || instanceIdFor(credential),
       },
+      signal,
     },
   );
   if (!response.ok && response.status !== 404)
@@ -335,11 +354,12 @@ async function endSession(credential: FreebuffCredential, endpoint: string) {
   return { unlocked: true };
 }
 
-async function startRun(credential: FreebuffCredential, endpoint: string, agentId: string, ancestorRunIds: string[] = []) {
+async function startRun(credential: FreebuffCredential, endpoint: string, agentId: string, ancestorRunIds: string[] = [], signal?: AbortSignal) {
   const response = await request(credential, `${baseUrl(endpoint)}/api/v1/agent-runs`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "User-Agent": BUN_USER_AGENT },
     body: JSON.stringify({ action: "START", agentId, ancestorRunIds }),
+    signal,
   });
   if (!response.ok) await jsonError(response, "Freebuff run");
   const body = (await response.json()) as { runId?: string };
@@ -355,6 +375,7 @@ async function recordRunStep(
   childRunIds: string[],
   messageId: string | null,
   startTime: string,
+  signal?: AbortSignal,
 ) {
   const response = await request(
     credential,
@@ -370,6 +391,7 @@ async function recordRunStep(
         status: "completed",
         startTime,
       }),
+      signal,
     },
   );
   if (!response.ok)
@@ -377,7 +399,7 @@ async function recordRunStep(
   await response.body?.cancel().catch(() => {});
 }
 
-async function finishRun(credential: FreebuffCredential, endpoint: string, runId: string, totalSteps: number) {
+async function finishRun(credential: FreebuffCredential, endpoint: string, runId: string, totalSteps: number, signal?: AbortSignal) {
   const response = await request(credential, `${baseUrl(endpoint)}/api/v1/agent-runs`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "User-Agent": BUN_USER_AGENT },
@@ -389,6 +411,7 @@ async function finishRun(credential: FreebuffCredential, endpoint: string, runId
       directCredits: 0,
       totalCredits: 0,
     }),
+    signal,
   });
   if (!response.ok) logger.warn("Freebuff run finish failed", { status: response.status });
   await response.body?.cancel().catch(() => {});
@@ -398,11 +421,12 @@ async function startRunChain(
   credential: FreebuffCredential,
   endpoint: string,
   agentId: string,
+  signal?: AbortSignal,
 ): Promise<{ runId: string; startedAt: string; childRunId: string }> {
   const upstream = baseUrl(endpoint);
   const startedAt = new Date().toISOString();
-  const runId = await startRun(credential, upstream, agentId, []);
-  await recordRunStep(credential, upstream, runId, 1, [], null, startedAt);
+  const runId = await startRun(credential, upstream, agentId, [], signal);
+  await recordRunStep(credential, upstream, runId, 1, [], null, startedAt, signal);
   return { runId, startedAt, childRunId: "" };
 }
 
@@ -412,9 +436,10 @@ async function finalizeRunChain(
   runId: string,
   startedAt: string,
   messageId: string | null,
+  signal?: AbortSignal,
 ) {
-  await recordRunStep(credential, baseUrl(endpoint), runId, 2, [], messageId, startedAt);
-  await finishRun(credential, baseUrl(endpoint), runId, 2);
+  await recordRunStep(credential, baseUrl(endpoint), runId, 2, [], messageId, startedAt, signal);
+  await finishRun(credential, baseUrl(endpoint), runId, 2, signal);
 }
 
 function clientSessionId() {
@@ -498,14 +523,31 @@ export async function freebuffResponses(
   model: string,
   credential: FreebuffCredential,
   endpoint?: string,
+  signal?: AbortSignal,
 ) {
   const upstream = baseUrl(endpoint);
-  let session = await ensureSession(credential, upstream, model);
+  const upstreamController = new AbortController();
+  const abortUpstream = () => upstreamController.abort(signal?.reason);
+  if (signal?.aborted) abortUpstream();
+  else signal?.addEventListener("abort", abortUpstream, { once: true });
+  const upstreamSignal = upstreamController.signal;
+  let session: Session;
+  try {
+    session = await ensureSession(credential, upstream, model, upstreamSignal);
+  } catch (error) {
+    throw error;
+  }
   const activeModel = session.model || model;
   const agentId = freebuffRootAgent(activeModel);
   session.lastUsedAt = Date.now();
+  let run: { runId: string; startedAt: string; childRunId: string };
   session.inFlight += 1;
-  const run = await startRunChain(credential, upstream, agentId);
+  try {
+    run = await startRunChain(credential, upstream, agentId, upstreamSignal);
+  } catch (error) {
+    session.inFlight = Math.max(0, session.inFlight - 1);
+    throw error;
+  }
   const payload = structuredClone(body);
   payload.model = activeModel;
   payload.stream = body.stream ?? false;
@@ -529,20 +571,26 @@ export async function freebuffResponses(
   payload.codebuff_metadata = codebuffMetadata;
   payload.provider = { ...(payload.provider || {}), data_collection: "deny" };
   let messageId: string | null = null;
-  const finalize = () => finalizeRunChain(credential, upstream, run.runId, run.startedAt, messageId).catch(() => {});
+  let finalized = false;
+  const finalize = () => {
+    if (finalized) return Promise.resolve();
+    finalized = true;
+    return finalizeRunChain(credential, upstream, run.runId, run.startedAt, messageId, upstreamSignal).catch(() => {});
+  };
   try {
     let response = await request(credential, `${upstream}/api/v1/chat/completions`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "User-Agent": CHAT_USER_AGENT },
       body: JSON.stringify(payload),
+      signal: upstreamSignal,
     });
     if (!response.ok) {
       const text = await response.text().catch(() => "");
       if (isModelLockError(response.status, text)) {
         const lockedModel = lockedModelFrom(text);
-        await endSession(credential, upstream).catch(() => {});
+        await endSession(credential, upstream, upstreamSignal).catch(() => {});
         if (lockedModel && lockedModel !== model) {
-          session = await ensureSession(credential, upstream, lockedModel);
+          session = await ensureSession(credential, upstream, lockedModel, upstreamSignal);
           session.inFlight += 1;
           session.lastUsedAt = Date.now();
           payload.model = lockedModel;
@@ -557,6 +605,7 @@ export async function freebuffResponses(
             method: "POST",
             headers: { "Content-Type": "application/json", "User-Agent": CHAT_USER_AGENT },
             body: JSON.stringify(payload),
+            signal: upstreamSignal,
           });
           if (!response.ok) {
             const retryText = await response.text().catch(() => "");
@@ -576,13 +625,16 @@ export async function freebuffResponses(
       await finalize();
       session.inFlight = Math.max(0, session.inFlight - 1);
       session.lastUsedAt = Date.now();
-      return new Response(JSON.stringify(result), { status: response.status, headers: { "content-type": "application/json" } });
+      return new Response(JSON.stringify(result), { status: response.status, statusText: response.statusText, headers: { "content-type": "application/json" } });
     }
+    let upstreamReader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+    let streamClosed = false;
     return new Response(
       new ReadableStream({
         async start(controller) {
           try {
-            const reader = response.body?.getReader();
+            upstreamReader = response.body?.getReader();
+            const reader = upstreamReader;
             if (!reader) throw new Error("Freebuff returned an empty response");
             while (true) {
               const part = await reader.read();
@@ -597,16 +649,28 @@ export async function freebuffResponses(
               if (part.done) break;
             }
           } catch (error) {
-            controller.error(error);
+            if (!streamClosed) {
+              streamClosed = true;
+              controller.error(error);
+            }
           } finally {
             await finalize();
             session.inFlight = Math.max(0, session.inFlight - 1);
             session.lastUsedAt = Date.now();
-            controller.close();
+            if (!streamClosed) {
+              streamClosed = true;
+              try { controller.close(); } catch {}
+            }
           }
         },
+        cancel(reason) {
+          if (streamClosed) return;
+          streamClosed = true;
+          upstreamController.abort(reason);
+          void upstreamReader?.cancel(reason).catch(() => undefined);
+        },
       }),
-      { headers: response.headers },
+      { status: response.status, statusText: response.statusText, headers: response.headers },
     );
   } catch (error) {
     await finalize();
