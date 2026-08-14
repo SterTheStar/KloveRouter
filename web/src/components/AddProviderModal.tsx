@@ -45,6 +45,7 @@ export default function AddProviderModal({
   const [apiKey, setApiKey] = useState("");
   const [authCode, setAuthCode] = useState("");
   const [avatar, setAvatar] = useState<string | null>(null);
+  const [avatarManuallySet, setAvatarManuallySet] = useState(false);
   const [loading, setLoading] = useState(false);
   const [verifying, setVerifying] = useState(false);
   const [verificationWarning, setVerificationWarning] = useState<string | null>(null);
@@ -75,6 +76,7 @@ export default function AddProviderModal({
     setApiKey("");
     setAuthCode("");
     setAvatar(null);
+    setAvatarManuallySet(false);
     setError(null);
     setVerificationWarning(null);
     setStep("select");
@@ -217,6 +219,7 @@ export default function AddProviderModal({
     setName(type.name);
     setBaseUrl(type.placeholder);
     setAvatar(type.logo);
+    setAvatarManuallySet(false);
     setStep("form");
   };
 
@@ -437,7 +440,7 @@ export default function AddProviderModal({
                   </AlertDescription>
                 </Alert>
               )}
-              <AvatarUpload value={avatar} name={name} onChange={setAvatar} label="Provider avatar" onError={(message) => notifyError("Invalid avatar", message)} />
+              <AvatarUpload value={avatar} name={name} onChange={(value) => { setAvatar(value); setAvatarManuallySet(true); }} label="Provider avatar" onError={(message) => notifyError("Invalid avatar", message)} />
               <div className="space-y-2">
                 <Label htmlFor="provider-name">Provider name</Label>
                 <Input
@@ -452,7 +455,18 @@ export default function AddProviderModal({
                 <Input
                   id="provider-url"
                   value={baseUrl}
-                  onChange={(e) => setBaseUrl(e.target.value)}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setBaseUrl(value);
+                    if (selectedType?.protocol === "openai" && !avatarManuallySet) {
+                      try {
+                        const hostname = new URL(value).hostname;
+                        if (hostname) setAvatar(`https://www.google.com/s2/favicons?domain=${encodeURIComponent(hostname)}&sz=64`);
+                      } catch {
+                        /* Keep the selected template avatar until the URL is valid. */
+                      }
+                    }
+                  }}
                   placeholder={selectedType?.placeholder}
                 />
               </div>
