@@ -20,7 +20,7 @@ export default function ContextUsageIndicator({
   cacheReadTokens,
   cacheWriteTokens,
 }: ContextUsageIndicatorProps) {
-  const totalTokens = promptTokens + completionTokens;
+  const totalTokens = Math.max(0, promptTokens - cacheReadTokens) + completionTokens;
   const hasContextLimit = Boolean(contextWindow && contextWindow > 0);
   const percentage = hasContextLimit
     ? Math.min(100, (totalTokens / contextWindow!) * 100)
