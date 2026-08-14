@@ -22,6 +22,7 @@ import { openAICompletionFromSse } from "./openai-completion";
 import { freebuffResponses } from "../integrations/freebuff";
 import { cleanQwenStream, extractQwenContent, qwenResponses } from "../integrations/qwen";
 import { atomesusResponses } from "../integrations/atomesus";
+import { conolContent, conolModelMetadataFromId, conolResponses } from "../integrations/conol";
 import {
   chatgptResponses,
   chatgptStreamToOpenAI,
@@ -664,6 +665,20 @@ export const proxyPlugin = (app: Elysia) =>
           body.messages = await customSkillsProxy.injectSkills(body.messages);
         }
 
+        if (provider.protocol === "conol") {
+          const unsupported = body.tools?.length || body.messages.some((message: any) =>
+            Array.isArray(message.content) && message.content.some((part: any) => part?.type !== "text" && part?.type !== "input_text"),
+          );
+          if (unsupported) {
+            set.status = 400;
+            return { error: "Invalid Conol request", message: "Conol supports text messages only; tools and images are not supported." };
+          }
+          if (body.messages.some((message: any) => !conolContent(message.content) && message.role === "user")) {
+            set.status = 400;
+            return { error: "Invalid Conol request", message: "Conol requires at least one user text message." };
+          }
+        }
+
         if (
           provider.protocol === "antigravity" &&
           isBlockedAntigravityModel(parsed.modelId)
@@ -1253,6 +1268,52 @@ export const proxyPlugin = (app: Elysia) =>
           set.status = 502;
           requestLogService.complete(requestLogId, { status: "error", statusCode: 502, error: failures.at(-1) });
           return { error: "Qwen request failed", message: failures.at(-1) };
+        }
+
+        if (provider.protocol === "conol") {
+          const attempted = new Set<string>();
+          const failures: string[] = [];
+          while (credential && !attempted.has(credential.id)) {
+            attempted.add(credential.id);
+            try {
+              const start = performance.now();
+              const conolModel = conolModelMetadataFromId(parsed.modelId) ?? { agentModel: parsed.modelId };
+              const result = await conolResponses(body, conolModel, credential, provider.base_url, request.signal);
+              const modelRecord = modelService.findByProviderAndModel(provider.id, parsed.modelId);
+              const credentialId = credential.id;
+              if (!body.stream) {
+                const durationMs = Math.round(performance.now() - start);
+                const completion = result as any;
+                const usage = usageService.record(provider.id, modelRecord?.id ?? parsed.modelId, parsed.modelId, 0, 0, durationMs, durationMs, { cacheRead: 0, cacheWrite: 0 });
+                requestLogService.complete(requestLogId, { cost: usage.estimated_cost_usd, durationMs });
+                credentialService.clearError(credentialId);
+                credentialService.clearCooldown(credentialId);
+                return completion;
+              }
+              return recordSseUsageResponse(result as Response, (promptTokens, completionTokens, durationMs, generationDurationMs, details) => {
+                const usage = usageService.record(provider.id, modelRecord?.id ?? parsed.modelId, parsed.modelId, promptTokens, completionTokens, durationMs, generationDurationMs, details);
+                requestLogService.complete(requestLogId, { promptTokens, completionTokens, cacheRead: details?.cacheRead, cacheWrite: details?.cacheWrite, cost: usage.estimated_cost_usd, durationMs });
+                credentialService.clearError(credentialId);
+                credentialService.clearCooldown(credentialId);
+              }, start, (error) => {
+                credentialService.markError(credentialId, error.message);
+                requestLogService.complete(requestLogId, { status: "error", statusCode: 502, error: error.message });
+              });
+            } catch (error: any) {
+              failures.push(error.message);
+              credentialService.markError(credential.id, error.message);
+              if (provider.credential_mode !== "round_robin") break;
+              credentialService.markCooldown(credential.id, 10, error.message, requestSequence);
+              const next = credentialService.select(provider.id, "round_robin", null, requestSequence);
+              if (!next || attempted.has(next.id)) break;
+              credential = next;
+              requestLogService.setCredential(requestLogId, credential);
+            }
+          }
+          const statusCode = failures.some((message) => isQuotaError(message)) ? 429 : 502;
+          set.status = statusCode;
+          requestLogService.complete(requestLogId, { status: "error", statusCode, error: failures.at(-1) });
+          return { error: "Conol request failed", message: failures.at(-1) ?? "Provider request failed" };
         }
 
         if (provider.protocol === "atomesus") {

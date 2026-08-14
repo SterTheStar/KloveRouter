@@ -37,6 +37,7 @@ export type CreateProviderInput = {
   name: string;
   base_url: string;
   api_key?: string;
+  account_id?: string;
   avatar?: string;
   protocol?: ProviderProtocol;
   credential_mode?: CredentialMode;
@@ -121,6 +122,7 @@ export const providerService = {
     const protocol = input.protocol ?? "openai";
     const kind = credentialKindForProtocol(protocol);
     validateCredential(protocol, kind, protocol === "codex" || protocol === "antigravity" ? undefined : input.api_key, {
+      accountId: input.account_id,
       allowIncompleteOAuth: protocol === "codex" || protocol === "antigravity",
     });
     const id = crypto.randomUUID();
@@ -139,7 +141,7 @@ export const providerService = {
     );
     const credentialId = crypto.randomUUID();
     db.query(
-      "INSERT INTO provider_credentials (id, provider_id, label, kind, secret) VALUES (?, ?, ?, ?, ?)",
+      "INSERT INTO provider_credentials (id, provider_id, label, kind, secret, account_id) VALUES (?, ?, ?, ?, ?, ?)",
     ).run(
       credentialId,
       id,
@@ -155,6 +157,8 @@ export const providerService = {
                ? "Qwen token"
                : protocol === "atomesus"
                  ? "Atomesus token"
+               : protocol === "conol"
+                 ? "Conol cookie"
                : "Default API key",
       protocol === "codex"
         ? "codex"
@@ -168,8 +172,11 @@ export const providerService = {
                ? "qwen"
                : protocol === "atomesus"
                  ? "atomesus"
+               : protocol === "conol"
+                 ? "conol"
                : "api_key",
       protocol === "antigravity" ? null : encryptedApiKey,
+      input.account_id ?? null,
     );
     db.query("UPDATE providers SET fixed_credential_id = ? WHERE id = ?").run(
       credentialId,

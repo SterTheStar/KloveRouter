@@ -23,6 +23,7 @@ import { generateDisplayName } from "../services/model-name";
 import { freebuffModels, freebuffResponses } from "../integrations/freebuff";
 import { qwenModels, qwenResponses } from "../integrations/qwen";
 import { atomesusModels, atomesusTest } from "../integrations/atomesus";
+import { conolModels, conolResponses } from "../integrations/conol";
 import {
   chatgptModels,
   chatgptTest,
@@ -72,6 +73,15 @@ async function freebuffTest(
     throw new Error(`Freebuff test failed (${response.status})`);
   }
   return response.json();
+}
+
+async function conolTest(
+  model: string,
+  credential: { id: string; secret?: string | null; account_id?: string | null },
+  endpoint: string,
+) {
+  const result = await conolResponses({ messages: [{ role: "user", content: "Say 'ok' and nothing else." }], stream: false }, model, credential, endpoint);
+  return result instanceof Response ? result.json() : result;
 }
 
 async function qwenTest(
@@ -327,6 +337,31 @@ export const modelsPlugin = (app: Elysia) =>
             return { success: true, models_found: selected.length, message: `Synced ${selected.length} Atomesus models from ${provider.name}` };
           }
 
+          if (provider.protocol === "conol") {
+            const credential =
+              credentialService.select(
+                provider.id,
+                provider.credential_mode,
+                provider.fixed_credential_id,
+              ) || credentialService.select(provider.id, "round_robin");
+            if (!credential) {
+              set.status = 503;
+              return { error: "No active Conol credential" };
+            }
+            const available = await conolModels(credential, provider.base_url);
+            if (query.preview === true) return preview(available);
+            const selected = selectModels(available);
+            for (const model of selected)
+              saveSyncedModel({
+                provider_id: id,
+                model_id: model.id,
+                display_name: model.display_name || generateDisplayName(model.id),
+                is_manual: 0,
+                ...await resolveModelMetadata(provider.protocol, model.id, model),
+              });
+            return { success: true, models_found: selected.length, message: `Synced ${selected.length} Conol models from ${provider.name}` };
+          }
+
           if (provider.protocol === "chatgpt") {
             const credential =
               credentialService.select(
@@ -536,6 +571,8 @@ export const modelsPlugin = (app: Elysia) =>
                    ? await qwenTest(model.model_id, credential, provider.base_url)
                    : provider.protocol === "atomesus"
                      ? await atomesusTest(model.model_id, credential, provider.base_url)
+                   : provider.protocol === "conol"
+                     ? await conolTest(model.model_id, credential, provider.base_url)
                    : provider.protocol === "chatgpt"
                      ? {
                          choices: [

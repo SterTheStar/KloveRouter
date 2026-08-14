@@ -10,6 +10,7 @@ const protocolKinds: Record<ProviderProtocol, CredentialKind> = {
   freebuff: "freebuff",
   qwen: "qwen",
   atomesus: "atomesus",
+  conol: "conol",
 };
 
 const secretKinds = new Set<CredentialKind>([
@@ -18,6 +19,7 @@ const secretKinds = new Set<CredentialKind>([
   "freebuff",
   "qwen",
   "atomesus",
+  "conol",
 ]);
 
 export class CredentialValidationError extends Error {
@@ -35,7 +37,7 @@ export function validateCredential(
   protocol: ProviderProtocol,
   kind: CredentialKind,
   secret?: string | null,
-  fields: { accessToken?: string | null; refreshToken?: string | null; allowIncompleteOAuth?: boolean } = {},
+  fields: { accessToken?: string | null; refreshToken?: string | null; accountId?: string | null; allowIncompleteOAuth?: boolean } = {},
 ): { valid: true; protocol: ProviderProtocol; kind: CredentialKind } {
   const expected = protocolKinds[protocol];
   if (expected !== kind) {
@@ -51,6 +53,9 @@ export function validateCredential(
   }
   if (!fields.allowIncompleteOAuth && kind === "antigravity" && (!fields.accessToken?.trim() || !fields.refreshToken?.trim())) {
     throw new CredentialValidationError("Credential kind 'antigravity' requires non-empty access_token and refresh_token");
+  }
+  if (!fields.allowIncompleteOAuth && kind === "conol" && !fields.accountId?.trim()) {
+    throw new CredentialValidationError("Credential kind 'conol' requires a non-empty account_id");
   }
   return { valid: true, protocol, kind };
 }

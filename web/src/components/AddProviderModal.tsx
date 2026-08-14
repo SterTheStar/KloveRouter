@@ -44,6 +44,7 @@ export default function AddProviderModal({
   const [baseUrl, setBaseUrl] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [authCode, setAuthCode] = useState("");
+  const [conolAccountId, setConolAccountId] = useState("");
   const [avatar, setAvatar] = useState<string | null>(null);
   const [avatarManuallySet, setAvatarManuallySet] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -75,6 +76,7 @@ export default function AddProviderModal({
     setBaseUrl("");
     setApiKey("");
     setAuthCode("");
+    setConolAccountId("");
     setAvatar(null);
     setAvatarManuallySet(false);
     setError(null);
@@ -234,6 +236,9 @@ export default function AddProviderModal({
     }
     if (!name || !baseUrl)
       return setError("Provider name and base URL are required.");
+    const conolParsedAccountId = conolAccountId.trim() || authCode.match(/^account_id\s*=\s*(.+)$/m)?.[1]?.trim() || "";
+    if (selectedType?.protocol === "conol" && !conolParsedAccountId)
+      return setError("Conol.ai account_id is required. Enter it separately or use account_id=<id> on the first line.");
     const shouldVerify = !skipVerification;
     setLoading(true);
     setVerifying(shouldVerify);
@@ -244,7 +249,9 @@ export default function AddProviderModal({
         base_url: baseUrl,
         ...(selectedType?.protocol === "freebuff" || selectedType?.protocol === "qwen" || selectedType?.protocol === "atomesus" || selectedType?.protocol === "chatgpt"
           ? { auth_code: authCode }
-          : { api_key: apiKey }),
+          : selectedType?.protocol === "conol"
+            ? { secret: authCode, account_id: conolParsedAccountId }
+            : { api_key: apiKey }),
         protocol: selectedType?.protocol,
       });
       setVerifying(false);
@@ -253,7 +260,9 @@ export default function AddProviderModal({
         base_url: baseUrl,
         ...(selectedType?.protocol === "freebuff" || selectedType?.protocol === "qwen" || selectedType?.protocol === "atomesus" || selectedType?.protocol === "chatgpt"
           ? { auth_code: authCode }
-          : { api_key: apiKey }),
+          : selectedType?.protocol === "conol"
+            ? { secret: authCode, account_id: conolParsedAccountId }
+            : { api_key: apiKey }),
         protocol: selectedType?.protocol,
         avatar: avatar || undefined,
       });
@@ -473,20 +482,43 @@ export default function AddProviderModal({
               {selectedType?.protocol !== "codex" &&
                 selectedType?.protocol !== "antigravity" && (
                   <div className="space-y-2">
-                     <Label htmlFor="provider-key">
-                        {selectedType?.protocol === "chatgpt" ? "Session token (required)" : selectedType?.protocol === "atomesus" ? "Bearer token (optional)" : selectedType?.protocol === "freebuff" || selectedType?.protocol === "qwen" ? "Auth code (optional)" : "API key (optional)"}
-                    </Label>
-                    <Input
-                      id="provider-key"
-                      type="password"
-                       value={selectedType?.protocol === "freebuff" || selectedType?.protocol === "qwen" || selectedType?.protocol === "atomesus" || selectedType?.protocol === "chatgpt" ? authCode : apiKey}
-                      onChange={(e) =>
-                         selectedType?.protocol === "freebuff" || selectedType?.protocol === "qwen" || selectedType?.protocol === "atomesus" || selectedType?.protocol === "chatgpt"
-                          ? setAuthCode(e.target.value)
-                          : setApiKey(e.target.value)
-                      }
-                       placeholder={selectedType?.protocol === "chatgpt" ? "Paste an authorized session token" : selectedType?.protocol === "atomesus" ? "Paste your Atomesus bearer token" : selectedType?.protocol === "freebuff" || selectedType?.protocol === "qwen" ? "Paste your auth token" : "sk-..."}
-                    />
+                    {selectedType?.protocol === "conol" ? (
+                      <>
+                        <Label htmlFor="conol-account-id">Account ID</Label>
+                        <Input
+                          id="conol-account-id"
+                          value={conolAccountId}
+                          onChange={(e) => setConolAccountId(e.target.value)}
+                          placeholder="account_id from Conol.ai"
+                        />
+                        <Label htmlFor="provider-key">Cookie</Label>
+                        <Input
+                          id="provider-key"
+                          type="password"
+                          value={authCode}
+                          onChange={(e) => setAuthCode(e.target.value)}
+                          placeholder="Paste the Conol.ai cookie (kept hidden)"
+                        />
+                        <p className="text-xs text-muted-foreground">Enter Account ID and cookie separately. Cookie stays hidden and is encrypted before storage.</p>
+                      </>
+                    ) : (
+                      <>
+                        <Label htmlFor="provider-key">
+                          {selectedType?.protocol === "chatgpt" ? "Session token (required)" : selectedType?.protocol === "atomesus" ? "Bearer token (optional)" : selectedType?.protocol === "freebuff" || selectedType?.protocol === "qwen" ? "Auth code (optional)" : "API key (optional)"}
+                        </Label>
+                        <Input
+                          id="provider-key"
+                          type="password"
+                          value={selectedType?.protocol === "freebuff" || selectedType?.protocol === "qwen" || selectedType?.protocol === "atomesus" || selectedType?.protocol === "chatgpt" ? authCode : apiKey}
+                          onChange={(e) =>
+                            selectedType?.protocol === "freebuff" || selectedType?.protocol === "qwen" || selectedType?.protocol === "atomesus" || selectedType?.protocol === "chatgpt"
+                              ? setAuthCode(e.target.value)
+                              : setApiKey(e.target.value)
+                          }
+                          placeholder={selectedType?.protocol === "chatgpt" ? "Paste an authorized session token" : selectedType?.protocol === "atomesus" ? "Paste your Atomesus bearer token" : selectedType?.protocol === "freebuff" || selectedType?.protocol === "qwen" ? "Paste your auth token" : "sk-..."}
+                        />
+                      </>
+                    )}
                     {selectedType?.protocol === "chatgpt" ? (
                       <div className="space-y-2 rounded-lg border border-dashed p-3 text-xs text-muted-foreground">
                         <p className="font-medium text-foreground">How to get your ChatGPT session token:</p>
@@ -496,8 +528,44 @@ export default function AddProviderModal({
                         </p>
                         <p>Paste the session token directly. It is encrypted before being stored.</p>
                       </div>
-                    ) : (selectedType?.protocol === "freebuff" || selectedType?.protocol === "qwen") && (
-                      selectedType?.protocol === "qwen" ? (
+                    ) : (selectedType?.protocol === "freebuff" || selectedType?.protocol === "qwen" || selectedType?.protocol === "conol") && (
+                      selectedType?.protocol === "conol" ? (
+                        <div className="space-y-3 rounded-lg border border-dashed p-3 text-xs text-muted-foreground">
+                          <p className="font-medium text-foreground">How to get your Conol.ai account and session cookie:</p>
+                          <ol className="list-inside list-decimal space-y-1">
+                            <li>Go to <a href="https://conol.ai" target="_blank" rel="noreferrer" className="text-primary underline underline-offset-2">conol.ai</a> and log in</li>
+                            <li>Open DevTools (<kbd className="rounded border bg-muted px-1 font-mono">F12</kbd>) → <strong>Network</strong>, then reload the page</li>
+                            <li>Open any request to <code>conol.ai</code>, find the <strong>Cookie</strong> request header, and copy its complete value</li>
+                            <li>Copy and paste this code in the Console to get the Account ID:</li>
+                          </ol>
+                          <div className="relative">
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                const code = `(()=>{\n  if (!location.hostname.endsWith("conol.ai"))\n    return console.error("Use this on conol.ai");\n  const accountId = location.pathname.match(/\\/accounts\\/([^/]+)/)?.[1] || "(not found)";\n  console.log("Account ID: " + accountId);\n})();`;
+                                try {
+                                  await copyToClipboard(code);
+                                  success("Setup code copied");
+                                } catch (e: any) {
+                                  notifyError("Could not copy setup code", e.message);
+                                }
+                              }}
+                              className="absolute right-1 top-1 rounded px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground hover:bg-muted-foreground/10 hover:text-foreground"
+                            >
+                              Copy
+                            </button>
+                            <pre className="overflow-x-auto rounded bg-muted p-2 pt-5 font-mono text-[11px] leading-relaxed">
+{`(()=>{
+  if (!location.hostname.endsWith("conol.ai"))
+    return console.error("Use this on conol.ai");
+  const accountId = location.pathname.match(/\\/accounts\\/([^/]+)/)?.[1] || "(not found)";
+  console.log("Account ID: " + accountId);
+})();`}
+                            </pre>
+                          </div>
+                          <p>Press <kbd className="rounded border bg-muted px-1 font-mono">Enter</kbd>, then paste the Account ID into the Account ID field and the complete cookie string into the Cookie field above.</p>
+                        </div>
+                      ) : selectedType?.protocol === "qwen" ? (
                         <div className="space-y-3 rounded-lg border border-dashed p-3 text-xs text-muted-foreground">
                           <p className="font-medium text-foreground">How to get your Qwen token:</p>
                           <ol className="list-inside list-decimal space-y-1">

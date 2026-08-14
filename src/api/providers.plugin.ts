@@ -7,6 +7,7 @@ import { isValidAvatar } from "../services/provider-appearance";
 import { assertSafeRemoteUrl } from "../services/ssrf";
 import { chatgptModels } from "../integrations/chatgpt";
 import { qwenModels } from "../integrations/qwen";
+import { conolValidate } from "../integrations/conol";
 import { credentialKindForProtocol, validateCredential } from "../services/credential-validation";
 import type { ProviderProtocol } from "../services/provider-appearance";
 import { anthropicEndpoint } from "../clients/anthropic";
@@ -20,10 +21,10 @@ export const providersPlugin = (app: Elysia) =>
       "/api/providers/validate-credential",
       async ({ body, set }) => {
         const protocol = (body.protocol ?? "openai") as ProviderProtocol;
-        const secret = body.api_key ?? body.auth_code;
+        const secret = body.api_key ?? body.auth_code ?? body.secret;
         try {
           const kind = credentialKindForProtocol(protocol);
-          validateCredential(protocol, kind, secret, { allowIncompleteOAuth: true });
+          validateCredential(protocol, kind, secret, { accountId: body.account_id, allowIncompleteOAuth: protocol !== "conol" });
           const provider = {
             id: "validation",
             name: "validation",
@@ -37,8 +38,10 @@ export const providersPlugin = (app: Elysia) =>
             created_at: "",
             updated_at: "",
           } as any;
-          const credential = { id: "validation", secret: secret ?? "" };
-          if (protocol === "chatgpt") {
+          const credential = { id: "validation", secret: secret ?? "", account_id: body.account_id };
+          if (protocol === "conol") {
+            await conolValidate(credential, provider.base_url);
+          } else if (protocol === "chatgpt") {
             const models = await chatgptModels(credential, { strict: true });
             if (!models.length) throw new Error("ChatGPT returned no models");
           } else if (protocol === "qwen") {
@@ -69,9 +72,11 @@ export const providersPlugin = (app: Elysia) =>
       {
         body: t.Object({
           base_url: t.String({ minLength: 1 }),
-          protocol: t.Optional(t.Union([t.Literal("openai"), t.Literal("anthropic"), t.Literal("codex"), t.Literal("chatgpt"), t.Literal("antigravity"), t.Literal("freebuff"), t.Literal("qwen"), t.Literal("atomesus")])),
+          protocol: t.Optional(t.Union([t.Literal("openai"), t.Literal("anthropic"), t.Literal("codex"), t.Literal("chatgpt"), t.Literal("antigravity"), t.Literal("freebuff"), t.Literal("qwen"), t.Literal("atomesus"), t.Literal("conol")])),
           api_key: t.Optional(t.String()),
           auth_code: t.Optional(t.String()),
+          secret: t.Optional(t.String()),
+          account_id: t.Optional(t.String()),
           model: t.Optional(t.String()),
         }),
       },
@@ -110,7 +115,7 @@ export const providersPlugin = (app: Elysia) =>
         }
         let provider;
         try {
-          provider = providerService.create({ ...body, api_key: body.api_key ?? body.auth_code });
+          provider = providerService.create({ ...body, api_key: body.api_key ?? body.auth_code ?? body.secret, account_id: body.account_id });
         } catch (error: any) {
           set.status = 400;
           return { error: error.message };
@@ -127,6 +132,8 @@ export const providersPlugin = (app: Elysia) =>
           base_url: t.String({ minLength: 1 }),
           api_key: t.Optional(t.String({ minLength: 1 })),
           auth_code: t.Optional(t.String({ minLength: 1 })),
+          secret: t.Optional(t.String({ minLength: 1 })),
+          account_id: t.Optional(t.String({ minLength: 1 })),
           avatar: t.Optional(t.String()),
           protocol: t.Optional(
             t.Union([
@@ -138,6 +145,7 @@ export const providersPlugin = (app: Elysia) =>
               t.Literal("freebuff"),
               t.Literal("qwen"),
               t.Literal("atomesus"),
+              t.Literal("conol"),
             ]),
           ),
           credential_mode: t.Optional(
@@ -191,6 +199,7 @@ export const providersPlugin = (app: Elysia) =>
               t.Literal("freebuff"),
               t.Literal("qwen"),
               t.Literal("atomesus"),
+              t.Literal("conol"),
             ]),
           ),
           credential_mode: t.Optional(
@@ -267,6 +276,7 @@ export const providersPlugin = (app: Elysia) =>
               t.Literal("freebuff"),
               t.Literal("qwen"),
               t.Literal("atomesus"),
+              t.Literal("conol"),
             ]),
           ),
           secret: t.Optional(t.String()),
@@ -309,6 +319,7 @@ export const providersPlugin = (app: Elysia) =>
               t.Literal("freebuff"),
               t.Literal("qwen"),
               t.Literal("atomesus"),
+              t.Literal("conol"),
             ]),
           ),
           secret: t.Optional(t.Union([t.String(), t.Null()])),

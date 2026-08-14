@@ -4,7 +4,7 @@ import { logger } from "../logger";
 import { validateCredential } from "./credential-validation";
 import type { ProviderProtocol } from "./provider-appearance";
 
-export type CredentialKind = "api_key" | "codex" | "chatgpt" | "antigravity" | "freebuff" | "qwen" | "atomesus";
+export type CredentialKind = "api_key" | "codex" | "chatgpt" | "antigravity" | "freebuff" | "qwen" | "atomesus" | "conol";
 export type CredentialMode = "fixed" | "round_robin";
 
 export interface ProviderCredential {
@@ -101,7 +101,7 @@ export const credentialService = {
     const credential = this.findById(id);
     if (!credential) return null;
     return {
-      authenticated: credential.kind === "chatgpt"
+      authenticated: credential.kind === "chatgpt" || credential.kind === "conol"
         ? Boolean(credential.secret)
         : Boolean(credential.access_token),
       account_id: credential.account_id,
@@ -155,6 +155,8 @@ export const credentialService = {
     validateCredential(provider.protocol, input.kind, input.secret, {
       accessToken: input.access_token,
       refreshToken: input.refresh_token,
+      accountId: input.account_id,
+      allowIncompleteOAuth: provider.protocol !== "conol",
     });
     const id = crypto.randomUUID();
     getDb()
@@ -208,6 +210,8 @@ export const credentialService = {
       validateCredential(provider.protocol, input.kind ?? existing.kind, input.secret !== undefined ? input.secret : existing.secret, {
         accessToken: input.access_token !== undefined ? input.access_token : existing.access_token,
         refreshToken: input.refresh_token !== undefined ? input.refresh_token : existing.refresh_token,
+        accountId: input.account_id !== undefined ? input.account_id : existing.account_id,
+        allowIncompleteOAuth: provider.protocol !== "conol",
       });
     }
     const updates: string[] = [];
@@ -301,6 +305,8 @@ export const credentialService = {
                  ? "kind = 'qwen' AND secret IS NOT NULL"
                : provider?.protocol === "atomesus"
                  ? "kind = 'atomesus' AND secret IS NOT NULL"
+               : provider?.protocol === "conol"
+                 ? "kind = 'conol' AND secret IS NOT NULL AND account_id IS NOT NULL"
                : "kind = 'api_key' AND secret IS NOT NULL";
     if (mode === "fixed" && fixedId) {
       const raw = db

@@ -113,6 +113,7 @@ const dedicatedIntegrations = new Set<ProviderProtocol>([
   "qwen",
   "freebuff",
   "atomesus",
+  "conol",
 ]);
 
 function numericMetadata(source: ModelMetadataInput): ModelMetadataInput {

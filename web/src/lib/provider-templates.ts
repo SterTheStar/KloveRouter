@@ -37,12 +37,13 @@ import replicateLogo from "../assets/providers/replicate.png";
 import portkeyLogo from "../assets/providers/portkey.png";
 import opencodeLogo from "../assets/providers/opencode.png";
 import freebuffLogo from "../assets/providers/freebuff.png";
+import conolLogo from "../assets/providers/conol.png";
 
 const chatgptLogo = "https://chatgpt.com/favicon.ico";
 
 export type ProviderTemplate = {
   id: string;
-  protocol: "openai" | "antigravity" | "anthropic" | "codex" | "chatgpt" | "freebuff" | "qwen" | "atomesus";
+  protocol: "openai" | "antigravity" | "anthropic" | "codex" | "chatgpt" | "freebuff" | "qwen" | "atomesus" | "conol";
   name: string;
   description: string;
   logo: string;
@@ -162,6 +163,8 @@ const providerDescriptions: Record<string, string> = {
     "Qwen AI models through an OpenAI-compatible gateway. Uses a Bearer token extracted from chat.qwen.ai.",
   atomesus:
     "Atomesus models with effort controls, persistent upstream sessions, streaming, and encrypted token storage.",
+  conol:
+    "Conol.ai agents with account and browser-cookie authentication. Credentials are stored encrypted.",
   blueminds:
     "An OpenAI-compatible gateway for accessing hosted language models through BlueMinds.",
   agnes:
@@ -302,6 +305,15 @@ export const PROVIDER_TEMPLATES: readonly ProviderTemplate[] = [
     description: providerDescriptions.atomesus,
     logo: "https://atomesus.com/favicon.ico",
     placeholder: "https://api.atomesus.com",
+    preset: false,
+  },
+  {
+    id: "conol",
+    protocol: "conol",
+    name: "Conol.ai",
+    description: providerDescriptions.conol,
+    logo: conolLogo,
+    placeholder: "https://conol.ai",
     preset: false,
   },
   ...openAiCompatiblePresets.map(([id, name, placeholder]) => ({

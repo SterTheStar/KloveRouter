@@ -6,7 +6,8 @@ export type ProviderProtocol =
   | "antigravity"
   | "freebuff"
   | "qwen"
-  | "atomesus";
+  | "atomesus"
+  | "conol";
 
 const protocolIcons: Partial<Record<ProviderProtocol, string>> = {
   antigravity: "https://antigravity.google/assets/image/brand/antigravity-icon__full-color.png",
