@@ -1,32 +1,47 @@
+function idPart(value: unknown, fallback: string) {
+  return String(value ?? fallback).replace(/[^a-zA-Z0-9_-]/g, "_");
+}
+
+function stableId(prefix: string, value: unknown, fallback: string) {
+  return `${prefix}_${idPart(value, fallback)}`;
+}
+
+function imageUrl(value: any): any {
+  if (typeof value === "string") return { url: value };
+  if (value && typeof value === "object") {
+    const url = value.url ?? value.image_url;
+    return { ...(url !== undefined ? { url } : {}), ...(value.detail ? { detail: value.detail } : {}) };
+  }
+  return { url: value };
+}
+
 function responseContentPart(part: any): any[] {
   if (typeof part === "string") return [{ type: "text", text: part }];
   if (!part || typeof part !== "object") return [];
-  if (part.type === "input_text" || part.type === "text")
+  if (part.type === "input_text" || part.type === "output_text" || part.type === "text") {
     return [{ type: "text", text: part.text ?? "" }];
-  if (part.type === "input_image" || part.type === "image_url")
-    return [{
-      type: "image_url",
-      image_url: {
-        url: part.image_url ?? part.url,
-        ...(part.detail ? { detail: part.detail } : {}),
-      },
-    }];
+  }
+  if (part.type === "input_image" || part.type === "image_url") {
+    return [{ type: "image_url", image_url: imageUrl(part.image_url ?? part.url) }];
+  }
   return [part];
+}
+
+function asToolOutput(output: any) {
+  return typeof output === "string" ? output : JSON.stringify(output ?? null);
 }
 
 export function responsesInputToMessages(input: any, instructions?: string) {
   const messages: any[] = [];
-  if (instructions) messages.push({ role: "system", content: instructions });
-  if (typeof input === "string") {
-    messages.push({ role: "user", content: input });
-    return messages;
-  }
-  for (const item of Array.isArray(input) ? input : []) {
+  let hasInstruction = false;
+  const items = typeof input === "string" ? [{ role: "user", content: input }] : (Array.isArray(input) ? input : []);
+  for (const item of items) {
     if (!item || typeof item !== "object") continue;
     if (["user", "assistant", "system", "developer"].includes(item.role)) {
       const content = Array.isArray(item.content)
         ? item.content.flatMap(responseContentPart)
         : item.content ?? "";
+      if (item.role === "system" && instructions !== undefined && content === instructions) hasInstruction = true;
       messages.push({ role: item.role, content });
       continue;
     }
@@ -37,35 +52,48 @@ export function responsesInputToMessages(input: any, instructions?: string) {
         tool_calls: [{
           id: item.call_id ?? item.id,
           type: "function",
-          function: { name: item.name, arguments: item.arguments ?? "{}" },
+          function: { name: item.name ?? "", arguments: item.arguments ?? "{}" },
         }],
       });
       continue;
     }
-    if (item.type === "function_call_output")
-      messages.push({
-        role: "tool",
-        tool_call_id: item.call_id,
-        content: typeof item.output === "string" ? item.output : JSON.stringify(item.output),
-      });
+    if (item.type === "function_call_output") {
+      messages.push({ role: "tool", tool_call_id: item.call_id ?? item.id, content: asToolOutput(item.output) });
+    }
+  }
+  if (instructions !== undefined && instructions !== "" && !hasInstruction) {
+    messages.unshift({ role: "system", content: instructions });
   }
   return messages;
 }
 
+function chatTool(tool: any) {
+  if (tool?.type === "function" && !tool.function) {
+    return { type: "function", function: {
+      name: tool.name,
+      ...(tool.description !== undefined ? { description: tool.description } : {}),
+      parameters: tool.parameters ?? {},
+      ...(tool.strict !== undefined ? { strict: tool.strict } : {}),
+    } };
+  }
+  return tool;
+}
+
+function responseFormat(format: any) {
+  if (!format) return undefined;
+  if (format.type !== "json_schema") return { type: format.type };
+  const schema = format.json_schema ?? format;
+  return { type: "json_schema", json_schema: {
+    name: schema.name,
+    ...(schema.description !== undefined ? { description: schema.description } : {}),
+    schema: schema.schema,
+    ...(schema.strict !== undefined ? { strict: schema.strict } : {}),
+  } };
+}
+
 export function responsesToChatBody(body: any) {
-  const tools = Array.isArray(body.tools)
-    ? body.tools.map((tool: any) => tool?.type === "function" && !tool.function
-      ? {
-          type: "function",
-          function: {
-            name: tool.name,
-            description: tool.description,
-            parameters: tool.parameters ?? {},
-            strict: tool.strict,
-          },
-        }
-      : tool)
-    : undefined;
+  const format = responseFormat(body.text?.format ?? body.response_format);
+  const tools = Array.isArray(body.tools) ? body.tools.map(chatTool) : undefined;
   return {
     model: body.model,
     messages: responsesInputToMessages(body.input, body.instructions),
@@ -81,24 +109,25 @@ export function responsesToChatBody(body: any) {
     ...(body.metadata !== undefined ? { metadata: body.metadata } : {}),
     ...(body.store !== undefined ? { store: body.store } : {}),
     ...(body.service_tier !== undefined ? { service_tier: body.service_tier } : {}),
-    ...(body.text?.format ? {
-      response_format: body.text.format.type === "json_schema"
-        ? {
-            type: "json_schema",
-            json_schema: {
-              name: body.text.format.name,
-              description: body.text.format.description,
-              schema: body.text.format.schema,
-              strict: body.text.format.strict,
-            },
-          }
-        : { type: body.text.format.type },
-    } : {}),
+    ...(format ? { response_format: format } : {}),
   };
 }
 
 function responseId(id?: string) {
-  return id?.startsWith("resp_") ? id : `resp_${id?.replace(/^chatcmpl-/, "") ?? crypto.randomUUID()}`;
+  return id?.startsWith("resp_") ? id : `resp_${idPart(id?.replace(/^chatcmpl-/, ""), crypto.randomUUID())}`;
+}
+
+function usageObject(usage: any) {
+  if (!usage) return null;
+  const input = usage.prompt_tokens ?? usage.input_tokens ?? 0;
+  const output = usage.completion_tokens ?? usage.output_tokens ?? 0;
+  return {
+    input_tokens: input,
+    input_tokens_details: usage.prompt_tokens_details ?? usage.input_tokens_details ?? { cached_tokens: 0 },
+    output_tokens: output,
+    output_tokens_details: usage.completion_tokens_details ?? usage.output_tokens_details ?? { reasoning_tokens: 0 },
+    total_tokens: usage.total_tokens ?? input + output,
+  };
 }
 
 export function chatCompletionToResponse(completion: any) {
@@ -106,216 +135,149 @@ export function chatCompletionToResponse(completion: any) {
   const message = choice.message ?? {};
   const id = responseId(completion?.id);
   const output: any[] = [];
-  if (message.reasoning_content)
-    output.push({
-      id: `rs_${crypto.randomUUID().replace(/-/g, "")}`,
-      type: "reasoning",
-      summary: [{ type: "summary_text", text: message.reasoning_content }],
-    });
-  if (message.content !== undefined && message.content !== null)
-    output.push({
-      id: `msg_${crypto.randomUUID().replace(/-/g, "")}`,
-      type: "message",
-      status: "completed",
-      role: "assistant",
-      content: [{ type: "output_text", text: String(message.content), annotations: [] }],
-    });
-  for (const call of message.tool_calls ?? [])
-    output.push({
-      id: call.id,
-      type: "function_call",
-      status: "completed",
-      call_id: call.id,
-      name: call.function?.name,
-      arguments: call.function?.arguments ?? "{}",
-    });
-  const usage = completion?.usage;
+  const base = idPart(id.replace(/^resp_/, ""), "response");
+  if (message.reasoning_content || message.reasoning) {
+    output.push({ id: stableId("rs", `${base}-reasoning`, "reasoning"), type: "reasoning", summary: [{ type: "summary_text", text: message.reasoning_content ?? message.reasoning }] });
+  }
+  if (message.content !== undefined && message.content !== null && message.content !== "") {
+    output.push({ id: stableId("msg", `${base}-message`, "message"), type: "message", status: "completed", role: "assistant", content: [{ type: "output_text", text: String(message.content), annotations: [] }] });
+  }
+  for (const call of message.tool_calls ?? []) {
+    const callId = call.id ?? stableId("call", `${base}-${output.length}`, "call");
+    output.push({ id: callId, type: "function_call", status: "completed", call_id: call.call_id ?? callId, name: call.function?.name ?? "", arguments: call.function?.arguments ?? "{}" });
+  }
+  const usage = usageObject(completion?.usage);
   return {
-    id,
-    object: "response",
-    created_at: completion?.created ?? Math.floor(Date.now() / 1000),
-    status: "completed",
-    error: null,
-    incomplete_details: null,
-    instructions: null,
-    model: completion?.model,
-    output,
-    parallel_tool_calls: true,
-    tool_choice: "auto",
-    tools: [],
-    usage: usage ? {
-      input_tokens: usage.prompt_tokens ?? usage.input_tokens ?? 0,
-      input_tokens_details: usage.prompt_tokens_details ?? usage.input_tokens_details ?? { cached_tokens: 0 },
-      output_tokens: usage.completion_tokens ?? usage.output_tokens ?? 0,
-      output_tokens_details: usage.completion_tokens_details ?? usage.output_tokens_details ?? { reasoning_tokens: 0 },
-      total_tokens: usage.total_tokens ?? 0,
-    } : null,
+    id, object: "response", created_at: completion?.created ?? Math.floor(Date.now() / 1000), status: "completed",
+    error: null, incomplete_details: null, instructions: null, model: completion?.model, output,
+    parallel_tool_calls: true, tool_choice: "auto", tools: [], usage,
   };
 }
 
-export function chatSseToResponses(response: Response, model: string) {
+function parseSseBlock(block: string): string | null {
+  const lines = block.split(/\r?\n/);
+  const data = lines.filter((line) => line.startsWith("data:")).map((line) => line.slice(5).replace(/^ /, "")).join("\n").trim();
+  return data || null;
+}
+
+export function chatSseToResponses(response: Response, model: string, onCancel?: () => void) {
   const reader = response.body?.getReader();
   if (!reader) return response;
-  const decoder = new TextDecoder();
   const encoder = new TextEncoder();
-  const responseObject: any = {
-    id: responseId(), object: "response", created_at: Math.floor(Date.now() / 1000),
-    status: "in_progress", model, output: [], error: null,
-  };
-  const messageId = `msg_${crypto.randomUUID().replace(/-/g, "")}`;
+  const responseObject: any = { id: responseId(), object: "response", created_at: Math.floor(Date.now() / 1000), status: "in_progress", model, output: [], error: null };
   let sequence = 0;
   let buffer = "";
   let text = "";
   let reasoning = "";
-  const reasoningId = `rs_${crypto.randomUUID().replace(/-/g, "")}`;
-  let reasoningAdded = false;
   let usage: any = null;
   let streamError: any = null;
-  const toolCalls = new Map<number, { id: string; name: string; arguments: string; added: boolean }>();
-  const event = (type: string, payload: any = {}) =>
-    encoder.encode(`event: ${type}\ndata: ${JSON.stringify({ type, sequence_number: sequence++, ...payload })}\n\n`);
+  let errorSent = false;
+  let outputCount = 0;
+  const itemByIndex = new Map<number, any>();
+  const callByIndex = new Map<number, any>();
+  const event = (type: string, payload: any = {}) => encoder.encode(`event: ${type}\ndata: ${JSON.stringify({ type, sequence_number: sequence++, ...payload })}\n\n`);
+  const nextIndex = () => outputCount++;
+  const addMessage = (controller: ReadableStreamDefaultController<Uint8Array>) => {
+    if (itemByIndex.has(-1)) return itemByIndex.get(-1);
+    const item = { id: stableId("msg", responseObject.id, "message"), type: "message", status: "in_progress", role: "assistant", content: [] };
+    const index = nextIndex(); itemByIndex.set(-1, { index, item }); responseObject.output.push(item);
+    controller.enqueue(event("response.output_item.added", { output_index: index, item }));
+    controller.enqueue(event("response.content_part.added", { item_id: item.id, output_index: index, content_index: 0, part: { type: "output_text", text: "", annotations: [] } }));
+    return itemByIndex.get(-1);
+  };
   return new Response(new ReadableStream({
     async start(controller) {
       controller.enqueue(event("response.created", { response: responseObject }));
       controller.enqueue(event("response.in_progress", { response: responseObject }));
-      const item = { id: messageId, type: "message", status: "in_progress", role: "assistant", content: [] };
-      controller.enqueue(event("response.output_item.added", { output_index: 0, item }));
-      controller.enqueue(event("response.content_part.added", {
-        item_id: messageId, output_index: 0, content_index: 0,
-        part: { type: "output_text", text: "", annotations: [] },
-      }));
+      const process = (chunk: any) => {
+        if (chunk.error) {
+          streamError = chunk.error;
+          if (!errorSent) { errorSent = true; controller.enqueue(event("error", { error: chunk.error })); }
+          return;
+        }
+        usage = chunk.usage ?? usage;
+        const delta = chunk.choices?.[0]?.delta;
+        const reasoningDelta = delta?.reasoning_content ?? delta?.reasoning;
+        if (typeof reasoningDelta === "string" && reasoningDelta) {
+          let record = itemByIndex.get(-2);
+          if (!record) {
+            const item = { id: stableId("rs", responseObject.id, "reasoning"), type: "reasoning", status: "in_progress", summary: [] };
+            record = { index: nextIndex(), item }; itemByIndex.set(-2, record); responseObject.output.push(item);
+            controller.enqueue(event("response.output_item.added", { output_index: record.index, item }));
+            controller.enqueue(event("response.reasoning_summary_part.added", { item_id: item.id, output_index: record.index, summary_index: 0, part: { type: "summary_text", text: "" } }));
+          }
+          reasoning += reasoningDelta;
+          controller.enqueue(event("response.reasoning_summary_text.delta", { item_id: record.item.id, output_index: record.index, summary_index: 0, delta: reasoningDelta }));
+        }
+        if (typeof delta?.content === "string" && delta.content) {
+          const record = addMessage(controller); text += delta.content;
+          controller.enqueue(event("response.output_text.delta", { item_id: record.item.id, output_index: record.index, content_index: 0, delta: delta.content }));
+        }
+        for (const callDelta of delta?.tool_calls ?? []) {
+          const sourceIndex = Number(callDelta.index ?? 0);
+          let call = callByIndex.get(sourceIndex);
+          if (!call) {
+            const callId = callDelta.id ?? stableId("call", `${responseObject.id}-${sourceIndex}`, "call");
+            const item = { id: callId, type: "function_call", status: "in_progress", call_id: callId, name: "", arguments: "" };
+            call = { index: nextIndex(), item }; callByIndex.set(sourceIndex, call); responseObject.output.push(item);
+            controller.enqueue(event("response.output_item.added", { output_index: call.index, item }));
+          }
+          if (callDelta.id) call.item.id = call.item.call_id = callDelta.id;
+          if (callDelta.function?.name) call.item.name += callDelta.function.name;
+          const args = callDelta.function?.arguments ?? ""; call.item.arguments += args;
+          if (args) controller.enqueue(event("response.function_call_arguments.delta", { item_id: call.item.id, output_index: call.index, delta: args }));
+        }
+      };
       try {
         while (true) {
           const { done, value } = await reader.read();
-          buffer += decoder.decode(value ?? new Uint8Array(), { stream: !done });
-          const events = buffer.split(/\r?\n\r?\n/);
-          buffer = events.pop() ?? "";
-          for (const rawEvent of events) {
-            const raw = rawEvent.split(/\r?\n/).filter((line) => line.startsWith("data:"))
-              .map((line) => line.slice(5).trimStart()).join("\n").trim();
-            if (!raw || raw === "[DONE]") continue;
-            const chunk = JSON.parse(raw);
-            if (chunk.error) {
-              streamError = chunk.error;
-              controller.enqueue(event("error", { error: chunk.error }));
-              continue;
-            }
-            usage = chunk.usage ?? usage;
-            const delta = chunk.choices?.[0]?.delta;
-            const reasoningDelta = delta?.reasoning_content ?? delta?.reasoning;
-            if (typeof reasoningDelta === "string" && reasoningDelta) {
-              if (!reasoningAdded) {
-                reasoningAdded = true;
-                controller.enqueue(event("response.output_item.added", {
-                  output_index: 1,
-                  item: { id: reasoningId, type: "reasoning", status: "in_progress", summary: [] },
-                }));
-                controller.enqueue(event("response.reasoning_summary_part.added", {
-                  item_id: reasoningId, output_index: 1, summary_index: 0,
-                  part: { type: "summary_text", text: "" },
-                }));
-              }
-              reasoning += reasoningDelta;
-              controller.enqueue(event("response.reasoning_summary_text.delta", {
-                item_id: reasoningId, output_index: 1, summary_index: 0, delta: reasoningDelta,
-              }));
-            }
-            if (typeof delta?.content === "string" && delta.content) {
-              text += delta.content;
-              controller.enqueue(event("response.output_text.delta", {
-                item_id: messageId, output_index: 0, content_index: 0, delta: delta.content,
-              }));
-            }
-            for (const callDelta of delta?.tool_calls ?? []) {
-              const index = Number(callDelta.index ?? 0);
-              const call = toolCalls.get(index) ?? {
-                id: callDelta.id ?? `call_${crypto.randomUUID().replace(/-/g, "")}`,
-                name: callDelta.function?.name ?? "",
-                arguments: "",
-                added: false,
-              };
-              if (callDelta.id) call.id = callDelta.id;
-              if (callDelta.function?.name) call.name += callDelta.function.name;
-              const args = callDelta.function?.arguments ?? "";
-              call.arguments += args;
-              if (!call.added) {
-                call.added = true;
-                controller.enqueue(event("response.output_item.added", {
-                  output_index: index + 2,
-                  item: { id: call.id, type: "function_call", status: "in_progress", call_id: call.id, name: call.name, arguments: "" },
-                }));
-              }
-              if (args)
-                controller.enqueue(event("response.function_call_arguments.delta", {
-                  item_id: call.id, output_index: index + 2, delta: args,
-                }));
-              toolCalls.set(index, call);
-            }
+          buffer += new TextDecoder().decode(value ?? new Uint8Array(), { stream: !done });
+          let match: RegExpMatchArray | null;
+          while ((match = buffer.match(/\r?\n\r?\n/))) {
+            const block = buffer.slice(0, match.index); buffer = buffer.slice((match.index ?? 0) + match[0].length);
+            const raw = parseSseBlock(block); if (!raw || raw === "[DONE]") continue;
+            process(JSON.parse(raw));
           }
-          if (done) break;
+          if (done) {
+            const raw = parseSseBlock(buffer); buffer = "";
+            if (raw && raw !== "[DONE]") process(JSON.parse(raw));
+            break;
+          }
         }
         if (streamError) {
-          controller.enqueue(event("response.failed", {
-            response: { ...responseObject, status: "failed", error: streamError },
-          }));
-          return;
+          responseObject.status = "failed"; responseObject.error = streamError;
+          controller.enqueue(event("response.failed", { response: responseObject })); return;
         }
-        controller.enqueue(event("response.output_text.done", {
-          item_id: messageId, output_index: 0, content_index: 0, text,
-        }));
-        const part = { type: "output_text", text, annotations: [] };
-        controller.enqueue(event("response.content_part.done", {
-          item_id: messageId, output_index: 0, content_index: 0, part,
-        }));
-        const doneItem = { ...item, status: "completed", content: [part] };
-        controller.enqueue(event("response.output_item.done", { output_index: 0, item: doneItem }));
-        if (reasoningAdded) {
-          const summary = { type: "summary_text", text: reasoning };
-          controller.enqueue(event("response.reasoning_summary_text.done", {
-            item_id: reasoningId, output_index: 1, summary_index: 0, text: reasoning,
-          }));
-          controller.enqueue(event("response.reasoning_summary_part.done", {
-            item_id: reasoningId, output_index: 1, summary_index: 0, part: summary,
-          }));
-          controller.enqueue(event("response.output_item.done", {
-            output_index: 1,
-            item: { id: reasoningId, type: "reasoning", status: "completed", summary: [summary] },
-          }));
+        for (const record of itemByIndex.values()) {
+          const { item, index } = record;
+          if (item.type === "message") {
+            const part = { type: "output_text", text, annotations: [] }; item.content = [part]; item.status = "completed";
+            controller.enqueue(event("response.output_text.done", { item_id: item.id, output_index: index, content_index: 0, text }));
+            controller.enqueue(event("response.content_part.done", { item_id: item.id, output_index: index, content_index: 0, part }));
+          } else if (item.type === "reasoning") {
+            const part = { type: "summary_text", text: reasoning }; item.summary = [part]; item.status = "completed";
+            controller.enqueue(event("response.reasoning_summary_text.done", { item_id: item.id, output_index: index, summary_index: 0, text: reasoning }));
+            controller.enqueue(event("response.reasoning_summary_part.done", { item_id: item.id, output_index: index, summary_index: 0, part }));
+          } else if (item.type === "function_call") {
+            item.status = "completed";
+          }
+          if (item.type !== "function_call") controller.enqueue(event("response.output_item.done", { output_index: index, item }));
         }
-        for (const [index, call] of toolCalls) {
-          controller.enqueue(event("response.function_call_arguments.done", {
-            item_id: call.id, output_index: index + 2, arguments: call.arguments,
-          }));
-          controller.enqueue(event("response.output_item.done", {
-            output_index: index + 2,
-            item: { id: call.id, type: "function_call", status: "completed", call_id: call.id, name: call.name, arguments: call.arguments },
-          }));
+        for (const { index, item } of callByIndex.values()) {
+          item.status = "completed";
+          controller.enqueue(event("response.function_call_arguments.done", { item_id: item.id, output_index: index, arguments: item.arguments }));
+          controller.enqueue(event("response.output_item.done", { output_index: index, item }));
         }
-        const completed = chatCompletionToResponse({
-          id: responseObject.id,
-          model,
-          choices: [{ message: {
-            content: text,
-            reasoning_content: reasoning || undefined,
-            tool_calls: [...toolCalls.values()].map((call) => ({
-              id: call.id, type: "function", function: { name: call.name, arguments: call.arguments },
-            })),
-          } }],
-          usage,
-        });
-        controller.enqueue(event("response.completed", { response: completed }));
+        const completed = chatCompletionToResponse({ id: responseObject.id, model, choices: [{ message: { content: text || undefined, reasoning_content: reasoning || undefined, tool_calls: [...callByIndex.values()].map(({ item }) => ({ id: item.id, function: { name: item.name, arguments: item.arguments } })) } }], usage });
+        responseObject.output = completed.output; responseObject.status = "completed"; responseObject.usage = completed.usage;
+        controller.enqueue(event("response.completed", { response: { ...completed, output: responseObject.output, usage: responseObject.usage } }));
       } catch (error: any) {
-        controller.enqueue(event("error", { error: { message: error.message, type: "server_error" } }));
-        controller.enqueue(event("response.failed", {
-          response: {
-            ...responseObject,
-            status: "failed",
-            error: { message: error.message, type: "server_error" },
-          },
-        }));
-      } finally {
-        controller.close();
-      }
+        const failure = { message: error?.message ?? String(error), type: "server_error" };
+        if (!errorSent) { errorSent = true; controller.enqueue(event("error", { error: failure })); }
+        responseObject.status = "failed"; responseObject.error = failure;
+        controller.enqueue(event("response.failed", { response: responseObject }));
+      } finally { controller.close(); }
     },
+    cancel() { onCancel?.(); reader.cancel().catch(() => {}); },
   }), { headers: { "Content-Type": "text/event-stream; charset=utf-8", "Cache-Control": "no-cache" } });
 }

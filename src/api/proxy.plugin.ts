@@ -515,7 +515,7 @@ export const proxyPlugin = (app: Elysia) =>
     })
     .post(
       "/v1/responses",
-      async ({ body, set, headers }) => {
+      async ({ body, set, headers, request }) => {
         if (!body || typeof body !== "object" || typeof body.model !== "string" || body.input === undefined) {
           set.status = 400;
           return {
@@ -533,6 +533,10 @@ export const proxyPlugin = (app: Elysia) =>
           return { error: { message: "Valid API key required", type: "authentication_error", code: null } };
         }
         const chatBody = responsesToChatBody(body);
+        const upstreamController = new AbortController();
+        const abortUpstream = () => upstreamController.abort(request.signal.reason);
+        if (request.signal.aborted) abortUpstream();
+        else request.signal.addEventListener("abort", abortUpstream, { once: true });
         const chatResponse = await fetch(`http://127.0.0.1:${config.port}/v1/chat/completions`, {
           method: "POST",
           headers: {
@@ -541,6 +545,7 @@ export const proxyPlugin = (app: Elysia) =>
             Accept: body.stream ? "text/event-stream" : "application/json",
           },
           body: JSON.stringify(chatBody),
+          signal: upstreamController.signal,
         });
         if (!chatResponse.ok) {
           set.status = chatResponse.status;
@@ -553,7 +558,7 @@ export const proxyPlugin = (app: Elysia) =>
             },
           };
         }
-        if (body.stream) return chatSseToResponses(chatResponse, body.model);
+        if (body.stream) return chatSseToResponses(chatResponse, body.model, abortUpstream);
         return chatCompletionToResponse(await chatResponse.json());
       },
       { body: t.Any() },
