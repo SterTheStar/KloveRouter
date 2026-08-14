@@ -16,6 +16,7 @@ import {
   RiRefreshLine as RefreshCw,
   RiDeleteBinLine as Trash2,
   RiSearchLine as Search,
+  RiFilter3Line as Filter,
   RiPlayCircleLine as PlayCircleLine,
 } from "@remixicon/react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -55,9 +56,12 @@ import {
   DropdownMenuLabel,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
+  DropdownMenuCheckboxItem,
+  DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import AvatarUpload from "../components/AvatarUpload";
+import DisplayAvatar from "../components/DisplayAvatar";
 import AddModelModal from "../components/AddModelModal";
 import EditModelModal from "../components/EditModelModal";
 import ConfirmDialog from "../components/ConfirmDialog";
@@ -75,6 +79,7 @@ import type {
 } from "../types";
 import { copyToClipboard } from "../lib/clipboard";
 import { useToast } from "../components/ui/toast";
+import { modelDisplayId, modelPublicId } from "../lib/model-id";
 
 const metadataCapabilityLabels: Record<keyof ModelCapabilities, string> = {
   reasoning: "Reasoning",
@@ -138,7 +143,23 @@ export default function ProviderDetailPage({
   const [editTarget, setEditTarget] = useState<Model | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Model | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
-  const [freeOnly, setFreeOnly] = useState(false);
+  const [modelFilters, setModelFilters] = useState({
+    free: false,
+    active: false,
+    manual: false,
+    synced: false,
+    capabilities: false,
+  });
+  const contextBounds = useMemo(() => {
+    const values = list
+      .map((model) => model.context_window)
+      .filter((value): value is number => value != null)
+      .sort((a, b) => a - b);
+    return { min: values[0] ?? 0, max: values[values.length - 1] ?? 0 };
+  }, [list]);
+  const [minContext, setMinContext] = useState<number | null>(null);
+  const [maxContext, setMaxContext] = useState<number | null>(null);
+  const [filterOpen, setFilterOpen] = useState(false);
   const [testingId, setTestingId] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<
     Record<string, "success" | "error">
@@ -150,19 +171,27 @@ export default function ProviderDetailPage({
       const q = searchQuery.toLowerCase();
       result = result.filter(
         (m) =>
-          m.model_id.toLowerCase().includes(q) ||
+          modelDisplayId(m).toLowerCase().includes(q) ||
+          modelPublicId({ ...m, provider_name: provider?.name ?? "" }).toLowerCase().includes(q) ||
           (m.display_name?.toLowerCase().includes(q) ?? false),
       );
     }
-    if (freeOnly) {
-      result = result.filter(
-        (m) =>
-          m.model_id.toLowerCase().includes("free") ||
-          (m.display_name?.toLowerCase().includes("free") ?? false),
-      );
-    }
+    if (modelFilters.free)
+      result = result.filter((m) => modelDisplayId(m).toLowerCase().includes("free") || (m.display_name?.toLowerCase().includes("free") ?? false));
+    if (modelFilters.active) result = result.filter((m) => m.is_active === 1);
+    if (modelFilters.manual) result = result.filter((m) => m.is_manual === 1);
+    if (modelFilters.synced) result = result.filter((m) => m.is_manual === 0);
+    if (modelFilters.capabilities) result = result.filter((m) => Object.values(m.capabilities ?? {}).some(Boolean));
+    if (minContext !== null) result = result.filter((m) => (m.context_window ?? 0) >= minContext);
+    if (maxContext !== null) result = result.filter((m) => (m.context_window ?? Number.POSITIVE_INFINITY) <= maxContext);
     return result;
-  }, [list, searchQuery, freeOnly]);
+  }, [list, searchQuery, modelFilters, minContext, maxContext]);
+  const activeFilterCount = Object.values(modelFilters).filter(Boolean).length + (minContext !== null ? 1 : 0) + (maxContext !== null ? 1 : 0);
+  const clearFilters = () => {
+    setModelFilters({ free: false, active: false, manual: false, synced: false, capabilities: false });
+    setMinContext(null);
+    setMaxContext(null);
+  };
   const [clearOpen, setClearOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -181,6 +210,10 @@ export default function ProviderDetailPage({
   const [avatar, setAvatar] = useState<string | null>(null);
   const [credentials, setCredentials] = useState<ProviderCredential[]>([]);
   const [credentialAction, setCredentialAction] = useState(false);
+  const [editingCredentialIds, setEditingCredentialIds] = useState<Record<string, boolean>>({});
+  const [credentialDraftLabels, setCredentialDraftLabels] = useState<Record<string, string>>({});
+  const [credentialDraftSecrets, setCredentialDraftSecrets] = useState<Record<string, string>>({});
+  const [credentialSavingId, setCredentialSavingId] = useState<string | null>(null);
   const [logoutOpen, setLogoutOpen] = useState(false);
   const [logoutCredentialId, setLogoutCredentialId] = useState<string | null>(
     null,
@@ -250,6 +283,14 @@ export default function ProviderDetailPage({
     load();
     return () => clearOAuthPoll();
   }, [load]);
+
+  const discard = () => {
+    setName(provider?.name ?? "");
+    setBaseUrl(provider?.base_url ?? "");
+    setAvatar(provider?.avatar_override ?? null);
+    setError(null);
+    setSuccess("Unsaved changes discarded.");
+  };
 
   const save = async () => {
     setSaving(true);
@@ -619,6 +660,42 @@ export default function ProviderDetailPage({
     }
   };
 
+  const beginCredentialEdit = (credential: ProviderCredential) => {
+    setCredentialDraftLabels((current) => ({ ...current, [credential.id]: credential.label }));
+    setCredentialDraftSecrets((current) => ({ ...current, [credential.id]: "" }));
+    setEditingCredentialIds((current) => ({ ...current, [credential.id]: true }));
+  };
+
+  const cancelCredentialEdit = (credential: ProviderCredential) => {
+    setEditingCredentialIds((current) => ({ ...current, [credential.id]: false }));
+    setCredentialDraftLabels((current) => { const next = { ...current }; delete next[credential.id]; return next; });
+    setCredentialDraftSecrets((current) => { const next = { ...current }; delete next[credential.id]; return next; });
+  };
+
+  const saveCredential = async (credential: ProviderCredential) => {
+    const label = (credentialDraftLabels[credential.id] ?? credential.label).trim();
+    const secret = credentialDraftSecrets[credential.id] ?? "";
+    if (!label) {
+      notifyError("Could not update credential", "Credential label is required.");
+      return;
+    }
+    setCredentialSavingId(credential.id);
+    try {
+      await providers.updateCredential(providerId, credential.id, {
+        label,
+        ...(secret ? { secret } : {}),
+      });
+      cancelCredentialEdit(credential);
+      await load();
+      notifySuccess("Credential updated");
+    } catch (e: any) {
+      setError(e.message);
+      notifyError("Could not update credential", e.message);
+    } finally {
+      setCredentialSavingId(null);
+    }
+  };
+
   const toggleApiKeyVisibility = async (credential: ProviderCredential) => {
     if (revealedKeys[credential.id] !== undefined) {
       setRevealedKeys((current) => {
@@ -673,6 +750,40 @@ export default function ProviderDetailPage({
       );
     }
   };
+
+  const renderCredentialRow = (credential: ProviderCredential, secretLabel: string) => {
+    const revealed = revealedKeys[credential.id];
+    const editing = editingCredentialIds[credential.id] === true;
+    const draftSecret = credentialDraftSecrets[credential.id] ?? "";
+    const saving = credentialSavingId === credential.id;
+    const displayedSecret = credential.kind === "conol"
+      ? (revealed ?? `Account ${credential.account_id ?? "configured"} · Cookie hidden`)
+      : (revealed ?? credential.masked_secret ?? secretLabel);
+    return (
+      <div key={credential.id} className="grid min-w-0 items-center gap-2 border-b border-border/60 py-2 last:border-b-0 md:grid-cols-[minmax(0,1fr)_auto]">
+        <div className="grid min-w-0 overflow-hidden rounded-lg border border-input bg-background shadow-xs md:grid-cols-[minmax(8rem,0.65fr)_minmax(0,1.8fr)]">
+          <div className="min-w-0 border-b border-input md:border-b-0 md:border-r">
+            <Input value={editing ? (credentialDraftLabels[credential.id] ?? credential.label) : credential.label} readOnly={!editing} onChange={(event) => setCredentialDraftLabels((current) => ({ ...current, [credential.id]: event.target.value }))} aria-label={`${credential.label} label`} placeholder="Label" className="h-9 min-w-0 rounded-none border-0 bg-transparent shadow-none focus-visible:ring-0" />
+          </div>
+          <div className="relative min-w-0">
+            <Input value={editing ? draftSecret : displayedSecret} placeholder={editing ? "Leave blank to keep current secret" : undefined} readOnly={!editing} type={editing ? "password" : "text"} aria-label={`${credential.label} secret`} className="h-9 min-w-0 rounded-none border-0 bg-transparent pr-36 font-mono shadow-none focus-visible:ring-0" onChange={(event) => setCredentialDraftSecrets((current) => ({ ...current, [credential.id]: event.target.value }))} />
+            <div className="absolute right-1 top-1/2 flex -translate-y-1/2 items-center gap-0.5">
+              <Button variant="ghost" size="icon" className="size-8" onClick={() => toggleApiKeyVisibility(credential)} disabled={loadingSecretId === credential.id} title={revealed === undefined ? `Reveal ${secretLabel}` : `Hide ${secretLabel}`} aria-label={revealed === undefined ? `Reveal ${credential.label}` : `Hide ${credential.label}`}>{revealed === undefined ? <Eye className="size-4" /> : <EyeOff className="size-4" />}</Button>
+              <Button variant="ghost" size="icon" className="size-8" onClick={() => copyCredentialSecret(credential)} disabled={loadingSecretId === credential.id} title={`Copy ${secretLabel}`} aria-label={`Copy ${credential.label}`}><Copy className="size-4" /></Button>
+              <Switch checked={credential.is_active === 1} onCheckedChange={() => toggleCredentialActive(credential)} aria-label={`${credential.label} active`} />
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center justify-end gap-2">
+          {editing ? <>
+            <Button variant="outline" size="sm" onClick={() => cancelCredentialEdit(credential)} disabled={saving}>Cancel</Button>
+            <Button size="sm" onClick={() => saveCredential(credential)} disabled={saving}>{saving ? <LoaderCircle className="size-4 animate-spin" /> : <Check className="size-4" />}<span className="sr-only sm:not-sr-only">Save</span></Button>
+          </> : <Button variant="outline" size="icon" className="size-9" onClick={() => beginCredentialEdit(credential)} title={`Edit ${credential.label}`} aria-label={`Edit ${credential.label}`}><Pencil className="size-4" /></Button>}
+          <Button variant="destructive" size="icon" className="size-9" onClick={() => removeApiKey(credential.id)} title={`Remove ${secretLabel}`} aria-label={`Remove ${credential.label}`}><Trash2 className="size-4" /></Button>
+        </div>
+      </div>
+    );
+  };
   const testModel = async (id: string) => {
     setTestingId(id);
     try {
@@ -710,111 +821,55 @@ export default function ProviderDetailPage({
     );
 
   return (
-    <div className="w-full space-y-6 p-6">
-      <div className="flex items-center gap-3">
-        <Button variant="outline" size="sm" onClick={onBack}>
+    <div className="mx-auto w-full max-w-7xl space-y-6 p-4 sm:p-6">
+      <header className="flex min-w-0 items-center gap-2 border-b border-border/60 pb-4 sm:gap-3">
+        <Button variant="outline" size="sm" className="shrink-0" onClick={onBack} aria-label="Back to providers">
           <ArrowLeft className="size-4" />
-          Back
+          <span className="hidden sm:inline">Back</span>
         </Button>
-        <h1 className="font-heading text-2xl font-semibold tracking-tight">
-          Provider configuration
-        </h1>
-      </div>
-      {error && (
-        <Alert variant="destructive">
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
-      {success && (
-        <Alert>
-          <Check className="size-4" />
-          <AlertDescription>{success}</AlertDescription>
-        </Alert>
-      )}
+        <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
+          <div className="flex size-9 shrink-0 items-center justify-center sm:size-10">
+            <DisplayAvatar name={name || provider.name} src={avatar || provider.avatar} sources={provider.avatar_sources} className="max-h-10 max-w-14" />
+          </div>
+          <div className="flex min-w-0 flex-1 items-center gap-2">
+            <h1 className="min-w-0 truncate font-heading text-lg font-semibold tracking-tight sm:text-2xl">{name || provider.name}</h1>
+            <Badge className="shrink-0 text-[10px] sm:text-xs" variant={provider.is_active ? "secondary" : "outline"}>{provider.is_active ? "Active" : "Inactive"}</Badge>
+            <span className="shrink-0 truncate text-xs text-muted-foreground">{provider.protocol}</span>
+          </div>
+        </div>
+        <div className="flex shrink-0 gap-1.5 sm:gap-2">
+          <Button variant="ghost" size="sm" className="px-2 sm:px-2.5" onClick={discard} disabled={saving} aria-label="Discard changes">
+            <CloseLine className="size-4 sm:hidden" />
+            <span className="hidden sm:inline">Discard</span>
+          </Button>
+          <Button size="sm" className="px-2 sm:px-2.5" onClick={save} disabled={saving} aria-label="Save changes">
+            {saving ? <LoaderCircle className="size-4 animate-spin" /> : <Check className="size-4 sm:hidden" />}
+            <span className="hidden sm:inline">{saving ? "Saving..." : "Save changes"}</span>
+          </Button>
+        </div>
+      </header>
+      {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
+      {success && <Alert><Check className="size-4" /><AlertDescription>{success}</AlertDescription></Alert>}
 
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle>Connection settings</CardTitle>
-          <div className="flex flex-wrap justify-end gap-2">
-            {(provider.protocol === "codex" ||
-              provider.protocol === "antigravity" ||
-              provider.protocol === "freebuff" ||
-              provider.protocol === "qwen" ||
-              provider.protocol === "atomesus" ||
-              provider.protocol === "chatgpt") && (
-              <>
-                <Button
-                  variant="outline"
-                  onClick={provider.protocol === "freebuff" || provider.protocol === "qwen" || provider.protocol === "atomesus" || provider.protocol === "conol" || provider.protocol === "chatgpt" ? () => {
-                    setShowAddKey(true);
-                    document.getElementById("provider-credentials")?.scrollIntoView({ behavior: "smooth" });
-                  } : addOAuthAccount}
-                  disabled={credentialAction}
-                >
-                  {credentialAction ? (
-                    <LoaderCircle className="size-4 animate-spin" />
-                  ) : (
-                    <LoginIcon className="size-4" />
-                  )}
-                  {provider.protocol === "chatgpt" ? "Add session credential" : provider.protocol === "conol" ? "Add credential" : provider.protocol === "atomesus" ? "Add token" : provider.protocol === "freebuff" || provider.protocol === "qwen" ? "Add auth code" : "Connect account"}
-                </Button>
-                {provider.protocol !== "freebuff" && provider.protocol !== "qwen" && provider.protocol !== "atomesus" && provider.protocol !== "conol" && credentials.some(
-                  (credential) =>
-                    (credential.kind === "codex" ||
-                      credential.kind === "antigravity") &&
-                    (credential.account_id || credential.email),
-                ) && (
-                  <Button
-                    variant="outline"
-                    onClick={() => setLogoutOpen(true)}
-                    disabled={authAction !== null}
-                  >
-                    <LogoutIcon className="size-4" />
-                    Log out
-                  </Button>
-                )}
-              </>
-            )}
-            <Button variant="outline" onClick={openSync} disabled={syncing}>
-              {syncing ? (
-                <LoaderCircle className="size-4 animate-spin" />
-              ) : (
-                <RefreshCw className="size-4" />
-              )}
-              Sync models
-            </Button>
-            <Button onClick={save} disabled={saving}>
-              {saving ? "Saving..." : "Save changes"}
-            </Button>
-          </div>
-        </CardHeader>
+        <CardHeader><CardTitle>Provider</CardTitle></CardHeader>
         <CardContent className="space-y-5">
-          <AvatarUpload
-            value={avatar}
-            sources={provider.avatar_sources}
-            name={name}
-            onChange={setAvatar}
-            label="Provider avatar"
-            onError={(message) => notifyError("Invalid avatar", message)}
-          />
+          <AvatarUpload value={avatar} sources={provider.avatar_sources} name={name} onChange={setAvatar} label="Provider avatar" onError={(message) => notifyError("Invalid avatar", message)} />
           <div className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="provider-name">Provider name</Label>
-              <Input
-                id="provider-name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="provider-url">Base URL</Label>
-              <Input
-                id="provider-url"
-                value={baseUrl}
-                onChange={(e) => setBaseUrl(e.target.value)}
-              />
-            </div>
+            <div className="space-y-2"><Label htmlFor="provider-name">Provider name</Label><Input id="provider-name" value={name} onChange={(e) => setName(e.target.value)} /></div>
+            <div className="space-y-2"><Label htmlFor="provider-url">Base URL</Label><Input id="provider-url" value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} /></div>
           </div>
+        </CardContent>
+      </Card>
+
+      {(routableCredentials.length > 1 || provider.protocol === "codex" || provider.protocol === "antigravity") && <Card>
+        <CardHeader className="flex flex-row items-center justify-between gap-3"><div><CardTitle>Connection</CardTitle><p className="mt-1 text-sm text-muted-foreground">Routing and account status.</p></div><div className="flex flex-wrap justify-end gap-2">
+            {(provider.protocol === "codex" || provider.protocol === "antigravity") && <>
+              <Button variant="outline" onClick={addOAuthAccount} disabled={credentialAction}><LoginIcon className="size-4" />{credentialAction ? "Connecting..." : "Connect account"}</Button>
+              {credentials.some((credential) => (credential.kind === "codex" || credential.kind === "antigravity") && (credential.account_id || credential.email)) && <Button variant="outline" onClick={() => setLogoutOpen(true)} disabled={authAction !== null}><LogoutIcon className="size-4" />Log out</Button>}
+            </>}
+          </div></CardHeader>
+        <CardContent className="space-y-5">
           {routableCredentials.length > 1 && (
             <div className="space-y-2">
               <Label>Credential routing</Label>
@@ -925,8 +980,7 @@ export default function ProviderDetailPage({
               </p>
             </div>
           )}
-          {provider.protocol === "codex" ||
-          provider.protocol === "antigravity" ? (
+          {(provider.protocol === "codex" || provider.protocol === "antigravity") && (
             <div className="space-y-2">
               <Label>Connected accounts</Label>
               <div className="space-y-2 rounded-md border bg-muted/40 p-3 text-sm">
@@ -963,8 +1017,15 @@ export default function ProviderDetailPage({
                 )}
               </div>
             </div>
-          ) : provider.protocol === "chatgpt" ? (
-            <div id="provider-credentials" className="space-y-3">
+          )}
+        </CardContent>
+      </Card>}
+
+      <Card id="provider-credentials">
+        <CardHeader><CardTitle>Credentials</CardTitle><p className="text-sm text-muted-foreground">Manage encrypted credentials and access tokens.</p></CardHeader>
+        <CardContent className="space-y-3">
+          {provider.protocol === "chatgpt" ? (
+            <div className="space-y-3">
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <Label>ChatGPT session credentials</Label>
@@ -976,18 +1037,7 @@ export default function ProviderDetailPage({
                 </Button>
               </div>
               <div className="space-y-2">
-                {credentials.filter((credential) => credential.kind === "chatgpt").map((credential) => {
-                  const revealed = revealedKeys[credential.id];
-                  return <div key={credential.id} className="grid items-center gap-2 border-b border-border/60 py-2 md:grid-cols-[minmax(8rem,0.65fr)_minmax(0,1.8fr)_auto]">
-                    <Input value={credential.label} readOnly className="h-9 bg-background" />
-                    <div className="relative"><Input value={revealed ?? credential.masked_secret ?? "Hidden credential"} readOnly className="h-9 bg-background pr-24 font-mono" /><div className="absolute right-1 top-1/2 flex -translate-y-1/2 gap-0.5">
-                      <Button variant="ghost" size="icon" className="size-8" onClick={() => toggleApiKeyVisibility(credential)} disabled={loadingSecretId === credential.id} title={revealed === undefined ? "Reveal credential" : "Hide credential"}>{revealed === undefined ? <Eye className="size-4" /> : <EyeOff className="size-4" />}</Button>
-                      <Button variant="ghost" size="icon" className="size-8" onClick={() => copyCredentialSecret(credential)} disabled={loadingSecretId === credential.id} title="Copy credential"><Copy className="size-4" /></Button>
-                    </div></div>
-                    <Switch checked={credential.is_active === 1} onCheckedChange={() => toggleCredentialActive(credential)} aria-label={`${credential.label} active`} />
-                    <Button variant="destructive" size="icon" className="size-9" onClick={() => removeApiKey(credential.id)} title="Remove credential"><Trash2 className="size-4" /></Button>
-                  </div>;
-                })}
+                {credentials.filter((credential) => credential.kind === "chatgpt").map((credential) => renderCredentialRow(credential, "credential"))}
                 {!credentials.some((credential) => credential.kind === "chatgpt") && <div className="text-xs text-muted-foreground">No session credentials configured.</div>}
               </div>
               {showAddKey && <div className="grid gap-2 rounded-md border border-dashed p-3 md:grid-cols-[1fr_1.5fr_auto]"><Input ref={newKeyLabelRef} placeholder="Credential label" /><Input ref={newAuthCodeRef} type="password" placeholder="Paste an authorized session token" /><Button onClick={addFreebuffAuthCode} disabled={addingKey}>{addingKey ? <LoaderCircle className="size-4 animate-spin" /> : <><Add className="size-4" /> Add credential</>}</Button></div>}
@@ -1011,26 +1061,7 @@ export default function ProviderDetailPage({
                 </Button>
               </div>
               <div className="space-y-2">
-                {credentials.filter((credential) => credential.kind === "freebuff" || credential.kind === "qwen" || credential.kind === "atomesus" || credential.kind === "conol").map((credential) => {
-                  const revealed = revealedKeys[credential.id];
-                  return <div key={credential.id} className="grid items-center gap-2 border-b border-border/60 py-2 md:grid-cols-[minmax(8rem,0.65fr)_minmax(0,1.8fr)_auto]">
-                    <Input value={credential.label} readOnly className="h-9 bg-background" />
-                    <div className="relative">
-                      <Input value={provider.protocol === "conol" ? (revealed ?? `Account ${credential.account_id ?? "configured"} · Cookie hidden`) : revealed ?? credential.masked_secret ?? "Hidden auth code"} readOnly className="h-9 bg-background pr-24 font-mono" />
-                      <div className="absolute right-1 top-1/2 flex -translate-y-1/2 gap-0.5">
-                        <Button variant="ghost" size="icon" className="size-8" onClick={() => toggleApiKeyVisibility(credential)} disabled={loadingSecretId === credential.id} title={revealed === undefined ? "Reveal credential" : "Hide credential"}>
-                          {revealed === undefined ? <Eye className="size-4" /> : <EyeOff className="size-4" />}
-                        </Button>
-                        <Button variant="ghost" size="icon" className="size-8" onClick={() => copyCredentialSecret(credential)} disabled={loadingSecretId === credential.id} title="Copy credential">
-                          <Copy className="size-4" />
-                        </Button>
-                      </div>
-                    </div>
-                    <Button variant="destructive" size="icon" className="size-9" onClick={() => removeApiKey(credential.id)} title={provider.protocol === "conol" ? "Remove credential" : "Remove auth code"}>
-                      <Trash2 className="size-4" />
-                    </Button>
-                  </div>;
-                })}
+                {credentials.filter((credential) => credential.kind === "freebuff" || credential.kind === "qwen" || credential.kind === "atomesus" || credential.kind === "conol").map((credential) => renderCredentialRow(credential, provider.protocol === "conol" ? "credential" : "auth code"))}
                 {!credentials.some((credential) => credential.kind === "freebuff" || credential.kind === "qwen" || credential.kind === "atomesus" || credential.kind === "conol") && (
                   <div className="text-xs text-muted-foreground">{provider.protocol === "conol" ? "No Conol credentials configured." : "No auth codes configured."}</div>
                 )}
@@ -1070,76 +1101,7 @@ export default function ProviderDetailPage({
                 ).length ? (
                   credentials
                     .filter((credential) => credential.kind === "api_key")
-                    .map((credential) => {
-                      const revealed = revealedKeys[credential.id];
-                      return (
-                        <div
-                          key={credential.id}
-                          className="grid items-center gap-2 border-b border-border/60 py-2 last:border-b-0 md:grid-cols-[minmax(8rem,0.65fr)_minmax(0,1.8fr)_auto]"
-                        >
-                          <Input
-                            value={credential.label}
-                            readOnly
-                            aria-label={`${credential.label} label`}
-                            className="h-9 bg-background"
-                          />
-                          <div className="relative">
-                            <Input
-                              value={
-                                revealed ??
-                                credential.masked_secret ??
-                                "Hidden key"
-                              }
-                              readOnly
-                              type="text"
-                              aria-label={`${credential.label} secret`}
-                              className="h-9 bg-background pr-24 font-mono"
-                            />
-                            <div className="absolute right-1 top-1/2 flex -translate-y-1/2 gap-0.5">
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="size-8"
-                                onClick={() =>
-                                  toggleApiKeyVisibility(credential)
-                                }
-                                disabled={loadingSecretId === credential.id}
-                                title={
-                                  revealed === undefined
-                                    ? "Reveal API key"
-                                    : "Hide API key"
-                                }
-                              >
-                                {revealed === undefined ? (
-                                  <Eye className="size-4" />
-                                ) : (
-                                  <EyeOff className="size-4" />
-                                )}
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="size-8"
-                                onClick={() => copyCredentialSecret(credential)}
-                                disabled={loadingSecretId === credential.id}
-                                title="Copy API key"
-                              >
-                                <Copy className="size-4" />
-                              </Button>
-                            </div>
-                          </div>
-                          <Button
-                            variant="destructive"
-                            size="icon"
-                            className="size-9"
-                            onClick={() => removeApiKey(credential.id)}
-                            title="Remove API key"
-                          >
-                            <Trash2 className="size-4" />
-                          </Button>
-                        </div>
-                      );
-                    })
+                    .map((credential) => renderCredentialRow(credential, "API key"))
                 ) : (
                   <div className="text-xs text-muted-foreground">
                     No API keys configured.
@@ -1177,39 +1139,28 @@ export default function ProviderDetailPage({
             Models{" "}
             <span className="text-muted-foreground">({list.length})</span>
           </CardTitle>
-          <div className="flex items-center gap-2">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                placeholder="Search..."
-                className="h-8 w-48 border-none bg-muted pl-9"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <div className="relative min-w-0 flex-1 sm:flex-none">
+              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input aria-label="Search models" placeholder="Search models" className="h-8 w-full border-none bg-muted pl-9 pr-9 sm:w-72 lg:w-96" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+              <DropdownMenu open={filterOpen} onOpenChange={setFilterOpen}>
+                <DropdownMenuTrigger render={<Button variant="ghost" size="icon-xs" className={`absolute right-1 top-1/2 -translate-y-1/2 ${activeFilterCount ? "text-primary" : "text-muted-foreground"}`} aria-label="Filter models" title="Filter models" />}>
+                  <Filter className="size-4" />
+                  {activeFilterCount > 0 && <span className="absolute -right-1 -top-1 flex size-4 items-center justify-center rounded-full bg-primary text-[10px] text-primary-foreground">{activeFilterCount}</span>}
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-64">
+                  <DropdownMenuGroup>
+                    <DropdownMenuLabel>Filter models</DropdownMenuLabel>
+                    {([['free', 'Free'], ['active', 'Active'], ['manual', 'Manual'], ['synced', 'Synced'], ['capabilities', 'Capabilities present']] as const).map(([key, label]) => <DropdownMenuCheckboxItem key={key} checked={modelFilters[key]} onCheckedChange={(checked) => setModelFilters((current) => ({ ...current, [key]: checked === true }))}>{label}</DropdownMenuCheckboxItem>)}
+                  </DropdownMenuGroup>
+                  {contextBounds.max > contextBounds.min && <div className="space-y-3 px-2 py-2"><p className="text-xs font-medium">Context window</p><label className="block text-xs text-muted-foreground">Min: {formatTokenLimit(minContext ?? contextBounds.min)}<input aria-label="Minimum context window" type="range" min={contextBounds.min} max={contextBounds.max} value={minContext ?? contextBounds.min} onChange={(event) => setMinContext(Number(event.target.value) === contextBounds.min ? null : Number(event.target.value))} className="mt-1 w-full accent-primary" /></label><label className="block text-xs text-muted-foreground">Max: {formatTokenLimit(maxContext ?? contextBounds.max)}<input aria-label="Maximum context window" type="range" min={contextBounds.min} max={contextBounds.max} value={maxContext ?? contextBounds.max} onChange={(event) => setMaxContext(Number(event.target.value) === contextBounds.max ? null : Number(event.target.value))} className="mt-1 w-full accent-primary" /></label></div>}
+                  {activeFilterCount > 0 && <Button variant="ghost" size="sm" className="mt-1 w-full" onClick={clearFilters}>Clear filters</Button>}
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
-            <Button
-              variant={freeOnly ? "default" : "secondary"}
-              size="sm"
-              onClick={() => setFreeOnly(!freeOnly)}
-            >
-              Free
-            </Button>
-            {list.length > 0 && (
-              <Button
-                variant="destructive"
-                size="sm"
-                onClick={() => setClearOpen(true)}
-              >
-                Delete all
-              </Button>
-            )}
-            <Button
-              variant="default"
-              size="sm"
-              onClick={() => setAddOpen(true)}
-            >
-              Add model
-            </Button>
+            {list.length > 0 && <Tooltip><TooltipTrigger render={<Button variant="destructive" size="icon" aria-label="Delete all models" title="Delete all models" onClick={() => setClearOpen(true)} />}><Trash2 className="size-4" /></TooltipTrigger><TooltipContent>Delete all models</TooltipContent></Tooltip>}
+            <Button variant="outline" size="sm" onClick={openSync} disabled={syncing} aria-label="Sync models">{syncing ? <LoaderCircle className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}<span className="hidden sm:inline">Sync</span></Button>
+            <Button variant="default" size="sm" onClick={() => setAddOpen(true)}>Add model</Button>
           </div>
         </CardHeader>
         <Separator />
@@ -1217,13 +1168,37 @@ export default function ProviderDetailPage({
           <div className="p-10 text-center text-sm text-muted-foreground">
             {list.length === 0
               ? "No models found. Sync the provider or add one manually."
-              : "No models match your search."}
+              : activeFilterCount > 0
+                ? "No models match the current search and filters."
+                : "No models match your search."}
           </div>
         ) : (
+          <>
+            <div className="space-y-3 p-4 md:hidden">
+              {filteredList.map((model) => {
+                const fullId = modelPublicId({ ...model, provider_name: provider.name });
+                return <div key={model.id} className="min-w-0 rounded-lg border border-border/60 p-3">
+                  <div className="flex min-w-0 items-start justify-between gap-3">
+                    <div className="min-w-0"><p className="break-all font-mono text-xs">{fullId}</p><p className="mt-1 truncate text-sm font-medium">{model.display_name || "Unnamed model"}</p><ModelMetadataBadges model={model} /></div>
+                    <Badge variant={model.is_manual ? "outline" : "secondary"}>{model.is_manual ? "Manual" : "Synced"}</Badge>
+                  </div>
+                  <div className="mt-3 flex items-center justify-between gap-2 border-t border-border/60 pt-3">
+                    {provider.protocol === "qwen" && model.is_active === 0 && !model.is_manual ? <Badge variant="outline">Not supported</Badge> : <label className="flex items-center gap-2 text-xs text-muted-foreground"><Switch checked={model.is_active === 1} aria-label={`${modelDisplayId(model)} active`} onCheckedChange={async () => { const updated = await modelsApi.toggle(model.id); setList((items) => items.map((item) => item.id === model.id ? { ...item, is_active: updated.is_active } : item)); }} />Active</label>}
+                    <div className="flex gap-1">
+                      <Button size="icon" variant="ghost" aria-label={`Copy ${modelDisplayId(model)}`} onClick={() => copy(fullId)}><Copy className="size-4" /></Button>
+                      <Button size="icon" variant="ghost" aria-label={`Test ${modelDisplayId(model)}`} onClick={() => testModel(model.id)} disabled={testingId === model.id}>{testingId === model.id ? <LoaderCircle className="size-4 animate-spin" /> : <PlayCircleLine className="size-4" />}</Button>
+                      <Button size="icon" variant="ghost" aria-label={`Edit ${modelDisplayId(model)}`} onClick={() => setEditTarget(model)}><Pencil className="size-4" /></Button>
+                      <Button size="icon" variant="ghost" className="text-destructive" aria-label={`Delete ${modelDisplayId(model)}`} onClick={() => setDeleteTarget(model)}><Trash2 className="size-4" /></Button>
+                    </div>
+                  </div>
+                </div>;
+              })}
+            </div>
+            <div className="hidden overflow-x-auto md:block">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Model ID</TableHead>
+                <TableHead>Public ID</TableHead>
                 <TableHead>Display name</TableHead>
                 <TableHead>Source</TableHead>
                 <TableHead>Status</TableHead>
@@ -1236,8 +1211,7 @@ export default function ProviderDetailPage({
                   <TableCell>
                     <div className="group flex items-center gap-1 font-mono text-xs">
                       <span>
-                        {provider.name.toLowerCase().replace(/\s+/g, "")}/
-                        {model.model_id}
+                        {modelPublicId({ ...model, provider_name: provider.name })}
                       </span>
                       <Tooltip>
                         <TooltipTrigger
@@ -1248,7 +1222,7 @@ export default function ProviderDetailPage({
                               className="size-6 opacity-0 group-hover:opacity-100"
                               onClick={() =>
                                 copy(
-                                  `${provider.name.toLowerCase().replace(/\s+/g, "")}/${model.model_id}`,
+                                  modelPublicId({ ...model, provider_name: provider.name }),
                                 )
                               }
                             />
@@ -1360,6 +1334,8 @@ export default function ProviderDetailPage({
               ))}
             </TableBody>
           </Table>
+            </div>
+          </>
         )}
       </Card>
       <Dialog open={syncOpen} onOpenChange={setSyncOpen}>
@@ -1546,7 +1522,7 @@ export default function ProviderDetailPage({
       <ConfirmDialog
         open={!!deleteTarget}
         title="Delete model"
-        message={`Remove ${deleteTarget?.model_id}?`}
+        message={`Remove ${deleteTarget ? modelDisplayId(deleteTarget) : "model"}?`}
         confirmLabel="Delete"
         onConfirm={async () => {
           if (!deleteTarget) return;
