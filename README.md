@@ -29,10 +29,6 @@ Klove provides a single OpenAI-compatible endpoint in front of API-key and OAuth
 | Atomesus          | Bearer token   | Native models, effort controls, persistent sessions, and streaming responses.          |
 | ChatGPT           | Session token/cookie | Authorized ChatGPT backend sessions stored encrypted; availability depends on the account and endpoint. |
 
-## ChatGPT provider
-
-Add the **ChatGPT** provider in the panel with the default base URL `https://chatgpt.com/backend-api`, then provide a session token or cookie that you are authorized to use. Klove encrypts the credential in SQLite and supports normal credential routing, model synchronization, testing, and activation controls. This integration is subject to ChatGPT account permissions, endpoint availability, and applicable terms. It does not provide or document any bypass or evasion technique.
-
 ## Quick Start
 
 ### Requirements
