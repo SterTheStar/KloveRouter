@@ -113,6 +113,7 @@ function CodeBlock({
       {activeTab === "preview" && isHtml ? (
         <HtmlPreview
           code={code}
+          streaming={streaming}
           className={previewMaximized ? "min-h-0 flex-1" : undefined}
         />
       ) : (
