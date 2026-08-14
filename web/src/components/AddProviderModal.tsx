@@ -225,6 +225,8 @@ export default function AddProviderModal({
     setStep("form");
   };
 
+  const avatarPayload = avatar && (/^data:image\//i.test(avatar) || /^https?:\/\//i.test(avatar)) ? avatar : undefined;
+
   const submit = async (skipVerification = false) => {
     if (
       selectedType?.protocol === "codex" ||
@@ -264,7 +266,7 @@ export default function AddProviderModal({
             ? { secret: authCode, account_id: conolParsedAccountId }
             : { api_key: apiKey }),
         protocol: selectedType?.protocol,
-        avatar: avatar || undefined,
+        avatar: avatarPayload,
       });
       success("Provider added", `${name} is ready to use.`);
       onSuccess();
@@ -297,7 +299,7 @@ export default function AddProviderModal({
         name: name.trim() || "antigravity",
         base_url: baseUrl || "https://cloudcode-pa.googleapis.com",
         protocol: "antigravity",
-        avatar: avatar || undefined,
+        avatar: avatarPayload,
       });
       createdProviderId = provider.id;
       const credential = (await providers.credentials(provider.id))[0];
@@ -330,7 +332,7 @@ export default function AddProviderModal({
         base_url: baseUrl || "https://chatgpt.com/backend-api/codex",
         api_key: "codex-session",
         protocol: "codex",
-        avatar: avatar || undefined,
+        avatar: avatarPayload,
       });
       createdProviderId = provider.id;
       const credentials = await providers.credentials(provider.id);

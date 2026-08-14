@@ -42,7 +42,9 @@ export default function AvatarUpload({
         accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml,image/x-icon"
         onChange={select}
       />
-      <DisplayAvatar name={name || "Avatar"} src={value} sources={sources} className="size-14" />
+      <div className="flex size-16 shrink-0 items-center justify-center">
+        <DisplayAvatar name={name || "Avatar"} src={value} sources={sources} className="max-h-16 max-w-20" />
+      </div>
       <div className="space-y-1">
         <div className="text-sm font-medium">{label}</div>
         <div className="flex gap-2">
