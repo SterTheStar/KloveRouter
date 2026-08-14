@@ -104,9 +104,11 @@ export function parseConolEvent(raw: unknown): { content?: string; reasoning?: s
   if (!raw || typeof raw !== "object") return null;
   const event = raw as any;
   if (event.done === true || event.type === "done") return { done: true };
-  if (event.type !== "history_delta") return null;
+  if (event.type !== "history_delta" || event.windowReset === true) return null;
   let content = ""; let reasoning = "";
-  for (const stage of event.stages ?? []) for (const preview of stage.preview ?? []) {
+  const stages = Array.isArray(event.stages) ? event.stages : [];
+  const stage = stages.at(-1);
+  for (const preview of stage?.preview ?? []) {
     const text = textFromPreview(preview);
     if (preview.type === "thinking") reasoning += text;
     if (preview.type === "message") content += text;
@@ -210,13 +212,27 @@ export async function conolModels(credential: ConolCredential, endpoint?: string
   return models;
 }
 
-function incremental(value: string, previous: string): string { if (!value || value === previous) return ""; if (previous && value.startsWith(previous)) return value.slice(previous.length); return value; }
+function reconcile(value: string, previous: string): { next: string; delta: string } {
+  if (!value || value === previous) return { next: previous, delta: "" };
+  if (!previous || value.startsWith(previous)) return { next: value, delta: value.slice(previous.length) };
+  if (previous.startsWith(value)) return { next: previous, delta: "" };
+  let overlap = Math.min(previous.length, value.length);
+  while (overlap > 0 && !previous.endsWith(value.slice(0, overlap))) overlap--;
+  if (overlap > 0) return { next: previous + value.slice(overlap), delta: value.slice(overlap) };
+  return { next: value, delta: value };
+}
+function incremental(value: string, previous: string): string {
+  if (!value || value === previous) return "";
+  if (!previous || value.startsWith(previous)) return value.slice(previous.length);
+  if (previous.startsWith(value)) return "";
+  return value;
+}
 function completion(model: string, content: string, reasoning?: string) { return { id: `chatcmpl-${crypto.randomUUID()}`, object: "chat.completion", created: Math.floor(Date.now() / 1000), model, choices: [{ index: 0, message: { role: "assistant", content, ...(reasoning ? { reasoning_content: reasoning } : {}) }, logprobs: null, finish_reason: "stop" }] }; }
 function openAIStream(model: string, source: Response, signal?: AbortSignal) { const encoder = new TextEncoder(); const id = `chatcmpl-${crypto.randomUUID()}`; const created = Math.floor(Date.now() / 1000); let cancelled = false; return new Response(new ReadableStream({ async start(controller) { const send = (delta: any, finish_reason: string | null = null) => { if (!cancelled) controller.enqueue(encoder.encode(`data: ${JSON.stringify({ id, object: "chat.completion.chunk", created, model, choices: [{ index: 0, delta, finish_reason }] })}\n\n`)); }; send({ role: "assistant", content: "" }); let content = ""; let reasoning = ""; try { for await (const event of conolEvents(source)) { if (event.content) { const delta = incremental(event.content, content); content += delta; if (delta) send({ content: delta }); } if (event.reasoning) { const delta = incremental(event.reasoning, reasoning); reasoning += delta; if (delta) send({ reasoning_content: delta }); } if (event.done) break; } if (!cancelled) { send({}, "stop"); controller.enqueue(encoder.encode("data: [DONE]\n\n")); controller.close(); } } catch (error) { if (!cancelled) { controller.enqueue(encoder.encode(`data: ${JSON.stringify({ error: { message: error instanceof Error ? error.message : "Conol stream failed" } })}\n\n`)); controller.enqueue(encoder.encode("data: [DONE]\n\n")); controller.close(); } } }, cancel() { cancelled = true; void source.body?.cancel(); signal?.throwIfAborted?.(); } }), { headers: { "Content-Type": "text/event-stream; charset=utf-8", "Cache-Control": "no-cache, no-transform", Connection: "keep-alive", "X-Accel-Buffering": "no" } }); }
 
 export async function conolResponses(body: any, model: string | ConolModelMetadata, credential: ConolCredential, endpoint?: string, signal?: AbortSignal): Promise<Response | ReturnType<typeof completion>> {
   const upstream = baseUrl(endpoint); const metadata = typeof model === "string" ? { agentModel: model } : model; const requestedModel = typeof model === "string" ? model : model.agentModel ?? model.modelPreset ?? "conol-default"; const messages: ChatMessage[] = Array.isArray(body.messages) ? body.messages : []; const user = [...messages].reverse().find((item) => item.role === "user"); const text = conolContent(user?.content); if (!text) throw new Error("Conol requires a user text message"); const timezone = timezoneOf(body); const timeout = Number(body.timeout_ms) || 15 * 60_000;
-  const sessionPayload = { source: { type: "home" }, messages: [{ type: "text", content: text }], timezone };
+  const sessionPayload = { source: { type: "home" }, messages: [{ type: "text", content: "" }], timezone };
   const created = await request(`${upstream}/api/sessions`, credential, { method: "POST", body: JSON.stringify(sessionPayload) }, timeout, signal); const session = await created.json().catch(() => null); if (!session?.sessionId) throw new Error("Conol session response missing sessionId");
   const current = session.effectiveModel;
   const changes = metadata.agentModel
@@ -226,6 +242,7 @@ export async function conolResponses(body: any, model: string | ConolModelMetada
       : {};
   if (Object.keys(changes).length && current !== requestedModel)
     await request(`${upstream}/api/sessions/${encodeURIComponent(session.sessionId)}/model`, credential, { method: "POST", body: JSON.stringify(changes) }, timeout, signal);
+  await request(`${upstream}/api/sessions/${encodeURIComponent(session.sessionId)}/messages`, credential, { method: "POST", body: JSON.stringify({ messages: [{ type: "text", content: text }], timezone }) }, timeout, signal);
   const stream = await request(`${upstream}/api/sessions/${encodeURIComponent(session.sessionId)}/messages?logDeltas=1&acct=${encodeURIComponent(parseConolCredential(credential).accountId)}`, credential, { method: "GET", headers: { Accept: "text/event-stream, application/x-ndjson" } }, timeout, signal);
   if (body.stream) return openAIStream(requestedModel, stream, signal); let content = ""; let reasoning = ""; for await (const event of conolEvents(stream)) { if (event.content) content += incremental(event.content, content); if (event.reasoning) reasoning += incremental(event.reasoning, reasoning); if (event.done) break; } return completion(requestedModel, content, reasoning);
 }
