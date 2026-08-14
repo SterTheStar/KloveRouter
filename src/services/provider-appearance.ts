@@ -45,7 +45,7 @@ export function resolveProviderAvatar(
 
 export function isValidAvatar(value: string | null | undefined): boolean {
   if (value == null || value === "") return true;
-  if (Buffer.byteLength(value, "utf8") > 1_500_000) return false;
+  if (Buffer.byteLength(value, "utf8") > 25 * 1024 * 1024) return false;
   if (/^data:image\/(png|jpeg|webp|gif|svg\+xml|x-icon);base64,/i.test(value)) return true;
   try {
     const url = new URL(value);

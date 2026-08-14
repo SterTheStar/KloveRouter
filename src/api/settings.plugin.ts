@@ -74,7 +74,7 @@ export const settingsPlugin = (app: Elysia) =>
         }
         if (!isValidAvatar(body.avatar)) {
           set.status = 400;
-          return { error: "Avatar must be an image URL or an image up to 1 MB" };
+          return { error: "Avatar must be an image URL or an image up to 25 MB" };
         }
         const db = getDb();
         db.query(

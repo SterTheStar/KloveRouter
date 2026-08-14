@@ -27,5 +27,6 @@ describe("provider appearance", () => {
     expect(isValidAvatar("https://example.com/icon.png")).toBe(true);
     expect(isValidAvatar("javascript:alert(1)")).toBe(false);
     expect(isValidAvatar("not a URL")).toBe(false);
+    expect(isValidAvatar(`data:image/png;base64,${"a".repeat(25 * 1024 * 1024)}`)).toBe(false);
   });
 });

@@ -98,7 +98,7 @@ export const providersPlugin = (app: Elysia) =>
          }
         if (!isValidAvatar(body.avatar)) {
           set.status = 400;
-          return { error: "Avatar must be an image URL or an image up to 1 MB" };
+          return { error: "Avatar must be an image URL or an image up to 25 MB" };
         }
         const existing = providerService.findByName(body.name);
         if (existing) {
@@ -154,7 +154,7 @@ export const providersPlugin = (app: Elysia) =>
         }
         if (!isValidAvatar(body.avatar)) {
           set.status = 400;
-          return { error: "Avatar must be an image URL or an image up to 1 MB" };
+          return { error: "Avatar must be an image URL or an image up to 25 MB" };
         }
         if (body.base_url !== undefined) {
           try {

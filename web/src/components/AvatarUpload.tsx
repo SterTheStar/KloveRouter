@@ -25,8 +25,8 @@ export default function AvatarUpload({
       onError?.("Choose an image file.");
       return;
     }
-    if (file.size > 1024 * 1024) {
-      onError?.("Avatar must be 1 MB or smaller.");
+    if (file.size > 25 * 1024 * 1024) {
+      onError?.("Avatar must be 25 MB or smaller.");
       return;
     }
     const reader = new FileReader();
