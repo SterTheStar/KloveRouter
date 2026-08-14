@@ -52,6 +52,19 @@ function validateArchive(archivePath: string): void {
     }
   }
 }
+function extractTar(archivePath: string, destDir: string): void {
+  try {
+    execFileSync("tar", ["--no-absolute-names", "-xzf", archivePath, "-C", destDir], { stdio: "pipe" });
+  } catch (err: unknown) {
+    const stderr = (err as { stderr?: string })?.stderr ?? "";
+    if (/unrecognized option.*--no-absolute-names/.test(stderr)) {
+      execFileSync("tar", ["-xzf", archivePath, "-C", destDir], { stdio: "pipe" });
+    } else {
+      throw err;
+    }
+  }
+}
+
 async function installFromArchive(archivePath: string, version: string): Promise<string> {
   const dir = cavemanDir();
   const tag = tagFor(version);
@@ -59,7 +72,7 @@ async function installFromArchive(archivePath: string, version: string): Promise
   const stagedSkill = join(staging, SKILL_FILE);
   try {
     validateArchive(archivePath);
-    execFileSync("tar", ["--no-absolute-names", "-xzf", archivePath, "-C", staging], { stdio: "pipe" });
+    extractTar(archivePath, staging);
     const root = readdirSync(staging).find((entry) => entry.startsWith("caveman-"));
     if (!root) throw new Error("Caveman archive has unexpected layout");
     const source = join(staging, root, "skills", "caveman", SKILL_FILE);
@@ -95,10 +108,11 @@ export const cavemanBinary = {
   async currentVersion() { return readVersion(); },
   async isInstalled() { return existsSync(skillPath()); },
   async checkLatestVersion() { return latestVersion(); },
-  async ensureInstalled(version = FALLBACK_VERSION) { return withLock(async () => {
+  async ensureInstalled(version?: string) { return withLock(async () => {
     if (existsSync(skillPath())) return skillPath();
     const dir = cavemanDir(); if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-    return installFromArchive(await downloadArchive(version, dir), version);
+    const target = version ?? (await latestVersion()) ?? FALLBACK_VERSION;
+    return installFromArchive(await downloadArchive(target, dir), target);
   }); },
   async update() { return withLock(async () => {
     const latest = await latestVersion(); if (!latest) throw new Error("Could not fetch latest Caveman version");
