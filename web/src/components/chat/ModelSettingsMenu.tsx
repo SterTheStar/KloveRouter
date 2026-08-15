@@ -130,7 +130,7 @@ export default function ModelSettingsMenu({
 
       {open && (
         <div
-          className="fixed inset-x-2 bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-[100] h-[min(38rem,calc(100dvh-6rem-env(safe-area-inset-bottom)))] max-h-[calc(100dvh-6rem-env(safe-area-inset-bottom))] w-auto max-w-none overflow-hidden rounded-xl bg-popover text-popover-foreground shadow-2xl ring-1 ring-foreground/10 sm:absolute sm:right-0 sm:bottom-11 sm:inset-x-auto sm:h-[min(32rem,calc(100vh-5rem))] sm:max-h-none sm:w-[min(46rem,calc(100vw-2rem))] sm:max-w-[calc(100vw-2rem)]"
+          className="fixed inset-x-0 top-20 bottom-0 z-[120] h-auto max-h-[calc(100dvh-5rem)] w-screen max-w-none overflow-hidden rounded-t-2xl bg-popover pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] text-popover-foreground shadow-2xl ring-1 ring-foreground/10 sm:absolute sm:right-0 sm:bottom-11 sm:top-auto sm:inset-x-auto sm:h-[min(32rem,calc(100vh-5rem))] sm:max-h-none sm:w-[min(46rem,calc(100vw-2rem))] sm:max-w-[calc(100vw-2rem)] sm:rounded-xl sm:pt-0 sm:pb-0"
           role="dialog"
           aria-label="Model and reasoning settings"
         >

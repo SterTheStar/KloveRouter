@@ -472,7 +472,7 @@ export default function ChatPage({
         </div>
       </div>
 
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20">
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-[110]">
         <div className="pointer-events-auto">
           <ChatComposer
             value={input}

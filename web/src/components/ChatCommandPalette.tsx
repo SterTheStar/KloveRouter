@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { RiChat1Line as ChatLine, RiSearchLine as Search } from "@remixicon/react";
 import type { ChatSession } from "../types";
 
@@ -30,9 +31,9 @@ export default function ChatCommandPalette({
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [onClose]);
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/20 px-4 pt-[16vh] backdrop-blur-[2px]" onMouseDown={onClose}>
-      <div className="w-full max-w-lg overflow-hidden rounded-2xl border border-border bg-popover text-popover-foreground shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>
+  return createPortal(
+    <div className="fixed inset-0 z-[130] flex items-start justify-center bg-black/20 px-4 pt-[16vh] backdrop-blur-[2px]" onMouseDown={onClose}>
+      <div className="w-full max-w-2xl overflow-hidden rounded-2xl border border-border bg-popover text-popover-foreground shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>
         <div className="flex items-center gap-2 border-b border-border px-4">
           <Search className="size-4 shrink-0 text-muted-foreground" />
           <input ref={inputRef} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search conversations..." className="h-12 min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground" />
@@ -49,6 +50,7 @@ export default function ChatCommandPalette({
           {filtered.length === 0 && <p className="px-3 py-8 text-center text-sm text-muted-foreground">No conversations found</p>}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
