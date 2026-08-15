@@ -107,7 +107,7 @@ export default function ModelSettingsMenu({
     <div ref={rootRef} className="relative shrink-0">
       <button
         type="button"
-        className="flex h-8 max-w-64 items-center gap-1.5 rounded-full px-2.5 text-sm font-medium text-foreground/80 transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-60 sm:max-w-72"
+        className="flex h-8 max-w-[min(16rem,calc(100vw-7rem))] items-center gap-1.5 rounded-full px-2.5 text-sm font-medium text-foreground/80 transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-60 sm:max-w-72"
         onClick={() => setOpen((value) => !value)}
         disabled={disabled}
         aria-haspopup="dialog"
@@ -130,7 +130,7 @@ export default function ModelSettingsMenu({
 
       {open && (
         <div
-          className="absolute right-0 bottom-11 z-50 h-[min(32rem,calc(100vh-5rem))] w-[min(46rem,calc(100vw-2rem))] overflow-hidden rounded-xl bg-popover text-popover-foreground shadow-2xl ring-1 ring-foreground/10"
+          className="fixed inset-x-2 bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-[100] h-[min(38rem,calc(100dvh-6rem-env(safe-area-inset-bottom)))] max-h-[calc(100dvh-6rem-env(safe-area-inset-bottom))] w-auto max-w-none overflow-hidden rounded-xl bg-popover text-popover-foreground shadow-2xl ring-1 ring-foreground/10 sm:absolute sm:right-0 sm:bottom-11 sm:inset-x-auto sm:h-[min(32rem,calc(100vh-5rem))] sm:max-h-none sm:w-[min(46rem,calc(100vw-2rem))] sm:max-w-[calc(100vw-2rem)]"
           role="dialog"
           aria-label="Model and reasoning settings"
         >
