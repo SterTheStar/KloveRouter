@@ -351,7 +351,7 @@ export default function AddProviderModal({
     }
   };
 
-  const unavailableProtocols = new Set(["chatgpt", "freebuff", "atomesus"]);
+  const unavailableProtocols = new Set(["chatgpt", "freebuff"]);
   const filteredTypes = PROVIDER_TEMPLATES.filter(
     (t) =>
       t.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
