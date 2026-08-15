@@ -1,3 +1,5 @@
+import { getDb } from "../../db/connection";
+
 const DEFAULT_BASE_URL = "https://conol.ai";
 const DEFAULT_TIMEZONE = "UTC";
 const DEFAULT_MODELS = ["conol-default", "conol-research", "conol-agent"] as const;
@@ -64,6 +66,57 @@ export function conolContent(content: unknown): string {
 
 function baseUrl(endpoint?: string) { return (endpoint || DEFAULT_BASE_URL).replace(/\/+$/, ""); }
 function timezoneOf(body: any) { return typeof body.timezone === "string" && body.timezone ? body.timezone : Intl.DateTimeFormat().resolvedOptions().timeZone || DEFAULT_TIMEZONE; }
+
+function normalizedHistory(messages: ChatMessage[]) {
+  return messages
+    .filter((message) => message.role === "user" || message.role === "assistant")
+    .map((message) => ({ role: message.role, content: conolContent(message.content) }));
+}
+
+function sessionModelKey(model: string | ConolModelMetadata) {
+  const metadata = typeof model === "string" ? { agentModel: model } : model;
+  return {
+    model: typeof model === "string" ? model : metadata.agentModel ?? metadata.modelPreset ?? "conol-default",
+    agentServerId: metadata.agentServerId ?? "",
+    agentName: metadata.agentName ?? "",
+    modelPreset: metadata.modelPreset ?? "",
+    agentModel: metadata.agentModel ?? "",
+  };
+}
+
+function findSession(credentialId: string | undefined, messages: ChatMessage[], model: string | ConolModelMetadata, timezone: string) {
+  if (!credentialId) return null;
+  const incoming = normalizedHistory(messages);
+  if (!incoming.length) return null;
+  const key = sessionModelKey(model);
+  const rows = getDb().query(
+    `SELECT session_id, messages FROM conol_sessions
+     WHERE credential_id = ? AND model = ? AND agent_server_id = ? AND agent_name = ?
+       AND model_preset = ? AND agent_model = ? AND timezone = ?
+     ORDER BY updated_at DESC`,
+  ).all(credentialId, key.model, key.agentServerId, key.agentName, key.modelPreset, key.agentModel, timezone) as { session_id: string; messages: string }[];
+  for (const row of rows) {
+    try {
+      const stored = JSON.parse(row.messages);
+      if (Array.isArray(stored) && stored.length <= incoming.length && stored.every((item, index) => item.role === incoming[index]?.role && item.content === incoming[index]?.content)) return row.session_id;
+    } catch {
+      // Ignore malformed historical session.
+    }
+  }
+  return null;
+}
+
+function saveSession(credentialId: string | undefined, sessionId: string, messages: ChatMessage[], assistantContent: string, model: string | ConolModelMetadata, timezone: string) {
+  if (!credentialId) return;
+  const key = sessionModelKey(model);
+  const history = normalizedHistory(messages);
+  if (history.at(-1)?.role !== "assistant") history.push({ role: "assistant", content: assistantContent });
+  getDb().query(
+    `INSERT INTO conol_sessions (credential_id, session_id, messages, model, agent_server_id, agent_name, model_preset, agent_model, timezone, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+     ON CONFLICT(credential_id, session_id) DO UPDATE SET messages = excluded.messages, updated_at = datetime('now')`,
+  ).run(credentialId, sessionId, JSON.stringify(history), key.model, key.agentServerId, key.agentName, key.modelPreset, key.agentModel, timezone);
+}
 function headers(credential: ConolCredential, accept = "application/json") {
   const parsed = parseConolCredential(credential);
   return { Accept: accept, "Content-Type": "application/json", Cookie: parsed.cookie, "x-conol-account": parsed.accountId };
@@ -225,26 +278,34 @@ function incremental(value: string, previous: string): string {
   if (!value || value === previous) return "";
   if (!previous || value.startsWith(previous)) return value.slice(previous.length);
   if (previous.startsWith(value)) return "";
-  return value;
+  let overlap = Math.min(previous.length, value.length);
+  while (overlap > 0 && !previous.endsWith(value.slice(0, overlap))) overlap--;
+  return overlap > 0 ? value.slice(overlap) : value;
 }
 function completion(model: string, content: string, reasoning?: string) { return { id: `chatcmpl-${crypto.randomUUID()}`, object: "chat.completion", created: Math.floor(Date.now() / 1000), model, choices: [{ index: 0, message: { role: "assistant", content, ...(reasoning ? { reasoning_content: reasoning } : {}) }, logprobs: null, finish_reason: "stop" }] }; }
-function openAIStream(model: string, source: Response, signal?: AbortSignal) { const encoder = new TextEncoder(); const id = `chatcmpl-${crypto.randomUUID()}`; const created = Math.floor(Date.now() / 1000); let cancelled = false; return new Response(new ReadableStream({ async start(controller) { const send = (delta: any, finish_reason: string | null = null) => { if (!cancelled) controller.enqueue(encoder.encode(`data: ${JSON.stringify({ id, object: "chat.completion.chunk", created, model, choices: [{ index: 0, delta, finish_reason }] })}\n\n`)); }; send({ role: "assistant", content: "" }); let content = ""; let reasoning = ""; try { for await (const event of conolEvents(source)) { if (event.content) { const delta = incremental(event.content, content); content += delta; if (delta) send({ content: delta }); } if (event.reasoning) { const delta = incremental(event.reasoning, reasoning); reasoning += delta; if (delta) send({ reasoning_content: delta }); } if (event.done) break; } if (!cancelled) { send({}, "stop"); controller.enqueue(encoder.encode("data: [DONE]\n\n")); controller.close(); } } catch (error) { if (!cancelled) { controller.enqueue(encoder.encode(`data: ${JSON.stringify({ error: { message: error instanceof Error ? error.message : "Conol stream failed" } })}\n\n`)); controller.enqueue(encoder.encode("data: [DONE]\n\n")); controller.close(); } } }, cancel() { cancelled = true; void source.body?.cancel(); signal?.throwIfAborted?.(); } }), { headers: { "Content-Type": "text/event-stream; charset=utf-8", "Cache-Control": "no-cache, no-transform", Connection: "keep-alive", "X-Accel-Buffering": "no" } }); }
+function openAIStream(model: string, source: Response, signal?: AbortSignal, onComplete?: (content: string) => void) { const encoder = new TextEncoder(); const id = `chatcmpl-${crypto.randomUUID()}`; const created = Math.floor(Date.now() / 1000); let cancelled = false; return new Response(new ReadableStream({ async start(controller) { const send = (delta: any, finish_reason: string | null = null) => { if (!cancelled) controller.enqueue(encoder.encode(`data: ${JSON.stringify({ id, object: "chat.completion.chunk", created, model, choices: [{ index: 0, delta, finish_reason }] })}\n\n`)); }; send({ role: "assistant", content: "" }); let content = ""; let reasoning = ""; try { for await (const event of conolEvents(source)) { if (event.content) { const delta = incremental(event.content, content); content += delta; if (delta) send({ content: delta }); } if (event.reasoning) { const delta = incremental(event.reasoning, reasoning); reasoning += delta; if (delta) send({ reasoning_content: delta }); } if (event.done) break; } if (!cancelled) { onComplete?.(content); send({}, "stop"); controller.enqueue(encoder.encode("data: [DONE]\n\n")); controller.close(); } } catch (error) { if (!cancelled) { controller.enqueue(encoder.encode(`data: ${JSON.stringify({ error: { message: error instanceof Error ? error.message : "Conol stream failed" } })}\n\n`)); controller.enqueue(encoder.encode("data: [DONE]\n\n")); controller.close(); } } }, cancel() { cancelled = true; void source.body?.cancel(); signal?.throwIfAborted?.(); } }), { headers: { "Content-Type": "text/event-stream; charset=utf-8", "Cache-Control": "no-cache, no-transform", Connection: "keep-alive", "X-Accel-Buffering": "no" } }); }
 
 export async function conolResponses(body: any, model: string | ConolModelMetadata, credential: ConolCredential, endpoint?: string, signal?: AbortSignal): Promise<Response | ReturnType<typeof completion>> {
   const upstream = baseUrl(endpoint); const metadata = typeof model === "string" ? { agentModel: model } : model; const requestedModel = typeof model === "string" ? model : model.agentModel ?? model.modelPreset ?? "conol-default"; const messages: ChatMessage[] = Array.isArray(body.messages) ? body.messages : []; const user = [...messages].reverse().find((item) => item.role === "user"); const text = conolContent(user?.content); if (!text) throw new Error("Conol requires a user text message"); const timezone = timezoneOf(body); const timeout = Number(body.timeout_ms) || 15 * 60_000;
-  const sessionPayload = { source: { type: "home" }, messages: [{ type: "text", content: "" }], timezone };
-  const created = await request(`${upstream}/api/sessions`, credential, { method: "POST", body: JSON.stringify(sessionPayload) }, timeout, signal); const session = await created.json().catch(() => null); if (!session?.sessionId) throw new Error("Conol session response missing sessionId");
-  const current = session.effectiveModel;
-  const changes = metadata.agentModel
-    ? { agentModel: metadata.agentModel }
-    : metadata.modelPreset
-      ? { modelPreset: metadata.modelPreset }
-      : {};
-  if (Object.keys(changes).length && current !== requestedModel)
-    await request(`${upstream}/api/sessions/${encodeURIComponent(session.sessionId)}/model`, credential, { method: "POST", body: JSON.stringify(changes) }, timeout, signal);
-  await request(`${upstream}/api/sessions/${encodeURIComponent(session.sessionId)}/messages`, credential, { method: "POST", body: JSON.stringify({ messages: [{ type: "text", content: text }], timezone }) }, timeout, signal);
-  const stream = await request(`${upstream}/api/sessions/${encodeURIComponent(session.sessionId)}/messages?logDeltas=1&acct=${encodeURIComponent(parseConolCredential(credential).accountId)}`, credential, { method: "GET", headers: { Accept: "text/event-stream, application/x-ndjson" } }, timeout, signal);
-  if (body.stream) return openAIStream(requestedModel, stream, signal); let content = ""; let reasoning = ""; for await (const event of conolEvents(stream)) { if (event.content) content += incremental(event.content, content); if (event.reasoning) reasoning += incremental(event.reasoning, reasoning); if (event.done) break; } return completion(requestedModel, content, reasoning);
+  const sessionId = findSession(credential.id, messages, model, timezone);
+  let activeSessionId = sessionId;
+  let stream: Response | undefined;
+  if (sessionId) {
+    const continuation = await request(`${upstream}/api/sessions/${encodeURIComponent(sessionId)}/messages`, credential, { method: "POST", headers: { Accept: "text/event-stream, application/x-ndjson" }, body: JSON.stringify({ messages: [{ type: "text", content: text }], timezone }) }, timeout, signal);
+    if ((continuation.headers.get("content-type") || "").includes("text/event-stream")) stream = continuation;
+  } else {
+    const sessionPayload = { source: { type: "home" }, messages: [{ type: "text", content: text }], timezone };
+    const created = await request(`${upstream}/api/sessions`, credential, { method: "POST", body: JSON.stringify(sessionPayload) }, timeout, signal); const session = await created.json().catch(() => null); if (!session?.sessionId) throw new Error("Conol session response missing sessionId");
+    activeSessionId = String(session.sessionId);
+    const current = session.effectiveModel;
+    const changes = metadata.agentModel ? { agentModel: metadata.agentModel } : metadata.modelPreset ? { modelPreset: metadata.modelPreset } : {};
+    if (Object.keys(changes).length && current !== requestedModel)
+      await request(`${upstream}/api/sessions/${encodeURIComponent(activeSessionId)}/model`, credential, { method: "POST", body: JSON.stringify(changes) }, timeout, signal);
+  }
+  if (!activeSessionId) throw new Error("Conol session response missing sessionId");
+  if (!stream) stream = await request(`${upstream}/api/sessions/${encodeURIComponent(activeSessionId)}/messages?logDeltas=1&acct=${encodeURIComponent(parseConolCredential(credential).accountId)}`, credential, { method: "GET", headers: { Accept: "text/event-stream, application/x-ndjson" } }, timeout, signal);
+  if (body.stream) return openAIStream(requestedModel, stream, signal, (content) => saveSession(credential.id, activeSessionId!, messages, content, model, timezone));
+  let content = ""; let reasoning = ""; for await (const event of conolEvents(stream)) { if (event.content) content += incremental(event.content, content); if (event.reasoning) reasoning += incremental(event.reasoning, reasoning); if (event.done) break; } saveSession(credential.id, activeSessionId, messages, content, model, timezone); return completion(requestedModel, content, reasoning);
 }
 
 export async function conolValidate(credential: ConolCredential, endpoint?: string) { const response = await request(`${baseUrl(endpoint)}/api/sessions`, credential, { method: "POST", body: JSON.stringify({ source: { type: "home" }, messages: [{ type: "text", content: "Say 'ok' and nothing else." }], timezone: DEFAULT_TIMEZONE }) }, 30_000); const data = await response.json().catch(() => null); return { authenticated: true, status: "ok", session_id: data?.sessionId ?? null, model: data?.effectiveModel ?? null }; }

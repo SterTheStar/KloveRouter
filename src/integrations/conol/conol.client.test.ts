@@ -23,22 +23,21 @@ describe("Conol client", () => {
     globalThis.fetch = (async (input, init) => {
       calls.push({ url: String(input), init });
       if (calls.length === 1) return Response.json({ sessionId: "s1", effectiveModel: "other" });
-      if (calls.length === 2 || calls.length === 3) return Response.json({ ok: true });
+      if (calls.length === 2) return Response.json({ ok: true });
       return stream(['data: {"type":"history_delta","stages":[{"preview":[{"type":"message","content":[{"text":"hi"}]}]}]}\r\n', '\r\n', 'data: {"type":"done"}\n\n']);
     }) as typeof fetch;
     const result = await conolResponses({ messages: [{ role: "user", content: "hello" }], stream: false, timezone: "America/Sao_Paulo" }, "agent-x", credential, "https://conol.test");
     expect(result).toMatchObject({ object: "chat.completion", choices: [{ message: { content: "hi" } }] });
-    expect(calls.map((call) => call.url)).toEqual(["https://conol.test/api/sessions", "https://conol.test/api/sessions/s1/model", "https://conol.test/api/sessions/s1/messages", "https://conol.test/api/sessions/s1/messages?logDeltas=1&acct=acct-1"]);
+    expect(calls.map((call) => call.url)).toEqual(["https://conol.test/api/sessions", "https://conol.test/api/sessions/s1/model", "https://conol.test/api/sessions/s1/messages?logDeltas=1&acct=acct-1"]);
     expect(new Headers(calls[0].init?.headers).get("cookie")).toBe("sid=secret-cookie");
     expect(new Headers(calls[0].init?.headers).get("x-conol-account")).toBe("acct-1");
-    expect(JSON.parse(String(calls[0].init?.body))).toMatchObject({ source: { type: "home" }, messages: [{ type: "text", content: "" }], timezone: "America/Sao_Paulo" });
-    expect(JSON.parse(String(calls[2].init?.body))).toMatchObject({ messages: [{ type: "text", content: "hello" }], timezone: "America/Sao_Paulo" });
+    expect(JSON.parse(String(calls[0].init?.body))).toMatchObject({ source: { type: "home" }, messages: [{ type: "text", content: "hello" }], timezone: "America/Sao_Paulo" });
   });
   it("deduplicates cumulative reasoning and content in stream", async () => {
+    let fetches = 0;
     globalThis.fetch = (async (_input, _init) => {
-      const n = (globalThis as any).__conolTestFetches = ((globalThis as any).__conolTestFetches ?? 0) + 1;
+      const n = ++fetches;
       if (n === 1) return Response.json({ sessionId: "s1", effectiveModel: "m" });
-      if (n === 2) return Response.json({ ok: true });
       return stream(['{"type":"history_delta","stages":[{"preview":[{"type":"thinking","content":[{"text":"think"}]},{"type":"message","content":[{"text":"A"}]}]}]}\n', '{"type":"history_delta","stages":[{"preview":[{"type":"thinking","content":[{"text":"think more"}]},{"type":"message","content":[{"text":"AB"}]}]}]}\n', '{"type":"done"}']);
     }) as typeof fetch;
     const response = await conolResponses({ messages: [{ role: "user", content: "x" }], stream: true }, "m", credential);
@@ -47,6 +46,23 @@ describe("Conol client", () => {
     expect(text).toContain('"content":"B"');
     expect(text).toContain('"reasoning_content":"think"');
     expect(text).toContain('"reasoning_content":" more"');
+  });
+  it("removes overlapping text when cumulative snapshots shift", async () => {
+    let fetches = 0;
+    globalThis.fetch = (async (_input, _init) => {
+      const n = ++fetches;
+      if (n === 1) return Response.json({ sessionId: "s1", effectiveModel: "m" });
+      return stream([
+        '{"type":"history_delta","stages":[{"preview":[{"type":"message","content":[{"text":"olá, Andressa"}]}]}]}\n',
+        '{"type":"history_delta","stages":[{"preview":[{"type":"message","content":[{"text":"Andressa! Tudo bem?"}]}]}]}\n',
+        '{"type":"done"}',
+      ]);
+    }) as typeof fetch;
+    const response = await conolResponses({ messages: [{ role: "user", content: "x" }], stream: true }, "m", credential);
+    const text = await (response as Response).text();
+    expect(text).toContain('"content":"olá, Andressa"');
+    expect(text).toContain('"content":"! Tudo bem?"');
+    expect(text).not.toContain('"content":"Andressa! Tudo bem?"');
   });
   it("decodes dynamic model IDs back to upstream metadata", () => {
     expect(conolModelMetadataFromId("conol:srv:agent:model:model-a")).toEqual({ agentServerId: "srv", agentName: "agent", agentModel: "model-a" });
@@ -81,11 +97,10 @@ describe("Conol client", () => {
   });
   it("sends the selected model through the documented model endpoint", async () => {
     const bodies: any[] = [];
-    globalThis.fetch = (async (_input, init) => { bodies.push(JSON.parse(String(init?.body ?? "{}"))); if (bodies.length === 1) return Response.json({ sessionId: "s", effectiveModel: "other" }); if (bodies.length < 3) return Response.json({ ok: true }); return stream(['{"type":"done"}']); }) as typeof fetch;
+    globalThis.fetch = (async (_input, init) => { bodies.push(JSON.parse(String(init?.body ?? "{}"))); if (bodies.length === 1) return Response.json({ sessionId: "s", effectiveModel: "other" }); if (bodies.length === 2) return Response.json({ ok: true }); return stream(['{"type":"done"}']); }) as typeof fetch;
     await conolResponses({ messages: [{ role: "user", content: "hello" }] }, { agentModel: "deepseek/deepseek-v4-flash-0731" }, credential, "https://conol.payload");
-    expect(bodies[0]).toMatchObject({ source: { type: "home" }, messages: [{ type: "text", content: "" }], timezone: "UTC" });
+    expect(bodies[0]).toMatchObject({ source: { type: "home" }, messages: [{ type: "text", content: "hello" }], timezone: "UTC" });
     expect(bodies[0]).not.toHaveProperty("agentModel");
     expect(bodies[1]).toEqual({ agentModel: "deepseek/deepseek-v4-flash-0731" });
-    expect(bodies[2]).toMatchObject({ messages: [{ type: "text", content: "hello" }], timezone: "UTC" });
   });
 });

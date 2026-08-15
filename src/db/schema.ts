@@ -95,6 +95,22 @@ export function initSchema(db: Database): void {
       FOREIGN KEY (credential_id) REFERENCES provider_credentials(id) ON DELETE CASCADE
     );
 
+    CREATE TABLE IF NOT EXISTS conol_sessions (
+      credential_id TEXT NOT NULL,
+      session_id TEXT NOT NULL,
+      messages TEXT NOT NULL DEFAULT '[]',
+      model TEXT NOT NULL DEFAULT '',
+      agent_server_id TEXT NOT NULL DEFAULT '',
+      agent_name TEXT NOT NULL DEFAULT '',
+      model_preset TEXT NOT NULL DEFAULT '',
+      agent_model TEXT NOT NULL DEFAULT '',
+      timezone TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      PRIMARY KEY (credential_id, session_id),
+      FOREIGN KEY (credential_id) REFERENCES provider_credentials(id) ON DELETE CASCADE
+    );
+
     CREATE TABLE IF NOT EXISTS api_keys (
       id          TEXT PRIMARY KEY,
       name        TEXT NOT NULL,
