@@ -67,6 +67,18 @@ const openAiCompatiblePresets = [
   ["mistral", "Mistral", "https://api.mistral.ai/v1"],
   ["nvidia-nim", "NVIDIA NIM", "https://integrate.api.nvidia.com/v1"],
   ["openrouter", "OpenRouter", "https://openrouter.ai/api/v1"],
+  ["perplexity", "Perplexity", "https://api.perplexity.ai"],
+  ["lambda-ai", "Lambda AI", "https://api.lambdal.ai/v1"],
+  ["chutes", "Chutes", "https://llm.chutes.ai/v1"],
+  ["scaleway", "Scaleway", "https://api.scaleway.ai/v1"],
+  ["ovhcloud-ai", "OVHcloud AI", "https://oai.endpoints.kepler.ai.cloud.ovh.net/v1"],
+  ["lm-studio", "LM Studio", "http://localhost:1234/v1"],
+  ["vllm", "vLLM", "http://localhost:8000/v1"],
+  ["tokenrouter", "TokenRouter", "https://api.tokenrouter.com/v1"],
+  ["tokenharbor", "TokenHarbor", "https://tokenharbor.ai/v1"],
+  ["hcnsec", "HCNSEC", "https://api.hcnsec.cn/v1"],
+  ["inferx", "InferX", "https://model.inferx.net/endpoints/v1"],
+  ["xkiro", "Xkiro", "https://api.xkiro.com/v1"],
   ["together-ai", "Together AI", "https://api.together.xyz/v1"],
   ["fireworks-ai", "Fireworks AI", "https://api.fireworks.ai/inference/v1"],
   ["groq", "Groq", "https://api.groq.com/openai/v1"],
@@ -179,6 +191,30 @@ const providerDescriptions: Record<string, string> = {
     "NVIDIA-hosted NIM endpoints for production inference across language and multimodal models.",
   openrouter:
     "A unified gateway that routes requests across many model providers and open models.",
+  perplexity:
+    "Perplexity's API for web-grounded search and language model responses.",
+  "lambda-ai":
+    "Lambda AI's hosted inference API for open and commercial language models.",
+  chutes:
+    "Chutes' OpenAI-compatible serverless inference for open models.",
+  scaleway:
+    "Scaleway AI's hosted inference API for open-source language models.",
+  "ovhcloud-ai":
+    "OVHcloud AI Endpoints for managed open-source model inference.",
+  "lm-studio":
+    "Local LM Studio server with an OpenAI-compatible API.",
+  vllm:
+    "Local vLLM server exposing an OpenAI-compatible inference API.",
+  tokenrouter:
+    "An OpenAI-compatible gateway for routing requests to supported language models.",
+  tokenharbor:
+    "An OpenAI-compatible model gateway for accessing hosted language models.",
+  hcnsec:
+    "An OpenAI-compatible inference endpoint for supported language models.",
+  inferx:
+    "An OpenAI-compatible inference endpoint for hosted language models.",
+  xkiro:
+    "An OpenAI-compatible gateway for accessing supported language models.",
   "together-ai":
     "Fast hosted inference for open models, with support for chat, vision, reasoning, and fine-tuning.",
   "fireworks-ai":
