@@ -463,6 +463,7 @@ export default function ChatPage({
               <ChatMessageView
                 key={message.id}
                 message={message}
+                model={message.stats?.model ? modelList.find((model) => modelApiId(model.provider_name, model.model_id, model.pretty_id) === message.stats?.model) : undefined}
                 modelName={message.stats?.model ? modelList.find((model) => modelApiId(model.provider_name, model.model_id, model.pretty_id) === message.stats?.model)?.display_name ?? undefined : undefined}
                 streaming={streaming && message.id === messages.at(-1)?.id}
               />

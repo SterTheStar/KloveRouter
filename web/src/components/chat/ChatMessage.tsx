@@ -6,7 +6,31 @@ import {
   RiFileCopyLine as CopyLine,
   RiCheckLine as CheckLine,
 } from "@remixicon/react";
-import type { ChatMessage } from "../../types";
+import type { ChatMessage, ModelWithProvider } from "../../types";
+
+function formatModelNumber(value: number | null) {
+  return value == null ? "—" : new Intl.NumberFormat().format(value);
+}
+
+function ModelTooltip({ model }: { model: ModelWithProvider }) {
+  const capabilities = Object.entries(model.capabilities)
+    .filter(([, enabled]) => enabled === true)
+    .map(([name]) => name)
+    .join(", ");
+
+  return (
+    <TooltipContent className="flex max-w-sm flex-col items-start gap-1">
+      <span className="font-semibold">{model.display_name || model.model_id}</span>
+      <span>Provider: {model.provider_name}</span>
+      <span className="break-all">Model ID: {model.model_id}</span>
+      {model.pretty_id && <span className="break-all">Public ID: {model.pretty_id}</span>}
+      <span>Context: {formatModelNumber(model.context_window)} tokens</span>
+      <span>Max output: {formatModelNumber(model.max_output_tokens)} tokens</span>
+      <span>Capabilities: {capabilities || "—"}</span>
+      <span className="break-all text-muted-foreground">Record ID: {model.id}</span>
+    </TooltipContent>
+  );
+}
 
 function UserAttachments({
   attachments,
@@ -46,10 +70,12 @@ function ChatStatsFooter({
   stats,
   content,
   modelName,
+  model,
 }: {
   stats: NonNullable<ChatMessage["stats"]>;
   content: string;
   modelName?: string;
+  model?: ModelWithProvider;
 }) {
   const [copied, setCopied] = useState(false);
 
@@ -65,7 +91,16 @@ function ChatStatsFooter({
 
   return (
     <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-      {stats.model && <span className="max-w-48 truncate font-mono" title={stats.model}>{modelName || stats.model}</span>}
+      {stats.model && (
+        <Tooltip>
+          <TooltipTrigger className="max-w-48 cursor-help truncate font-mono underline decoration-dotted underline-offset-2">
+            {modelName || stats.model}
+          </TooltipTrigger>
+          {model ? <ModelTooltip model={model} /> : (
+            <TooltipContent>Model ID: {stats.model}</TooltipContent>
+          )}
+        </Tooltip>
+      )}
       <span className="font-mono">
         {formatTokens(stats.completion_tokens)} out ·{" "}
         <Tooltip>
@@ -134,10 +169,12 @@ export default function ChatMessageView({
   message,
   streaming,
   modelName,
+  model,
 }: {
   message: ChatMessage;
   streaming?: boolean;
   modelName?: string;
+  model?: ModelWithProvider;
 }) {
   if (message.role === "user") {
     const text = Array.isArray(message.content)
@@ -182,7 +219,12 @@ export default function ChatMessageView({
         </div>
       ) : null}
       {message.stats && typeof message.content === "string" ? (
-        <ChatStatsFooter stats={message.stats} content={message.content} modelName={modelName} />
+        <ChatStatsFooter
+          stats={message.stats}
+          content={message.content}
+          modelName={modelName}
+          model={model}
+        />
       ) : null}
     </div>
   );
