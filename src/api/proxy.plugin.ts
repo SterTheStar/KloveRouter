@@ -43,6 +43,7 @@ import {
   validateModelRequest,
 } from "../services/request-validation";
 import { MultimodalRequestError } from "../services/multimodal";
+import { countMessages, countCompletion } from "../services/token-counter/token-counter";
 import { config } from "../config";
 import {
   chatCompletionToResponse,
@@ -368,6 +369,7 @@ export function recordSseUsageResponse(
   ) => void,
   start: number,
   onError?: (error: Error) => void,
+  estimate?: { messages?: unknown; model?: string; provider?: string },
 ) {
   const reader = response.body?.getReader();
   if (!reader) return response;
@@ -377,6 +379,7 @@ export function recordSseUsageResponse(
   let completionTokens = 0;
   let cacheRead = 0;
   let cacheWrite = 0;
+  let completionText = "";
   let recorded = false;
   let firstTokenAt: number | null = null;
   let streamError: Error | null = null;
@@ -386,6 +389,8 @@ export function recordSseUsageResponse(
   const record = () => {
     if (recorded) return;
     recorded = true;
+    if (!promptTokens && estimate?.messages) promptTokens = countMessages(estimate.messages, estimate);
+    if (!completionTokens && completionText) completionTokens = countCompletion(completionText, estimate);
     onUsage(
       promptTokens,
       completionTokens,
@@ -418,6 +423,13 @@ export function recordSseUsageResponse(
               cacheRead = Math.max(cacheRead, details.cacheRead);
               cacheWrite = Math.max(cacheWrite, details.cacheWrite);
             }
+            for (const choice of data.choices ?? []) {
+              const delta = choice?.delta;
+              if (typeof delta?.content === "string") completionText += delta.content;
+              if (typeof delta?.reasoning_content === "string") completionText += delta.reasoning_content;
+            }
+            if (typeof data.delta?.content === "string") completionText += data.delta.content;
+            if (typeof data.delta?.reasoning_content === "string") completionText += data.delta.reasoning_content;
             const semanticDelta = (data.choices ?? []).some((choice: any) => {
               const delta = choice?.delta;
               return Boolean(delta && (delta.content || delta.reasoning_content || delta.reasoning || delta.tool_calls?.length || delta.function_call?.arguments));
@@ -1235,19 +1247,21 @@ export const proxyPlugin = (app: Elysia) =>
                 }
                 const durationMs = Math.round(performance.now() - start);
                 const details = tokenDetails(completion.usage);
+                const promptTokens = Number(completion.usage?.prompt_tokens ?? completion.usage?.input_tokens ?? 0) || countMessages(body.messages, { model: parsed.modelId, provider: provider.name });
+                const completionTokens = Number(completion.usage?.completion_tokens ?? completion.usage?.output_tokens ?? 0) || countCompletion(completion.choices?.[0]?.message?.content ?? "", { model: parsed.modelId, provider: provider.name });
                 const usage = usageService.record(
                   provider.id,
                   modelRecord?.id ?? parsed.modelId,
                   parsed.modelId,
-                  completion.usage?.prompt_tokens ?? 0,
-                  completion.usage?.completion_tokens ?? 0,
+                  promptTokens,
+                  completionTokens,
                   durationMs,
                   durationMs,
                   details,
                 );
                 requestLogService.complete(requestLogId, {
-                  promptTokens: completion.usage?.prompt_tokens,
-                  completionTokens: completion.usage?.completion_tokens,
+                  promptTokens,
+                  completionTokens,
                   cacheRead: details.cacheRead,
                   cacheWrite: details.cacheWrite,
                   cost: usage.estimated_cost_usd,
@@ -1259,7 +1273,7 @@ export const proxyPlugin = (app: Elysia) =>
               return recordSseUsageResponse(cleanQwenStream(response), (promptTokens, completionTokens, durationMs, generationDurationMs, details) => {
                 const usage = usageService.record(provider.id, modelRecord?.id ?? parsed.modelId, parsed.modelId, promptTokens, completionTokens, durationMs, generationDurationMs, details);
                 requestLogService.complete(requestLogId, { promptTokens, completionTokens, cacheRead: details?.cacheRead, cacheWrite: details?.cacheWrite, cost: usage.estimated_cost_usd, durationMs });
-              }, start);
+              }, start, undefined, { messages: body.messages, model: parsed.modelId, provider: provider.name });
             } catch (error: any) {
               failures.push(error.message);
               credentialService.markError(credential.id, error.message);
@@ -1289,8 +1303,11 @@ export const proxyPlugin = (app: Elysia) =>
               if (!body.stream) {
                 const durationMs = Math.round(performance.now() - start);
                 const completion = result as any;
-                const usage = usageService.record(provider.id, modelRecord?.id ?? parsed.modelId, parsed.modelId, 0, 0, durationMs, durationMs, { cacheRead: 0, cacheWrite: 0 });
-                requestLogService.complete(requestLogId, { cost: usage.estimated_cost_usd, durationMs });
+                const promptTokens = countMessages(body.messages, { model: parsed.modelId, provider: provider.name });
+                const completionText = completion.choices?.[0]?.message?.content ?? "";
+                const completionTokens = countCompletion(completionText, { model: parsed.modelId, provider: provider.name });
+                const usage = usageService.record(provider.id, modelRecord?.id ?? parsed.modelId, parsed.modelId, promptTokens, completionTokens, durationMs, durationMs, { cacheRead: 0, cacheWrite: 0 });
+                requestLogService.complete(requestLogId, { promptTokens, completionTokens, cost: usage.estimated_cost_usd, durationMs });
                 credentialService.clearError(credentialId);
                 credentialService.clearCooldown(credentialId);
                 return completion;
@@ -1303,7 +1320,7 @@ export const proxyPlugin = (app: Elysia) =>
               }, start, (error) => {
                 credentialService.markError(credentialId, error.message);
                 requestLogService.complete(requestLogId, { status: "error", statusCode: 502, error: error.message });
-              });
+              }, { messages: body.messages, model: parsed.modelId, provider: provider.name });
             } catch (error: any) {
               failures.push(error.message);
               credentialService.markError(credential.id, error.message);

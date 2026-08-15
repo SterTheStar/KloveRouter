@@ -3,6 +3,7 @@ import { config } from "../config";
 import { keyService } from "../services/key.service";
 import { chatService } from "../services/chat.service";
 import { chatTitleService } from "../services/chat-title.service";
+import { countMessages, countCompletion } from "../services/token-counter/token-counter";
 
 const DONE_MARKER = "data: [DONE]\n\n";
 
@@ -18,6 +19,16 @@ function textFromContent(content: unknown): string {
     .map((part) => typeof part.text === "string" ? part.text : "")
     .join("\n")
     .trim();
+}
+
+function streamDelta(value: string, previous: string): string {
+  if (!value || value === previous) return "";
+  if (!previous || value.startsWith(previous)) return value.slice(previous.length);
+  if (previous.startsWith(value)) return "";
+  if (value.length < previous.length) return value;
+  let overlap = Math.min(previous.length, value.length);
+  while (overlap > 0 && !previous.endsWith(value.slice(0, overlap))) overlap--;
+  return overlap > 0 ? value.slice(overlap) : value;
 }
 
 /**
@@ -36,6 +47,7 @@ function textFromContent(content: unknown): string {
 function chatStatsStream(
   response: Response,
   model: string,
+  messages: unknown,
   chatId?: string,
   assistantMessageId?: string,
   titleGenerator?: (() => Promise<string>) | undefined,
@@ -85,7 +97,10 @@ function chatStatsStream(
   const emitStats = (controller: ReadableStreamDefaultController) => {
     if (statsEmitted) return;
     statsEmitted = true;
-    if (!sawUsage) completionTokens = Math.ceil(streamedChars / 4);
+    if (!sawUsage) {
+      promptTokens = countMessages(messages, { model });
+      completionTokens = countCompletion(assistantContent + assistantReasoning, { model });
+    }
     const durationMs = Math.round(performance.now() - start);
     const tps =
       durationMs > 0 && completionTokens > 0
@@ -156,12 +171,16 @@ function chatStatsStream(
     for (const choice of chunk?.choices ?? []) {
       const delta = choice?.delta;
       if (typeof delta?.content === "string") {
-        streamedChars += delta.content.length;
-        assistantContent += delta.content;
+        const contentDelta = streamDelta(delta.content, assistantContent);
+        streamedChars += contentDelta.length;
+        assistantContent += contentDelta;
+        if (contentDelta !== delta.content) delta.content = contentDelta;
       }
       if (typeof delta?.reasoning_content === "string") {
-        streamedChars += delta.reasoning_content.length;
-        assistantReasoning += delta.reasoning_content;
+        const reasoningDelta = streamDelta(delta.reasoning_content, assistantReasoning);
+        streamedChars += reasoningDelta.length;
+        assistantReasoning += reasoningDelta;
+        if (reasoningDelta !== delta.reasoning_content) delta.reasoning_content = reasoningDelta;
       }
     }
   };
@@ -341,7 +360,7 @@ export const chatPlugin = (app: Elysia) =>
         titleGenerator = () => chatTitleService.generate(titleMessage!, input.model);
       }
 
-      return chatStatsStream(response, input.model, chatId, assistantMessageId, titleGenerator);
+      return chatStatsStream(response, input.model, input.messages, chatId, assistantMessageId, titleGenerator);
     },
     {
       // Forward-compatible like the proxy: required fields are validated at
