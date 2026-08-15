@@ -5,8 +5,7 @@ import {
   RiStopLine as StopLine,
 } from "@remixicon/react";
 import { Button } from "@/components/ui/button";
-import ModelInput from "./ModelInput";
-import ReasoningInput from "./ReasoningInput";
+import ModelSettingsMenu from "./ModelSettingsMenu";
 import ContextUsageIndicator from "./ContextUsageIndicator";
 import type {
   ChatAttachmentPreview,
@@ -132,16 +131,13 @@ export default function ChatComposer({
               />
             </div>
             <div className="flex shrink-0 items-center gap-2">
-              <ModelInput
+              <ModelSettingsMenu
                 models={models}
-                value={selectedModel ?? ""}
-                onChange={onSelectModel}
-                disabled={streaming}
-              />
-              <ReasoningInput
-                efforts={reasoningEfforts}
-                value={selectedReasoningEffort}
-                onChange={onSelectReasoningEffort}
+                selectedModel={selectedModel}
+                onSelectModel={onSelectModel}
+                reasoningEfforts={reasoningEfforts}
+                selectedReasoningEffort={selectedReasoningEffort}
+                onSelectReasoningEffort={onSelectReasoningEffort}
                 disabled={streaming}
               />
               {streaming ? (
