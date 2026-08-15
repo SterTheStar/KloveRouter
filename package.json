@@ -12,11 +12,12 @@
     "postinstall": "cd web && bun install"
   },
   "dependencies": {
-    "elysia": "^1.2.0",
-    "@elysiajs/jwt": "^1.2.0",
     "@elysiajs/cors": "^1.2.0",
+    "@elysiajs/jwt": "^1.2.0",
     "@elysiajs/static": "^1.2.0",
-    "openai": "^4.0.0"
+    "elysia": "^1.2.0",
+    "openai": "^4.0.0",
+    "tiktoken": "^1.0.22"
   },
   "devDependencies": {
     "typescript": "^5.6.0",
