@@ -127,6 +127,7 @@ const openAiCompatiblePresets = [
   ["requesty", "Requesty", "https://router.requesty.ai/v1"],
   ["portkey", "Portkey AI Gateway", "https://api.portkey.ai/v1"],
   ["opencode", "OpenCode Zen", "https://opencode.ai/zen/v1"],
+  ["opencode-zen-go", "Opencode Go", "https://opencode.ai/zen/go/v1"],
   ["qwen-cloud", "Qwen Cloud (DashScope)", "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"],
 ] as const;
 
@@ -284,6 +285,8 @@ const providerDescriptions: Record<string, string> = {
     "An AI gateway for routing, observability, fallbacks, and governance across model providers.",
   opencode:
     "OpenCode Zen's curated gateway for accessing supported models through an OpenAI-compatible API.",
+  "opencode-zen-go":
+    "OpenCode Zen Go's OpenAI-compatible endpoint for supported models.",
   "qwen-cloud":
     "Alibaba Cloud's DashScope API for Qwen models, with official OpenAI-compatible endpoints for chat, vision, and reasoning models.",
 };
