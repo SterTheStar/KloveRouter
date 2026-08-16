@@ -22,13 +22,16 @@ import {
   rtkPlugin,
   chatPlugin,
   chatsPlugin,
+  setupPlugin,
 } from "./api";
+import { getSecuritySecrets } from "./services/security.service";
 import { initRtkOnStartup, rtkPublicPlugin } from "./plugins/rtk";
 import { cavemanPublicPlugin, cavemanPlugin } from "./plugins/caveman";
 import { customSkillsPlugin } from "./plugins/custom-skills";
 
-// Initialize database
-getDb();
+// Initialize database and resolve effective security secrets.
+const db = getDb();
+const { jwtSecret } = getSecuritySecrets(db);
 
 // Auto-start RTK if enabled in settings
 initRtkOnStartup();
@@ -55,11 +58,12 @@ const app = new Elysia()
   }))
   .use(
     jwt({
-      secret: config.jwtSecret,
+      secret: jwtSecret,
       name: "jwt",
     }),
   )
   // Public routes
+  .use(setupPlugin)
   .use(authPlugin)
   .use(codexPublicPlugin)
   .use(antigravityPublicPlugin)

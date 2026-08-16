@@ -525,12 +525,11 @@ export function initSchema(db: Database): void {
     "auto",
   );
 
-  // Seed default password if not exists
-  const existing = db
+  const existingPassword = db
     .query("SELECT value FROM settings WHERE key = ?")
     .get("panel_password") as { value: string } | undefined;
 
-  if (!existing) {
+  if (!existingPassword && config.defaultPassword) {
     const hash = Bun.password.hashSync(config.defaultPassword, {
       algorithm: "bcrypt",
       cost: 10,
@@ -538,6 +537,13 @@ export function initSchema(db: Database): void {
     db.query("INSERT INTO settings (key, value) VALUES (?, ?)").run(
       "panel_password",
       hash,
+    );
+  }
+
+  if (config.profileName) {
+    db.query("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)").run(
+      "profile_name",
+      config.profileName,
     );
   }
 }

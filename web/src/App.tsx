@@ -7,6 +7,7 @@ import ChatSidebar from "./components/ChatSidebar";
 import { chats as chatsApi } from "./api/client";
 import type { ChatSession } from "./types";
 import LoginPage from "./pages/LoginPage";
+import SetupPage from "./pages/SetupPage";
 import DashboardPage from "./pages/DashboardPage";
 import ProviderDetailPage from "./pages/ProviderDetailPage";
 import ApiKeysPage from "./pages/ApiKeysPage";
@@ -22,7 +23,7 @@ import { settings } from "./api/client";
 import type { UserProfile } from "./types";
 
 export default function App() {
-  const { isAuth, loading, error, login, logout } = useAuth();
+  const { isAuth, loading, error, needsSetup, completeSetup, login, logout } = useAuth();
   const [currentPage, setCurrentPage] = useState<Page>("dashboard");
   const [chatSessions, setChatSessions] = useState<ChatSession[]>([]);
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
@@ -119,8 +120,10 @@ export default function App() {
     );
   }
 
-  if (!isAuth)
+  if (!isAuth) {
+    if (needsSetup) return <SetupPage onComplete={completeSetup} />;
     return <LoginPage onLogin={login} error={error} loading={loading} />;
+  }
 
   const createChat = async () => {
     const chat = await chatsApi.create();

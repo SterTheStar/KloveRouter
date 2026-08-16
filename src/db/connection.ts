@@ -3,6 +3,7 @@ import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { config } from "../config";
 import { initSchema } from "./schema";
+import { initializeSecurity } from "../services/security.service";
 
 let db: Database | null = null;
 
@@ -14,6 +15,7 @@ export function getDb(): Database {
     db = new Database(config.dbPath);
     db.exec("PRAGMA journal_mode = WAL");
     db.exec("PRAGMA foreign_keys = ON");
+    initializeSecurity(db);
     initSchema(db);
   }
   return db;

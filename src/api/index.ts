@@ -16,6 +16,7 @@ import {
 } from "./codex.plugin";
 import { requestLogsPlugin } from "./request-logs.plugin";
 import { rtkPlugin } from "../plugins/rtk";
+import { setupPlugin } from "./setup.plugin";
 
 export {
   authPlugin,
@@ -34,4 +35,5 @@ export {
   rtkPlugin,
   chatPlugin,
   chatsPlugin,
+  setupPlugin,
 };

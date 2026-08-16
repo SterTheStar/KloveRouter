@@ -47,6 +47,15 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 }
 
 // Auth
+export const setup = {
+  status: () => request<{ needs_setup: boolean }>("/api/setup/status"),
+  complete: (data: { name: string; password: string; confirm_password: string }) =>
+    request<{ success: boolean; needs_setup: boolean }>("/api/setup", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+};
+
 export const auth = {
   login: (password: string) =>
     request<{ token: string }>("/api/auth/login", {

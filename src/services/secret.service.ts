@@ -4,16 +4,22 @@ import {
   createHash,
   randomBytes,
 } from "node:crypto";
-import { config } from "../config";
+import { getDb } from "../db/connection";
+import { getSecuritySecrets } from "./security.service";
 
-const key = createHash("sha256").update(config.encryptionKey).digest();
 const prefix = "enc:v1:";
+
+function getKey() {
+  return createHash("sha256")
+    .update(getSecuritySecrets(getDb()).encryptionKey)
+    .digest();
+}
 
 export function encryptSecret(value: string | null | undefined) {
   if (value == null) return null;
   if (value.startsWith(prefix)) return value;
   const iv = randomBytes(12);
-  const cipher = createCipheriv("aes-256-gcm", key, iv);
+  const cipher = createCipheriv("aes-256-gcm", getKey(), iv);
   const encrypted = Buffer.concat([
     cipher.update(value, "utf8"),
     cipher.final(),
@@ -28,7 +34,7 @@ export function decryptSecret(value: string | null | undefined) {
     const [iv, tag, data] = value.slice(prefix.length).split(".");
     const decipher = createDecipheriv(
       "aes-256-gcm",
-      key,
+      getKey(),
       Buffer.from(iv, "base64url"),
     );
     decipher.setAuthTag(Buffer.from(tag, "base64url"));
