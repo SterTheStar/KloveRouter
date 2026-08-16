@@ -37,7 +37,7 @@ export const config = {
   defaultPassword,
   isDev: !isProduction,
   encryptionKey,
-  jwtExpirationSeconds: 8 * 60 * 60,
+  jwtExpirationSeconds: 7 * 24 * 60 * 60,
   logLevel: process.env.LOG_LEVEL || "info",
   trustedProxyIps: new Set(
     (process.env.TRUSTED_PROXY_IPS || "")
