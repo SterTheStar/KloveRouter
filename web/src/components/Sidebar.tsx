@@ -8,6 +8,7 @@ import {
   RiPulseLine as PulseLine,
   RiFileList3Line as FileListLine,
   RiSettings4Line as Settings4Line,
+  RiCupLine as CupLine,
 } from "@remixicon/react";
 import { Button } from "@/components/ui/button";
 import DisplayAvatar from "./DisplayAvatar";
@@ -26,15 +27,20 @@ const items = [
 ];
 
 function BuyMeACoffeeButton() {
-  const srcDoc = `<!doctype html><html><head><meta charset="utf-8"><style>html,body{width:100%;height:50px;margin:0;background:transparent;overflow:hidden}body{display:flex;justify-content:center;align-items:center}</style></head><body><script type='text/javascript' src='https://storage.ko-fi.com/cdn/widget/Widget_2.js'></script><script type='text/javascript'>kofiwidget2.init('Support me on Ko-fi', '#ff5c38', 'V7V11EYI5U');kofiwidget2.draw();</script></body></html>`;
   return (
-    <div className="mb-3 flex h-[50px] w-full items-start justify-center overflow-hidden rounded-xl">
-      <iframe
-        title="Support me on Ko-fi"
-        className="block h-[50px] w-full shrink-0 rounded-xl border-0"
-        sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"
-        srcDoc={srcDoc}
-      />
+    <div className="mb-3 px-1">
+      <Button
+        render={<a href="https://ko-fi.com/V7V11EYI5U" target="_blank" rel="noreferrer" />}
+        variant="default"
+        className="kofi-button group relative h-10 w-full justify-center rounded-xl bg-[#ff5c38] px-3 text-white shadow-md shadow-[#ff5c38]/25 hover:bg-[#ff704f] hover:text-white"
+        aria-label="Support me on Ko-fi"
+      >
+        <span className="kofi-icon-wrap" aria-hidden="true">
+          <CupLine className="kofi-icon size-6" />
+          <span className="kofi-steam" />
+        </span>
+        <span className="text-sm font-semibold">Support me on Ko-fi</span>
+      </Button>
     </div>
   );
 }

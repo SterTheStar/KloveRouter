@@ -218,11 +218,118 @@
   }
 }
 
+.kofi-button {
+  transition: background-color 180ms ease, box-shadow 180ms ease;
+}
+
+.kofi-icon-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  flex-shrink: 0;
+  transition: transform 320ms ease;
+  animation: kofi-cup-sway 4.8s ease-in-out infinite;
+}
+
+.kofi-button:hover .kofi-icon-wrap {
+  animation-play-state: paused;
+  transform: rotate(-5deg);
+}
+
+.kofi-icon {
+  position: relative;
+  z-index: 1;
+}
+
+.kofi-steam {
+  position: absolute;
+  left: 0.84rem;
+  top: -0.2rem;
+  width: 0.62rem;
+  height: 1.1rem;
+  border-radius: 50%;
+  background: linear-gradient(90deg, transparent 0%, currentColor 42%, transparent 100%);
+  filter: blur(3px);
+  opacity: 0;
+  transform-origin: bottom center;
+  animation: kofi-steam-flow 3.8s cubic-bezier(0.35, 0, 0.25, 1) infinite;
+}
+
+.kofi-steam::before,
+.kofi-steam::after {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: inherit;
+  content: "";
+}
+
+.kofi-steam::before {
+  transform: translateX(-0.18rem) scaleX(0.7);
+  opacity: 0.65;
+}
+
+.kofi-steam::after {
+  transform: translateX(0.16rem) scaleX(0.55) scaleY(0.8);
+  opacity: 0.45;
+}
+
+@keyframes kofi-cup-sway {
+  0%, 100% { transform: rotate(0deg); }
+  18% { transform: rotate(-5deg); }
+  42% { transform: rotate(3deg); }
+  68% { transform: rotate(-2deg); }
+}
+
+@keyframes kofi-cup-bob {
+  0%, 100% { transform: rotate(0deg) translateY(0); }
+  20% { transform: rotate(-6deg) translateY(-1px); }
+  44% { transform: rotate(4deg) translateY(0); }
+  70% { transform: rotate(-2deg) translateY(-0.5px); }
+}
+
+@keyframes kofi-steam-flow {
+  0% {
+    opacity: 0;
+    transform: translate(0.02rem, 0.12rem) scale(0.45, 0.58) rotate(-4deg);
+  }
+  18% {
+    opacity: 0.48;
+    transform: translate(-0.04rem, -0.04rem) scale(0.7, 0.78) rotate(5deg);
+  }
+  42% {
+    opacity: 0.34;
+    transform: translate(0.1rem, -0.3rem) scale(0.95, 1) rotate(-6deg);
+  }
+  68% {
+    opacity: 0.2;
+    transform: translate(-0.12rem, -0.62rem) scale(1.18, 1.2) rotate(7deg);
+  }
+  86% {
+    opacity: 0.08;
+    transform: translate(0.14rem, -0.88rem) scale(1.4, 1.35) rotate(-4deg);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-0.08rem, -1.08rem) scale(1.65, 1.5) rotate(3deg);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .chat-sidebar-item,
-  .chat-title-generating {
+  .chat-title-generating,
+  .kofi-icon,
+  .kofi-icon-wrap,
+  .kofi-steam {
     animation: none;
     transition: none;
+  }
+
+  .kofi-steam {
+    display: none;
   }
 
   .chat-greeting-hello::after {
