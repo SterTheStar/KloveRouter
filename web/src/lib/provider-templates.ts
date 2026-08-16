@@ -38,6 +38,15 @@ import portkeyLogo from "../assets/providers/portkey.png";
 import opencodeLogo from "../assets/providers/opencode.png";
 import freebuffLogo from "../assets/providers/freebuff.png";
 import conolLogo from "../assets/providers/conol.png";
+import perplexityLogo from "../assets/providers/perplexity.ico";
+import lambdaAiLogo from "../assets/providers/lambda-ai.ico";
+import ovhcloudAiLogo from "../assets/providers/ovhcloud-ai.ico";
+import lmStudioLogo from "../assets/providers/lm-studio.ico";
+import vllmLogo from "../assets/providers/vllm.ico";
+import tokenharborLogo from "../assets/providers/tokenharbor.ico";
+import hcnsecLogo from "../assets/providers/hcnsec.ico";
+import inferxLogo from "../assets/providers/inferx.ico";
+import xkiroLogo from "../assets/providers/xkiro.ico";
 
 const chatgptLogo = "https://chatgpt.com/favicon.ico";
 
@@ -129,6 +138,15 @@ const presetLogos: Record<string, string> = {
   mistral: mistralLogo,
   "nvidia-nim": nvidiaLogo,
   openrouter: openRouterLogo,
+  perplexity: perplexityLogo,
+  "lambda-ai": lambdaAiLogo,
+  "ovhcloud-ai": ovhcloudAiLogo,
+  "lm-studio": lmStudioLogo,
+  vllm: vllmLogo,
+  tokenharbor: tokenharborLogo,
+  hcnsec: hcnsecLogo,
+  inferx: inferxLogo,
+  xkiro: xkiroLogo,
   "together-ai": togetherLogo,
   "fireworks-ai": fireworksLogo,
   groq: groqLogo,
