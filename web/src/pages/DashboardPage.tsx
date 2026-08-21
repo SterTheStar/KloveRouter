@@ -1,6 +1,8 @@
 import { useMemo, useState } from "react";
 import {
   RiAddLine as Plus,
+  RiArrowDownSLine as ChevronDown,
+  RiArrowRightSLine as ChevronRight,
   RiLoader4Line as LoaderCircle,
 } from "@remixicon/react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -31,9 +33,21 @@ function ProviderSection({
   onEdit: (id: string) => void;
   onDelete: (id: string) => void;
 }) {
+  const [collapsed, setCollapsed] = useState(false);
   return (
     <section aria-labelledby={`${title.toLowerCase()}-providers-heading`}>
-      <div className="mb-3 flex items-center gap-2">
+      <button
+        type="button"
+        className="mb-3 flex items-center gap-2 rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+        aria-expanded={!collapsed}
+        aria-controls={`${title.toLowerCase()}-providers-grid`}
+        onClick={() => setCollapsed((value) => !value)}
+      >
+        {collapsed ? (
+          <ChevronRight className="size-4 text-muted-foreground" />
+        ) : (
+          <ChevronDown className="size-4 text-muted-foreground" />
+        )}
         <h2
           id={`${title.toLowerCase()}-providers-heading`}
           className="font-heading text-lg font-semibold"
@@ -41,19 +55,24 @@ function ProviderSection({
           {title}
         </h2>
         <span className="text-sm text-muted-foreground">({count})</span>
-      </div>
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        {providers.map((provider) => (
-          <ProviderCard
-            key={provider.id}
-            provider={provider}
-            isToggling={togglingProviderId === provider.id}
-            onToggle={onToggle}
-            onEdit={onEdit}
-            onDelete={onDelete}
-          />
-        ))}
-      </div>
+      </button>
+      {!collapsed && (
+        <div
+          id={`${title.toLowerCase()}-providers-grid`}
+          className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3"
+        >
+          {providers.map((provider) => (
+            <ProviderCard
+              key={provider.id}
+              provider={provider}
+              isToggling={togglingProviderId === provider.id}
+              onToggle={onToggle}
+              onEdit={onEdit}
+              onDelete={onDelete}
+            />
+          ))}
+        </div>
+      )}
     </section>
   );
 }
