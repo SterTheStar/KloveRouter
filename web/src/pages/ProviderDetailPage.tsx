@@ -65,6 +65,7 @@ import DisplayAvatar from "../components/DisplayAvatar";
 import AddModelModal from "../components/AddModelModal";
 import EditModelModal from "../components/EditModelModal";
 import ConfirmDialog from "../components/ConfirmDialog";
+import SyncModelsModal, { type SyncModelItem } from "../components/SyncModelsModal";
 import {
   antigravity,
   codex,
@@ -130,14 +131,7 @@ export default function ProviderDetailPage({
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [syncOpen, setSyncOpen] = useState(false);
-  const [syncPreview, setSyncPreview] = useState<{
-    models_found: number;
-    existing_models: number;
-    models_to_add: number;
-    free_models_found: number;
-    free_existing_models: number;
-    free_models_to_add: number;
-  } | null>(null);
+  const [syncItems, setSyncItems] = useState<SyncModelItem[]>([]);
   const [saving, setSaving] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<Model | null>(null);
@@ -314,14 +308,7 @@ export default function ProviderDetailPage({
     setSyncing(true);
     try {
       const result = await modelsApi.sync(providerId, { preview: true });
-      setSyncPreview({
-        models_found: result.models_found,
-        existing_models: result.existing_models ?? 0,
-        models_to_add: result.models_to_add ?? 0,
-        free_models_found: result.free_models_found ?? 0,
-        free_existing_models: result.free_existing_models ?? 0,
-        free_models_to_add: result.free_models_to_add ?? 0,
-      });
+      setSyncItems(result.items ?? result.models ?? []);
       setSyncOpen(true);
     } catch (e: any) {
       setError(e.message);
@@ -331,17 +318,13 @@ export default function ProviderDetailPage({
     }
   };
 
-  const sync = async (freeOnly = false, existingOnly = false) => {
+  const sync = async (modelIds: string[], freeOnly: boolean, resetExisting: boolean) => {
     setSyncing(true);
     try {
-      const result = await modelsApi.sync(providerId, {
-        freeOnly,
-        existingOnly,
-        resetExisting: existingOnly,
-      });
+      const result = await modelsApi.sync(providerId, { modelIds, freeOnly, resetExisting });
       await load();
       setSyncOpen(false);
-      setSyncPreview(null);
+      setSyncItems([]);
       setSuccess(result.message || "Models synchronized successfully.");
     } catch (e: any) {
       setError(e.message);
@@ -1338,60 +1321,13 @@ export default function ProviderDetailPage({
           </>
         )}
       </Card>
-      <Dialog open={syncOpen} onOpenChange={setSyncOpen}>
-        <DialogContent className="sm:max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Synchronize provider models</DialogTitle>
-            <DialogDescription>
-              Review the available models before updating this provider.
-              Existing models will be refreshed and new models will be added.
-            </DialogDescription>
-          </DialogHeader>
-          {syncPreview && (
-            <p className="text-sm text-muted-foreground">
-              <strong className="font-semibold text-foreground">
-                {syncPreview.models_found}
-              </strong>{" "}
-              models found, including <strong className="font-semibold text-foreground">
-                {syncPreview.models_to_add}
-              </strong>{" "}
-              new and <strong className="font-semibold text-foreground">
-                {syncPreview.existing_models}
-              </strong>{" "}
-              already configured; <strong className="font-semibold text-foreground">
-                {syncPreview.free_models_found}
-              </strong>{" "}
-              are free, including <strong className="font-semibold text-foreground">
-                {syncPreview.free_models_to_add}
-              </strong>{" "}
-              new.
-            </p>
-          )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setSyncOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              variant="secondary"
-              onClick={() => sync(true)}
-              disabled={syncing}
-            >
-              Sync free models ({syncPreview?.free_models_to_add ?? 0} new)
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => sync(false, true)}
-              disabled={syncing || !syncPreview?.existing_models}
-              title="Replace metadata for configured models without adding new models"
-            >
-              {syncing ? "Updating..." : `Reset existing (${syncPreview?.existing_models ?? 0})`}
-            </Button>
-            <Button onClick={() => sync(false)} disabled={syncing}>
-              {syncing ? "Synchronizing..." : "Sync all models"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <SyncModelsModal
+        open={syncOpen}
+        items={syncItems}
+        loading={syncing}
+        onOpenChange={setSyncOpen}
+        onSync={sync}
+      />
       <Dialog
         open={logoutOpen}
         onOpenChange={(open) => {
