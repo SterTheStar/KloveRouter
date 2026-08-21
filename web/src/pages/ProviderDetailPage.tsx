@@ -81,6 +81,7 @@ import type {
 import { copyToClipboard } from "../lib/clipboard";
 import { useToast } from "../components/ui/toast";
 import { modelDisplayId, modelPublicId } from "../lib/model-id";
+import { queryCache, queryKeys, invalidateModels, invalidateProviders } from "../lib/query-cache";
 
 const metadataCapabilityLabels: Record<keyof ModelCapabilities, string> = {
   reasoning: "Reasoning",
@@ -240,8 +241,8 @@ export default function ProviderDetailPage({
     try {
       setLoading(true);
       const [current, models, providerCredentials] = await Promise.all([
-        providers.get(providerId),
-        modelsApi.listByProvider(providerId),
+        queryCache.getOrFetch(queryKeys.provider(providerId), 30_000, () => providers.get(providerId)),
+        queryCache.getOrFetch(queryKeys.modelsByProvider(providerId), 30_000, () => modelsApi.listByProvider(providerId)),
         providers.credentials(providerId),
       ]);
       const account =
@@ -322,6 +323,8 @@ export default function ProviderDetailPage({
     setSyncing(true);
     try {
       const result = await modelsApi.sync(providerId, { modelIds, freeOnly, resetExisting });
+      invalidateModels(providerId);
+      invalidateProviders(providerId);
       await load();
       setSyncOpen(false);
       setSyncItems([]);
@@ -357,7 +360,9 @@ export default function ProviderDetailPage({
             `${protocol === "antigravity" ? "Google Antigravity" : "Codex"} account connected.`,
           );
           notifySuccess("Account connected");
-          await load();
+          invalidateModels(providerId);
+      invalidateProviders(providerId);
+      await load();
         } else if (Date.now() - started > 5 * 60_000) {
           clearOAuthPoll();
           setCredentialAction(false);
@@ -434,6 +439,8 @@ export default function ProviderDetailPage({
         `${manualOAuth.protocol === "codex" ? "Codex" : "Google Antigravity"} account connected.`,
       );
       notifySuccess("Account connected");
+      invalidateModels(providerId);
+      invalidateProviders(providerId);
       await load();
     } catch (e: any) {
       try {
@@ -450,7 +457,9 @@ export default function ProviderDetailPage({
           setManualOAuth(null);
           setCallbackUrl("");
           setCredentialAction(false);
-          await load();
+          invalidateModels(providerId);
+      invalidateProviders(providerId);
+      await load();
           return;
         }
       } catch {
@@ -515,6 +524,8 @@ export default function ProviderDetailPage({
       setLogoutOpen(false);
       setLogoutCredentialId(null);
       setSuccess("Codex account disconnected. The account was kept.");
+      invalidateModels(providerId);
+      invalidateProviders(providerId);
       await load();
     } catch (e: any) {
       setError(e.message);
@@ -579,6 +590,8 @@ export default function ProviderDetailPage({
       if (newKeySecretRef.current) newKeySecretRef.current.value = "";
       setShowAddKey(false);
       setSuccess("API key added.");
+      invalidateModels(providerId);
+      invalidateProviders(providerId);
       await load();
     } catch (e: any) {
       setError(e.message);
@@ -611,6 +624,8 @@ export default function ProviderDetailPage({
       if (newAccountIdRef.current) newAccountIdRef.current.value = "";
       setShowAddKey(false);
       setSuccess(provider.protocol === "chatgpt" ? "ChatGPT session credential added." : provider.protocol === "atomesus" ? "Atomesus token added." : provider.protocol === "qwen" ? "Qwen auth code added." : provider.protocol === "conol" ? "Conol credential added." : "Freebuff auth code added.");
+      invalidateModels(providerId);
+      invalidateProviders(providerId);
       await load();
     } catch (e: any) {
       setError(e.message);
@@ -624,6 +639,8 @@ export default function ProviderDetailPage({
     try {
       await providers.removeCredential(providerId, credentialId);
       setSuccess("API key removed.");
+      invalidateModels(providerId);
+      invalidateProviders(providerId);
       await load();
     } catch (e: any) {
       setError(e.message);
@@ -636,6 +653,8 @@ export default function ProviderDetailPage({
       await providers.updateCredential(providerId, credential.id, {
         is_active: credential.is_active ? 0 : 1,
       });
+      invalidateModels(providerId);
+      invalidateProviders(providerId);
       await load();
     } catch (e: any) {
       setError(e.message);
@@ -669,6 +688,8 @@ export default function ProviderDetailPage({
         ...(secret ? { secret } : {}),
       });
       cancelCredentialEdit(credential);
+      invalidateModels(providerId);
+      invalidateProviders(providerId);
       await load();
       notifySuccess("Credential updated");
     } catch (e: any) {
@@ -1238,6 +1259,8 @@ export default function ProviderDetailPage({
                         checked={model.is_active === 1}
                         onCheckedChange={async () => {
                           const updated = await modelsApi.toggle(model.id);
+                          invalidateModels(providerId);
+                          queryCache.invalidate(queryKeys.modelsByProvider(providerId));
                           setList((items) =>
                             items.map((item) =>
                               item.id === model.id
@@ -1463,6 +1486,7 @@ export default function ProviderDetailPage({
         onConfirm={async () => {
           if (!deleteTarget) return;
           await modelsApi.remove(deleteTarget.id);
+          invalidateModels(providerId);
           setList((items) =>
             items.filter((item) => item.id !== deleteTarget.id),
           );
@@ -1477,6 +1501,7 @@ export default function ProviderDetailPage({
         confirmLabel="Delete all"
         onConfirm={async () => {
           await modelsApi.deleteAll(providerId);
+          invalidateModels(providerId);
           setList([]);
           setClearOpen(false);
         }}

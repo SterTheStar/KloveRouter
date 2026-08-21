@@ -9,6 +9,7 @@ import type {
   ModelWithProvider,
 } from "../types";
 import { modelApiId, readChatStream } from "../lib/chat";
+import { queryCache, queryKeys, invalidateChats } from "../lib/query-cache";
 import ChatMessageView from "../components/chat/ChatMessage";
 import ChatComposer from "../components/chat/ChatComposer";
 
@@ -96,9 +97,7 @@ export default function ChatPage({
 
   useEffect(() => {
     let cancelled = false;
-    models
-      .listAll()
-      .then((list) => {
+    queryCache.getOrFetch(queryKeys.models, 30_000, models.listAll).then((list) => {
         if (cancelled) return;
         setModelList(list);
         setModelsError(null);
@@ -138,7 +137,12 @@ export default function ChatPage({
     };
 
     const loadChat = () => {
-      chatsApi.get(chatId).then((result) => {
+      const request = queryCache.getOrFetch(
+        queryKeys.chat(chatId),
+        5_000,
+        () => chatsApi.get(chatId),
+      );
+      request.then((result) => {
         if (cancelled) return;
         if (!streamingChatsRef.current.has(chatId)) {
           setMessagesByChat((previous) => ({ ...previous, [chatId]: result.messages }));
@@ -418,6 +422,8 @@ export default function ChatPage({
     } finally {
       if (controllersRef.current.get(activeChatId!) === controller) {
         controllersRef.current.delete(activeChatId!);
+        queryCache.invalidate(queryKeys.chat(activeChatId!));
+        invalidateChats(activeChatId!);
         streamingChatsRef.current.delete(activeChatId!);
         setStreamingByChat((previous) => ({ ...previous, [activeChatId!]: false }));
       }

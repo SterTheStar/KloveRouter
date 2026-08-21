@@ -21,6 +21,7 @@ import type { Page } from "./types";
 import { ToastProvider } from "./components/ui/toast";
 import { settings } from "./api/client";
 import type { UserProfile } from "./types";
+import { queryCache, queryKeys, invalidateChats } from "./lib/query-cache";
 
 export default function App() {
   const { isAuth, loading, error, needsSetup, completeSetup, login, logout } = useAuth();
@@ -96,7 +97,7 @@ export default function App() {
 
   useEffect(() => {
     if (!isAuth || currentPage !== "chat") return;
-    chatsApi.list().then((list) => {
+    queryCache.getOrFetch(queryKeys.chats, 5_000, chatsApi.list).then((list) => {
       setChatSessions(list);
       setActiveChatId((current) => current && list.some((chat) => chat.id === current) ? current : list[0]?.id ?? null);
     }).catch(() => setChatSessions([]));
@@ -127,16 +128,19 @@ export default function App() {
 
   const createChat = async () => {
     const chat = await chatsApi.create();
+    invalidateChats(chat.id);
     setChatSessions((current) => [chat, ...current]);
     setActiveChatId(chat.id);
     handleNavigate("chat");
   };
   const renameChat = async (id: string, title: string) => {
     const chat = await chatsApi.update(id, { title });
+    invalidateChats(id);
     setChatSessions((current) => current.map((item) => item.id === id ? chat : item));
   };
   const deleteChat = async (id: string) => {
     await chatsApi.remove(id);
+    invalidateChats(id);
     const remaining = chatSessions.filter((chat) => chat.id !== id);
     setChatSessions(remaining);
     if (activeChatId === id) setActiveChatId(remaining[0]?.id ?? null);
@@ -209,7 +213,8 @@ export default function App() {
                 }}
                 onChatCreated={(id) => {
                   setActiveChatId(id);
-                  chatsApi.list().then((list) => {
+                  invalidateChats(id);
+                  queryCache.getOrFetch(queryKeys.chats, 5_000, chatsApi.list).then((list) => {
                     const created = list.find((chat) => chat.id === id);
                     setChatSessions(created ? [created, ...list.filter((chat) => chat.id !== id)] : list);
                   }).catch(() => undefined);

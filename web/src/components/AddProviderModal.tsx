@@ -26,6 +26,7 @@ import {
   type ProviderTemplate,
 } from "../lib/provider-templates";
 import ProviderIcon from "./ProviderIcon";
+import { invalidateProviders } from "../lib/query-cache";
 
 export default function AddProviderModal({
   isOpen,
@@ -104,6 +105,7 @@ export default function AddProviderModal({
     if (oauthFinishedRef.current) return;
     oauthFinishedRef.current = true;
     clearPoll();
+    invalidateProviders();
     success(
       "Account connected",
       protocol === "codex"
@@ -268,6 +270,7 @@ export default function AddProviderModal({
         protocol: selectedType?.protocol,
         avatar: avatarPayload,
       });
+      invalidateProviders();
       success("Provider added", `${name} is ready to use.`);
       onSuccess();
       close();

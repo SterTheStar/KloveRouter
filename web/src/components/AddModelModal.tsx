@@ -22,6 +22,7 @@ import type {
   ReasoningEffort,
 } from "../types";
 import { generateDisplayName } from "../lib/model-name";
+import { invalidateModels } from "../lib/query-cache";
 
 export default function AddModelModal({
   isOpen,
@@ -97,6 +98,7 @@ export default function AddModelModal({
         pricing_tiers: pricingTiers,
         ...metadata,
       });
+      invalidateModels(providerId);
       success("Model added");
       onSuccess();
       close();

@@ -23,6 +23,7 @@ import {
 } from "./AddModelModal";
 import type { PricingTier } from "../types";
 import { generateDisplayName } from "../lib/model-name";
+import { invalidateModels } from "../lib/query-cache";
 
 export default function EditModelModal({
   isOpen,
@@ -111,6 +112,7 @@ export default function EditModelModal({
         pricing_tiers: pricingTiers,
         ...metadata,
       });
+      invalidateModels();
       success("Model updated");
       onSuccess();
       onClose();

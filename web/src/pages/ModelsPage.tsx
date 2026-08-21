@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   RiLoader4Line as LoaderCircle,
   RiSearchLine as Search,
@@ -36,6 +36,8 @@ import type { ModelCapabilities, ModelWithProvider } from "../types";
 import { useToast } from "../components/ui/toast";
 import ProviderIcon from "../components/ProviderIcon";
 import { modelDisplayId, modelPublicId } from "../lib/model-id";
+import { useQuery } from "../hooks/useQuery";
+import { invalidateModels, queryKeys } from "../lib/query-cache";
 
 type SourceFilter = "all" | "manual" | "synced";
 
@@ -77,9 +79,12 @@ function ModelMetadataBadges({ model }: { model: ModelWithProvider }) {
 
 export default function ModelsPage() {
   const { success, error: notifyError } = useToast();
-  const [list, setList] = useState<ModelWithProvider[]>([]);
+  const { data: list = [], loading, error: queryError } = useQuery(
+    queryKeys.models,
+    models.listAll,
+    30_000,
+  );
   const [tpsMap, setTpsMap] = useState<Record<string, number | null>>({});
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>("all");
@@ -94,30 +99,16 @@ export default function ModelsPage() {
     Record<string, "success" | "error">
   >({});
 
-  const load = useCallback(async () => {
-    try {
-      setLoading(true);
-      const [modelList, tpsData] = await Promise.all([
-        models.listAll(),
-        stats.tps(),
-      ]);
-      setList(modelList);
-      const map: Record<string, number | null> = {};
-      for (const item of tpsData) {
-        map[item.model_id] = item.tps;
-      }
-      setTpsMap(map);
-      setError(null);
-    } catch (e: any) {
-      setError(e.message);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
   useEffect(() => {
-    load();
-  }, [load]);
+    stats.tps().then((data) => {
+      const map: Record<string, number | null> = {};
+      for (const item of data) map[item.model_id] = item.tps;
+      setTpsMap(map);
+    }).catch((e: any) => setError(e.message));
+  }, []);
+  useEffect(() => {
+    if (queryError) setError(queryError.message);
+  }, [queryError]);
 
   const providers = useMemo(() => {
     const names = new Set(list.map((m) => m.provider_name));

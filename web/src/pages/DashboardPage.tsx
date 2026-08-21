@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   RiAddLine as Plus,
   RiLoader4Line as LoaderCircle,
@@ -11,6 +11,8 @@ import ProviderCard from "../components/ProviderCard";
 import { providers } from "../api/client";
 import type { Provider } from "../types";
 import { useToast } from "../components/ui/toast";
+import { useQuery } from "../hooks/useQuery";
+import { invalidateProviders, queryKeys } from "../lib/query-cache";
 
 function ProviderSection({
   title,
@@ -62,8 +64,12 @@ export default function DashboardPage({
   onNavigate: (page: "provider-detail", providerId: string) => void;
 }) {
   const { success, error: notifyError } = useToast();
-  const [list, setList] = useState<Provider[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data: cachedList, loading, error: queryError, refresh: load } = useQuery(
+    queryKeys.providers,
+    providers.list,
+    30_000,
+  );
+  const list = cachedList ?? [];
   const [error, setError] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [target, setTarget] = useState<Provider | null>(null);
@@ -77,29 +83,12 @@ export default function DashboardPage({
     () => list.filter((provider) => provider.is_active !== 1),
     [list],
   );
-  const load = useCallback(async () => {
-    try {
-      setLoading(true);
-      setList(await providers.list());
-      setError(null);
-    } catch (e: any) {
-      setError(e.message);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-  useEffect(() => {
-    load();
-  }, [load]);
   const toggle = async (id: string) => {
     setTogglingProviderId(id);
     try {
-      const updated = await providers.toggle(id);
-      setList((items) =>
-        items.map((item) =>
-          item.id === id ? { ...item, is_active: updated.is_active } : item,
-        ),
-      );
+      await providers.toggle(id);
+      invalidateProviders(id);
+      await load();
     } catch (e: any) {
       notifyError("Could not update provider", e.message);
     } finally {
@@ -111,7 +100,8 @@ export default function DashboardPage({
     setDeleting(true);
     try {
       await providers.remove(target.id);
-      setList((items) => items.filter((item) => item.id !== target.id));
+      invalidateProviders(target.id);
+      await load();
       success("Provider removed");
       setTarget(null);
     } catch (e: any) {
@@ -121,6 +111,7 @@ export default function DashboardPage({
       setDeleting(false);
     }
   };
+  const displayError = error ?? queryError?.message ?? null;
   if (loading)
     return (
       <div className="flex items-center justify-center p-12">
@@ -138,9 +129,9 @@ export default function DashboardPage({
           Add provider
         </Button>
       </div>
-      {error && (
+      {displayError && (
         <Alert variant="destructive">
-          <AlertDescription>{error}</AlertDescription>
+          <AlertDescription>{displayError}</AlertDescription>
         </Alert>
       )}
       {list.length === 0 ? (
