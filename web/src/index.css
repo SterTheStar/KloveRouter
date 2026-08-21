@@ -323,7 +323,8 @@
   .chat-title-generating,
   .kofi-icon,
   .kofi-icon-wrap,
-  .kofi-steam {
+  .kofi-steam,
+  [data-slot="card"] {
     animation: none;
     transition: none;
   }

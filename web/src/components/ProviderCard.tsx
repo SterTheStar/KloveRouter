@@ -1,4 +1,7 @@
-import { RiDeleteBinLine as DeleteIcon } from "@remixicon/react";
+import {
+  RiDeleteBinLine as DeleteIcon,
+  RiLoader4Line as LoaderCircle,
+} from "@remixicon/react";
 import ProviderIcon from "./ProviderIcon";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -26,11 +29,17 @@ export default function ProviderCard({
       size="sm"
       role="button"
       tabIndex={0}
-      className={`cursor-pointer transition-colors hover:border-primary/50 ${!provider.is_active ? "opacity-60" : ""}`}
-      onClick={() => onEdit(provider.id)}
-      onKeyDown={(event) => {
-        if (event.key === "Enter" || event.key === " ") onEdit(provider.id);
+      className={`animate-in fade-in slide-in-from-bottom-2 cursor-pointer transition-[opacity,transform,border-color] duration-300 hover:border-primary/50 ${!provider.is_active ? "opacity-60" : ""} ${isToggling ? "scale-[0.98] opacity-70" : ""}`}
+      onClick={() => {
+        if (!isToggling) onEdit(provider.id);
       }}
+      onKeyDown={(event) => {
+        if (!isToggling && (event.key === "Enter" || event.key === " ")) {
+          event.preventDefault();
+          onEdit(provider.id);
+        }
+      }}
+      aria-busy={isToggling}
     >
       <CardContent>
         <div className="flex items-center justify-between gap-3">
@@ -53,15 +62,22 @@ export default function ProviderCard({
               disabled={isToggling}
               aria-label={`Toggle ${provider.name}`}
             />
-            <Button
-              size="icon"
-              variant="ghost"
-              className="text-destructive"
-              onClick={() => onDelete(provider.id)}
-              aria-label={`Delete ${provider.name}`}
-            >
-              <DeleteIcon className="size-4" />
-            </Button>
+            {isToggling ? (
+              <LoaderCircle
+                className="size-4 animate-spin text-muted-foreground"
+                aria-label="Updating provider"
+              />
+            ) : (
+              <Button
+                size="icon"
+                variant="ghost"
+                className="text-destructive"
+                onClick={() => onDelete(provider.id)}
+                aria-label={`Delete ${provider.name}`}
+              >
+                <DeleteIcon className="size-4" />
+              </Button>
+            )}
           </div>
         </div>
       </CardContent>

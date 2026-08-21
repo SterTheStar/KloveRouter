@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   RiAddLine as Plus,
   RiLoader4Line as LoaderCircle,
@@ -12,6 +12,50 @@ import { providers } from "../api/client";
 import type { Provider } from "../types";
 import { useToast } from "../components/ui/toast";
 
+function ProviderSection({
+  title,
+  count,
+  providers,
+  togglingProviderId,
+  onToggle,
+  onEdit,
+  onDelete,
+}: {
+  title: string;
+  count: number;
+  providers: Provider[];
+  togglingProviderId: string | null;
+  onToggle: (id: string) => void;
+  onEdit: (id: string) => void;
+  onDelete: (id: string) => void;
+}) {
+  return (
+    <section aria-labelledby={`${title.toLowerCase()}-providers-heading`}>
+      <div className="mb-3 flex items-center gap-2">
+        <h2
+          id={`${title.toLowerCase()}-providers-heading`}
+          className="font-heading text-lg font-semibold"
+        >
+          {title}
+        </h2>
+        <span className="text-sm text-muted-foreground">({count})</span>
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        {providers.map((provider) => (
+          <ProviderCard
+            key={provider.id}
+            provider={provider}
+            isToggling={togglingProviderId === provider.id}
+            onToggle={onToggle}
+            onEdit={onEdit}
+            onDelete={onDelete}
+          />
+        ))}
+      </div>
+    </section>
+  );
+}
+
 export default function DashboardPage({
   onNavigate,
 }: {
@@ -24,6 +68,15 @@ export default function DashboardPage({
   const [addOpen, setAddOpen] = useState(false);
   const [target, setTarget] = useState<Provider | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [togglingProviderId, setTogglingProviderId] = useState<string | null>(null);
+  const activeProviders = useMemo(
+    () => list.filter((provider) => provider.is_active === 1),
+    [list],
+  );
+  const inactiveProviders = useMemo(
+    () => list.filter((provider) => provider.is_active !== 1),
+    [list],
+  );
   const load = useCallback(async () => {
     try {
       setLoading(true);
@@ -38,6 +91,21 @@ export default function DashboardPage({
   useEffect(() => {
     load();
   }, [load]);
+  const toggle = async (id: string) => {
+    setTogglingProviderId(id);
+    try {
+      const updated = await providers.toggle(id);
+      setList((items) =>
+        items.map((item) =>
+          item.id === id ? { ...item, is_active: updated.is_active } : item,
+        ),
+      );
+    } catch (e: any) {
+      notifyError("Could not update provider", e.message);
+    } finally {
+      setTogglingProviderId(null);
+    }
+  };
   const remove = async () => {
     if (!target) return;
     setDeleting(true);
@@ -86,27 +154,33 @@ export default function DashboardPage({
           </Button>
         </div>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {list.map((provider) => (
-            <ProviderCard
-              key={provider.id}
-              provider={provider}
-              onToggle={async (id) => {
-                const updated = await providers.toggle(id);
-                setList((items) =>
-                  items.map((item) =>
-                    item.id === id
-                      ? { ...item, is_active: updated.is_active }
-                      : item,
-                  ),
-                );
-              }}
+        <div className="space-y-8">
+          {activeProviders.length > 0 && (
+            <ProviderSection
+              title="Active"
+              count={activeProviders.length}
+              providers={activeProviders}
+              togglingProviderId={togglingProviderId}
+              onToggle={toggle}
               onEdit={(id) => onNavigate("provider-detail", id)}
               onDelete={(id) =>
                 setTarget(list.find((item) => item.id === id) ?? null)
               }
             />
-          ))}
+          )}
+          {inactiveProviders.length > 0 && (
+            <ProviderSection
+              title="Disabled"
+              count={inactiveProviders.length}
+              providers={inactiveProviders}
+              togglingProviderId={togglingProviderId}
+              onToggle={toggle}
+              onEdit={(id) => onNavigate("provider-detail", id)}
+              onDelete={(id) =>
+                setTarget(list.find((item) => item.id === id) ?? null)
+              }
+            />
+          )}
         </div>
       )}
       <AddProviderModal
