@@ -282,24 +282,33 @@ export const models = {
     }),
   sync: (
     providerId: string,
-    options: { preview?: boolean; freeOnly?: boolean; existingOnly?: boolean; resetExisting?: boolean } = {},
+    options: {
+      preview?: boolean;
+      modelIds?: string[];
+      freeOnly?: boolean;
+      resetExisting?: boolean;
+    } = {},
   ) =>
     request<{
       preview?: boolean;
       success?: boolean;
+      models?: { id: string; display_name: string; is_free: boolean; is_existing: boolean; source_data?: Record<string, unknown> }[];
+      items?: { id: string; display_name: string; is_free: boolean; is_existing: boolean; source_data?: Record<string, unknown> }[];
       models_found: number;
       existing_models?: number;
       models_to_add?: number;
       free_models_found?: number;
       free_existing_models?: number;
       free_models_to_add?: number;
-      free_only?: boolean;
-      existing_only?: boolean;
       message?: string;
-    }>(
-      `/api/providers/${providerId}/sync?preview=${options.preview ? "true" : "false"}&free_only=${options.freeOnly ? "true" : "false"}&existing_only=${options.existingOnly ? "true" : "false"}&reset_existing=${options.resetExisting ? "true" : "false"}`,
-      { method: "POST" },
-    ),
+    }>(`/api/providers/${providerId}/sync${options.preview ? "?preview=true" : ""}`, {
+      method: "POST",
+      body: JSON.stringify({
+        ...(options.modelIds ? { model_ids: options.modelIds } : {}),
+        ...(options.freeOnly ? { free_only: true } : {}),
+        ...(options.resetExisting ? { reset_existing: true } : {}),
+      }),
+    }),
   toggle: (id: string) =>
     request<import("../types").Model>(`/api/models/${id}/toggle`, {
       method: "PUT",

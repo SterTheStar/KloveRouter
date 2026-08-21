@@ -194,52 +194,57 @@ export const modelsPlugin = (app: Elysia) =>
     )
     .post(
       "/api/providers/:id/sync",
-      async ({ params: { id }, query, set }) => {
+      async ({ params: { id }, query, body, set }) => {
         const provider = providerService.findById(id);
         if (!provider) {
           set.status = 404;
           return { error: "Provider not found" };
         }
 
-        const freeOnly = query.free_only === true;
+        const requestedIds = body?.model_ids;
+        const freeOnly = body?.free_only === true || query.free_only === true;
         const existingOnly = query.existing_only === true;
-        const resetExisting = query.reset_existing === true;
+        const resetExisting = body?.reset_existing === true || query.reset_existing === true;
         const existingIds = new Set(
           modelService.findByProvider(id).map((model) => model.model_id),
         );
         const saveSyncedModel = (input: Parameters<typeof modelService.upsert>[0]) =>
-          resetExisting
-            ? modelService.resetExisting(input)
-            : modelService.upsert(input);
-        const selectModels = <T extends { id: string }>(available: T[]) => {
-          const freeSelected = freeOnly
-            ? available.filter((model) => /(?:^|[:-])free(?:$|\b)/i.test(model.id))
+          resetExisting ? modelService.resetExisting(input) : modelService.upsert(input);
+        const isFreeModel = (model: { id: string; is_free?: boolean }) =>
+          model.is_free === true || /(?:^|[:-])free(?:$|\b)/i.test(model.id);
+        const selectModels = <T extends { id: string; is_free?: boolean }>(available: T[]) => {
+          const catalog = requestedIds
+            ? available.filter((model) => requestedIds.includes(model.id))
             : available;
+          const freeSelected = freeOnly ? catalog.filter(isFreeModel) : catalog;
           return existingOnly
             ? freeSelected.filter((model) => existingIds.has(model.id))
             : freeSelected;
         };
-        const preview = (
-          available: { id: string; display_name?: string }[],
-        ) => {
-          const freeModels = available.filter((model) =>
-            /(?:^|[:-])free(?:$|\b)/i.test(model.id),
-          );
-          const selected = freeOnly ? freeModels : available;
-          const existingModels = selected.filter((model) =>
-            existingIds.has(model.id),
-          ).length;
-          const freeExisting = freeModels.filter((model) =>
-            existingIds.has(model.id),
-          ).length;
+        const preview = (available: { id: string; display_name?: string; is_free?: boolean }[]) => {
+          const catalog = requestedIds
+            ? available.filter((model) => requestedIds.includes(model.id))
+            : available;
+          const freeModels = catalog.filter(isFreeModel);
+          const selected = freeOnly ? freeModels : catalog;
+          const items = selected.map((model) => ({
+            id: model.id,
+            display_name: model.display_name || generateDisplayName(model.id),
+            is_free: isFreeModel(model),
+            is_existing: existingIds.has(model.id),
+            source_data: model,
+          }));
+          const existingModels = items.filter((model) => model.is_existing).length;
           return {
             preview: true,
+            models: items,
+            items,
             models_found: selected.length,
             existing_models: existingModels,
             models_to_add: selected.length - existingModels,
             free_models_found: freeModels.length,
-            free_existing_models: freeExisting,
-            free_models_to_add: freeModels.length - freeExisting,
+            free_existing_models: freeModels.filter((model) => existingIds.has(model.id)).length,
+            free_models_to_add: freeModels.filter((model) => !existingIds.has(model.id)).length,
             free_only: freeOnly,
             existing_only: existingOnly,
           };
@@ -305,7 +310,7 @@ export const modelsPlugin = (app: Elysia) =>
           }
 
            if (provider.protocol === "freebuff") {
-            const available = await freebuffModels();
+            const available = (await freebuffModels()).map((model) => ({ ...model, is_free: true }));
             if (query.preview === true) return preview(available);
             const selected = selectModels(available);
             for (const model of selected)
@@ -499,6 +504,11 @@ export const modelsPlugin = (app: Elysia) =>
         }
       },
       {
+        body: t.Optional(t.Object({
+          model_ids: t.Optional(t.Array(t.String({ minLength: 1 }))),
+          free_only: t.Optional(t.Boolean()),
+          reset_existing: t.Optional(t.Boolean()),
+        })),
         query: t.Object({
           preview: t.Optional(t.Boolean()),
           free_only: t.Optional(t.Boolean()),
