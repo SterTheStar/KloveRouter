@@ -17,6 +17,7 @@ import {
 import { requestLogsPlugin } from "./request-logs.plugin";
 import { rtkPlugin } from "../plugins/rtk";
 import { setupPlugin } from "./setup.plugin";
+import { avatarMediaPlugin } from "./avatar-media.plugin";
 
 export {
   authPlugin,
@@ -36,4 +37,5 @@ export {
   chatPlugin,
   chatsPlugin,
   setupPlugin,
+  avatarMediaPlugin,
 };

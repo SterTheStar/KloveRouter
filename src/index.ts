@@ -23,6 +23,7 @@ import {
   chatPlugin,
   chatsPlugin,
   setupPlugin,
+  avatarMediaPlugin,
 } from "./api";
 import { getSecuritySecrets } from "./services/security.service";
 import { initRtkOnStartup, rtkPublicPlugin } from "./plugins/rtk";
@@ -67,6 +68,7 @@ const app = new Elysia()
   .use(authPlugin)
   .use(codexPublicPlugin)
   .use(antigravityPublicPlugin)
+  .use(avatarMediaPlugin)
   .use(proxyPlugin);
 
 // RTK public routes

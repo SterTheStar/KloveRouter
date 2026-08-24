@@ -203,6 +203,7 @@ export default function ProviderDetailPage({
   const [connectedAccount, setConnectedAccount] = useState<string | null>(null);
   const [authAction, setAuthAction] = useState<"login" | "logout" | null>(null);
   const [avatar, setAvatar] = useState<string | null>(null);
+  const originalAvatarRef = useRef<string | null>(null);
   const [credentials, setCredentials] = useState<ProviderCredential[]>([]);
   const [credentialAction, setCredentialAction] = useState(false);
   const [editingCredentialIds, setEditingCredentialIds] = useState<Record<string, boolean>>({});
@@ -252,6 +253,7 @@ export default function ProviderDetailPage({
       setName(current.name);
       setBaseUrl(current.base_url);
       setAvatar(current.avatar_override ?? null);
+      originalAvatarRef.current = current.avatar_override ?? null;
       setConnectedAccount(
         providerCredentials.find(
           (credential) => credential.kind === "codex" && credential.account_id,
@@ -293,7 +295,7 @@ export default function ProviderDetailPage({
       const updated = await providers.update(providerId, {
         name,
         base_url: baseUrl,
-        avatar,
+        ...(avatar !== originalAvatarRef.current ? { avatar } : {}),
       });
       setProvider(updated);
       setSuccess("Provider updated.");

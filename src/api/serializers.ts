@@ -1,34 +1,31 @@
 import type { Model, ModelWithProvider } from "../services/model.service";
 import type { ProviderPublic } from "../services/provider.service";
+import { avatarMediaUrl, isDataAvatar } from "../services/avatar.service";
 
-function isDataImage(value: string | null | undefined): boolean {
-  return value?.startsWith("data:image/") === true;
+export function serializedAvatar(value: string | null, ownerId: string): string | null {
+  return isDataAvatar(value) ? avatarMediaUrl(ownerId, value!) : value;
 }
 
 function compactAvatarSources(
   avatar: string | null,
   sources: string[],
 ): string[] {
-  return sources.filter((source) => source !== avatar && !isDataImage(source));
-}
-
-function compactAvatar(value: string | null): string | null {
-  return isDataImage(value) ? null : value;
+  return sources.filter((source) => source !== avatar && !isDataAvatar(source));
 }
 
 export function serializeProvider(
   provider: ProviderPublic,
   options: { includeAvatarOverride?: boolean } = {},
 ) {
-  const avatar = compactAvatar(provider.avatar);
+  const avatar = serializedAvatar(provider.avatar, provider.id);
   return {
     id: provider.id,
     name: provider.name,
     base_url: provider.base_url,
     avatar,
-    avatar_sources: compactAvatarSources(provider.avatar, provider.avatar_sources),
+    avatar_sources: compactAvatarSources(avatar, provider.avatar_sources),
     ...(options.includeAvatarOverride
-      ? { avatar_override: provider.avatar_override }
+      ? { avatar_override: serializedAvatar(provider.avatar_override, provider.id) }
       : {}),
     protocol: provider.protocol,
     credential_mode: provider.credential_mode,
@@ -59,7 +56,7 @@ export function serializeModel(model: Model) {
 }
 
 export function serializeModelWithProvider(model: ModelWithProvider) {
-  const providerAvatar = compactAvatar(model.provider_avatar);
+  const providerAvatar = serializedAvatar(model.provider_avatar, model.provider_id);
   return {
     ...serializeModel(model),
     provider_name: model.provider_name,
