@@ -39,7 +39,7 @@ function Metric({ label, value }: { label: string; value: string | number }) {
 function ModelGroups({ groups }: { groups: StatsUptimeGroup[] }) {
   if (!groups.length) return null;
   return (
-    <details open className="border-t pt-3">
+    <details className="border-t pt-3">
       <summary className="cursor-pointer text-xs font-medium text-muted-foreground">
         Models ({groups.length})
       </summary>
