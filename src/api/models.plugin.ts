@@ -32,6 +32,7 @@ import {
 import { parseRawModelMetadata, resolveModelMetadata } from "../services/model-metadata";
 import { assertSafeRemoteUrl } from "../services/ssrf";
 import { anthropicEndpoint } from "../clients/anthropic";
+import { healthService } from "../services/health.service";
 
 const nullableBoolean = t.Union([t.Boolean(), t.Null()]);
 const capabilitiesSchema = t.Object({
@@ -530,8 +531,8 @@ export const modelsPlugin = (app: Elysia) =>
       }
 
       let credential: ReturnType<typeof credentialService.select> = null;
+      const start = performance.now();
       try {
-        const start = performance.now();
         credential =
           credentialService.select(
             provider.id,
@@ -633,6 +634,7 @@ export const modelsPlugin = (app: Elysia) =>
             ? completion.choices[0].message.content.trim()
             : "";
 
+        healthService.recordTest(provider.id, true, durationMs);
         return {
           success: true,
           duration_ms: durationMs,
@@ -640,11 +642,11 @@ export const modelsPlugin = (app: Elysia) =>
           usage: completion.usage ?? null,
         };
       } catch (error: any) {
-        if (credential)
-          credentialService.markError(
-            credential.id,
-            error.message || "Test failed",
-          );
+        if (credential) {
+          const message = error.message || "Test failed";
+          credentialService.markError(credential.id, message);
+          healthService.recordTest(provider.id, false, Math.round(performance.now() - start), message);
+        }
         set.status = 502;
         return {
           success: false,

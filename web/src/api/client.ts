@@ -383,6 +383,10 @@ export const stats = {
     ),
   tps: () =>
     request<{ model_id: string; tps: number | null }[]>("/api/stats/tps"),
+  uptime: (days: number | null = 0) =>
+    request<import("../types").StatsUptime>(`/api/stats/uptime?days=${days ?? 0}`),
+  health: (days: number | null = 0) =>
+    request<import("../types").StatsHealth>(`/api/stats/health?days=${days ?? 0}`),
 };
 
 export const requestLogs = {

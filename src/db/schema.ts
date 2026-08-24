@@ -15,7 +15,11 @@ export function initSchema(db: Database): void {
       fixed_credential_id TEXT,
       is_active   INTEGER NOT NULL DEFAULT 1,
       created_at  TEXT NOT NULL DEFAULT (datetime('now')),
-      updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
+      updated_at  TEXT NOT NULL DEFAULT (datetime('now')),
+      last_test_at TEXT,
+      last_test_success INTEGER,
+      last_test_error TEXT,
+      last_test_duration_ms INTEGER
     );
 
     CREATE TABLE IF NOT EXISTS models (
@@ -230,6 +234,13 @@ export function initSchema(db: Database): void {
     );
   `);
 
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_request_logs_provider_model_created
+      ON request_logs(provider_id, model_name, created_at);
+    CREATE INDEX IF NOT EXISTS idx_request_logs_status_created
+      ON request_logs(status, created_at);
+  `);
+
   // Migrate existing tables: add avatar column if missing
   const cols = db.query("PRAGMA table_info(providers)").all() as {
     name: string;
@@ -249,6 +260,14 @@ export function initSchema(db: Database): void {
   }
   if (!cols.find((c) => c.name === "fixed_credential_id")) {
     db.exec("ALTER TABLE providers ADD COLUMN fixed_credential_id TEXT");
+  }
+  for (const [name, sql] of [
+    ["last_test_at", "ALTER TABLE providers ADD COLUMN last_test_at TEXT"],
+    ["last_test_success", "ALTER TABLE providers ADD COLUMN last_test_success INTEGER"],
+    ["last_test_error", "ALTER TABLE providers ADD COLUMN last_test_error TEXT"],
+    ["last_test_duration_ms", "ALTER TABLE providers ADD COLUMN last_test_duration_ms INTEGER"],
+  ] as const) {
+    if (!cols.find((c) => c.name === name)) db.exec(sql);
   }
 
   const modelCols = db.query("PRAGMA table_info(models)").all() as {

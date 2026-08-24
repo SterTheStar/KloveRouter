@@ -142,6 +142,83 @@ export interface DailyStats {
   estimated_cost_usd: number;
 }
 
+export interface StatsUptimeGroup {
+  provider_id: string | null;
+  provider_name: string;
+  avatar: string | null;
+  avatar_sources: string[];
+  model_name: string;
+  total_requests: number;
+  success_count: number;
+  error_count: number;
+  success_rate: number;
+  uptime_percent: number;
+  avg_latency_ms: number;
+  p95_latency_ms: number;
+  last_used_at: string | null;
+  last_error_at: string | null;
+  last_error: string | null;
+}
+
+export interface StatsUptimeSummary {
+  total_requests: number;
+  success_count: number;
+  error_count: number;
+  uptime_percent: number;
+  avg_latency_ms: number;
+  p95_latency_ms: number;
+  last_used_at: string | null;
+  last_error_at: string | null;
+  last_error: string | null;
+}
+
+export interface StatsUptime {
+  days: number;
+  summary: StatsUptimeSummary;
+  global: StatsUptimeSummary;
+  groups: StatsUptimeGroup[];
+}
+
+export interface StatsCooldownDetail {
+  credential_id: string;
+  credential_label: string | null;
+  remaining_requests: number;
+  cooldown_until_sequence: number;
+  reason: string | null;
+  updated_at: string;
+}
+
+export interface StatsProviderHealth {
+  provider_id: string;
+  provider_name: string;
+  avatar: string | null;
+  avatar_sources: string[];
+  is_active: boolean;
+  active_credential_count: number;
+  status: "online" | "degraded" | "offline";
+  requests: number;
+  success_count: number;
+  error_count: number;
+  uptime_percent: number;
+  avg_latency_ms: number;
+  p95_latency_ms: number;
+  cooldown_count: number;
+  cooldowns: number;
+  cooldown_details: StatsCooldownDetail[];
+  last_used_at: string | null;
+  last_error_at: string | null;
+  last_error: string | null;
+  last_test_at: string | null;
+  last_test_success: boolean | null;
+  last_test_error: string | null;
+  last_test_duration_ms: number | null;
+}
+
+export interface StatsHealth {
+  days: number;
+  providers: StatsProviderHealth[];
+}
+
 export interface CodexUsageWindow {
   used_percent?: number;
   limit_window_seconds?: number;

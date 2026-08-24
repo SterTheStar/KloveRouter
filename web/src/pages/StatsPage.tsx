@@ -17,7 +17,11 @@ import type {
   StatsByProvider,
   StatsByModel,
   DailyStats,
+  StatsUptime,
+  StatsHealth,
 } from "../types";
+import { Tabs } from "@/components/ui/tabs";
+import { StatusPanel } from "@/components/stats/StatusPanel";
 import {
   BarChart,
   Bar,
@@ -305,20 +309,27 @@ export default function StatsPage() {
   const [error, setError] = useState<string | null>(null);
   const [days, setDays] = useState<number | null>(30);
   const [refreshing, setRefreshing] = useState(false);
+  const [activeTab, setActiveTab] = useState("usage");
+  const [uptime, setUptime] = useState<StatsUptime | null>(null);
+  const [health, setHealth] = useState<StatsHealth | null>(null);
 
   const load = useCallback(async () => {
     try {
       setLoading(true);
-      const [ov, bp, bm, dl] = await Promise.all([
+      const [ov, bp, bm, dl, uptimeData, healthData] = await Promise.all([
         stats.overview(days),
         stats.byProvider(days),
         stats.byModel(days),
         stats.daily(days),
+        stats.uptime(days),
+        stats.health(days),
       ]);
       setOverview(ov);
       setByProvider(bp);
       setByModel(bm);
       setDaily(dl);
+      setUptime(uptimeData);
+      setHealth(healthData);
       setError(null);
     } catch (e: any) {
       setError(e.message);
@@ -335,16 +346,20 @@ export default function StatsPage() {
     const interval = window.setInterval(async () => {
       try {
         setRefreshing(true);
-        const [ov, bp, bm, dl] = await Promise.all([
+        const [ov, bp, bm, dl, uptimeData, healthData] = await Promise.all([
           stats.overview(days),
           stats.byProvider(days),
           stats.byModel(days),
           stats.daily(days),
+          stats.uptime(days),
+          stats.health(days),
         ]);
         setOverview(ov);
         setByProvider(bp);
         setByModel(bm);
         setDaily(dl);
+        setUptime(uptimeData);
+        setHealth(healthData);
         setError(null);
       } catch (e: any) {
         setError(e.message);
@@ -412,7 +427,9 @@ export default function StatsPage() {
         </Alert>
       )}
 
-      {overview && (
+      <Tabs tabs={[{ id: "usage", label: "Usage" }, { id: "status", label: "Status" }]} active={activeTab} onChange={setActiveTab} />
+      {activeTab === "status" && uptime && health ? <StatusPanel uptime={uptime} health={health} /> : null}
+      {activeTab === "usage" && overview && (
         <div className="grid grid-cols-2 gap-3 md:grid-cols-6">
           {statCards.map(({ icon: Icon, title, key, format }) => (
             <div
@@ -433,6 +450,7 @@ export default function StatsPage() {
         </div>
       )}
 
+      {activeTab === "usage" && <>
       {daily.length > 0 && (
         <ChartPanel
           title="Daily usage"
@@ -689,6 +707,7 @@ export default function StatsPage() {
           </p>
         </div>
       )}
+      </>}
     </div>
   );
 }

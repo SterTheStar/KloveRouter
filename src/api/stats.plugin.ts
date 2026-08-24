@@ -1,5 +1,6 @@
 import { Elysia, t } from "elysia";
 import { usageService } from "../services/usage.service";
+import { healthService } from "../services/health.service";
 
 export const statsPlugin = (app: Elysia) =>
   app
@@ -17,4 +18,12 @@ export const statsPlugin = (app: Elysia) =>
     })
     .get("/api/stats/tps", () => {
       return usageService.getAllModelTps();
+    })
+    .get("/api/stats/uptime", ({ query: { days } }) => {
+      const period = days === undefined || days === "" ? 0 : Math.max(0, Number(days) || 0);
+      return healthService.getUptime(period);
+    })
+    .get("/api/stats/health", ({ query: { days } }) => {
+      const period = days === undefined || days === "" ? 0 : Math.max(0, Number(days) || 0);
+      return healthService.getHealth(period);
     });
