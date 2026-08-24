@@ -11,61 +11,15 @@ export type SyncModelItem = {
   display_name: string;
   is_free: boolean;
   is_existing: boolean;
-  source_data?: Record<string, unknown>;
 };
 
-function formatDetailLabel(key: string) {
-  return key
-    .replaceAll("_", " ")
-    .replace(/\b\w/g, (letter) => letter.toUpperCase());
-}
-
-function formatDetailValue(key: string, value: unknown) {
-  if (key === "created" && typeof value === "number") {
-    return new Date(value * 1000).toLocaleDateString();
-  }
-  if (typeof value === "boolean") return value ? "Yes" : "No";
-  if (value == null) return "—";
-  if (Array.isArray(value)) {
-    return value.length ? (
-      <div className="flex flex-wrap justify-end gap-1">
-        {value.map((item) => (
-          <Badge key={String(item)} variant="secondary" className="text-[10px]">
-            {String(item)}
-          </Badge>
-        ))}
-      </div>
-    ) : "—";
-  }
-  if (typeof value === "object") {
-    return (
-      <div className="space-y-0.5 text-right text-[10px]">
-        {Object.entries(value as Record<string, unknown>).map(([nestedKey, nestedValue]) => (
-          <div key={nestedKey}>
-            <span className="text-muted-foreground">{formatDetailLabel(nestedKey)}:</span>{" "}
-            <span>{String(nestedValue)}</span>
-          </div>
-        ))}
-      </div>
-    );
-  }
-  return String(value);
-}
-
-function ModelSourceDetails({ data }: { data?: Record<string, unknown> }) {
-  const entries = Object.entries(data ?? {});
-  if (!entries.length) return <span>No provider metadata</span>;
+function ModelSourceDetails({ model }: { model: SyncModelItem }) {
   return (
-    <div className="w-80 max-w-[70vw] space-y-2">
-      <p className="font-medium">Provider metadata</p>
-      <div className="max-h-64 space-y-1.5 overflow-y-auto">
-        {entries.map(([key, value]) => (
-          <div key={key} className="grid grid-cols-[auto_1fr] items-start gap-3 border-b border-border/50 pb-1.5 last:border-0">
-            <span className="text-muted-foreground">{formatDetailLabel(key)}</span>
-            <span className="min-w-0 text-right font-medium">{formatDetailValue(key, value)}</span>
-          </div>
-        ))}
-      </div>
+    <div className="space-y-1">
+      <p className="font-medium">Model details</p>
+      <p className="text-muted-foreground">{model.id}</p>
+      {model.is_free && <p>Free model</p>}
+      {model.is_existing && <p>Already configured</p>}
     </div>
   );
 }
@@ -250,9 +204,7 @@ export default function SyncModelsModal({
           className="pointer-events-none fixed z-[100] rounded-lg border border-border bg-popover p-3 text-xs text-popover-foreground shadow-xl"
           style={{ left: pointer.x + 16, top: pointer.y + 16 }}
         >
-          <ModelSourceDetails
-            data={hoveredModel.source_data ?? { id: hoveredModel.id, display_name: hoveredModel.display_name }}
-          />
+          <ModelSourceDetails model={hoveredModel} />
         </div>
       )}
       <ConfirmDialog open={confirmOpen} title="Reset existing models?" message="This replaces metadata and clears custom metadata for selected existing models. Continue?" confirmLabel="Reset and sync" onConfirm={confirm} onCancel={() => setConfirmOpen(false)} loading={loading} />

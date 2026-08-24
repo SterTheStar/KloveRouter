@@ -292,8 +292,8 @@ export const models = {
     request<{
       preview?: boolean;
       success?: boolean;
-      models?: { id: string; display_name: string; is_free: boolean; is_existing: boolean; source_data?: Record<string, unknown> }[];
-      items?: { id: string; display_name: string; is_free: boolean; is_existing: boolean; source_data?: Record<string, unknown> }[];
+      models?: { id: string; display_name: string; is_free: boolean; is_existing: boolean }[];
+      items?: { id: string; display_name: string; is_free: boolean; is_existing: boolean }[];
       models_found: number;
       existing_models?: number;
       models_to_add?: number;

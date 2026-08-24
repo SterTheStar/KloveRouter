@@ -381,18 +381,20 @@ export function initSchema(db: Database): void {
 
   // Seed editable pricing for the built-in Codex OAuth models once.
   const codexPricingDefaults = [
-    ["gpt-5.4", 2.5, 15, 0.25],
-    ["gpt-5.4-mini", 0.75, 4.5, 0.075],
-    ["gpt-5.5", 5, 30, 0.5],
-    ["gpt-5.6-luna", 1, 6, 0.1],
-    ["gpt-5.6-sol", 5, 30, 0.5],
-    ["gpt-5.6-terra", 2.5, 15, 0.25],
+    ["gpt-5.3-codex", 1.75, 14, 0.175, 0],
+    ["gpt-5.4", 2.5, 15, 0.25, 0],
+    ["gpt-5.4-mini", 0.75, 4.5, 0.075, 0],
+    ["gpt-5.5", 5, 30, 0.5, 0],
+    ["gpt-5.6-luna", 0.2, 1.2, 0.02, 0.25],
+    ["gpt-5.6-sol", 4, 20, 0.4, 5],
+    ["gpt-5.6-terra", 2, 12, 0.2, 2.5],
   ] as const;
   for (const [
     modelName,
     inputPrice,
     outputPrice,
     cachePrice,
+    cacheWritePrice,
   ] of codexPricingDefaults) {
     const models = db
       .query(
@@ -403,9 +405,24 @@ export function initSchema(db: Database): void {
       .all(modelName) as { id: string }[];
     for (const model of models)
       db.query(
-        "INSERT INTO model_pricing_tiers (id, model_id, threshold_tokens, input_per_million, output_per_million, cache_read_per_million, cache_write_per_million) VALUES (?, ?, 0, ?, ?, ?, 0)",
-      ).run(crypto.randomUUID(), model.id, inputPrice, outputPrice, cachePrice);
+        "INSERT INTO model_pricing_tiers (id, model_id, threshold_tokens, input_per_million, output_per_million, cache_read_per_million, cache_write_per_million) VALUES (?, ?, 0, ?, ?, ?, ?)",
+      ).run(crypto.randomUUID(), model.id, inputPrice, outputPrice, cachePrice, cacheWritePrice);
   }
+
+  // Update the previous built-in Codex prices without overwriting custom tiers.
+  const codexPricingUpdates = [
+    ["gpt-5.6-luna", 1, 6, 0.1, 0.2, 1.2, 0.02, 0.25],
+    ["gpt-5.6-sol", 5, 30, 0.5, 4, 20, 0.4, 5],
+    ["gpt-5.6-terra", 2.5, 15, 0.25, 2, 12, 0.2, 2.5],
+  ] as const;
+  for (const [modelName, oldInput, oldOutput, oldCache, inputPrice, outputPrice, cachePrice, cacheWritePrice] of codexPricingUpdates) {
+    db.query(
+      `UPDATE model_pricing_tiers SET input_per_million = ?, output_per_million = ?, cache_read_per_million = ?, cache_write_per_million = ?
+       WHERE threshold_tokens = 0 AND input_per_million = ? AND output_per_million = ? AND cache_read_per_million = ? AND cache_write_per_million = 0
+         AND model_id IN (SELECT m.id FROM models m JOIN providers p ON p.id = m.provider_id WHERE p.protocol = 'codex' AND lower(m.model_id) = ?)`,
+    ).run(inputPrice, outputPrice, cachePrice, cacheWritePrice, oldInput, oldOutput, oldCache, modelName);
+  }
+
   const antigravityPricingDefaults = [
     ["claude-opus-4-6-thinking", 15, 75, 1.5],
     ["claude-sonnet-4-6", 3, 15, 0.3],

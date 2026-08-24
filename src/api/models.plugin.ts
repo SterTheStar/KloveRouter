@@ -33,6 +33,7 @@ import { parseRawModelMetadata, resolveModelMetadata } from "../services/model-m
 import { assertSafeRemoteUrl } from "../services/ssrf";
 import { anthropicEndpoint } from "../clients/anthropic";
 import { healthService } from "../services/health.service";
+import { serializeModel, serializeModelWithProvider } from "./serializers";
 
 const nullableBoolean = t.Union([t.Boolean(), t.Null()]);
 const capabilitiesSchema = t.Object({
@@ -56,7 +57,9 @@ const reasoningEffortsSchema = t.Array(
 export const parseGenericModelMetadata = parseRawModelMetadata;
 
 function publicModel(model: any) {
-  return model;
+  return "provider_name" in model
+    ? serializeModelWithProvider(model)
+    : serializeModel(model);
 }
 
 async function freebuffTest(
@@ -233,7 +236,6 @@ export const modelsPlugin = (app: Elysia) =>
             display_name: model.display_name || generateDisplayName(model.id),
             is_free: isFreeModel(model),
             is_existing: existingIds.has(model.id),
-            source_data: model,
           }));
           const existingModels = items.filter((model) => model.is_existing).length;
           return {

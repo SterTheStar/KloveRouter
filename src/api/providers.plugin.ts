@@ -11,11 +11,12 @@ import { conolValidate } from "../integrations/conol";
 import { credentialKindForProtocol, validateCredential } from "../services/credential-validation";
 import type { ProviderProtocol } from "../services/provider-appearance";
 import { anthropicEndpoint } from "../clients/anthropic";
+import { serializeProvider } from "./serializers";
 
 export const providersPlugin = (app: Elysia) =>
   app
     .get("/api/providers", () => {
-      return providerService.findAll();
+      return providerService.findAll().map((provider) => serializeProvider(provider));
     })
     .post(
       "/api/providers/validate-credential",
@@ -87,7 +88,9 @@ export const providersPlugin = (app: Elysia) =>
         set.status = 404;
         return { error: "Provider not found" };
       }
-      const pub = providerService.findPublicById(id)!;
+      const pub = serializeProvider(providerService.findPublicById(id)!, {
+        includeAvatarOverride: true,
+      });
       return {
         ...pub,
         api_key: provider.api_key
@@ -124,7 +127,7 @@ export const providersPlugin = (app: Elysia) =>
           provider: provider.name,
           protocol: provider.protocol,
         });
-        return provider;
+        return serializeProvider(provider);
       },
       {
         body: t.Object({
@@ -176,7 +179,8 @@ export const providersPlugin = (app: Elysia) =>
           }
         }
         try {
-          return providerService.update(id, { ...body, api_key: body.api_key ?? body.auth_code });
+          const updated = providerService.update(id, { ...body, api_key: body.api_key ?? body.auth_code });
+          return updated ? serializeProvider(updated, { includeAvatarOverride: true }) : updated;
         } catch (error: any) {
           set.status = 400;
           return { error: error.message };
@@ -393,5 +397,5 @@ export const providersPlugin = (app: Elysia) =>
         set.status = 404;
         return { error: "Provider not found" };
       }
-      return provider;
+      return serializeProvider(provider);
     });

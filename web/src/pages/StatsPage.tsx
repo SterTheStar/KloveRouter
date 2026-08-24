@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import {
   RiLoader4Line as LoaderCircle,
@@ -312,10 +312,14 @@ export default function StatsPage() {
   const [activeTab, setActiveTab] = useState("usage");
   const [uptime, setUptime] = useState<StatsUptime | null>(null);
   const [health, setHealth] = useState<StatsHealth | null>(null);
+  const loadingRef = useRef(false);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (background = false) => {
+    if (loadingRef.current) return;
+    loadingRef.current = true;
     try {
-      setLoading(true);
+      if (background) setRefreshing(true);
+      else setLoading(true);
       const [ov, bp, bm, dl, uptimeData, healthData] = await Promise.all([
         stats.overview(days),
         stats.byProvider(days),
@@ -332,43 +336,19 @@ export default function StatsPage() {
       setHealth(healthData);
       setError(null);
     } catch (e: any) {
-      setError(e.message);
+      setError(e instanceof Error ? e.message : String(e));
     } finally {
+      loadingRef.current = false;
       setLoading(false);
+      setRefreshing(false);
     }
   }, [days]);
 
   useEffect(() => {
-    load();
-  }, [load]);
-
-  useEffect(() => {
-    const interval = window.setInterval(async () => {
-      try {
-        setRefreshing(true);
-        const [ov, bp, bm, dl, uptimeData, healthData] = await Promise.all([
-          stats.overview(days),
-          stats.byProvider(days),
-          stats.byModel(days),
-          stats.daily(days),
-          stats.uptime(days),
-          stats.health(days),
-        ]);
-        setOverview(ov);
-        setByProvider(bp);
-        setByModel(bm);
-        setDaily(dl);
-        setUptime(uptimeData);
-        setHealth(healthData);
-        setError(null);
-      } catch (e: any) {
-        setError(e.message);
-      } finally {
-        setRefreshing(false);
-      }
-    }, 5000);
+    void load();
+    const interval = window.setInterval(() => void load(true), 30_000);
     return () => window.clearInterval(interval);
-  }, [days]);
+  }, [load]);
 
   const groupedByProvider = useMemo(() => {
     const groups: Record<string, StatsByModel[]> = {};
