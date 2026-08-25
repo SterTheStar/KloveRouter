@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { RiLoader4Line as LoaderCircle } from "@remixicon/react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { chat, chats as chatsApi, models } from "../api/client";
+import { chat, chats as chatsApi, models, settings } from "../api/client";
 import type {
   ChatAttachmentPreview,
   ChatContentPart,
@@ -32,9 +32,19 @@ export default function ChatPage({
   const [modelList, setModelList] = useState<ModelWithProvider[]>([]);
   const [loadingModels, setLoadingModels] = useState(true);
   const [modelsError, setModelsError] = useState<string | null>(null);
-  const [selectedModel, setSelectedModel] = useState<string | null>(() =>
+  const [modelSelectionError, setModelSelectionError] = useState<string | null>(null);
+  const [globalModel, setGlobalModel] = useState<string | null>(() =>
     localStorage.getItem(MODEL_STORAGE_KEY),
   );
+  const [modelsByChat, setModelsByChat] = useState<Record<string, string>>({});
+  const [persistModelPerChat, setPersistModelPerChat] = useState(false);
+  const persistModelPerChatRef = useRef(false);
+  const modelUpdateVersionsRef = useRef(new Map<string, number>());
+  const pendingModelUpdatesRef = useRef(new Set<string>());
+  const validModelIdsRef = useRef(new Set<string>());
+  const selectedModel = persistModelPerChat && chatId
+    ? modelsByChat[chatId] ?? globalModel
+    : globalModel;
   const [selectedReasoningEffort, setSelectedReasoningEffort] = useState<string | null>(null);
   const [messagesByChat, setMessagesByChat] = useState<Record<string, ChatMessage[]>>({});
   const [input, setInput] = useState("");
@@ -92,24 +102,37 @@ export default function ChatPage({
   }, [modelList, selectedModel]);
 
   useEffect(() => {
-    if (selectedModel) localStorage.setItem(MODEL_STORAGE_KEY, selectedModel);
-  }, [selectedModel]);
+    if (globalModel) localStorage.setItem(MODEL_STORAGE_KEY, globalModel);
+  }, [globalModel]);
+
+  useEffect(() => {
+    let cancelled = false;
+    settings.chat().then((value) => {
+      if (cancelled) return;
+      persistModelPerChatRef.current = value.persist_model_per_chat;
+      setPersistModelPerChat(value.persist_model_per_chat);
+    }).catch((error) => {
+      if (!cancelled) setModelsError(error.message);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
     queryCache.getOrFetch(queryKeys.models, 30_000, models.listAll).then((list) => {
         if (cancelled) return;
+        const validIds = new Set(
+          list.map((model) => modelApiId(model.provider_name, model.model_id, model.pretty_id)),
+        );
+        validModelIdsRef.current = validIds;
         setModelList(list);
         setModelsError(null);
-        // Drop a persisted selection that no longer exists.
-        setSelectedModel((prev) => {
-          if (!prev) return prev;
-          return list.some(
-            (m) => modelApiId(m.provider_name, m.model_id, m.pretty_id) === prev,
-          )
-            ? prev
-            : null;
-        });
+        setGlobalModel((previous) => previous && validIds.has(previous) ? previous : null);
+        setModelsByChat((previous) => Object.fromEntries(
+          Object.entries(previous).filter(([, model]) => validIds.has(model)),
+        ));
       })
       .catch((error) => {
         if (!cancelled) setModelsError(error.message);
@@ -137,6 +160,7 @@ export default function ChatPage({
     };
 
     const loadChat = () => {
+      const modelVersion = modelUpdateVersionsRef.current.get(chatId) ?? 0;
       const request = queryCache.getOrFetch(
         queryKeys.chat(chatId),
         5_000,
@@ -144,6 +168,18 @@ export default function ChatPage({
       );
       request.then((result) => {
         if (cancelled) return;
+        if (
+          persistModelPerChatRef.current &&
+          result.session.model &&
+          validModelIdsRef.current.has(result.session.model) &&
+          !pendingModelUpdatesRef.current.has(chatId) &&
+          (modelUpdateVersionsRef.current.get(chatId) ?? 0) === modelVersion
+        ) {
+          setModelsByChat((previous) => ({
+            ...previous,
+            [chatId]: result.session.model,
+          }));
+        }
         if (!streamingChatsRef.current.has(chatId)) {
           setMessagesByChat((previous) => ({ ...previous, [chatId]: result.messages }));
         }
@@ -189,7 +225,7 @@ export default function ChatPage({
       cancelled = true;
       if (pollTimer !== null) window.clearInterval(pollTimer);
     };
-  }, [chatId]);
+  }, [chatId, persistModelPerChat, loadingModels]);
 
   useEffect(() => {
     const container = messagesContainerRef.current;
@@ -226,8 +262,31 @@ export default function ChatPage({
   );
 
   const onSelectModel = (id: string) => {
-    setSelectedModel(id);
-    localStorage.setItem(MODEL_STORAGE_KEY, id);
+    setModelSelectionError(null);
+    setGlobalModel(id);
+    if (!persistModelPerChat || !chatId) return;
+
+    const previous = modelsByChat[chatId] ?? globalModel;
+    const version = (modelUpdateVersionsRef.current.get(chatId) ?? 0) + 1;
+    modelUpdateVersionsRef.current.set(chatId, version);
+    pendingModelUpdatesRef.current.add(chatId);
+    setModelsByChat((current) => ({ ...current, [chatId]: id }));
+    void chatsApi.update(chatId, { model: id }).then(() => {
+      if (modelUpdateVersionsRef.current.get(chatId) !== version) return;
+      pendingModelUpdatesRef.current.delete(chatId);
+      queryCache.invalidate(queryKeys.chat(chatId));
+      invalidateChats(chatId);
+    }).catch((error) => {
+      if (modelUpdateVersionsRef.current.get(chatId) !== version) return;
+      pendingModelUpdatesRef.current.delete(chatId);
+      setModelsByChat((current) => {
+        const next = { ...current };
+        if (previous) next[chatId] = previous;
+        else delete next[chatId];
+        return next;
+      });
+      setModelSelectionError(error.message ?? "Could not save chat model");
+    });
   };
 
   const onSelectReasoningEffort = (effort: string) => {
@@ -324,6 +383,9 @@ export default function ChatPage({
     if (!activeChatId) {
       const created = await chatsApi.create({ model: selectedModel });
       activeChatId = created.id;
+      if (persistModelPerChat) {
+        setModelsByChat((previous) => ({ ...previous, [created.id]: selectedModel }));
+      }
       skipNextChatLoadRef.current = created.id;
       onChatCreated(created.id);
     }
@@ -447,10 +509,10 @@ export default function ChatPage({
 
   return (
     <div className="relative flex h-svh flex-col">
-      {modelsError && (
+      {(modelsError || modelSelectionError) && (
         <div className="flex justify-center px-6 pt-4">
           <Alert variant="destructive" className="w-full max-w-3xl">
-            <AlertDescription>{modelsError}</AlertDescription>
+            <AlertDescription>{modelSelectionError || modelsError}</AlertDescription>
           </Alert>
         </div>
       )}

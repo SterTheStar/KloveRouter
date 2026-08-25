@@ -49,3 +49,30 @@ describe("model timestamps", () => {
     db.close();
   });
 });
+
+describe("chat settings", () => {
+  test("seeds per-chat model persistence disabled", () => {
+    const db = new Database(":memory:");
+    initSchema(db);
+    expect(
+      db.query("SELECT value FROM settings WHERE key = ?")
+        .get("persist_model_per_chat"),
+    ).toEqual({ value: "false" });
+    db.close();
+  });
+
+  test("preserves an existing per-chat model persistence setting", () => {
+    const db = new Database(":memory:");
+    initSchema(db);
+    db.query("UPDATE settings SET value = ? WHERE key = ?").run(
+      "true",
+      "persist_model_per_chat",
+    );
+    initSchema(db);
+    expect(
+      db.query("SELECT value FROM settings WHERE key = ?")
+        .get("persist_model_per_chat"),
+    ).toEqual({ value: "true" });
+    db.close();
+  });
+});

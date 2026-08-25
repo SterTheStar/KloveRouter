@@ -65,6 +65,7 @@ export default function SettingsPage({
   const [avatar, setAvatar] = useState(profile.avatar);
   const [profileSaving, setProfileSaving] = useState(false);
   const [chatTitleModel, setChatTitleModel] = useState("auto");
+  const [persistModelPerChat, setPersistModelPerChat] = useState(false);
   const [chatTitleModels, setChatTitleModels] = useState<import("../types").ModelWithProvider[]>([]);
   const [chatSaving, setChatSaving] = useState(false);
 
@@ -91,7 +92,10 @@ export default function SettingsPage({
 
   useEffect(() => {
     customSkills.list().then(setCustomSkillList).catch(() => {});
-    settings.chat().then((value) => setChatTitleModel(value.chat_title_model)).catch(() => {});
+    settings.chat().then((value) => {
+      setChatTitleModel(value.chat_title_model);
+      setPersistModelPerChat(value.persist_model_per_chat);
+    }).catch(() => {});
     models.listAll().then(setChatTitleModels).catch(() => {});
   }, []);
 
@@ -103,7 +107,10 @@ export default function SettingsPage({
   const saveChatSettings = async () => {
     setChatSaving(true);
     try {
-      await settings.updateChat({ chat_title_model: chatTitleModel });
+      await settings.updateChat({
+        chat_title_model: chatTitleModel,
+        persist_model_per_chat: persistModelPerChat,
+      });
       notifySuccess("Chat settings updated");
     } catch (e: any) {
       notifyError("Could not update chat settings", e.message);
@@ -389,6 +396,21 @@ export default function SettingsPage({
               })}
             </select>
             <p className="text-xs text-muted-foreground">Titles are generated after the first message and never replace a custom title.</p>
+            <Separator />
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <Label htmlFor="persist-model-per-chat">Remember model per chat</Label>
+                <p className="text-xs text-muted-foreground">
+                  Restore each chat's last selected model instead of using the global selection.
+                </p>
+              </div>
+              <Switch
+                id="persist-model-per-chat"
+                checked={persistModelPerChat}
+                onCheckedChange={setPersistModelPerChat}
+                aria-label="Remember model per chat"
+              />
+            </div>
           </CardContent>
         </Card>
       )}

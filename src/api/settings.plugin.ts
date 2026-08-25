@@ -23,8 +23,17 @@ function defaultProfileName() {
 export const settingsPlugin = (app: Elysia) =>
   app
     .get("/api/settings/chat", () => {
-      const row = getDb().query("SELECT value FROM settings WHERE key = ?").get("chat_title_model") as { value: string } | undefined;
-      return { chat_title_model: row?.value || "auto" };
+      const rows = getDb()
+        .query("SELECT key, value FROM settings WHERE key IN (?, ?)")
+        .all("chat_title_model", "persist_model_per_chat") as Array<{
+        key: string;
+        value: string;
+      }>;
+      const values = Object.fromEntries(rows.map((row) => [row.key, row.value]));
+      return {
+        chat_title_model: values.chat_title_model || "auto",
+        persist_model_per_chat: values.persist_model_per_chat === "true",
+      };
     })
     .put(
       "/api/settings/chat",
@@ -39,10 +48,29 @@ export const settingsPlugin = (app: Elysia) =>
             return { error: "Chat title model must be auto or an active configured model" };
           }
         }
-        getDb().query("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)").run("chat_title_model", value);
-        return { chat_title_model: value };
+        const db = getDb();
+        const update = db.transaction(() => {
+          db.query("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)").run(
+            "chat_title_model",
+            value,
+          );
+          db.query("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)").run(
+            "persist_model_per_chat",
+            String(body.persist_model_per_chat),
+          );
+        });
+        update();
+        return {
+          chat_title_model: value,
+          persist_model_per_chat: body.persist_model_per_chat,
+        };
       },
-      { body: t.Object({ chat_title_model: t.String({ minLength: 1 }) }) },
+      {
+        body: t.Object({
+          chat_title_model: t.String({ minLength: 1 }),
+          persist_model_per_chat: t.Boolean(),
+        }),
+      },
     )
     .get("/api/settings/profile", () => {
       const db = getDb();

@@ -294,6 +294,7 @@ export interface UserProfile {
 
 export interface ChatSettings {
   chat_title_model: string;
+  persist_model_per_chat: boolean;
 }
 
 export interface ChatSession {

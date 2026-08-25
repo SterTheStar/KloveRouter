@@ -560,6 +560,10 @@ export function initSchema(db: Database): void {
     "chat_title_model",
     "auto",
   );
+  db.query("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)").run(
+    "persist_model_per_chat",
+    "false",
+  );
 
   const existingPassword = db
     .query("SELECT value FROM settings WHERE key = ?")

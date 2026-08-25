@@ -4,6 +4,7 @@ import { keyService } from "../services/key.service";
 import { chatService } from "../services/chat.service";
 import { chatTitleService } from "../services/chat-title.service";
 import { countMessages, countCompletion } from "../services/token-counter/token-counter";
+import { getDb } from "../db/connection";
 
 const DONE_MARKER = "data: [DONE]\n\n";
 
@@ -325,6 +326,18 @@ export const chatPlugin = (app: Elysia) =>
           role: "assistant",
           content: "",
         });
+      }
+
+      if (chatId) {
+        getDb()
+          .query(
+            `UPDATE chat_sessions SET model = ?, updated_at = datetime('now')
+             WHERE id = ? AND EXISTS (
+               SELECT 1 FROM settings
+               WHERE key = 'persist_model_per_chat' AND value = 'true'
+             )`,
+          )
+          .run(input.model, chatId);
       }
 
       const response = await fetch(
