@@ -9,6 +9,7 @@ import type {
   ModelWithProvider,
 } from "../types";
 import { modelApiId, readChatStream } from "../lib/chat";
+import { resolveChatModel } from "../lib/chat-model";
 import { queryCache, queryKeys, invalidateChats } from "../lib/query-cache";
 import ChatMessageView from "../components/chat/ChatMessage";
 import ChatComposer from "../components/chat/ChatComposer";
@@ -41,6 +42,7 @@ export default function ChatPage({
   const persistModelPerChatRef = useRef(false);
   const modelUpdateVersionsRef = useRef(new Map<string, number>());
   const pendingModelUpdatesRef = useRef(new Set<string>());
+  const modelUpdateQueueRef = useRef(new Map<string, Promise<void>>());
   const validModelIdsRef = useRef(new Set<string>());
   const selectedModel = persistModelPerChat && chatId
     ? modelsByChat[chatId] ?? globalModel
@@ -85,6 +87,18 @@ export default function ChatPage({
     (model) => modelApiId(model.provider_name, model.model_id, model.pretty_id) === selectedModel,
   );
   const reasoningEfforts = selectedModelRecord?.reasoning_efforts ?? [];
+
+  const enqueueModelUpdate = useCallback((targetChatId: string, update: () => Promise<void>) => {
+    const previous = modelUpdateQueueRef.current.get(targetChatId) ?? Promise.resolve();
+    const queued = previous.catch(() => undefined).then(update);
+    modelUpdateQueueRef.current.set(targetChatId, queued);
+    void queued.finally(() => {
+      if (modelUpdateQueueRef.current.get(targetChatId) === queued) {
+        modelUpdateQueueRef.current.delete(targetChatId);
+      }
+    }).catch(() => undefined);
+    return queued;
+  }, []);
 
   useEffect(() => {
     if (!selectedModel) {
@@ -170,15 +184,34 @@ export default function ChatPage({
         if (cancelled) return;
         if (
           persistModelPerChatRef.current &&
-          result.session.model &&
-          validModelIdsRef.current.has(result.session.model) &&
           !pendingModelUpdatesRef.current.has(chatId) &&
           (modelUpdateVersionsRef.current.get(chatId) ?? 0) === modelVersion
         ) {
-          setModelsByChat((previous) => ({
-            ...previous,
-            [chatId]: result.session.model,
-          }));
+          const resolvedModel = resolveChatModel(
+            result.session.model,
+            result.messages,
+            globalModel,
+            validModelIdsRef.current,
+          );
+          if (resolvedModel) {
+            setModelsByChat((previous) => ({ ...previous, [chatId]: resolvedModel }));
+
+            if (!validModelIdsRef.current.has(result.session.model)) {
+              pendingModelUpdatesRef.current.add(chatId);
+              void enqueueModelUpdate(chatId, () => chatsApi.update(chatId, { model: resolvedModel })
+                .then(() => {
+                  if ((modelUpdateVersionsRef.current.get(chatId) ?? 0) !== modelVersion) return;
+                  pendingModelUpdatesRef.current.delete(chatId);
+                  queryCache.invalidate(queryKeys.chat(chatId));
+                  invalidateChats(chatId);
+                })
+                .catch(() => {
+                  if ((modelUpdateVersionsRef.current.get(chatId) ?? 0) === modelVersion) {
+                    pendingModelUpdatesRef.current.delete(chatId);
+                  }
+                }));
+            }
+          }
         }
         if (!streamingChatsRef.current.has(chatId)) {
           setMessagesByChat((previous) => ({ ...previous, [chatId]: result.messages }));
@@ -225,7 +258,7 @@ export default function ChatPage({
       cancelled = true;
       if (pollTimer !== null) window.clearInterval(pollTimer);
     };
-  }, [chatId, persistModelPerChat, loadingModels]);
+  }, [chatId, persistModelPerChat, loadingModels, globalModel, enqueueModelUpdate]);
 
   useEffect(() => {
     const container = messagesContainerRef.current;
@@ -271,7 +304,7 @@ export default function ChatPage({
     modelUpdateVersionsRef.current.set(chatId, version);
     pendingModelUpdatesRef.current.add(chatId);
     setModelsByChat((current) => ({ ...current, [chatId]: id }));
-    void chatsApi.update(chatId, { model: id }).then(() => {
+    void enqueueModelUpdate(chatId, () => chatsApi.update(chatId, { model: id }).then(() => {
       if (modelUpdateVersionsRef.current.get(chatId) !== version) return;
       pendingModelUpdatesRef.current.delete(chatId);
       queryCache.invalidate(queryKeys.chat(chatId));
@@ -286,7 +319,7 @@ export default function ChatPage({
         return next;
       });
       setModelSelectionError(error.message ?? "Could not save chat model");
-    });
+    }));
   };
 
   const onSelectReasoningEffort = (effort: string) => {
