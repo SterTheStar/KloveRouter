@@ -30,6 +30,7 @@ export function initSchema(db: Database): void {
       display_name  TEXT,
       context_window INTEGER,
       max_output_tokens INTEGER,
+      fix_missing_think_opening_tag INTEGER NOT NULL DEFAULT 0,
       is_manual     INTEGER NOT NULL DEFAULT 0,
       is_active     INTEGER NOT NULL DEFAULT 1,
       created_at    TEXT NOT NULL DEFAULT (datetime('now')),
@@ -280,6 +281,10 @@ export function initSchema(db: Database): void {
     db.exec("ALTER TABLE models ADD COLUMN context_window INTEGER");
   if (!modelCols.find((c) => c.name === "max_output_tokens"))
     db.exec("ALTER TABLE models ADD COLUMN max_output_tokens INTEGER");
+  if (!modelCols.find((c) => c.name === "fix_missing_think_opening_tag"))
+    db.exec(
+      "ALTER TABLE models ADD COLUMN fix_missing_think_opening_tag INTEGER NOT NULL DEFAULT 0",
+    );
   if (!modelCols.find((c) => c.name === "updated_at")) {
     db.exec("ALTER TABLE models ADD COLUMN updated_at TEXT NOT NULL DEFAULT ''");
     db.exec("UPDATE models SET updated_at = created_at WHERE updated_at = ''");

@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Tabs } from "@/components/ui/tabs";
+import { Switch } from "@/components/ui/switch";
 import { models } from "../api/client";
 import { useToast } from "./ui/toast";
 import type {
@@ -40,6 +41,8 @@ export default function AddModelModal({
   const [prettyId, setPrettyId] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [displayEdited, setDisplayEdited] = useState(false);
+  const [fixMissingThinkOpeningTag, setFixMissingThinkOpeningTag] =
+    useState(false);
   const [metadata, setMetadata] = useState<ModelMetadataInput>(() =>
     emptyModelMetadata(),
   );
@@ -61,6 +64,7 @@ export default function AddModelModal({
     setPrettyId("");
     setDisplayName("");
     setDisplayEdited(false);
+    setFixMissingThinkOpeningTag(false);
     setMetadata(emptyModelMetadata());
     setPricingTiers([
       {
@@ -95,6 +99,7 @@ export default function AddModelModal({
         model_id: modelId.trim(),
         pretty_id: prettyId.trim() || null,
         display_name: displayName || undefined,
+        fix_missing_think_opening_tag: fixMissingThinkOpeningTag,
         pricing_tiers: pricingTiers,
         ...metadata,
       });
@@ -171,7 +176,12 @@ export default function AddModelModal({
             </div>
           )}
           {activeTab === "capabilities" && (
-            <ModelMetadataEditor value={metadata} onChange={setMetadata} />
+            <ModelMetadataEditor
+              value={metadata}
+              onChange={setMetadata}
+              fixMissingThinkOpeningTag={fixMissingThinkOpeningTag}
+              onFixMissingThinkOpeningTagChange={setFixMissingThinkOpeningTag}
+            />
           )}
           {activeTab === "pricing" && (
             <PricingEditor
@@ -233,9 +243,13 @@ export function emptyModelMetadata(): ModelMetadataInput {
 export function ModelMetadataEditor({
   value,
   onChange,
+  fixMissingThinkOpeningTag,
+  onFixMissingThinkOpeningTagChange,
 }: {
   value: ModelMetadataInput;
   onChange: (value: ModelMetadataInput) => void;
+  fixMissingThinkOpeningTag: boolean;
+  onFixMissingThinkOpeningTagChange: (value: boolean) => void;
 }) {
   const setLimit = (
     field: "context_window" | "max_output_tokens",
@@ -316,6 +330,22 @@ export function ModelMetadataEditor({
           <Input type="number" min="0" placeholder="Unknown" value={value.max_output_tokens ?? ""} onChange={(event) => setLimit("max_output_tokens", event.target.value)} />
           <p className="text-xs text-muted-foreground">Maximum generated tokens</p>
         </div>
+      </div>
+      <div className="flex items-start justify-between gap-4 rounded-md border p-3">
+        <div>
+          <Label htmlFor="fix-missing-think-opening-tag">
+            Fix missing &lt;think&gt; opening tag
+          </Label>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Prefixes &lt;think&gt; when the model emits only a closing
+            &lt;/think&gt; tag.
+          </p>
+        </div>
+        <Switch
+          id="fix-missing-think-opening-tag"
+          checked={fixMissingThinkOpeningTag}
+          onCheckedChange={onFixMissingThinkOpeningTagChange}
+        />
       </div>
       <div className="space-y-3">
         <div>

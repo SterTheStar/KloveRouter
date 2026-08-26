@@ -15,6 +15,7 @@ export interface Model {
   updated_at: string;
   context_window: number | null;
   max_output_tokens: number | null;
+  fix_missing_think_opening_tag: boolean;
   capabilities: ModelCapabilities;
   reasoning_efforts: ReasoningEffort[];
   pricing_tiers?: PricingTier[];
@@ -42,6 +43,7 @@ export interface ReasoningEffort {
 export interface ModelMetadataInput {
   context_window?: number | null;
   max_output_tokens?: number | null;
+  fix_missing_think_opening_tag?: boolean;
   capabilities?: Partial<ModelCapabilities>;
   reasoning_efforts?: ReasoningEffort[];
 }
@@ -464,6 +466,9 @@ function hydrate(model: Model | null): Model | null {
     ...model,
     context_window: model.context_window ?? null,
     max_output_tokens: model.max_output_tokens ?? null,
+    fix_missing_think_opening_tag: Boolean(
+      model.fix_missing_think_opening_tag,
+    ),
     capabilities: Object.fromEntries(
       capabilityKeys.map((key) => {
         const value = capabilities?.[key];
@@ -609,6 +614,10 @@ export const modelService = {
           syncingManualModel ? existing.is_active : input.is_active ?? existing.is_active,
           existing.id,
         );
+        if (input.fix_missing_think_opening_tag !== undefined)
+          db.query(
+            "UPDATE models SET fix_missing_think_opening_tag = ? WHERE id = ?",
+          ).run(input.fix_missing_think_opening_tag ? 1 : 0, existing.id);
         const hasPricing = Boolean(
           db.query("SELECT 1 FROM model_pricing_tiers WHERE model_id = ? LIMIT 1").get(existing.id),
         );
@@ -623,13 +632,14 @@ export const modelService = {
     const id = crypto.randomUUID();
     db.transaction(() => {
       db.query(
-        "INSERT INTO models (id, provider_id, model_id, pretty_id, display_name, is_manual, is_active, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))",
+        "INSERT INTO models (id, provider_id, model_id, pretty_id, display_name, fix_missing_think_opening_tag, is_manual, is_active, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))",
       ).run(
         id,
         input.provider_id,
         input.model_id,
         requestedPrettyId,
         input.display_name?.trim() || generateDisplayName(input.model_id),
+        input.fix_missing_think_opening_tag ? 1 : 0,
         input.is_manual ?? 0,
         input.is_active ?? 1,
       );
@@ -736,6 +746,10 @@ export const modelService = {
         input.display_name?.trim() ||
           generateDisplayName(input.model_id ?? existing.model_id),
       );
+    }
+    if (input.fix_missing_think_opening_tag !== undefined) {
+      updates.push("fix_missing_think_opening_tag = ?");
+      values.push(input.fix_missing_think_opening_tag ? 1 : 0);
     }
     db.transaction(() => {
       savePricing(id, input.pricing_tiers);

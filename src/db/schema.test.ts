@@ -50,6 +50,43 @@ describe("model timestamps", () => {
   });
 });
 
+describe("model think tag fix", () => {
+  test("defaults the option to disabled in a fresh schema", () => {
+    const db = new Database(":memory:");
+    initSchema(db);
+    const column = (db.query("PRAGMA table_info(models)").all() as Array<{
+      name: string;
+      dflt_value: string | null;
+    }>).find((item) => item.name === "fix_missing_think_opening_tag");
+    expect(column?.dflt_value).toBe("0");
+    db.close();
+  });
+
+  test("migrates an existing models table and preserves its rows", () => {
+    const db = new Database(":memory:");
+    db.exec(`
+      CREATE TABLE models (
+        id TEXT PRIMARY KEY, provider_id TEXT NOT NULL, model_id TEXT NOT NULL,
+        display_name TEXT, is_manual INTEGER NOT NULL DEFAULT 0,
+        is_active INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      INSERT INTO models (id, provider_id, model_id, display_name)
+      VALUES ('model', 'provider', 'test', 'Existing');
+    `);
+    initSchema(db);
+    expect(
+      db.query(
+        "SELECT display_name, fix_missing_think_opening_tag FROM models WHERE id = 'model'",
+      ).get(),
+    ).toEqual({
+      display_name: "Existing",
+      fix_missing_think_opening_tag: 0,
+    });
+    db.close();
+  });
+});
+
 describe("chat settings", () => {
   test("seeds per-chat model persistence disabled", () => {
     const db = new Database(":memory:");

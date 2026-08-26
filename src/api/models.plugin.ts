@@ -152,6 +152,7 @@ export const modelsPlugin = (app: Elysia) =>
             pricing_tiers: body.pricing_tiers,
             context_window: body.context_window,
             max_output_tokens: body.max_output_tokens,
+            fix_missing_think_opening_tag: body.fix_missing_think_opening_tag,
             capabilities: body.capabilities,
             reasoning_efforts: body.reasoning_efforts,
             is_manual: 1,
@@ -180,6 +181,7 @@ export const modelsPlugin = (app: Elysia) =>
           display_name: t.Optional(t.String()),
           context_window: t.Optional(t.Union([t.Integer({ minimum: 1 }), t.Null()])),
           max_output_tokens: t.Optional(t.Union([t.Integer({ minimum: 1 }), t.Null()])),
+          fix_missing_think_opening_tag: t.Optional(t.Boolean()),
           capabilities: t.Optional(capabilitiesSchema),
           reasoning_efforts: t.Optional(reasoningEffortsSchema),
           pricing_tiers: t.Optional(
@@ -701,6 +703,7 @@ export const modelsPlugin = (app: Elysia) =>
           display_name: t.Optional(t.Union([t.String(), t.Null()])),
           context_window: t.Optional(t.Union([t.Integer({ minimum: 1 }), t.Null()])),
           max_output_tokens: t.Optional(t.Union([t.Integer({ minimum: 1 }), t.Null()])),
+          fix_missing_think_opening_tag: t.Optional(t.Boolean()),
           capabilities: t.Optional(capabilitiesSchema),
           reasoning_efforts: t.Optional(reasoningEffortsSchema),
           pricing_tiers: t.Optional(

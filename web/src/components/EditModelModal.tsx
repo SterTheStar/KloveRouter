@@ -41,6 +41,8 @@ export default function EditModelModal({
   const [prettyId, setPrettyId] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [displayEdited, setDisplayEdited] = useState(false);
+  const [fixMissingThinkOpeningTag, setFixMissingThinkOpeningTag] =
+    useState(false);
   const [pricingTiers, setPricingTiers] = useState<PricingTier[]>([]);
   const [metadata, setMetadata] = useState<ModelMetadataInput>(() =>
     emptyModelMetadata(),
@@ -58,6 +60,7 @@ export default function EditModelModal({
       setPrettyId(model.pretty_id ?? "");
       setDisplayName(model.display_name ?? generateDisplayName(model.model_id));
       setDisplayEdited(Boolean(model.display_name));
+      setFixMissingThinkOpeningTag(model.fix_missing_think_opening_tag);
       setMetadata({
         context_window: model.context_window ?? null,
         max_output_tokens: model.max_output_tokens ?? null,
@@ -109,6 +112,7 @@ export default function EditModelModal({
         model_id: modelId.trim(),
         pretty_id: prettyId.trim() || null,
         display_name: displayName || null,
+        fix_missing_think_opening_tag: fixMissingThinkOpeningTag,
         pricing_tiers: pricingTiers,
         ...metadata,
       });
@@ -182,7 +186,12 @@ export default function EditModelModal({
             </div>
           )}
           {activeTab === "capabilities" && (
-            <ModelMetadataEditor value={metadata} onChange={setMetadata} />
+            <ModelMetadataEditor
+              value={metadata}
+              onChange={setMetadata}
+              fixMissingThinkOpeningTag={fixMissingThinkOpeningTag}
+              onFixMissingThinkOpeningTagChange={setFixMissingThinkOpeningTag}
+            />
           )}
           {activeTab === "pricing" && (
             <PricingEditor

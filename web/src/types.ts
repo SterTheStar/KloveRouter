@@ -44,6 +44,7 @@ export interface Model {
   created_at: string;
   context_window: number | null;
   max_output_tokens: number | null;
+  fix_missing_think_opening_tag: boolean;
   capabilities: ModelCapabilities;
   reasoning_efforts: ReasoningEffort[];
   pricing_tiers?: PricingTier[];

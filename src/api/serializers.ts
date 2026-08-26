@@ -49,6 +49,7 @@ export function serializeModel(model: Model) {
     updated_at: model.updated_at,
     context_window: model.context_window,
     max_output_tokens: model.max_output_tokens,
+    fix_missing_think_opening_tag: model.fix_missing_think_opening_tag,
     capabilities: model.capabilities,
     reasoning_efforts: model.reasoning_efforts,
     pricing_tiers: model.pricing_tiers,

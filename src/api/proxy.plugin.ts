@@ -51,6 +51,11 @@ import {
   responsesToChatBody,
 } from "./responses-api";
 import { validateChatCompletionRequest } from "./openai-request";
+import {
+  fixMissingThinkOpeningTag,
+  fixThinkTagAsyncIterable,
+  fixThinkTagSseResponse,
+} from "./think-tag-fix";
 
 function anthropicPayload(body: any, modelId: string, stream = false) {
   const messages = splitAnthropicMessages(body.messages);
@@ -658,6 +663,16 @@ export const proxyPlugin = (app: Elysia) =>
         }
         // Public identifier resolved; use upstream technical ID only internally.
         parsed.modelId = modelRecord.model_id;
+        const fixThinkTag = (completion: any) =>
+          fixMissingThinkOpeningTag(
+            completion,
+            modelRecord.fix_missing_think_opening_tag,
+          );
+        const fixThinkTagStream = (response: Response) =>
+          fixThinkTagSseResponse(
+            response,
+            modelRecord.fix_missing_think_opening_tag,
+          );
         try {
           validateModelRequest(body, modelRecord);
         } catch (error) {
@@ -776,7 +791,7 @@ export const proxyPlugin = (app: Elysia) =>
                 api_key: credential.secret ?? "",
               };
               if (body.stream)
-                return anthropicStreamResponse(
+                return fixThinkTagStream(anthropicStreamResponse(
                   await createAnthropicStream(
                     credentialProvider,
                     anthropicPayload(body, parsed.modelId),
@@ -812,7 +827,7 @@ export const proxyPlugin = (app: Elysia) =>
                   start,
                   parsed.modelId,
                   () => upstreamController.abort(),
-                );
+                ));
               const completion = await createAnthropicMessage(
                 credentialProvider,
                 anthropicPayload(body, parsed.modelId),
@@ -841,7 +856,7 @@ export const proxyPlugin = (app: Elysia) =>
               });
               credentialService.clearError(credential.id);
               credentialService.clearCooldown(credential.id);
-              return toOpenAICompletion(completion);
+              return fixThinkTag(toOpenAICompletion(completion));
             } catch (error: any) {
               failures.push(error.message);
               if (isAbortError(error)) break;
@@ -928,10 +943,10 @@ export const proxyPlugin = (app: Elysia) =>
                  });
                  credentialService.clearError(credentialId);
                  credentialService.clearCooldown(credentialId);
-                 return completion;
+                 return fixThinkTag(completion);
                }
                return recordSseUsageResponse(
-                response,
+                fixThinkTagStream(response),
                 (
                   promptTokens,
                   completionTokens,
@@ -1053,10 +1068,10 @@ export const proxyPlugin = (app: Elysia) =>
                  });
                  credentialService.clearError(credentialId);
                  credentialService.clearCooldown(credentialId);
-                 return completion;
+                 return fixThinkTag(completion);
                }
                return recordSseUsageResponse(
-                response,
+                fixThinkTagStream(response),
                 (
                   promptTokens,
                   completionTokens,
@@ -1199,9 +1214,9 @@ export const proxyPlugin = (app: Elysia) =>
               const modelRecord = modelService.findByProviderAndModel(provider.id, parsed.modelId);
               if (!body.stream) {
                 requestLogService.complete(requestLogId, { durationMs: Math.round(performance.now() - start) });
-                return response.json();
+                return fixThinkTag(await response.json());
               }
-               return recordSseUsageResponse(response, (promptTokens, completionTokens, durationMs, generationDurationMs, details) => {
+               return recordSseUsageResponse(fixThinkTagStream(response), (promptTokens, completionTokens, durationMs, generationDurationMs, details) => {
                 const usage = usageService.record(provider.id, modelRecord?.id ?? parsed.modelId, parsed.modelId, promptTokens, completionTokens, durationMs, generationDurationMs, details);
                 requestLogService.complete(requestLogId, { promptTokens, completionTokens, cacheRead: details?.cacheRead, cacheWrite: details?.cacheWrite, cost: usage.estimated_cost_usd, durationMs });
               }, start);
@@ -1268,9 +1283,9 @@ export const proxyPlugin = (app: Elysia) =>
                   durationMs,
                 });
                 credentialService.clearError(credential.id);
-                return completion;
+                return fixThinkTag(completion);
               }
-              return recordSseUsageResponse(cleanQwenStream(response), (promptTokens, completionTokens, durationMs, generationDurationMs, details) => {
+              return recordSseUsageResponse(fixThinkTagStream(cleanQwenStream(response)), (promptTokens, completionTokens, durationMs, generationDurationMs, details) => {
                 const usage = usageService.record(provider.id, modelRecord?.id ?? parsed.modelId, parsed.modelId, promptTokens, completionTokens, durationMs, generationDurationMs, details);
                 requestLogService.complete(requestLogId, { promptTokens, completionTokens, cacheRead: details?.cacheRead, cacheWrite: details?.cacheWrite, cost: usage.estimated_cost_usd, durationMs });
               }, start, undefined, { messages: body.messages, model: parsed.modelId, provider: provider.name });
@@ -1310,9 +1325,9 @@ export const proxyPlugin = (app: Elysia) =>
                 requestLogService.complete(requestLogId, { promptTokens, completionTokens, cost: usage.estimated_cost_usd, durationMs });
                 credentialService.clearError(credentialId);
                 credentialService.clearCooldown(credentialId);
-                return completion;
+                return fixThinkTag(completion);
               }
-              return recordSseUsageResponse(result as Response, (promptTokens, completionTokens, durationMs, generationDurationMs, details) => {
+              return recordSseUsageResponse(fixThinkTagStream(result as Response), (promptTokens, completionTokens, durationMs, generationDurationMs, details) => {
                 const usage = usageService.record(provider.id, modelRecord?.id ?? parsed.modelId, parsed.modelId, promptTokens, completionTokens, durationMs, generationDurationMs, details);
                 requestLogService.complete(requestLogId, { promptTokens, completionTokens, cacheRead: details?.cacheRead, cacheWrite: details?.cacheWrite, cost: usage.estimated_cost_usd, durationMs });
                 credentialService.clearError(credentialId);
@@ -1350,7 +1365,9 @@ export const proxyPlugin = (app: Elysia) =>
               credentialService.clearError(credential.id);
               credentialService.clearCooldown(credential.id);
               requestLogService.complete(requestLogId, { durationMs });
-              return result;
+              return body.stream
+                ? fixThinkTagStream(result as Response)
+                : fixThinkTag(result);
             } catch (error: any) {
               failures.push(error.message);
               credentialService.markError(credential.id, error.message);
@@ -1416,10 +1433,10 @@ export const proxyPlugin = (app: Elysia) =>
                 });
                 credentialService.clearError(credentialId);
                 credentialService.clearCooldown(credentialId);
-                return completion;
+                return fixThinkTag(completion);
               }
               return recordSseUsageResponse(
-                chatgptStreamToOpenAI(
+                fixThinkTagStream(chatgptStreamToOpenAI(
                   upstream,
                   parsed.modelId,
                   (conversationId) => {
@@ -1429,7 +1446,7 @@ export const proxyPlugin = (app: Elysia) =>
                         conversationId,
                       );
                   },
-                ),
+                )),
                 (
                   promptTokens,
                   completionTokens,
@@ -1500,10 +1517,6 @@ export const proxyPlugin = (app: Elysia) =>
               attempted.add(credential.id);
               const credentialId = credential.id;
               const start = performance.now();
-              const modelRecord = modelService.findByProviderAndModel(
-                provider.id,
-                parsed.modelId,
-              );
               const client = createOpenAIClient({
                 ...provider,
                 api_key: credential.secret ?? "",
@@ -1517,7 +1530,12 @@ export const proxyPlugin = (app: Elysia) =>
                 { signal: request.signal },
               )) as any;
 
-              return openAIStreamResponse(stream, {
+              return openAIStreamResponse(
+                fixThinkTagAsyncIterable(
+                  stream,
+                  modelRecord.fix_missing_think_opening_tag,
+                ),
+                {
                 start,
                 tokenDetails,
                 signal: request.signal,
@@ -1650,7 +1668,7 @@ export const proxyPlugin = (app: Elysia) =>
               });
 
               credentialService.clearError(credential.id);
-              return completion;
+              return fixThinkTag(completion);
             } catch (error: any) {
               failures.push(error.message);
               credentialService.markError(credential.id, error.message);
