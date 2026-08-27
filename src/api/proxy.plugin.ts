@@ -177,6 +177,62 @@ function isQuotaError(error: unknown) {
   );
 }
 
+const sensitiveErrorKey = /token|secret|password|authorization|api.?key|cookie/i;
+
+function safeErrorDetail(value: unknown, depth = 0): unknown {
+  if (depth > 4) return "[truncated]";
+  if (value instanceof Error) return value.message;
+  if (Array.isArray(value)) return value.slice(0, 20).map((item) => safeErrorDetail(item, depth + 1));
+  if (value && typeof value === "object") {
+    return Object.fromEntries(Object.entries(value).slice(0, 30).map(([key, item]) => [
+      key,
+      sensitiveErrorKey.test(key) ? "[redacted]" : safeErrorDetail(item, depth + 1),
+    ]));
+  }
+  return typeof value === "string" && value.length > 4000 ? `${value.slice(0, 4000)}…` : value;
+}
+
+function errorMessage(error: unknown, fallback = "Provider request failed") {
+  const value = (error as any)?.body ?? (error as any)?.error ?? error;
+  const nested = (value as any)?.error;
+  const message =
+    (typeof nested === "object" ? nested?.message : nested) ??
+    (value as any)?.message ??
+    (error as any)?.message;
+  return typeof message === "string" && message ? message : fallback;
+}
+
+export function proxyErrorBody(error: unknown, fallback = "Provider request failed"): { error: Record<string, unknown> } {
+  const raw = (error as any)?.body ?? (error as any)?.error;
+  const detail = safeErrorDetail(raw);
+  const message = errorMessage(error, fallback);
+  const source = detail && typeof detail === "object" ? detail as Record<string, unknown> : {};
+  const nested = source.error && typeof source.error === "object" ? source.error as Record<string, unknown> : {};
+  return {
+    error: {
+      ...nested,
+      ...source,
+      message,
+      type: nested.type ?? source.type ?? "server_error",
+      code: nested.code ?? source.code ?? null,
+    },
+  };
+}
+
+export function proxyErrorStatus(error: unknown, fallback = 502) {
+  const status = errorStatus(error);
+  if (status !== undefined && status >= 400 && status <= 599) return status;
+  return isQuotaError(error) ? 429 : fallback;
+}
+
+function failureStatus(failures: unknown[], fallback = 502) {
+  const statuses = failures.map((failure) => errorStatus(failure)).filter((status): status is number => status !== undefined && status >= 400 && status <= 599);
+  if (statuses.length) return statuses.at(-1)!;
+  if (failures.length && failures.every(isQuotaError)) return 429;
+  const match = failures.map((failure) => String(failure).match(/(?:HTTP|status|failed\s*\()\s*(4\d\d|5\d\d)/i)?.[1]).find(Boolean);
+  return match ? Number(match) : fallback;
+}
+
 function isModelNotFoundError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
   return /"code"\s*:\s*404|\bNOT_FOUND\b|requested entity was not found/i.test(
@@ -491,6 +547,13 @@ async function verifyApiKey(headers: Record<string, string | undefined>) {
 
 export const proxyPlugin = (app: Elysia) =>
   app
+    .onError(({ error, set, request }) => {
+      const pathname = new URL(request.url).pathname;
+      if (pathname === "/v1/chat/completions" || pathname === "/v1/responses") {
+        set.status = proxyErrorStatus(error, 500);
+        return proxyErrorBody(error, "Internal proxy error");
+      }
+    })
     .get("/v1/models", async ({ set, headers }) => {
       const apiKey = await verifyApiKey(headers);
       if (!apiKey) {
@@ -571,14 +634,14 @@ export const proxyPlugin = (app: Elysia) =>
         });
         if (!chatResponse.ok) {
           set.status = chatResponse.status;
-          const error = await chatResponse.json().catch(async () => ({ message: await chatResponse.text() }));
-          return {
-            error: {
-              message: error?.message ?? error?.error?.message ?? error?.error ?? "Provider request failed",
-              type: error?.type ?? "server_error",
-              code: error?.code ?? null,
-            },
-          };
+          const raw = await chatResponse.text().catch(() => "");
+          let error: unknown = raw ? { message: raw } : undefined;
+          try {
+            if (raw) error = JSON.parse(raw);
+          } catch {
+            // Keep the plain-text upstream error.
+          }
+          return proxyErrorBody({ status: chatResponse.status, body: error });
         }
         if (body.stream) return chatSseToResponses(chatResponse, body.model, abortUpstream);
         return chatCompletionToResponse(await chatResponse.json());
@@ -774,7 +837,7 @@ export const proxyPlugin = (app: Elysia) =>
 
         if (provider.protocol === "anthropic") {
           const attempted = new Set<string>();
-          const failures: string[] = [];
+          const failures: unknown[] = [];
           const failureStatuses: number[] = [];
           const upstreamController = new AbortController();
           request.signal.addEventListener("abort", () => upstreamController.abort(request.signal.reason), { once: true });
@@ -858,7 +921,7 @@ export const proxyPlugin = (app: Elysia) =>
               credentialService.clearCooldown(credential.id);
               return fixThinkTag(toOpenAICompletion(completion));
             } catch (error: any) {
-              failures.push(error.message);
+              failures.push(error);
               if (isAbortError(error)) break;
               const status = errorStatus(error);
               if (status !== undefined) failureStatuses.push(status);
@@ -877,13 +940,13 @@ export const proxyPlugin = (app: Elysia) =>
               requestLogService.setCredential(requestLogId, credential);
             }
           }
-          const lastFailure = failures.at(-1) ?? "Provider request failed";
+          const lastFailure = errorMessage(failures.at(-1));
           const lastStatus = failureStatuses.at(-1);
           const statusCode = lastStatus === 429 || failures.every(isQuotaError)
             ? 429
             : lastStatus !== undefined && lastStatus >= 400 && lastStatus < 600
               ? lastStatus
-              : 502;
+              : failureStatus(failures);
           requestLogService.complete(requestLogId, {
             status: "error",
             statusCode,
@@ -898,7 +961,7 @@ export const proxyPlugin = (app: Elysia) =>
 
          if (provider.protocol === "codex") {
           const attempted = new Set<string>();
-          const failures: string[] = [];
+          const failures: unknown[] = [];
           while (credential && !attempted.has(credential.id)) {
             attempted.add(credential.id);
             try {
@@ -986,7 +1049,7 @@ export const proxyPlugin = (app: Elysia) =>
                  },
                );
             } catch (error: any) {
-              failures.push(error.message);
+              failures.push(error);
               credentialService.markError(credential.id, error.message);
               if (isAbortError(error) || !isTransientProviderError(error) || provider.credential_mode !== "round_robin") break;
               credentialService.markCooldown(
@@ -1006,8 +1069,8 @@ export const proxyPlugin = (app: Elysia) =>
               requestLogService.setCredential(requestLogId, credential);
             }
           }
-          const lastFailure = failures.at(-1) ?? "Provider request failed";
-          const statusCode = failures.every(isQuotaError) ? 429 : 502;
+          const lastFailure = errorMessage(failures.at(-1));
+          const statusCode = failureStatus(failures);
           requestLogService.complete(requestLogId, {
             status: "error",
             statusCode,
@@ -1016,13 +1079,13 @@ export const proxyPlugin = (app: Elysia) =>
           set.status = statusCode;
           return {
             error: "Codex request failed",
-            message: `All ${attempted.size} available credentials failed. ${failures.at(-1)}`,
+            message: `All ${attempted.size} available credentials failed. ${lastFailure}`,
           };
         }
 
          if (provider.protocol === "antigravity") {
           const attempted = new Set<string>();
-          const failures: string[] = [];
+          const failures: unknown[] = [];
           while (credential && !attempted.has(credential.id)) {
             attempted.add(credential.id);
             try {
@@ -1112,7 +1175,7 @@ export const proxyPlugin = (app: Elysia) =>
                );
             } catch (error: any) {
               if (isModelNotFoundError(error)) {
-                failures.push(error.message);
+                failures.push(error);
                 if (isAbortError(error) || !isTransientProviderError(error) || provider.credential_mode !== "round_robin") break;
                 const next = credentialService.select(
                   provider.id,
@@ -1126,7 +1189,7 @@ export const proxyPlugin = (app: Elysia) =>
                 continue;
               }
               credentialService.markError(credential.id, error.message);
-              failures.push(error.message);
+              failures.push(error);
               if (isAbortError(error) || !isTransientProviderError(error) || provider.credential_mode !== "round_robin") {
                 const statusCode = isQuotaError(error) ? 429 : errorStatus(error) ?? 502;
                 requestLogService.complete(requestLogId, {
@@ -1180,7 +1243,7 @@ export const proxyPlugin = (app: Elysia) =>
           requestLogService.complete(requestLogId, {
             status: "error",
             statusCode,
-            error: failures.at(-1),
+            error: errorMessage(failures.at(-1)),
           });
           set.status = statusCode;
           return {
@@ -1199,7 +1262,7 @@ export const proxyPlugin = (app: Elysia) =>
 
         if (provider.protocol === "freebuff") {
           const attempted = new Set<string>();
-          const failures: string[] = [];
+          const failures: unknown[] = [];
           while (credential && !attempted.has(credential.id)) {
             attempted.add(credential.id);
             try {
@@ -1221,7 +1284,7 @@ export const proxyPlugin = (app: Elysia) =>
                 requestLogService.complete(requestLogId, { promptTokens, completionTokens, cacheRead: details?.cacheRead, cacheWrite: details?.cacheWrite, cost: usage.estimated_cost_usd, durationMs });
               }, start);
             } catch (error: any) {
-              failures.push(error.message);
+              failures.push(error);
               credentialService.markError(credential.id, error.message);
               if (isAbortError(error) || !isTransientProviderError(error) || provider.credential_mode !== "round_robin") break;
               const next = credentialService.select(provider.id, "round_robin", null, requestSequence);
@@ -1230,14 +1293,15 @@ export const proxyPlugin = (app: Elysia) =>
               requestLogService.setCredential(requestLogId, credential);
             }
           }
-           set.status = 502;
-           requestLogService.complete(requestLogId, { status: "error", statusCode: 502, error: failures.at(-1) });
-           return { error: "Freebuff request failed", message: failures.at(-1) };
+           const statusCode = failureStatus(failures);
+           set.status = statusCode;
+           requestLogService.complete(requestLogId, { status: "error", statusCode, error: errorMessage(failures.at(-1)) });
+           return { error: "Freebuff request failed", message: errorMessage(failures.at(-1)) };
          }
 
         if (provider.protocol === "qwen") {
           const attempted = new Set<string>();
-          const failures: string[] = [];
+          const failures: unknown[] = [];
           while (credential && !attempted.has(credential.id)) {
             attempted.add(credential.id);
             try {
@@ -1290,7 +1354,7 @@ export const proxyPlugin = (app: Elysia) =>
                 requestLogService.complete(requestLogId, { promptTokens, completionTokens, cacheRead: details?.cacheRead, cacheWrite: details?.cacheWrite, cost: usage.estimated_cost_usd, durationMs });
               }, start, undefined, { messages: body.messages, model: parsed.modelId, provider: provider.name });
             } catch (error: any) {
-              failures.push(error.message);
+              failures.push(error);
               credentialService.markError(credential.id, error.message);
               if (isAbortError(error) || !isTransientProviderError(error) || provider.credential_mode !== "round_robin") break;
               const next = credentialService.select(provider.id, "round_robin", null, requestSequence);
@@ -1299,14 +1363,15 @@ export const proxyPlugin = (app: Elysia) =>
               requestLogService.setCredential(requestLogId, credential);
             }
           }
-          set.status = 502;
-          requestLogService.complete(requestLogId, { status: "error", statusCode: 502, error: failures.at(-1) });
-          return { error: "Qwen request failed", message: failures.at(-1) };
+          const statusCode = failureStatus(failures);
+          set.status = statusCode;
+          requestLogService.complete(requestLogId, { status: "error", statusCode, error: errorMessage(failures.at(-1)) });
+          return { error: "Qwen request failed", message: errorMessage(failures.at(-1)) };
         }
 
         if (provider.protocol === "conol") {
           const attempted = new Set<string>();
-          const failures: string[] = [];
+          const failures: unknown[] = [];
           while (credential && !attempted.has(credential.id)) {
             attempted.add(credential.id);
             try {
@@ -1337,7 +1402,7 @@ export const proxyPlugin = (app: Elysia) =>
                 requestLogService.complete(requestLogId, { status: "error", statusCode: 502, error: error.message });
               }, { messages: body.messages, model: parsed.modelId, provider: provider.name });
             } catch (error: any) {
-              failures.push(error.message);
+              failures.push(error);
               credentialService.markError(credential.id, error.message);
               if (isAbortError(error) || !isTransientProviderError(error) || provider.credential_mode !== "round_robin") break;
               credentialService.markCooldown(credential.id, 10, error.message, requestSequence);
@@ -1347,15 +1412,15 @@ export const proxyPlugin = (app: Elysia) =>
               requestLogService.setCredential(requestLogId, credential);
             }
           }
-          const statusCode = failures.some((message) => isQuotaError(message)) ? 429 : 502;
+          const statusCode = failureStatus(failures);
           set.status = statusCode;
-          requestLogService.complete(requestLogId, { status: "error", statusCode, error: failures.at(-1) });
-          return { error: "Conol request failed", message: failures.at(-1) ?? "Provider request failed" };
+          requestLogService.complete(requestLogId, { status: "error", statusCode, error: errorMessage(failures.at(-1)) });
+          return { error: "Conol request failed", message: errorMessage(failures.at(-1)) };
         }
 
         if (provider.protocol === "atomesus") {
           const attempted = new Set<string>();
-          const failures: string[] = [];
+          const failures: unknown[] = [];
           while (credential && !attempted.has(credential.id)) {
             attempted.add(credential.id);
             try {
@@ -1369,7 +1434,7 @@ export const proxyPlugin = (app: Elysia) =>
                 ? fixThinkTagStream(result as Response)
                 : fixThinkTag(result);
             } catch (error: any) {
-              failures.push(error.message);
+              failures.push(error);
               credentialService.markError(credential.id, error.message);
               if (isAbortError(error) || !isTransientProviderError(error) || provider.credential_mode !== "round_robin") break;
               credentialService.markCooldown(credential.id, 10, error.message, requestSequence);
@@ -1379,15 +1444,15 @@ export const proxyPlugin = (app: Elysia) =>
               requestLogService.setCredential(requestLogId, credential);
             }
           }
-          const statusCode = failures.every(isQuotaError) ? 429 : 502;
+          const statusCode = failureStatus(failures);
           set.status = statusCode;
-          requestLogService.complete(requestLogId, { status: "error", statusCode, error: failures.at(-1) });
-          return { error: "Atomesus request failed", message: failures.at(-1) };
+          requestLogService.complete(requestLogId, { status: "error", statusCode, error: errorMessage(failures.at(-1)) });
+          return { error: "Atomesus request failed", message: errorMessage(failures.at(-1)) };
         }
 
         if (provider.protocol === "chatgpt") {
           const attempted = new Set<string>();
-          const failures: string[] = [];
+          const failures: unknown[] = [];
           while (credential && !attempted.has(credential.id)) {
             attempted.add(credential.id);
             try {
@@ -1478,7 +1543,7 @@ export const proxyPlugin = (app: Elysia) =>
                 start,
               );
             } catch (error: any) {
-              failures.push(error.message);
+              failures.push(error);
               credentialService.markError(credential.id, error.message);
               if (isAbortError(error) || !isTransientProviderError(error) || provider.credential_mode !== "round_robin") break;
               credentialService.markCooldown(
@@ -1498,20 +1563,20 @@ export const proxyPlugin = (app: Elysia) =>
               requestLogService.setCredential(requestLogId, credential);
             }
           }
-          const statusCode = failures.every(isQuotaError) ? 429 : 502;
+          const statusCode = failureStatus(failures);
           set.status = statusCode;
           requestLogService.complete(requestLogId, {
             status: "error",
             statusCode,
-            error: failures.at(-1),
+            error: errorMessage(failures.at(-1)),
           });
-          return { error: "ChatGPT request failed", message: failures.at(-1) };
+          return { error: "ChatGPT request failed", message: errorMessage(failures.at(-1)) };
         }
 
         // Handle streaming
         if (body.stream) {
           const attempted = new Set<string>();
-          const failures: string[] = [];
+          const failures: unknown[] = [];
           while (credential && !attempted.has(credential.id))
             try {
               attempted.add(credential.id);
@@ -1595,7 +1660,7 @@ export const proxyPlugin = (app: Elysia) =>
                 },
               });
             } catch (error: any) {
-              failures.push(error.message);
+              failures.push(error);
               credentialService.markError(credential.id, error.message);
               if (isAbortError(error) || !isTransientProviderError(error) || provider.credential_mode !== "round_robin") break;
               credentialService.markCooldown(
@@ -1614,8 +1679,8 @@ export const proxyPlugin = (app: Elysia) =>
               credential = next;
               requestLogService.setCredential(requestLogId, credential);
             }
-          const lastFailure = failures.at(-1) ?? "Provider request failed";
-          const statusCode = failures.every(isQuotaError) ? 429 : 502;
+          const lastFailure = errorMessage(failures.at(-1));
+          const statusCode = failureStatus(failures);
           requestLogService.complete(requestLogId, {
             status: "error",
             statusCode,
@@ -1624,14 +1689,14 @@ export const proxyPlugin = (app: Elysia) =>
           set.status = statusCode;
           return {
             error: "Provider request failed",
-            message: `All ${attempted.size} available credentials failed. ${failures.at(-1)}`,
+            message: `All ${attempted.size} available credentials failed. ${lastFailure}`,
           };
         }
 
         // Non-streaming
         {
           const attempted = new Set<string>();
-          const failures: string[] = [];
+          const failures: unknown[] = [];
           while (credential && !attempted.has(credential.id))
             try {
               attempted.add(credential.id);
@@ -1670,7 +1735,7 @@ export const proxyPlugin = (app: Elysia) =>
               credentialService.clearError(credential.id);
               return fixThinkTag(completion);
             } catch (error: any) {
-              failures.push(error.message);
+              failures.push(error);
               credentialService.markError(credential.id, error.message);
               if (isAbortError(error) || !isTransientProviderError(error) || provider.credential_mode !== "round_robin") break;
               credentialService.markCooldown(
@@ -1689,8 +1754,8 @@ export const proxyPlugin = (app: Elysia) =>
               credential = next;
               requestLogService.setCredential(requestLogId, credential);
             }
-          const lastFailure = failures.at(-1) ?? "Provider request failed";
-          const statusCode = failures.every(isQuotaError) ? 429 : 502;
+          const lastFailure = errorMessage(failures.at(-1));
+          const statusCode = failureStatus(failures);
           requestLogService.complete(requestLogId, {
             status: "error",
             statusCode,
@@ -1699,7 +1764,7 @@ export const proxyPlugin = (app: Elysia) =>
           set.status = statusCode;
           return {
             error: "Provider request failed",
-            message: `All ${attempted.size} available credentials failed. ${failures.at(-1)}`,
+            message: `All ${attempted.size} available credentials failed. ${lastFailure}`,
           };
         }
       },
