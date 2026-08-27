@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { proxyErrorBody, proxyErrorStatus } from "./proxy.plugin";
+import { buildChatPayload, proxyErrorBody, proxyErrorStatus } from "./proxy.plugin";
 
 describe("proxy error normalization", () => {
   test("preserves upstream status, body details, and safe fields", () => {
@@ -43,5 +43,19 @@ describe("proxy error normalization", () => {
         code: null,
       },
     });
+  });
+
+  test("normalizes developer messages for OpenAI-compatible upstreams", () => {
+    const messages = [
+      { role: "developer", content: "Follow these instructions" },
+      { role: "user", content: "Hello" },
+    ];
+    const payload = buildChatPayload({ messages }, "model", false);
+
+    expect(payload.messages).toEqual([
+      { role: "system", content: "Follow these instructions" },
+      { role: "user", content: "Hello" },
+    ]);
+    expect(messages[0]?.role).toBe("developer");
   });
 });

@@ -158,10 +158,19 @@ const forwardedChatFields = [
   "prompt_cache_key",
 ] as const;
 
-function buildChatPayload(body: any, model: string, stream: boolean) {
+function normalizeOpenAIMessages(messages: unknown) {
+  if (!Array.isArray(messages)) return messages;
+  return messages.map((message) =>
+    message && typeof message === "object" && (message as any).role === "developer"
+      ? { ...(message as any), role: "system" }
+      : message,
+  );
+}
+
+export function buildChatPayload(body: any, model: string, stream: boolean) {
   const payload: Record<string, unknown> = {
     model,
-    messages: body.messages,
+    messages: normalizeOpenAIMessages(body.messages),
     stream,
   };
   for (const field of forwardedChatFields) {
