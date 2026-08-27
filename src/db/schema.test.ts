@@ -54,11 +54,11 @@ describe("model think tag fix", () => {
   test("defaults the option to disabled in a fresh schema", () => {
     const db = new Database(":memory:");
     initSchema(db);
-    const column = (db.query("PRAGMA table_info(models)").all() as Array<{
+    const mode = (db.query("PRAGMA table_info(models)").all() as Array<{
       name: string;
       dflt_value: string | null;
-    }>).find((item) => item.name === "fix_missing_think_opening_tag");
-    expect(column?.dflt_value).toBe("0");
+    }>).find((item) => item.name === "think_opening_tag_mode");
+    expect(mode?.dflt_value).toBe("'off'");
     db.close();
   });
 
@@ -77,12 +77,52 @@ describe("model think tag fix", () => {
     initSchema(db);
     expect(
       db.query(
-        "SELECT display_name, fix_missing_think_opening_tag FROM models WHERE id = 'model'",
+        "SELECT display_name, think_opening_tag_mode FROM models WHERE id = 'model'",
       ).get(),
     ).toEqual({
       display_name: "Existing",
-      fix_missing_think_opening_tag: 0,
+      think_opening_tag_mode: "off",
     });
+    db.close();
+  });
+
+  test("migrates the legacy boolean into the enum column", () => {
+    const db = new Database(":memory:");
+    db.exec(`
+      CREATE TABLE models (
+        id TEXT PRIMARY KEY, provider_id TEXT NOT NULL, model_id TEXT NOT NULL,
+        display_name TEXT, is_manual INTEGER NOT NULL DEFAULT 0,
+        is_active INTEGER NOT NULL DEFAULT 1,
+        fix_missing_think_opening_tag INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      INSERT INTO models (id, provider_id, model_id, display_name, fix_missing_think_opening_tag)
+      VALUES ('off-model', 'provider', 'off-model', 'Off', 0),
+             ('detect-model', 'provider', 'detect-model', 'Detect', 1);
+    `);
+    initSchema(db);
+    expect(
+      db.query("SELECT display_name, think_opening_tag_mode FROM models ORDER BY display_name ASC").all(),
+    ).toEqual([
+      { display_name: "Detect", think_opening_tag_mode: "detect" },
+      { display_name: "Off", think_opening_tag_mode: "off" },
+    ]);
+    db.close();
+  });
+
+  test("does not overwrite a later force value on re-init", () => {
+    const db = new Database(":memory:");
+    initSchema(db);
+    db.exec(`
+      INSERT INTO providers (id, name, base_url, api_key)
+      VALUES ('provider', 'Provider', 'https://example.com', 'key');
+      INSERT INTO models (id, provider_id, model_id, think_opening_tag_mode)
+      VALUES ('model', 'provider', 'test', 'force');
+    `);
+    initSchema(db);
+    expect(
+      db.query("SELECT think_opening_tag_mode FROM models WHERE id = 'model'").get(),
+    ).toEqual({ think_opening_tag_mode: "force" });
     db.close();
   });
 });

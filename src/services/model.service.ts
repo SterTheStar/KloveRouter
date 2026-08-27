@@ -3,6 +3,10 @@ import { isBlockedAntigravityModel } from "../integrations/antigravity/antigravi
 import { generateDisplayName } from "./model-name";
 import { providerAvatarSources, resolveProviderAvatar, type ProviderProtocol } from "./provider-appearance";
 
+export type ThinkOpeningTagMode = "off" | "detect" | "force";
+
+const thinkOpeningTagModes: ThinkOpeningTagMode[] = ["off", "detect", "force"];
+
 export interface Model {
   id: string;
   provider_id: string;
@@ -15,6 +19,7 @@ export interface Model {
   updated_at: string;
   context_window: number | null;
   max_output_tokens: number | null;
+  think_opening_tag_mode: ThinkOpeningTagMode;
   fix_missing_think_opening_tag: boolean;
   capabilities: ModelCapabilities;
   reasoning_efforts: ReasoningEffort[];
@@ -43,6 +48,7 @@ export interface ReasoningEffort {
 export interface ModelMetadataInput {
   context_window?: number | null;
   max_output_tokens?: number | null;
+  think_opening_tag_mode?: ThinkOpeningTagMode;
   fix_missing_think_opening_tag?: boolean;
   capabilities?: Partial<ModelCapabilities>;
   reasoning_efforts?: ReasoningEffort[];
@@ -353,6 +359,13 @@ function savePricing(modelId: string, tiers?: PricingTier[]) {
 }
 
 function validateMetadata(input: ModelMetadataInput): void {
+  if (
+    input.think_opening_tag_mode !== undefined &&
+    !thinkOpeningTagModes.includes(input.think_opening_tag_mode)
+  )
+    throw new InvalidModelMetadataError(
+      "think_opening_tag_mode must be off, detect, or force",
+    );
   for (const [name, value] of [
     ["context_window", input.context_window],
     ["max_output_tokens", input.max_output_tokens],
@@ -456,6 +469,18 @@ function refreshSyncedMetadata(modelId: string, input: ModelMetadataInput): void
   saveMetadata(modelId, input);
 }
 
+function resolveThinkOpeningTagMode(
+  input: ModelMetadataInput,
+  existingMode: ThinkOpeningTagMode = "off",
+): ThinkOpeningTagMode {
+  if (input.think_opening_tag_mode !== undefined)
+    return input.think_opening_tag_mode;
+  if (input.fix_missing_think_opening_tag === false) return "off";
+  if (input.fix_missing_think_opening_tag === true)
+    return existingMode === "force" ? "force" : "detect";
+  return existingMode;
+}
+
 function hydrate(model: Model | null): Model | null {
   if (!model) return null;
   const db = getDb();
@@ -466,9 +491,8 @@ function hydrate(model: Model | null): Model | null {
     ...model,
     context_window: model.context_window ?? null,
     max_output_tokens: model.max_output_tokens ?? null,
-    fix_missing_think_opening_tag: Boolean(
-      model.fix_missing_think_opening_tag,
-    ),
+    think_opening_tag_mode: model.think_opening_tag_mode,
+    fix_missing_think_opening_tag: model.think_opening_tag_mode !== "off",
     capabilities: Object.fromEntries(
       capabilityKeys.map((key) => {
         const value = capabilities?.[key];
@@ -608,16 +632,18 @@ export const modelService = {
         const displayName = syncingManualModel
           ? existing.display_name
           : input.display_name?.trim() || generateDisplayName(input.model_id);
-         db.query("UPDATE models SET pretty_id = ?, display_name = ?, is_active = ?, updated_at = datetime('now') WHERE id = ?").run(
+         const resolvedMode = resolveThinkOpeningTagMode(
+          input,
+          existing.think_opening_tag_mode,
+        );
+         db.query("UPDATE models SET pretty_id = ?, display_name = ?, is_active = ?, think_opening_tag_mode = ?, fix_missing_think_opening_tag = ?, updated_at = datetime('now') WHERE id = ?").run(
           prettyId,
           displayName,
           syncingManualModel ? existing.is_active : input.is_active ?? existing.is_active,
+          resolvedMode,
+          resolvedMode !== "off" ? 1 : 0,
           existing.id,
         );
-        if (input.fix_missing_think_opening_tag !== undefined)
-          db.query(
-            "UPDATE models SET fix_missing_think_opening_tag = ? WHERE id = ?",
-          ).run(input.fix_missing_think_opening_tag ? 1 : 0, existing.id);
         const hasPricing = Boolean(
           db.query("SELECT 1 FROM model_pricing_tiers WHERE model_id = ? LIMIT 1").get(existing.id),
         );
@@ -631,15 +657,17 @@ export const modelService = {
 
     const id = crypto.randomUUID();
     db.transaction(() => {
+      const resolvedMode = resolveThinkOpeningTagMode(input);
       db.query(
-        "INSERT INTO models (id, provider_id, model_id, pretty_id, display_name, fix_missing_think_opening_tag, is_manual, is_active, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))",
+        "INSERT INTO models (id, provider_id, model_id, pretty_id, display_name, fix_missing_think_opening_tag, think_opening_tag_mode, is_manual, is_active, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))",
       ).run(
         id,
         input.provider_id,
         input.model_id,
         requestedPrettyId,
         input.display_name?.trim() || generateDisplayName(input.model_id),
-        input.fix_missing_think_opening_tag ? 1 : 0,
+        resolvedMode !== "off" ? 1 : 0,
+        resolvedMode,
         input.is_manual ?? 0,
         input.is_active ?? 1,
       );
@@ -750,6 +778,19 @@ export const modelService = {
     if (input.fix_missing_think_opening_tag !== undefined) {
       updates.push("fix_missing_think_opening_tag = ?");
       values.push(input.fix_missing_think_opening_tag ? 1 : 0);
+    }
+    const resolvedMode = resolveThinkOpeningTagMode(
+      input,
+      existing.think_opening_tag_mode,
+    );
+    if (
+      input.think_opening_tag_mode !== undefined ||
+      input.fix_missing_think_opening_tag !== undefined
+    ) {
+      updates.push("think_opening_tag_mode = ?");
+      values.push(resolvedMode);
+      updates.push("fix_missing_think_opening_tag = ?");
+      values.push(resolvedMode !== "off" ? 1 : 0);
     }
     db.transaction(() => {
       savePricing(id, input.pricing_tiers);

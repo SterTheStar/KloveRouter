@@ -33,6 +33,8 @@ export interface ProviderCredential {
   created_at: string;
 }
 
+export type ThinkOpeningTagMode = "off" | "detect" | "force";
+
 export interface Model {
   id: string;
   provider_id: string;
@@ -44,6 +46,7 @@ export interface Model {
   created_at: string;
   context_window: number | null;
   max_output_tokens: number | null;
+  think_opening_tag_mode: ThinkOpeningTagMode;
   fix_missing_think_opening_tag: boolean;
   capabilities: ModelCapabilities;
   reasoning_efforts: ReasoningEffort[];
@@ -70,6 +73,7 @@ export interface ReasoningEffort {
 export interface ModelMetadataInput {
   context_window: number | null;
   max_output_tokens: number | null;
+  think_opening_tag_mode?: ThinkOpeningTagMode;
   capabilities: ModelCapabilities;
   reasoning_efforts: ReasoningEffort[];
 }

@@ -666,12 +666,12 @@ export const proxyPlugin = (app: Elysia) =>
         const fixThinkTag = (completion: any) =>
           fixMissingThinkOpeningTag(
             completion,
-            modelRecord.fix_missing_think_opening_tag,
+            modelRecord.think_opening_tag_mode,
           );
         const fixThinkTagStream = (response: Response) =>
           fixThinkTagSseResponse(
             response,
-            modelRecord.fix_missing_think_opening_tag,
+            modelRecord.think_opening_tag_mode,
           );
         try {
           validateModelRequest(body, modelRecord);
@@ -1533,7 +1533,7 @@ export const proxyPlugin = (app: Elysia) =>
               return openAIStreamResponse(
                 fixThinkTagAsyncIterable(
                   stream,
-                  modelRecord.fix_missing_think_opening_tag,
+                  modelRecord.think_opening_tag_mode,
                 ),
                 {
                 start,

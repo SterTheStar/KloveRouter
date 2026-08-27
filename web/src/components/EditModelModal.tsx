@@ -20,6 +20,7 @@ import {
   ModelMetadataEditor,
   modelFormTabs,
   PricingEditor,
+  ThinkTagModeEditor,
 } from "./AddModelModal";
 import type { PricingTier } from "../types";
 import { generateDisplayName } from "../lib/model-name";
@@ -41,8 +42,8 @@ export default function EditModelModal({
   const [prettyId, setPrettyId] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [displayEdited, setDisplayEdited] = useState(false);
-  const [fixMissingThinkOpeningTag, setFixMissingThinkOpeningTag] =
-    useState(false);
+  const [thinkOpeningTagMode, setThinkOpeningTagMode] =
+    useState<import("../types").ThinkOpeningTagMode>("off");
   const [pricingTiers, setPricingTiers] = useState<PricingTier[]>([]);
   const [metadata, setMetadata] = useState<ModelMetadataInput>(() =>
     emptyModelMetadata(),
@@ -60,7 +61,10 @@ export default function EditModelModal({
       setPrettyId(model.pretty_id ?? "");
       setDisplayName(model.display_name ?? generateDisplayName(model.model_id));
       setDisplayEdited(Boolean(model.display_name));
-      setFixMissingThinkOpeningTag(model.fix_missing_think_opening_tag);
+      setThinkOpeningTagMode(
+        model.think_opening_tag_mode ??
+          (model.fix_missing_think_opening_tag ? "detect" : "off"),
+      );
       setMetadata({
         context_window: model.context_window ?? null,
         max_output_tokens: model.max_output_tokens ?? null,
@@ -112,7 +116,7 @@ export default function EditModelModal({
         model_id: modelId.trim(),
         pretty_id: prettyId.trim() || null,
         display_name: displayName || null,
-        fix_missing_think_opening_tag: fixMissingThinkOpeningTag,
+        think_opening_tag_mode: thinkOpeningTagMode,
         pricing_tiers: pricingTiers,
         ...metadata,
       });
@@ -186,11 +190,12 @@ export default function EditModelModal({
             </div>
           )}
           {activeTab === "capabilities" && (
-            <ModelMetadataEditor
-              value={metadata}
-              onChange={setMetadata}
-              fixMissingThinkOpeningTag={fixMissingThinkOpeningTag}
-              onFixMissingThinkOpeningTagChange={setFixMissingThinkOpeningTag}
+            <ModelMetadataEditor value={metadata} onChange={setMetadata} />
+          )}
+          {activeTab === "output-fixes" && (
+            <ThinkTagModeEditor
+              value={thinkOpeningTagMode}
+              onChange={setThinkOpeningTagMode}
             />
           )}
           {activeTab === "pricing" && (

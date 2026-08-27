@@ -274,6 +274,7 @@ export const models = {
       pretty_id?: string | null;
       display_name?: string;
       fix_missing_think_opening_tag?: boolean;
+      think_opening_tag_mode?: import("../types").ThinkOpeningTagMode;
       pricing_tiers?: import("../types").PricingTier[];
     } & import("../types").ModelMetadataInput,
   ) =>
@@ -321,6 +322,7 @@ export const models = {
       pretty_id?: string | null;
       display_name?: string | null;
       fix_missing_think_opening_tag?: boolean;
+      think_opening_tag_mode?: import("../types").ThinkOpeningTagMode;
       pricing_tiers?: import("../types").PricingTier[];
     } & Partial<import("../types").ModelMetadataInput>,
   ) =>

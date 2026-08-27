@@ -12,8 +12,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { AlertTriangle, Info } from "lucide-react";
 import { Tabs } from "@/components/ui/tabs";
-import { Switch } from "@/components/ui/switch";
 import { models } from "../api/client";
 import { useToast } from "./ui/toast";
 import type {
@@ -21,6 +21,7 @@ import type {
   ModelMetadataInput,
   PricingTier,
   ReasoningEffort,
+  ThinkOpeningTagMode,
 } from "../types";
 import { generateDisplayName } from "../lib/model-name";
 import { invalidateModels } from "../lib/query-cache";
@@ -41,8 +42,8 @@ export default function AddModelModal({
   const [prettyId, setPrettyId] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [displayEdited, setDisplayEdited] = useState(false);
-  const [fixMissingThinkOpeningTag, setFixMissingThinkOpeningTag] =
-    useState(false);
+  const [thinkOpeningTagMode, setThinkOpeningTagMode] =
+    useState<ThinkOpeningTagMode>("off");
   const [metadata, setMetadata] = useState<ModelMetadataInput>(() =>
     emptyModelMetadata(),
   );
@@ -64,7 +65,7 @@ export default function AddModelModal({
     setPrettyId("");
     setDisplayName("");
     setDisplayEdited(false);
-    setFixMissingThinkOpeningTag(false);
+    setThinkOpeningTagMode("off");
     setMetadata(emptyModelMetadata());
     setPricingTiers([
       {
@@ -99,7 +100,7 @@ export default function AddModelModal({
         model_id: modelId.trim(),
         pretty_id: prettyId.trim() || null,
         display_name: displayName || undefined,
-        fix_missing_think_opening_tag: fixMissingThinkOpeningTag,
+        think_opening_tag_mode: thinkOpeningTagMode,
         pricing_tiers: pricingTiers,
         ...metadata,
       });
@@ -176,11 +177,12 @@ export default function AddModelModal({
             </div>
           )}
           {activeTab === "capabilities" && (
-            <ModelMetadataEditor
-              value={metadata}
-              onChange={setMetadata}
-              fixMissingThinkOpeningTag={fixMissingThinkOpeningTag}
-              onFixMissingThinkOpeningTagChange={setFixMissingThinkOpeningTag}
+            <ModelMetadataEditor value={metadata} onChange={setMetadata} />
+          )}
+          {activeTab === "output-fixes" && (
+            <ThinkTagModeEditor
+              value={thinkOpeningTagMode}
+              onChange={setThinkOpeningTagMode}
             />
           )}
           {activeTab === "pricing" && (
@@ -212,6 +214,7 @@ export default function AddModelModal({
 export const modelFormTabs = [
   { id: "general", label: "General" },
   { id: "capabilities", label: "Capabilities" },
+  { id: "output-fixes", label: "Output fixes" },
   { id: "pricing", label: "Pricing" },
 ];
 
@@ -243,13 +246,9 @@ export function emptyModelMetadata(): ModelMetadataInput {
 export function ModelMetadataEditor({
   value,
   onChange,
-  fixMissingThinkOpeningTag,
-  onFixMissingThinkOpeningTagChange,
 }: {
   value: ModelMetadataInput;
   onChange: (value: ModelMetadataInput) => void;
-  fixMissingThinkOpeningTag: boolean;
-  onFixMissingThinkOpeningTagChange: (value: boolean) => void;
 }) {
   const setLimit = (
     field: "context_window" | "max_output_tokens",
@@ -331,22 +330,6 @@ export function ModelMetadataEditor({
           <p className="text-xs text-muted-foreground">Maximum generated tokens</p>
         </div>
       </div>
-      <div className="flex items-start justify-between gap-4 rounded-md border p-3">
-        <div>
-          <Label htmlFor="fix-missing-think-opening-tag">
-            Fix missing &lt;think&gt; opening tag
-          </Label>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Prefixes &lt;think&gt; when the model emits only a closing
-            &lt;/think&gt; tag.
-          </p>
-        </div>
-        <Switch
-          id="fix-missing-think-opening-tag"
-          checked={fixMissingThinkOpeningTag}
-          onCheckedChange={onFixMissingThinkOpeningTagChange}
-        />
-      </div>
       <div className="space-y-3">
         <div>
           <Label>Capabilities</Label>
@@ -392,6 +375,90 @@ export function ModelMetadataEditor({
         ))}
         {!value.reasoning_efforts.length && <p className="rounded-md border border-dashed p-3 text-xs text-muted-foreground">No reasoning efforts configured.</p>}
       </div>
+    </div>
+  );
+}
+
+const thinkTagModeOptions: {
+  value: ThinkOpeningTagMode;
+  title: string;
+  description: string;
+}[] = [
+  {
+    value: "off",
+    title: "Off",
+    description: "Return the model output unchanged.",
+  },
+  {
+    value: "detect",
+    title: "Detect missing opening tag",
+    description:
+      "Wait until an opening or closing <think> tag is detected. Streaming may be delayed, and responses without tags are buffered until the end.",
+  },
+  {
+    value: "force",
+    title: "Force opening tag",
+    description:
+      "Immediately prefix <think> to the first streamed content of each choice, with no buffering.",
+  },
+];
+
+export function ThinkTagModeEditor({
+  value,
+  onChange,
+}: {
+  value: ThinkOpeningTagMode;
+  onChange: (value: ThinkOpeningTagMode) => void;
+}) {
+  return (
+    <div className="space-y-4 py-1">
+      <div>
+        <div className="text-sm font-medium">Think tag handling</div>
+        <p className="mt-1 text-xs text-muted-foreground">
+          How Klove should treat responses that omit the opening &lt;think&gt;
+          tag.
+        </p>
+      </div>
+      <div className="space-y-2">
+        {thinkTagModeOptions.map((option) => {
+          const selected = value === option.value;
+          return (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => onChange(option.value)}
+              className={`w-full rounded-md border p-3 text-left text-sm transition-colors ${selected ? "border-primary/50 bg-primary/10" : "border-dashed hover:bg-muted/50"}`}
+              aria-pressed={selected}
+            >
+              <div className="font-medium">{option.title}</div>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {option.description}
+              </p>
+            </button>
+          );
+        })}
+      </div>
+      {value === "detect" && (
+        <div className="flex items-start gap-2 rounded-md border border-blue-500/30 bg-blue-500/10 p-3 text-xs text-muted-foreground">
+          <Info className="mt-0.5 h-4 w-4 shrink-0 text-blue-500" />
+          <span>
+            This mode waits for a tag before releasing content. If the model
+            never emits one, streaming is buffered until the response ends.
+          </span>
+        </div>
+      )}
+      {value === "force" && (
+        <div className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-muted-foreground">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+          <span>
+            <span className="font-medium text-foreground">Use with caution.</span>{" "}
+            This mode always prefixes the first content and never inspects the
+            response. If the model already emits an opening &lt;think&gt; tag,
+            the output will contain a duplicate tag and may be parsed incorrectly
+            by clients.
+          </span>
+        </div>
+      )}
     </div>
   );
 }
