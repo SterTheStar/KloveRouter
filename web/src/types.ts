@@ -34,6 +34,7 @@ export interface ProviderCredential {
 }
 
 export type ThinkOpeningTagMode = "off" | "detect" | "force";
+export type MaxOutputTokensSource = "auto" | "api" | "manual";
 
 export interface Model {
   id: string;
@@ -46,6 +47,8 @@ export interface Model {
   created_at: string;
   context_window: number | null;
   max_output_tokens: number | null;
+  max_output_tokens_source: MaxOutputTokensSource;
+  max_output_tokens_is_default: boolean;
   think_opening_tag_mode: ThinkOpeningTagMode;
   fix_missing_think_opening_tag: boolean;
   capabilities: ModelCapabilities;

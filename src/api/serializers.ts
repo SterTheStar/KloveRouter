@@ -49,6 +49,8 @@ export function serializeModel(model: Model) {
     updated_at: model.updated_at,
     context_window: model.context_window,
     max_output_tokens: model.max_output_tokens,
+    max_output_tokens_source: model.max_output_tokens_source ?? (model.is_manual ? "manual" : "api"),
+    max_output_tokens_is_default: model.max_output_tokens_is_default ?? model.max_output_tokens_source === "auto",
     think_opening_tag_mode: model.think_opening_tag_mode,
     fix_missing_think_opening_tag: model.fix_missing_think_opening_tag,
     capabilities: model.capabilities,

@@ -586,6 +586,8 @@ export const proxyPlugin = (app: Elysia) =>
              owned_by: provider?.name.toLowerCase() ?? "unknown",
              context_window: m.context_window,
              max_output_tokens: m.max_output_tokens,
+             max_output_tokens_source: m.max_output_tokens_source,
+             max_output_tokens_is_default: m.max_output_tokens_is_default,
              limit: {
                context: m.context_window,
                output: m.max_output_tokens,

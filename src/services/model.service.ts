@@ -4,6 +4,13 @@ import { generateDisplayName } from "./model-name";
 import { providerAvatarSources, resolveProviderAvatar, type ProviderProtocol } from "./provider-appearance";
 
 export type ThinkOpeningTagMode = "off" | "detect" | "force";
+export type MaxOutputTokensSource = "auto" | "api" | "manual";
+
+export function automaticMaxOutputTokens(contextWindow: number | null | undefined): number {
+  return contextWindow != null && contextWindow <= 131_072
+    ? Math.floor(contextWindow / 2)
+    : 128_000;
+}
 
 const thinkOpeningTagModes: ThinkOpeningTagMode[] = ["off", "detect", "force"];
 
@@ -19,6 +26,8 @@ export interface Model {
   updated_at: string;
   context_window: number | null;
   max_output_tokens: number | null;
+  max_output_tokens_source: MaxOutputTokensSource;
+  max_output_tokens_is_default: boolean;
   think_opening_tag_mode: ThinkOpeningTagMode;
   fix_missing_think_opening_tag: boolean;
   capabilities: ModelCapabilities;
@@ -48,6 +57,7 @@ export interface ReasoningEffort {
 export interface ModelMetadataInput {
   context_window?: number | null;
   max_output_tokens?: number | null;
+  max_output_tokens_source?: MaxOutputTokensSource;
   think_opening_tag_mode?: ThinkOpeningTagMode;
   fix_missing_think_opening_tag?: boolean;
   capabilities?: Partial<ModelCapabilities>;
@@ -404,14 +414,19 @@ function saveMetadata(modelId: string, input: ModelMetadataInput): void {
   const db = getDb();
   validateMetadata(input);
   const scalarUpdates: string[] = [];
-  const scalarValues: Array<number | null> = [];
+  const scalarValues: Array<number | null | string> = [];
   if (input.context_window !== undefined) {
     scalarUpdates.push("context_window = ?");
     scalarValues.push(input.context_window);
   }
   if (input.max_output_tokens !== undefined) {
+    const effectiveMax = input.max_output_tokens == null
+      ? automaticMaxOutputTokens(input.context_window ?? (db.query("SELECT context_window FROM models WHERE id = ?").get(modelId) as { context_window: number | null } | null)?.context_window)
+      : input.max_output_tokens;
     scalarUpdates.push("max_output_tokens = ?");
-    scalarValues.push(input.max_output_tokens);
+    scalarValues.push(effectiveMax);
+    scalarUpdates.push("max_output_tokens_source = ?");
+    scalarValues.push(input.max_output_tokens == null ? "auto" : input.max_output_tokens_source ?? "manual");
   }
   if (scalarUpdates.length)
     db.query(`UPDATE models SET ${scalarUpdates.join(", ")} WHERE id = ?`).run(...scalarValues, modelId);
@@ -466,7 +481,18 @@ function seedMissingMetadata(modelId: string, input: ModelMetadataInput): void {
 }
 
 function refreshSyncedMetadata(modelId: string, input: ModelMetadataInput): void {
-  saveMetadata(modelId, input);
+  const db = getDb();
+  const existing = db.query("SELECT context_window, max_output_tokens_source FROM models WHERE id = ?").get(modelId) as { context_window: number | null; max_output_tokens_source: MaxOutputTokensSource };
+  const context = input.context_window ?? existing.context_window;
+  if (existing.max_output_tokens_source === "manual") {
+    saveMetadata(modelId, { ...input, max_output_tokens: undefined });
+    return;
+  }
+  saveMetadata(modelId, {
+    ...input,
+    max_output_tokens: input.max_output_tokens ?? automaticMaxOutputTokens(context),
+    max_output_tokens_source: input.max_output_tokens != null ? "api" : "auto",
+  });
 }
 
 function resolveThinkOpeningTagMode(
@@ -487,10 +513,14 @@ function hydrate(model: Model | null): Model | null {
   const capabilities = db
     .query("SELECT reasoning, tools, vision, attachments, streaming, non_streaming FROM model_capabilities WHERE model_id = ?")
     .get(model.id) as Record<(typeof capabilityKeys)[number], number | null> | null;
+  const source = model.max_output_tokens_source ?? (model.is_manual ? "manual" : "api");
+  const maxOutput = model.max_output_tokens ?? automaticMaxOutputTokens(model.context_window);
   return {
     ...model,
     context_window: model.context_window ?? null,
-    max_output_tokens: model.max_output_tokens ?? null,
+    max_output_tokens: maxOutput,
+    max_output_tokens_source: source,
+    max_output_tokens_is_default: source === "auto",
     think_opening_tag_mode: model.think_opening_tag_mode,
     fix_missing_think_opening_tag: model.think_opening_tag_mode !== "off",
     capabilities: Object.fromEntries(
@@ -616,6 +646,12 @@ export const modelService = {
     const requestedPrettyId = validatePrettyId(input.pretty_id);
     const pricingTiers =
       input.pricing_tiers ?? defaultPricing(input.provider_id, input.model_id);
+    const metadataInput: ModelMetadataInput = {
+      ...input,
+      ...(input.max_output_tokens != null
+        ? { max_output_tokens_source: input.is_manual === 1 ? "manual" : "api" }
+        : { max_output_tokens_source: "auto" }),
+    };
     const existing = db
       .query("SELECT * FROM models WHERE provider_id = ? AND model_id = ?")
       .get(input.provider_id, input.model_id) as Model | null;
@@ -649,8 +685,8 @@ export const modelService = {
         );
         if (!syncingManualModel && (input.pricing_tiers || !hasPricing))
           savePricing(existing.id, pricingTiers);
-        if (syncingManualModel) seedMissingMetadata(existing.id, input);
-        else refreshSyncedMetadata(existing.id, input);
+        if (syncingManualModel) seedMissingMetadata(existing.id, metadataInput);
+        else refreshSyncedMetadata(existing.id, metadataInput);
       })();
       return this.findById(existing.id)!;
     }
@@ -672,7 +708,7 @@ export const modelService = {
         input.is_active ?? 1,
       );
       savePricing(id, pricingTiers);
-      saveMetadata(id, input);
+      saveMetadata(id, metadataInput);
     })();
     return this.findById(id)!;
   },
@@ -693,7 +729,7 @@ export const modelService = {
       input.pricing_tiers ?? defaultPricing(input.provider_id, input.model_id);
     db.transaction(() => {
       db.query(
-        "UPDATE models SET pretty_id = ?, display_name = ?, is_manual = 0, is_active = ?, context_window = NULL, max_output_tokens = NULL, updated_at = datetime('now') WHERE id = ?",
+        "UPDATE models SET pretty_id = ?, display_name = ?, is_manual = 0, is_active = ?, context_window = NULL, max_output_tokens = NULL, max_output_tokens_source = 'auto', updated_at = datetime('now') WHERE id = ?",
       ).run(
         requestedPrettyId ?? existing.pretty_id,
         input.display_name?.trim() || generateDisplayName(input.model_id),

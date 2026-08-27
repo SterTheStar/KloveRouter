@@ -69,7 +69,6 @@ export function validateModelRequest(body: any, model: Model): void {
     throw new ModelRequestError(
       `${output.field} (${output.value}) exceeds model "${model.model_id}" maximum output of ${model.max_output_tokens} tokens`,
     );
-
   if (
     model.capabilities.tools === false &&
     (body?.tools !== undefined || body?.functions !== undefined)

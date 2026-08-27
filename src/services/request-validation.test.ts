@@ -47,6 +47,14 @@ describe("metadata-backed request validation", () => {
     expect(body).toEqual({ max_completion_tokens: 20, max_tokens: 20 });
   });
 
+  test("accepts provider-specific output limits when metadata allows them", () => {
+    expect(() => validateModelRequest({ max_completion_tokens: 485298 }, {
+      ...model,
+      max_output_tokens: 500000,
+      context_window: null,
+    })).not.toThrow();
+  });
+
   test("enforces explicitly false tools while unknown metadata stays permissive", () => {
     expect(() =>
       validateModelRequest(
