@@ -1,4 +1,4 @@
-import { useRef, type KeyboardEvent } from "react";
+import { useRef, type ClipboardEvent, type KeyboardEvent } from "react";
 import {
   RiAddLine as AddLine,
   RiSendPlaneFill as SendPlaneFill,
@@ -16,6 +16,7 @@ type ChatComposerProps = {
   value: string;
   onChange: (value: string) => void;
   onKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => void;
+  onPaste: (event: ClipboardEvent<HTMLTextAreaElement>) => void;
   onSend: () => void;
   onStop: () => void;
   attachments: ChatAttachmentPreview[];
@@ -39,6 +40,7 @@ export default function ChatComposer({
   value,
   onChange,
   onKeyDown,
+  onPaste,
   onSend,
   onStop,
   attachments,
@@ -58,7 +60,7 @@ export default function ChatComposer({
   streaming,
 }: ChatComposerProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const disabled = !selectedModel || streaming;
+  const disabled = !selectedModel;
   const canSend = Boolean(selectedModel && (value.trim() || attachments.length) && !streaming);
 
   return (
@@ -103,6 +105,7 @@ export default function ChatComposer({
               value={value}
               onChange={(event) => onChange(event.target.value)}
               onKeyDown={onKeyDown}
+              onPaste={onPaste}
               disabled={disabled}
               rows={2}
               aria-label="Chat message"

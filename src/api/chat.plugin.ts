@@ -32,6 +32,13 @@ function streamDelta(value: string, previous: string): string {
   return overlap > 0 ? value.slice(overlap) : value;
 }
 
+export function startTitleGeneration(
+  titleGenerator: () => Promise<string>,
+  onTitle: (title: string) => void,
+): void {
+  void titleGenerator().then(onTitle).catch(() => undefined);
+}
+
 /**
  * Wraps the proxy's OpenAI-compatible SSE stream to hand the chat UI a final
  * `klove_stats` event with the token accounting the proxy already computed.
@@ -72,6 +79,7 @@ function chatStatsStream(
   let usageEmitted = false;
   let statsEmitted = false;
   let titleEmitted = false;
+  let streamOpen = true;
   let lastProgressPersist = start;
 
   const persistProgress = (force = false) => {
@@ -85,14 +93,16 @@ function chatStatsStream(
     });
   };
 
-  const emitTitle = async (controller: ReadableStreamDefaultController) => {
+  const emitTitle = (controller: ReadableStreamDefaultController) => {
     if (titleEmitted || !titleGenerator || !chatId) return;
     titleEmitted = true;
-    const title = await titleGenerator();
-    if (chatService.findById(chatId)?.title === "New chat") {
-      const session = chatService.update(chatId, { title });
-      if (session) controller.enqueue(encoder.encode(statsEvent({ type: "klove_chat_title", chat_id: chatId, title: session.title })));
-    }
+    startTitleGeneration(titleGenerator, (title) => {
+      const session = chatService.setGeneratedTitle(chatId, title);
+      if (!session) return;
+      if (streamOpen) {
+        controller.enqueue(encoder.encode(statsEvent({ type: "klove_chat_title", chat_id: chatId, title: session.title })));
+      }
+    });
   };
 
   const emitStats = (controller: ReadableStreamDefaultController) => {
@@ -210,7 +220,7 @@ function chatStatsStream(
               const raw = dataLine.slice(5).trim();
               if (raw === "[DONE]") {
                 persistProgress(true);
-                await emitTitle(controller);
+                emitTitle(controller);
                 emitStats(controller);
                 controller.enqueue(encoder.encode(DONE_MARKER));
                 continue;
@@ -237,28 +247,34 @@ function chatStatsStream(
           }
           // Upstream ended without a [DONE] marker — emit title and stats anyway.
           persistProgress(true);
-          await emitTitle(controller);
+          emitTitle(controller);
           if (!statsEmitted) emitStats(controller);
         } catch (error: any) {
           persistProgress(true);
-          controller.enqueue(
-            encoder.encode(
-              statsEvent({
-                error: {
-                  message:
-                    error?.message ?? "Chat stream interrupted",
-                },
-              }),
-            ),
-          );
-          if (!statsEmitted) emitStats(controller);
+          if (streamOpen) {
+            controller.enqueue(
+              encoder.encode(
+                statsEvent({
+                  error: {
+                    message:
+                      error?.message ?? "Chat stream interrupted",
+                  },
+                }),
+              ),
+            );
+            if (!statsEmitted) emitStats(controller);
+          }
         } finally {
-          controller.close();
+          if (streamOpen) {
+            streamOpen = false;
+            controller.close();
+          }
         }
       },
       cancel() {
         // Client disconnected — stop pulling from the proxy so the upstream
         // reader is released too.
+        streamOpen = false;
         void reader.cancel();
       },
     }),

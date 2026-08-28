@@ -188,8 +188,9 @@
 
 .chat-sidebar-item {
   animation: chat-sidebar-item-in 220ms ease-out both;
-  transition: background-color 160ms ease, transform 160ms ease;
+  transition: background-color 160ms ease, transform 220ms ease;
 }
+
 
 .chat-sidebar-item:hover {
   transform: translateX(2px);

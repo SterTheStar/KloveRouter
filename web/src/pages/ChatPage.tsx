@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ClipboardEvent } from "react";
 import { RiLoader4Line as LoaderCircle } from "@remixicon/react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { chat, chats as chatsApi, models, settings } from "../api/client";
@@ -22,12 +22,14 @@ export default function ChatPage({
   onChatCreated,
   onTitle,
   onTitleGenerationStart,
+  onChatActivity,
   username,
 }: {
   chatId: string | null;
   onChatCreated: (id: string) => void;
   onTitle: (event: { chat_id: string; title: string }) => void;
   onTitleGenerationStart: (id: string) => void;
+  onChatActivity: (id: string) => void;
   username: string;
 }) {
   const [modelList, setModelList] = useState<ModelWithProvider[]>([]);
@@ -333,12 +335,17 @@ export default function ChatPage({
     setStreamingByChat((previous) => ({ ...previous, [chatId]: false }));
   };
 
-  const addFiles = async (files: FileList | null) => {
+  const addFiles = async (files: File[] | FileList | null) => {
     if (!files?.length) return;
+    const textExtensions = /\.(txt|md|json|csv|ts|tsx|js|jsx|py|java|go|rs|html|css|xml|yaml|yml|log)$/i;
+    const textMimeTypes = /^(text\/|application\/(json|javascript|xml|yaml)|image\/svg\+xml)/i;
+    const remaining = Math.max(0, 8 - attachments.length);
     const next: ChatAttachmentPreview[] = [];
-    for (const file of Array.from(files).slice(0, 8)) {
+    for (const file of Array.from(files).slice(0, remaining)) {
       if (file.size > 20 * 1024 * 1024) continue;
       const isImage = file.type.startsWith("image/");
+      const isText = textMimeTypes.test(file.type) || textExtensions.test(file.name);
+      if (!isImage && !isText) continue;
       if (isImage) {
         const data = await new Promise<string>((resolve, reject) => {
           const reader = new FileReader();
@@ -368,6 +375,19 @@ export default function ChatPage({
       }
     }
     setAttachments((current) => [...current, ...next]);
+  };
+
+  const onPaste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
+    if (streaming) return;
+    const files = Array.from(event.clipboardData.files);
+    const itemFiles = Array.from(event.clipboardData.items)
+      .filter((item) => item.kind === "file")
+      .map((item) => item.getAsFile())
+      .filter((file): file is File => file !== null);
+    const pastedFiles = files.length ? files : itemFiles;
+    if (!pastedFiles.length) return;
+    event.preventDefault();
+    void addFiles(pastedFiles);
   };
 
   const send = async () => {
@@ -425,6 +445,7 @@ export default function ChatPage({
     if (activeChatId && messagesRef.current.length === 0) {
       onTitleGenerationStart(activeChatId);
     }
+    onChatActivity(activeChatId!);
     setMessagesByChat((previous) => ({
       ...previous,
       [activeChatId!]: [
@@ -580,6 +601,7 @@ export default function ChatPage({
             value={input}
             onChange={setInput}
             onKeyDown={onKeyDown}
+            onPaste={onPaste}
             onSend={() => void send()}
             onStop={stop}
             attachments={attachments}

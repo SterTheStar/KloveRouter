@@ -23,12 +23,24 @@ import { settings } from "./api/client";
 import type { UserProfile } from "./types";
 import { queryCache, queryKeys, invalidateChats } from "./lib/query-cache";
 
+function sortChats(chats: ChatSession[]): ChatSession[] {
+  return chats
+    .map((chat, index) => ({ chat, index }))
+    .sort((a, b) =>
+      b.chat.updated_at.localeCompare(a.chat.updated_at) ||
+      b.chat.created_at.localeCompare(a.chat.created_at) ||
+      a.index - b.index,
+    )
+    .map(({ chat }) => chat);
+}
+
 export default function App() {
   const { isAuth, loading, error, needsSetup, completeSetup, login, logout } = useAuth();
   const [currentPage, setCurrentPage] = useState<Page>("dashboard");
   const [chatSessions, setChatSessions] = useState<ChatSession[]>([]);
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [generatingChats, setGeneratingChats] = useState<Record<string, boolean>>({});
+  const manualTitlesRef = useRef(new Set<string>());
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const touchStart = useRef<{ x: number; y: number } | null>(null);
   const [selectedProviderId, setSelectedProviderId] = useState<string | null>(
@@ -98,8 +110,9 @@ export default function App() {
   useEffect(() => {
     if (!isAuth || currentPage !== "chat") return;
     queryCache.getOrFetch(queryKeys.chats, 5_000, chatsApi.list).then((list) => {
-      setChatSessions(list);
-      setActiveChatId((current) => current && list.some((chat) => chat.id === current) ? current : list[0]?.id ?? null);
+      const sorted = sortChats(list);
+      setChatSessions(sorted);
+      setActiveChatId((current) => current && sorted.some((chat) => chat.id === current) ? current : sorted[0]?.id ?? null);
     }).catch(() => setChatSessions([]));
   }, [isAuth, currentPage]);
 
@@ -129,14 +142,26 @@ export default function App() {
   const createChat = async () => {
     const chat = await chatsApi.create();
     invalidateChats(chat.id);
-    setChatSessions((current) => [chat, ...current]);
+    setChatSessions((current) => sortChats([chat, ...current]));
     setActiveChatId(chat.id);
     handleNavigate("chat");
   };
   const renameChat = async (id: string, title: string) => {
+    manualTitlesRef.current.add(id);
+    setGeneratingChats((current) => {
+      const next = { ...current };
+      delete next[id];
+      return next;
+    });
     const chat = await chatsApi.update(id, { title });
     invalidateChats(id);
-    setChatSessions((current) => current.map((item) => item.id === id ? chat : item));
+    setChatSessions((current) => sortChats(current.map((item) => item.id === id ? chat : item)));
+  };
+  const onChatActivity = (id: string) => {
+    const updatedAt = new Date().toISOString();
+    setChatSessions((current) => sortChats(current.map((chat) =>
+      chat.id === id ? { ...chat, updated_at: updatedAt } : chat,
+    )));
   };
   const deleteChat = async (id: string) => {
     await chatsApi.remove(id);
@@ -194,29 +219,32 @@ export default function App() {
                     delete next[chat_id];
                     return next;
                   });
+                  if (manualTitlesRef.current.has(chat_id)) return;
                   setChatSessions((current) => {
                     const existing = current.find((chat) => chat.id === chat_id);
+                    const now = new Date().toISOString();
                     const updated = existing
-                      ? { ...existing, title }
+                      ? { ...existing, title, updated_at: now }
                       : {
                           id: chat_id,
                           title,
                           model: "",
-                          created_at: new Date().toISOString(),
-                          updated_at: new Date().toISOString(),
+                          created_at: now,
+                          updated_at: now,
                         };
-                    return [updated, ...current.filter((chat) => chat.id !== chat_id)];
+                    return sortChats([updated, ...current.filter((chat) => chat.id !== chat_id)]);
                   });
                 }}
                 onTitleGenerationStart={(id) => {
                   setGeneratingChats((current) => ({ ...current, [id]: true }));
                 }}
+                onChatActivity={onChatActivity}
                 onChatCreated={(id) => {
                   setActiveChatId(id);
                   invalidateChats(id);
                   queryCache.getOrFetch(queryKeys.chats, 5_000, chatsApi.list).then((list) => {
                     const created = list.find((chat) => chat.id === id);
-                    setChatSessions(created ? [created, ...list.filter((chat) => chat.id !== id)] : list);
+                    setChatSessions(sortChats(created ? [created, ...list.filter((chat) => chat.id !== id)] : list));
                   }).catch(() => undefined);
                 }}
                 username={profile.name}

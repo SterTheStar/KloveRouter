@@ -55,7 +55,7 @@ function rowToMessage(row: any): ChatMessage {
 export const chatService = {
   list(): ChatSession[] {
     return getDb()
-      .query("SELECT * FROM chat_sessions ORDER BY updated_at DESC, created_at DESC")
+      .query("SELECT * FROM chat_sessions ORDER BY updated_at DESC, created_at DESC, id ASC")
       .all() as ChatSession[];
   },
 
@@ -150,5 +150,13 @@ export const chatService = {
     const session = this.findById(id);
     if (!session || session.title !== "New chat") return session;
     return this.update(id, { title: content.trim().replace(/\s+/g, " ").slice(0, 80) });
+  },
+
+  setGeneratedTitle(id: string, title: string): ChatSession | null {
+    const db = getDb();
+    const result = db.query(
+      "UPDATE chat_sessions SET title = ?, updated_at = datetime('now') WHERE id = ? AND title = 'New chat'",
+    ).run(normalizeTitle(title), id);
+    return result.changes > 0 ? this.findById(id) : null;
   },
 };
