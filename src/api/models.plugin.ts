@@ -410,7 +410,7 @@ export const modelsPlugin = (app: Elysia) =>
               set.status = 503;
               return { error: "No active ChatGPT credential" };
             }
-            const available = await chatgptModels(credential);
+            const available = await chatgptModels(credential, { baseUrl: provider.base_url });
             if (query.preview === true) return preview(available);
             const selected = selectModels(available);
             for (const model of selected)
@@ -620,7 +620,7 @@ export const modelsPlugin = (app: Elysia) =>
                          choices: [
                            {
                              message: {
-                               content: await chatgptTest(model.model_id, credential),
+                               content: await chatgptTest(model.model_id, credential, provider.base_url),
                              },
                            },
                          ],

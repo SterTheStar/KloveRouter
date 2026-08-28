@@ -1,12 +1,17 @@
-import { chatgptAuthHeaders, normalizeChatGptAuth } from "./auth";
+import { chatgptRequestHeaders, normalizeChatGptAuth } from "./auth";
 import { conversationFingerprint, conversationIdCache } from "./cache";
 import { chatGptRequestBody } from "./transform";
 
-const BASE = "https://chatgpt.com/backend-api";
+export const DEFAULT_CHATGPT_BASE_URL = "https://chatgpt.com/backend-api";
 
-function headers(credential: unknown, accept = "application/json") {
+export function normalizeChatGptBaseUrl(value?: unknown): string {
+  const base = typeof value === "string" && value.trim() ? value.trim() : DEFAULT_CHATGPT_BASE_URL;
+  return base.replace(/\/+$/, "");
+}
+
+async function headers(credential: unknown, accept = "application/json") {
   return {
-    ...chatgptAuthHeaders(credential, accept),
+    ...(await chatgptRequestHeaders(credential, { accept })),
     "Content-Type": "application/json",
   };
 }
@@ -24,11 +29,11 @@ function sseConversation(text: string) {
   let conversationId: string | undefined;
   let output = "";
   for (const event of text.split(/\n\n|\r\n\r\n|\r\r/)) {
-    const line = event.split(/\r?\n/).find((item) => item.startsWith("data:"));
-    const raw = line?.slice(5).trim();
+    const raw = event.split(/\r?\n/).filter((item) => item.startsWith("data:")).map((item) => item.slice(5).trim()).join("\n");
     if (!raw || raw === "[DONE]") continue;
     let parsed: any;
     try { parsed = JSON.parse(raw); } catch { continue; }
+    if (parsed.error) continue;
     const id = parsed.conversation_id ?? parsed.conversation?.id;
     if (typeof id === "string" && id) conversationId = id;
     const cumulative = parsed.message?.content?.parts?.join("") ?? parsed.message?.content?.text;
@@ -53,13 +58,15 @@ export async function chatgptResponses(
   body: any,
   model: string,
   credential?: unknown,
+  baseUrl?: string,
 ) {
   const auth = normalizeChatGptAuth(credential);
+  const base = normalizeChatGptBaseUrl(baseUrl);
   const fingerprint = await conversationFingerprint(body, model, auth.accountId);
   const conversationId = conversationIdCache.get(fingerprint);
-  const response = await fetch(`${BASE}/conversation`, {
+  const response = await fetch(`${base}/conversation`, {
     method: "POST",
-    headers: headers(credential, body?.stream ? "text/event-stream" : "application/json"),
+    headers: await headers(credential, body?.stream ? "text/event-stream" : "application/json"),
     body: JSON.stringify(chatGptRequestBody(body, model, conversationId)),
   });
   if (body?.stream) {
@@ -85,7 +92,7 @@ export async function chatgptResponses(
   return openAICompletion(model, text, data?.usage);
 }
 
-export async function chatgptTest(model: string, credential?: unknown) {
+export async function chatgptTest(model: string, credential?: unknown, baseUrl?: string) {
   const response = await chatgptResponses(
     {
       messages: [{ role: "user", content: "Say 'ok' and nothing else." }],
@@ -93,27 +100,24 @@ export async function chatgptTest(model: string, credential?: unknown) {
     },
     model,
     credential,
+    baseUrl,
   );
   const text = await response.text();
-  const values: string[] = [];
-  for (const event of text.split(/\n\n|\r\n\r\n/)) {
-    const line = event.split(/\r?\n/).find((item) => item.startsWith("data:"));
-    if (!line) continue;
-    const raw = line.slice(5).trim();
-    if (raw === "[DONE]") continue;
+  let output = "";
+  for (const event of text.split(/\n\n|\r\n\r\n|\r\r/)) {
+    const raw = event.split(/\r?\n/).filter((item) => item.startsWith("data:")).map((item) => item.slice(5).trim()).join("\n");
+    if (!raw || raw === "[DONE]") continue;
     try {
       const data = JSON.parse(raw);
-      const part =
-        data.message?.content?.parts?.join("") ??
-        data.message?.content?.text ??
-        data.choices?.[0]?.delta?.content ??
-        data.delta ?? data.text;
-      if (typeof part === "string") values.push(part);
-    } catch {
-      // Ignore non-JSON SSE keepalive events.
+      if (data.error) throw new Error(data.error.message ?? data.error.detail ?? String(data.error));
+      const cumulative = data.message?.content?.parts?.filter((part: unknown) => typeof part === "string").join("") ?? data.message?.content?.text;
+      const part = cumulative ?? data.choices?.[0]?.delta?.content ?? data.delta ?? data.text;
+      if (typeof part === "string") output = typeof cumulative === "string" ? cumulative : output + part;
+    } catch (error) {
+      if (error instanceof Error && error.message !== "Unexpected end of JSON input") throw error;
     }
   }
-  const output = values.join("").trim();
+  output = output.trim();
   if (!output) throw new Error("ChatGPT returned an empty response");
   return output;
 }

@@ -1472,6 +1472,7 @@ export const proxyPlugin = (app: Elysia) =>
                 body,
                 parsed.modelId,
                 credential,
+                provider.base_url,
               );
               const modelRecord = modelService.findByProviderAndModel(
                 provider.id,

@@ -1,15 +1,14 @@
-import { chatgptAuthHeaders } from "./auth";
-
-const BASE = "https://chatgpt.com/backend-api";
+import { chatgptRequestHeaders } from "./auth";
+import { DEFAULT_CHATGPT_BASE_URL, normalizeChatGptBaseUrl } from "./client";
 
 export const FALLBACK_MODELS = ["gpt-4o", "gpt-4o-mini", "gpt-4.1", "o3-mini"].map(
   (id) => ({ id, object: "model", owned_by: "openai" }),
 );
 
-export async function chatgptModels(credential?: unknown, options: { strict?: boolean } = {}) {
+export async function chatgptModels(credential?: unknown, options: { strict?: boolean; baseUrl?: string } = {}) {
   try {
-    const response = await fetch(`${BASE}/models`, {
-      headers: chatgptAuthHeaders(credential),
+    const response = await fetch(`${normalizeChatGptBaseUrl(options.baseUrl || DEFAULT_CHATGPT_BASE_URL)}/models`, {
+      headers: await chatgptRequestHeaders(credential, { accept: "application/json" }),
     });
     const data: any = await response.json().catch(() => null);
     const values = Array.isArray(data) ? data : data?.models ?? data?.data;

@@ -196,6 +196,7 @@ export default function ProviderDetailPage({
   const newKeySecretRef = useRef<HTMLInputElement>(null);
   const newAuthCodeRef = useRef<HTMLInputElement>(null);
   const newAccountIdRef = useRef<HTMLInputElement>(null);
+  const cookieFileRef = useRef<HTMLInputElement>(null);
   const [addingKey, setAddingKey] = useState(false);
   const [showAddKey, setShowAddKey] = useState(false);
   const [revealedKeys, setRevealedKeys] = useState<Record<string, string>>({});
@@ -603,6 +604,33 @@ export default function ProviderDetailPage({
     }
   };
 
+  const uploadChatGptCookies = async () => {
+    if (!provider) return;
+    const file = cookieFileRef.current?.files?.[0];
+    const label = newKeyLabelRef.current?.value.trim() || "ChatGPT cookies";
+    if (!file) {
+      setError("Select a cookies.txt file.");
+      return;
+    }
+    setAddingKey(true);
+    setError(null);
+    try {
+      await providers.uploadCookies(providerId, file, label);
+      if (cookieFileRef.current) cookieFileRef.current.value = "";
+      if (newKeyLabelRef.current) newKeyLabelRef.current.value = "";
+      setShowAddKey(false);
+      setSuccess("ChatGPT cookie credential added.");
+      invalidateModels(providerId);
+      invalidateProviders(providerId);
+      await load();
+    } catch (e: any) {
+      setError(e.message);
+      notifyError("Could not add ChatGPT cookies", e.message);
+    } finally {
+      setAddingKey(false);
+    }
+  };
+
   const addFreebuffAuthCode = async () => {
     if (!provider) return;
     const label = newKeyLabelRef.current?.value.trim() ?? "";
@@ -762,8 +790,9 @@ export default function ProviderDetailPage({
     const editing = editingCredentialIds[credential.id] === true;
     const draftSecret = credentialDraftSecrets[credential.id] ?? "";
     const saving = credentialSavingId === credential.id;
-    const displayedSecret = credential.kind === "conol"
-      ? (revealed ?? `Account ${credential.account_id ?? "configured"} · Cookie hidden`)
+    const isCookieCredential = credential.kind === "chatgpt" || credential.kind === "conol";
+    const displayedSecret = isCookieCredential
+      ? (credential.kind === "conol" ? `Account ${credential.account_id ?? "configured"} · Cookie hidden` : "Cookie hidden")
       : (revealed ?? credential.masked_secret ?? secretLabel);
     return (
       <div key={credential.id} className="grid min-w-0 items-center gap-2 border-b border-border/60 py-2 last:border-b-0 md:grid-cols-[minmax(0,1fr)_auto]">
@@ -772,10 +801,10 @@ export default function ProviderDetailPage({
             <Input value={editing ? (credentialDraftLabels[credential.id] ?? credential.label) : credential.label} readOnly={!editing} onChange={(event) => setCredentialDraftLabels((current) => ({ ...current, [credential.id]: event.target.value }))} aria-label={`${credential.label} label`} placeholder="Label" className="h-9 min-w-0 rounded-none border-0 bg-transparent shadow-none focus-visible:ring-0" />
           </div>
           <div className="relative min-w-0">
-            <Input value={editing ? draftSecret : displayedSecret} placeholder={editing ? "Leave blank to keep current secret" : undefined} readOnly={!editing} type={editing ? "password" : "text"} aria-label={`${credential.label} secret`} className="h-9 min-w-0 rounded-none border-0 bg-transparent pr-36 font-mono shadow-none focus-visible:ring-0" onChange={(event) => setCredentialDraftSecrets((current) => ({ ...current, [credential.id]: event.target.value }))} />
+            <Input value={isCookieCredential ? displayedSecret : (editing ? draftSecret : displayedSecret)} placeholder={editing && !isCookieCredential ? "Leave blank to keep current secret" : undefined} readOnly={!editing || isCookieCredential} type={editing && !isCookieCredential ? "password" : "text"} aria-label={`${credential.label} ${isCookieCredential ? "cookie status" : "secret"}`} className="h-9 min-w-0 rounded-none border-0 bg-transparent pr-20 font-mono shadow-none focus-visible:ring-0" onChange={(event) => setCredentialDraftSecrets((current) => ({ ...current, [credential.id]: event.target.value }))} />
             <div className="absolute right-1 top-1/2 flex -translate-y-1/2 items-center gap-0.5">
-              <Button variant="ghost" size="icon" className="size-8" onClick={() => toggleApiKeyVisibility(credential)} disabled={loadingSecretId === credential.id} title={revealed === undefined ? `Reveal ${secretLabel}` : `Hide ${secretLabel}`} aria-label={revealed === undefined ? `Reveal ${credential.label}` : `Hide ${credential.label}`}>{revealed === undefined ? <Eye className="size-4" /> : <EyeOff className="size-4" />}</Button>
-              <Button variant="ghost" size="icon" className="size-8" onClick={() => copyCredentialSecret(credential)} disabled={loadingSecretId === credential.id} title={`Copy ${secretLabel}`} aria-label={`Copy ${credential.label}`}><Copy className="size-4" /></Button>
+              {!isCookieCredential && <><Button variant="ghost" size="icon" className="size-8" onClick={() => toggleApiKeyVisibility(credential)} disabled={loadingSecretId === credential.id} title={revealed === undefined ? `Reveal ${secretLabel}` : `Hide ${secretLabel}`} aria-label={revealed === undefined ? `Reveal ${credential.label}` : `Hide ${credential.label}`}>{revealed === undefined ? <Eye className="size-4" /> : <EyeOff className="size-4" />}</Button>
+              <Button variant="ghost" size="icon" className="size-8" onClick={() => copyCredentialSecret(credential)} disabled={loadingSecretId === credential.id} title={`Copy ${secretLabel}`} aria-label={`Copy ${credential.label}`}><Copy className="size-4" /></Button></>}
               <Switch checked={credential.is_active === 1} onCheckedChange={() => toggleCredentialActive(credential)} aria-label={`${credential.label} active`} />
             </div>
           </div>
@@ -1034,8 +1063,8 @@ export default function ProviderDetailPage({
             <div className="space-y-3">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <Label>ChatGPT session credentials</Label>
-                  <p className="text-xs text-muted-foreground">Authorized session tokens are stored encrypted.</p>
+                  <Label>ChatGPT cookie credentials</Label>
+                  <p className="text-xs text-muted-foreground">Netscape cookies.txt files are validated and stored encrypted. Cookie contents are never displayed.</p>
                 </div>
                 <Button variant="outline" size="sm" onClick={() => setShowAddKey((value) => !value)}>
                   {showAddKey ? <CloseCircle className="size-4" /> : <Add className="size-4" />}
@@ -1044,9 +1073,9 @@ export default function ProviderDetailPage({
               </div>
               <div className="space-y-2">
                 {credentials.filter((credential) => credential.kind === "chatgpt").map((credential) => renderCredentialRow(credential, "credential"))}
-                {!credentials.some((credential) => credential.kind === "chatgpt") && <div className="text-xs text-muted-foreground">No session credentials configured.</div>}
+                {!credentials.some((credential) => credential.kind === "chatgpt") && <div className="text-xs text-muted-foreground">No cookie credentials configured.</div>}
               </div>
-              {showAddKey && <div className="grid gap-2 rounded-md border border-dashed p-3 md:grid-cols-[1fr_1.5fr_auto]"><Input ref={newKeyLabelRef} placeholder="Credential label" /><Input ref={newAuthCodeRef} type="password" placeholder="Paste an authorized session token" /><Button onClick={addFreebuffAuthCode} disabled={addingKey}>{addingKey ? <LoaderCircle className="size-4 animate-spin" /> : <><Add className="size-4" /> Add credential</>}</Button></div>}
+              {showAddKey && <div className="grid gap-2 rounded-md border border-dashed p-3 md:grid-cols-[1fr_1.5fr_auto]"><Input ref={newKeyLabelRef} placeholder="Credential label (optional)" /><Input ref={cookieFileRef} type="file" accept=".txt,text/plain" aria-label="ChatGPT cookies.txt file" /><Button onClick={uploadChatGptCookies} disabled={addingKey}>{addingKey ? <LoaderCircle className="size-4 animate-spin" /> : <><Add className="size-4" /> Upload cookies</>}</Button></div>}
             </div>
           ) : provider.protocol === "freebuff" || provider.protocol === "qwen" || provider.protocol === "atomesus" || provider.protocol === "conol" ? (
             <div id="provider-credentials" className="space-y-3">
@@ -1083,6 +1112,25 @@ export default function ProviderDetailPage({
                   </Button>
                 </div>
               )}
+            </div>
+          ) : provider.protocol === "codex" || provider.protocol === "antigravity" ? (
+            <div className="space-y-3">
+              <div>
+                <Label>{provider.protocol === "codex" ? "Connected accounts" : "Connected Google accounts"}</Label>
+                <p className="text-xs text-muted-foreground">This integration uses OAuth accounts. Manage them in the Connection section above.</p>
+              </div>
+              <div className="space-y-2">
+                {credentials.filter((credential) => (credential.kind === "codex" || credential.kind === "antigravity") && (credential.account_id || credential.email)).length ? (
+                  credentials.filter((credential) => (credential.kind === "codex" || credential.kind === "antigravity") && (credential.account_id || credential.email)).map((credential) => (
+                    <div key={credential.id} className="flex items-center justify-between gap-3 rounded-md border bg-muted/40 px-3 py-2 text-sm">
+                      <span>{credential.label}</span>
+                      <span className="font-mono text-xs text-muted-foreground">{credential.email || credential.account_id || credential.id}</span>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-xs text-muted-foreground">No account connected.</div>
+                )}
+              </div>
             </div>
           ) : (
             <div className="space-y-3">

@@ -19,7 +19,7 @@ export function isAuthenticated(): boolean {
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = getToken();
   const headers: Record<string, string> = {
-    "Content-Type": "application/json",
+    ...(!(options.body instanceof FormData) ? { "Content-Type": "application/json" } : {}),
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...(options.headers as Record<string, string>),
   };
@@ -125,6 +125,15 @@ export const providers = {
     request<import("../types").ProviderCredential[]>(
       `/api/providers/${id}/credentials`,
     ),
+  uploadCookies: (id: string, file: File, label = "ChatGPT cookies") => {
+    const form = new FormData();
+    form.append("file", file);
+    form.append("label", label);
+    return request<import("../types").ProviderCredential>(`/api/providers/${id}/credentials/cookies`, {
+      method: "POST",
+      body: form,
+    });
+  },
   addCredential: (
     id: string,
     data: {

@@ -45,7 +45,7 @@ export function validateCredential(
       `Credential kind '${kind}' is incompatible with provider protocol '${protocol}'; expected '${expected}'`,
     );
   }
-  if (secretKinds.has(kind) && !secret?.trim()) {
+  if (secretKinds.has(kind) && !secret?.trim() && !fields.allowIncompleteOAuth) {
     throw new CredentialValidationError(`Credential kind '${kind}' requires a non-empty secret`);
   }
   if (!fields.allowIncompleteOAuth && kind === "codex" && !fields.accessToken?.trim()) {

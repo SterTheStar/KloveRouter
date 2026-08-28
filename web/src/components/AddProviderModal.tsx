@@ -45,6 +45,7 @@ export default function AddProviderModal({
   const [baseUrl, setBaseUrl] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [authCode, setAuthCode] = useState("");
+  const [cookieFile, setCookieFile] = useState<File | null>(null);
   const [conolAccountId, setConolAccountId] = useState("");
   const [avatar, setAvatar] = useState<string | null>(null);
   const [avatarManuallySet, setAvatarManuallySet] = useState(false);
@@ -77,6 +78,7 @@ export default function AddProviderModal({
     setBaseUrl("");
     setApiKey("");
     setAuthCode("");
+    setCookieFile(null);
     setConolAccountId("");
     setAvatar(null);
     setAvatarManuallySet(false);
@@ -241,6 +243,8 @@ export default function AddProviderModal({
     if (!name || !baseUrl)
       return setError("Provider name and base URL are required.");
     const conolParsedAccountId = conolAccountId.trim() || authCode.match(/^account_id\s*=\s*(.+)$/m)?.[1]?.trim() || "";
+    if (selectedType?.protocol === "chatgpt" && !cookieFile)
+      return setError("Select a cookies.txt file.");
     if (selectedType?.protocol === "conol" && !conolParsedAccountId)
       return setError("Conol.ai account_id is required. Enter it separately or use account_id=<id> on the first line.");
     const shouldVerify = !skipVerification;
@@ -249,9 +253,9 @@ export default function AddProviderModal({
     setError(null);
     setVerificationWarning(null);
     try {
-      if (shouldVerify) await providers.validateCredential({
+      if (shouldVerify && selectedType?.protocol !== "chatgpt") await providers.validateCredential({
         base_url: baseUrl,
-        ...(selectedType?.protocol === "freebuff" || selectedType?.protocol === "qwen" || selectedType?.protocol === "atomesus" || selectedType?.protocol === "chatgpt"
+        ...(selectedType?.protocol === "freebuff" || selectedType?.protocol === "qwen" || selectedType?.protocol === "atomesus"
           ? { auth_code: authCode }
           : selectedType?.protocol === "conol"
             ? { secret: authCode, account_id: conolParsedAccountId }
@@ -259,17 +263,21 @@ export default function AddProviderModal({
         protocol: selectedType?.protocol,
       });
       setVerifying(false);
-      await providers.create({
+      const created = await providers.create({
         name,
         base_url: baseUrl,
-        ...(selectedType?.protocol === "freebuff" || selectedType?.protocol === "qwen" || selectedType?.protocol === "atomesus" || selectedType?.protocol === "chatgpt"
-          ? { auth_code: authCode }
-          : selectedType?.protocol === "conol"
-            ? { secret: authCode, account_id: conolParsedAccountId }
-            : { api_key: apiKey }),
+        ...(selectedType?.protocol === "chatgpt"
+          ? {}
+          : selectedType?.protocol === "freebuff" || selectedType?.protocol === "qwen" || selectedType?.protocol === "atomesus"
+            ? { auth_code: authCode }
+            : selectedType?.protocol === "conol"
+              ? { secret: authCode, account_id: conolParsedAccountId }
+              : { api_key: apiKey }),
         protocol: selectedType?.protocol,
         avatar: avatarPayload,
       });
+      if (selectedType?.protocol === "chatgpt" && cookieFile)
+        await providers.uploadCookies(created.id, cookieFile);
       invalidateProviders();
       success("Provider added", `${name} is ready to use.`);
       onSuccess();
@@ -508,30 +516,23 @@ export default function AddProviderModal({
                       </>
                     ) : (
                       <>
-                        <Label htmlFor="provider-key">
-                          {selectedType?.protocol === "chatgpt" ? "Session token (required)" : selectedType?.protocol === "atomesus" ? "Bearer token (optional)" : selectedType?.protocol === "freebuff" || selectedType?.protocol === "qwen" ? "Auth code (optional)" : "API key (optional)"}
-                        </Label>
-                        <Input
-                          id="provider-key"
-                          type="password"
-                          value={selectedType?.protocol === "freebuff" || selectedType?.protocol === "qwen" || selectedType?.protocol === "atomesus" || selectedType?.protocol === "chatgpt" ? authCode : apiKey}
-                          onChange={(e) =>
-                            selectedType?.protocol === "freebuff" || selectedType?.protocol === "qwen" || selectedType?.protocol === "atomesus" || selectedType?.protocol === "chatgpt"
-                              ? setAuthCode(e.target.value)
-                              : setApiKey(e.target.value)
-                          }
-                          placeholder={selectedType?.protocol === "chatgpt" ? "Paste an authorized session token" : selectedType?.protocol === "atomesus" ? "Paste your Atomesus bearer token" : selectedType?.protocol === "freebuff" || selectedType?.protocol === "qwen" ? "Paste your auth token" : "sk-..."}
-                        />
-                      </>
-                    )}
+                        {selectedType?.protocol === "chatgpt" ? (
+                          <div>
+                            <Label htmlFor="provider-cookies">cookies.txt (Netscape)</Label>
+                            <Input id="provider-cookies" type="file" accept=".txt,text/plain" onChange={(e) => setCookieFile(e.target.files?.[0] ?? null)} />
+                          </div>
+                        ) : (
+                          <div>
+                            <Label htmlFor="provider-key">
+                              {selectedType?.protocol === "atomesus" ? "Bearer token (optional)" : selectedType?.protocol === "freebuff" || selectedType?.protocol === "qwen" ? "Auth code (optional)" : "API key (optional)"}
+                            </Label>
+                            <Input id="provider-key" type="password" value={selectedType?.protocol === "freebuff" || selectedType?.protocol === "qwen" || selectedType?.protocol === "atomesus" ? authCode : apiKey} onChange={(e) => selectedType?.protocol === "freebuff" || selectedType?.protocol === "qwen" || selectedType?.protocol === "atomesus" ? setAuthCode(e.target.value) : setApiKey(e.target.value)} placeholder={selectedType?.protocol === "atomesus" ? "Paste your Atomesus bearer token" : selectedType?.protocol === "freebuff" || selectedType?.protocol === "qwen" ? "Paste your auth token" : "sk-..."} />
+                          </div>
+                        )}
                     {selectedType?.protocol === "chatgpt" ? (
                       <div className="space-y-2 rounded-lg border border-dashed p-3 text-xs text-muted-foreground">
-                        <p className="font-medium text-foreground">How to get your ChatGPT session token:</p>
-                        <p>Open ChatGPT, then follow this path in your browser:</p>
-                        <p className="rounded bg-muted p-2 font-mono text-[11px] leading-relaxed">
-                          Use the authorized ChatGPT session token provided by your account
-                        </p>
-                        <p>Paste the session token directly. It is encrypted before being stored.</p>
+                        <p className="font-medium text-foreground">ChatGPT cookies.txt</p>
+                        <p>Export your own logged-in ChatGPT cookies in Netscape cookies.txt format. Only chatgpt.com and openai.com cookies are accepted and the resulting Cookie header is encrypted before storage.</p>
                       </div>
                     ) : (selectedType?.protocol === "freebuff" || selectedType?.protocol === "qwen" || selectedType?.protocol === "conol") && (
                       selectedType?.protocol === "conol" ? (
@@ -613,6 +614,8 @@ export default function AddProviderModal({
                           Use the auth code from your Freebuff account or CLI. It is encrypted before being stored.
                         </p>
                       )
+                    )}
+                      </>
                     )}
                   </div>
                 )}

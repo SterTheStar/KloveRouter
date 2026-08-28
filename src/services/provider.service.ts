@@ -123,7 +123,7 @@ export const providerService = {
     const kind = credentialKindForProtocol(protocol);
     validateCredential(protocol, kind, protocol === "codex" || protocol === "antigravity" ? undefined : input.api_key, {
       accountId: input.account_id,
-      allowIncompleteOAuth: protocol === "codex" || protocol === "antigravity",
+      allowIncompleteOAuth: protocol === "codex" || protocol === "antigravity" || protocol === "chatgpt",
     });
     const id = crypto.randomUUID();
     const encryptedApiKey = input.api_key

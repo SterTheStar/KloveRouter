@@ -5,7 +5,7 @@ import { codexAuthService } from "../integrations/codex";
 import { logger } from "../logger";
 import { isValidAvatar } from "../services/provider-appearance";
 import { assertSafeRemoteUrl } from "../services/ssrf";
-import { chatgptModels } from "../integrations/chatgpt";
+import { chatgptModels, parseChatGptCookies } from "../integrations/chatgpt";
 import { qwenModels } from "../integrations/qwen";
 import { conolValidate } from "../integrations/conol";
 import { credentialKindForProtocol, validateCredential } from "../services/credential-validation";
@@ -43,7 +43,7 @@ export const providersPlugin = (app: Elysia) =>
           if (protocol === "conol") {
             await conolValidate(credential, provider.base_url);
           } else if (protocol === "chatgpt") {
-            const models = await chatgptModels(credential, { strict: true });
+            const models = await chatgptModels(credential, { strict: true, baseUrl: provider.base_url });
             if (!models.length) throw new Error("ChatGPT returned no models");
           } else if (protocol === "qwen") {
             const models = await qwenModels(credential, provider.base_url);
@@ -239,12 +239,45 @@ export const providersPlugin = (app: Elysia) =>
         if (
           !credential ||
           credential.provider_id !== id ||
-            credential.kind !== "api_key" && credential.kind !== "chatgpt" && credential.kind !== "freebuff" && credential.kind !== "qwen" && credential.kind !== "atomesus" && credential.kind !== "conol"
+            credential.kind === "chatgpt" ||
+            credential.kind !== "api_key" && credential.kind !== "freebuff" && credential.kind !== "qwen" && credential.kind !== "atomesus" && credential.kind !== "conol"
         ) {
           set.status = 404;
           return { error: "Credential secret not found" };
         }
         return { secret: credential.secret };
+      },
+    )
+    .post(
+      "/api/providers/:id/credentials/cookies",
+      async ({ params: { id }, request, set }) => {
+        const provider = providerService.findById(id);
+        if (!provider) {
+          set.status = 404;
+          return { error: "Provider not found" };
+        }
+        if (provider.protocol !== "chatgpt") {
+          set.status = 400;
+          return { error: "Cookie uploads are only supported for ChatGPT" };
+        }
+        try {
+          const form = await request.formData();
+          const file = form.get("file");
+          if (!(file instanceof File)) throw new Error("A cookies.txt file is required");
+          if (file.name && !/cookies\.txt$/i.test(file.name)) throw new Error("Only cookies.txt files are accepted");
+          const cookieHeader = parseChatGptCookies(await file.arrayBuffer().then((buffer) => new Uint8Array(buffer)));
+          const validated = await chatgptModels({ cookieHeader }, { strict: true, baseUrl: provider.base_url });
+          if (!validated.length) throw new Error("ChatGPT returned no models");
+          return credentialService.create({
+            provider_id: id,
+            label: typeof form.get("label") === "string" && form.get("label") ? String(form.get("label")) : file.name || "ChatGPT cookies",
+            kind: "chatgpt",
+            secret: JSON.stringify({ cookieHeader }),
+          });
+        } catch (error: any) {
+          set.status = 400;
+          return { error: error.message || "Invalid cookies.txt" };
+        }
       },
     )
     .post(
