@@ -116,6 +116,51 @@ export default function App() {
     }).catch(() => setChatSessions([]));
   }, [isAuth, currentPage]);
 
+  useEffect(() => {
+    if (!isAuth || currentPage !== "chat" || !Object.keys(generatingChats).length) return;
+    let cancelled = false;
+    let requestInFlight = false;
+
+    const pollTitles = () => {
+      if (cancelled || requestInFlight) return;
+      requestInFlight = true;
+      chatsApi.list().then((list) => {
+        if (cancelled) return;
+        const pendingIds = Object.keys(generatingChats);
+        const chatsById = new Map(list.map((chat) => [chat.id, chat]));
+        const completedIds = pendingIds.filter((id) => {
+          const chat = chatsById.get(id);
+          return !chat || chat.title !== "New chat";
+        });
+
+        setGeneratingChats((current) => {
+          const next = { ...current };
+          completedIds.forEach((id) => delete next[id]);
+          return next;
+        });
+        setChatSessions((current) => {
+          const currentById = new Map(current.map((chat) => [chat.id, chat]));
+          const merged = list.map((chat) => {
+            const local = currentById.get(chat.id);
+            return manualTitlesRef.current.has(chat.id) && local
+              ? { ...chat, title: local.title, updated_at: local.updated_at }
+              : chat;
+          });
+          return sortChats(merged);
+        });
+      }).catch(() => undefined).finally(() => {
+        requestInFlight = false;
+      });
+    };
+
+    pollTitles();
+    const pollTimer = window.setInterval(pollTitles, 500);
+    return () => {
+      cancelled = true;
+      window.clearInterval(pollTimer);
+    };
+  }, [isAuth, currentPage, generatingChats]);
+
   const handleNavigate = (page: Page, providerId?: string) => {
     if (page === "provider-detail" && providerId) {
       setSelectedProviderId(providerId);
