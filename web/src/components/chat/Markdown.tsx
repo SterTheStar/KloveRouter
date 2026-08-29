@@ -155,6 +155,68 @@ const inlineCodeClass =
 const headingClass =
   "font-heading font-semibold tracking-tight text-foreground first:mt-0";
 
+const htmlDocumentStart = /(?:<!doctype\s+html\b[^>]*>|<html\b[^>]*>)/gi;
+const htmlDocumentEnd = /<\/html\s*>/i;
+
+function markdownFenceRanges(content: string) {
+  const ranges: Array<{ start: number; end: number }> = [];
+  const fenceLine = /^ {0,3}(`{3,}|~{3,})[^\n]*$/gm;
+  let open: { marker: string; start: number } | undefined;
+  let match: RegExpExecArray | null;
+
+  while ((match = fenceLine.exec(content))) {
+    const marker = match[1];
+    if (!open) {
+      open = { marker, start: match.index };
+    } else if (marker[0] === open.marker[0] && marker.length >= open.marker.length) {
+      ranges.push({ start: open.start, end: fenceLine.lastIndex });
+      open = undefined;
+    }
+  }
+
+  if (open) ranges.push({ start: open.start, end: content.length });
+  return ranges;
+}
+
+function isInMarkdownFence(index: number, ranges: Array<{ start: number; end: number }>) {
+  return ranges.some((range) => index >= range.start && index < range.end);
+}
+
+function fenceUnfencedHtml(content: string) {
+  const ranges = markdownFenceRanges(content);
+  const replacements: Array<{ start: number; end: number; html: string }> = [];
+  let match: RegExpExecArray | null;
+
+  htmlDocumentStart.lastIndex = 0;
+  while ((match = htmlDocumentStart.exec(content))) {
+    const start = match.index;
+    if (isInMarkdownFence(start, ranges)) continue;
+
+    const endMatch = htmlDocumentEnd.exec(content.slice(htmlDocumentStart.lastIndex));
+    if (!endMatch) continue;
+
+    const end = htmlDocumentStart.lastIndex + endMatch.index + endMatch[0].length;
+    if (isInMarkdownFence(end - 1, ranges)) continue;
+
+    replacements.push({
+      start,
+      end,
+      html: `\`\`\`html\n${content.slice(start, end)}\n\`\`\``,
+    });
+    htmlDocumentStart.lastIndex = end;
+  }
+
+  if (!replacements.length) return content;
+
+  let result = "";
+  let cursor = 0;
+  for (const replacement of replacements) {
+    result += content.slice(cursor, replacement.start) + replacement.html;
+    cursor = replacement.end;
+  }
+  return result + content.slice(cursor);
+}
+
 export const Markdown = memo(function Markdown({
   content,
   streaming = false,
@@ -259,7 +321,7 @@ export const Markdown = memo(function Markdown({
           ),
         }}
       >
-        {content}
+        {fenceUnfencedHtml(content)}
       </ReactMarkdown>
     </div>
   );
