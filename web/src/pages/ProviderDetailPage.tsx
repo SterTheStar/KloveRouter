@@ -1056,7 +1056,7 @@ export default function ProviderDetailPage({
         </CardContent>
       </Card>}
 
-      <Card id="provider-credentials">
+      {provider.protocol !== "codex" && provider.protocol !== "antigravity" && <Card id="provider-credentials">
         <CardHeader><CardTitle>Credentials</CardTitle><p className="text-sm text-muted-foreground">Manage encrypted credentials and access tokens.</p></CardHeader>
         <CardContent className="space-y-3">
           {provider.protocol === "chatgpt" ? (
@@ -1166,7 +1166,7 @@ export default function ProviderDetailPage({
             </div>
           )}
         </CardContent>
-      </Card>
+      </Card>}
 
       <Card variant="plain" className="overflow-hidden p-0 gap-0">
         <CardHeader className="flex flex-row items-center justify-between py-(--card-spacing)">
