@@ -18,7 +18,7 @@ export default function SetupPage({
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     setError(null);
-    if (password.length < 12) return setError("Password must be at least 12 characters");
+    if (password.length < 6) return setError("Password must be at least 6 characters");
     if (password !== confirmPassword) return setError("Passwords do not match");
     setLoading(true);
     const result = await onComplete({ name, password, confirm_password: confirmPassword });

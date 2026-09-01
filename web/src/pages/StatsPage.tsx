@@ -1,16 +1,37 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import {
-  RiLoader4Line as LoaderCircle,
+  RiArrowDownLine as ArrowDown,
+  RiArrowUpLine as ArrowUp,
+  RiDatabase2Line as DatabaseLine,
   RiExchangeLine as ExchangeLine,
+  RiFileList3Line as FileListLine,
+  RiLineChartLine as ChartLine,
+  RiLoader4Line as LoaderCircle,
+  RiMoneyDollarCircleLine as CoinsLine,
   RiNumbersLine as NumbersLine,
+  RiRefreshLine as RefreshIcon,
   RiSpeedLine as SpeedLine,
   RiTimeLine as TimeLine,
 } from "@remixicon/react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Tabs } from "@/components/ui/tabs";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
+import { StatusPanel } from "@/components/stats/StatusPanel";
 import { stats } from "../api/client";
 import type {
   StatsOverview,
@@ -20,8 +41,6 @@ import type {
   StatsUptime,
   StatsHealth,
 } from "../types";
-import { Tabs } from "@/components/ui/tabs";
-import { StatusPanel } from "@/components/stats/StatusPanel";
 import {
   BarChart,
   Bar,
@@ -48,6 +67,8 @@ const COLORS = [
   "#F472B6",
   "#34D399",
 ];
+const TOKENS_COLOR = "#5BCEFA";
+const COST_COLOR = "#F5A9B8";
 const AXIS = { fontSize: 11, fill: "currentColor" };
 
 function formatNumber(n: number): string {
@@ -135,21 +156,24 @@ function ChartTooltipContent({
 function ChartPanel({
   title,
   description,
+  action,
   children,
   className = "",
 }: {
   title: string;
   description: string;
+  action?: ReactNode;
   children: ReactNode;
   className?: string;
 }) {
   return (
     <Card className={`overflow-hidden ${className}`}>
-      <CardHeader className="border-b bg-muted/20">
+      <CardHeader className="border-b">
         <CardTitle>{title}</CardTitle>
-        <div className="text-xs text-muted-foreground">{description}</div>
+        <CardDescription>{description}</CardDescription>
+        {action ? <CardAction>{action}</CardAction> : null}
       </CardHeader>
-      <CardContent className="pt-5">{children}</CardContent>
+      <CardContent className="pt-4">{children}</CardContent>
     </Card>
   );
 }
@@ -261,44 +285,121 @@ function DonutChart({
   );
 }
 
-const statCards = [
-  {
-    icon: ExchangeLine,
-    title: "Requests",
-    key: "total_requests" as const,
-    format: (v: number) => formatNumber(v),
-  },
-  {
-    icon: NumbersLine,
-    title: "Total tokens",
-    key: "total_tokens" as const,
-    format: (v: number) => formatNumber(v),
-  },
-  {
-    icon: NumbersLine,
-    title: "Cached tokens",
-    key: "total_tokens_cache" as const,
-    format: (v: number) => formatNumber(v),
-  },
-  {
-    icon: SpeedLine,
-    title: "Avg tokens/req",
-    key: "avg_tokens_per_request" as const,
-    format: (v: number) => formatNumber(Math.round(v)),
-  },
-  {
-    icon: TimeLine,
-    title: "Avg duration",
-    key: "avg_duration_ms" as const,
-    format: (v: number) => formatDuration(v),
-  },
-  {
-    icon: NumbersLine,
-    title: "Estimated cost",
-    key: "estimated_cost_usd" as const,
-    format: (v: number) => formatCost(v),
-  },
-];
+type StatCardData = {
+  icon: typeof ExchangeLine;
+  title: string;
+  value: string;
+  sub?: string;
+};
+
+function StatCard({ icon: Icon, title, value, sub }: StatCardData) {
+  return (
+    <Card className="gap-0">
+      <CardContent className="flex flex-1 items-center gap-4">
+        <Icon className="size-9 shrink-0 text-muted-foreground" />
+        <div className="min-w-0">
+          <div className="truncate text-xs text-muted-foreground">{title}</div>
+          <div className="mt-0.5 font-heading text-2xl font-semibold tracking-tight tabular-nums">
+            {value}
+          </div>
+          {sub && (
+            <div className="truncate text-xs text-muted-foreground">{sub}</div>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function TokenBreakdownTooltip({
+  prompt,
+  completion,
+  cache,
+  children,
+}: {
+  prompt: number;
+  completion: number;
+  cache: number;
+  children: ReactNode;
+}) {
+  const rows = [
+    { label: "Input", value: prompt },
+    { label: "Output", value: completion },
+    { label: "Cached", value: cache },
+  ];
+  return (
+    <Tooltip>
+      <TooltipTrigger render={<span className="cursor-help" />}>
+        {children}
+      </TooltipTrigger>
+      <TooltipContent side="top" className="flex-col items-stretch gap-1 py-2">
+        <div className="text-[11px] font-medium text-muted-foreground">
+          Token breakdown
+        </div>
+        {rows.map(({ label, value }) => (
+          <div key={label} className="flex items-center justify-between gap-6">
+            <span className="text-muted-foreground">{label}</span>
+            <span className="font-mono font-medium tabular-nums">
+              {formatNumber(value)}
+            </span>
+          </div>
+        ))}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+type ModelSortKey =
+  | "model_name"
+  | "provider_name"
+  | "requests"
+  | "tokens_total"
+  | "tokens_cache_read"
+  | "estimated_cost_usd"
+  | "avg_duration_ms"
+  | "tps";
+
+function SortTh({
+  label,
+  k,
+  sortKey,
+  sortDir,
+  onSort,
+  align = "left",
+}: {
+  label: string;
+  k: ModelSortKey;
+  sortKey: ModelSortKey;
+  sortDir: "asc" | "desc";
+  onSort: (k: ModelSortKey) => void;
+  align?: "left" | "right";
+}) {
+  const active = sortKey === k;
+  const icon = active ? (
+    sortDir === "asc" ? (
+      <ArrowUp className="size-3" />
+    ) : (
+      <ArrowDown className="size-3" />
+    )
+  ) : null;
+  return (
+    <th className="p-3 font-medium whitespace-nowrap">
+      <button
+        type="button"
+        onClick={() => onSort(k)}
+        className={cn(
+          "flex w-full items-center gap-1 transition-colors hover:text-foreground",
+          align === "right" ? "justify-end" : "justify-start",
+          active && "text-foreground",
+        )}
+      >
+        {align === "right" && icon}
+        {label}
+        {align === "left" && icon}
+      </button>
+    </th>
+  );
+}
 
 export default function StatsPage() {
   const [overview, setOverview] = useState<StatsOverview | null>(null);
@@ -312,6 +413,8 @@ export default function StatsPage() {
   const [activeTab, setActiveTab] = useState("usage");
   const [uptime, setUptime] = useState<StatsUptime | null>(null);
   const [health, setHealth] = useState<StatsHealth | null>(null);
+  const [sortKey, setSortKey] = useState<ModelSortKey>("tokens_total");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const loadingRef = useRef(false);
 
   const load = useCallback(async (background = false) => {
@@ -350,21 +453,114 @@ export default function StatsPage() {
     return () => window.clearInterval(interval);
   }, [load]);
 
-  const groupedByProvider = useMemo(() => {
-    const groups: Record<string, StatsByModel[]> = {};
-    for (const m of byModel) {
-      if (!groups[m.provider_name]) groups[m.provider_name] = [];
-      groups[m.provider_name].push(m);
-    }
-    return groups;
-  }, [byModel]);
-
   const daysOptions: { label: string; value: number | null }[] = [
     { label: "7d", value: 7 },
     { label: "30d", value: 30 },
     { label: "90d", value: 90 },
-    { label: "Total", value: null },
+    { label: "All", value: null },
   ];
+
+  const statCards = useMemo<StatCardData[]>(() => {
+    if (!overview) return [];
+    const daysWithData = daily.length;
+    const cacheShare =
+      overview.total_tokens > 0
+        ? (overview.total_tokens_cache / overview.total_tokens) * 100
+        : 0;
+    return [
+      {
+        icon: ExchangeLine,
+        title: "Requests",
+        value: formatNumber(overview.total_requests),
+        sub:
+          daysWithData > 1
+            ? `${formatNumber(Math.round(overview.total_requests / daysWithData))} / day avg`
+            : undefined,
+      },
+      {
+        icon: NumbersLine,
+        title: "Total tokens",
+        value: formatNumber(overview.total_tokens),
+        sub: `${formatNumber(overview.total_tokens_prompt)} in · ${formatNumber(overview.total_tokens_completion)} out`,
+      },
+      {
+        icon: DatabaseLine,
+        title: "Cached tokens",
+        value: formatNumber(overview.total_tokens_cache),
+        sub: `${cacheShare.toFixed(0)}% of all tokens`,
+      },
+      {
+        icon: FileListLine,
+        title: "Avg tokens/req",
+        value: formatNumber(Math.round(overview.avg_tokens_per_request)),
+      },
+      {
+        icon: SpeedLine,
+        title: "Avg duration",
+        value: formatDuration(overview.avg_duration_ms),
+      },
+      {
+        icon: CoinsLine,
+        title: "Estimated cost",
+        value: formatCost(overview.estimated_cost_usd),
+        sub:
+          overview.total_requests > 0
+            ? `${formatCost(overview.estimated_cost_usd / overview.total_requests)} / request avg`
+            : undefined,
+      },
+    ];
+  }, [overview, daily.length]);
+
+  const sortedModels = useMemo(() => {
+    const arr = [...byModel];
+    arr.sort((a, b) => {
+      const av = a[sortKey];
+      const bv = b[sortKey];
+      const cmp =
+        typeof av === "number" && typeof bv === "number"
+          ? av - bv
+          : String(av ?? "").localeCompare(String(bv ?? ""));
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+    return arr;
+  }, [byModel, sortKey, sortDir]);
+
+  const modelTotals = useMemo(() => {
+    let requests = 0;
+    let tokens = 0;
+    let prompt = 0;
+    let completion = 0;
+    let cache = 0;
+    let cost = 0;
+    let weightedDuration = 0;
+    for (const m of byModel) {
+      requests += m.requests;
+      tokens += m.tokens_total;
+      prompt += m.tokens_prompt;
+      completion += m.tokens_completion;
+      cache += m.tokens_cache_read;
+      cost += m.estimated_cost_usd;
+      weightedDuration += m.avg_duration_ms * m.requests;
+    }
+    return {
+      requests,
+      tokens,
+      prompt,
+      completion,
+      cache,
+      cost,
+      avgDuration: requests > 0 ? weightedDuration / requests : 0,
+    };
+  }, [byModel]);
+
+  const handleSort = (k: ModelSortKey) => {
+    if (k === sortKey) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(k);
+      setSortDir(k === "model_name" || k === "provider_name" ? "asc" : "desc");
+    }
+  };
 
   if (loading)
     return (
@@ -375,29 +571,45 @@ export default function StatsPage() {
 
   return (
     <div className="w-full space-y-6 p-6">
-      <div className="flex items-center justify-between gap-4">
-        <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div>
           <h1 className="font-heading text-2xl font-semibold tracking-tight">
             Usage statistics
           </h1>
-          {refreshing && (
-            <LoaderCircle
-              className="size-4 animate-spin text-muted-foreground"
-              aria-label="Refreshing statistics"
-            />
-          )}
+          <p className="mt-1 text-sm text-muted-foreground">
+            Token usage, cost and performance across your providers.
+          </p>
         </div>
-        <div className="flex gap-1">
-          {daysOptions.map(({ label, value }) => (
-            <Button
-              key={label}
-              variant={days === value ? "default" : "outline"}
-              size="sm"
-              onClick={() => setDays(value)}
-            >
-              {label}
-            </Button>
-          ))}
+        <div className="flex items-center gap-2">
+          <div className="flex items-center rounded-lg bg-muted p-0.5">
+            {daysOptions.map(({ label, value }) => (
+              <button
+                key={label}
+                onClick={() => setDays(value)}
+                className={cn(
+                  "h-7 rounded-md px-2.5 text-xs font-medium transition-colors",
+                  days === value
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => load(true)}
+            disabled={refreshing}
+          >
+            {refreshing ? (
+              <LoaderCircle className="size-3.5 animate-spin" />
+            ) : (
+              <RefreshIcon className="size-3.5" />
+            )}
+            Refresh
+          </Button>
         </div>
       </div>
 
@@ -407,287 +619,444 @@ export default function StatsPage() {
         </Alert>
       )}
 
-      <Tabs tabs={[{ id: "usage", label: "Usage" }, { id: "status", label: "Status" }]} active={activeTab} onChange={setActiveTab} />
-      {activeTab === "status" && uptime && health ? <StatusPanel uptime={uptime} health={health} /> : null}
+      <Tabs
+        tabs={[
+          { id: "usage", label: "Usage" },
+          { id: "status", label: "Status" },
+        ]}
+        active={activeTab}
+        onChange={setActiveTab}
+      />
+
+      {activeTab === "status" && uptime && health ? (
+        <StatusPanel uptime={uptime} health={health} />
+      ) : null}
+
       {activeTab === "usage" && overview && (
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-6">
-          {statCards.map(({ icon: Icon, title, key, format }) => (
-            <div
-              key={key}
-              className="flex items-center gap-4 rounded-xl bg-card p-5 text-card-foreground ring-1 ring-foreground/10"
-            >
-              <div className="flex size-10 shrink-0 items-center justify-center rounded-lg">
-                <Icon className="size-9 text-muted-foreground" />
-              </div>
-              <div className="min-w-0">
-                <div className="text-xs text-muted-foreground">{title}</div>
-                <div className="mt-0.5 text-2xl font-bold tracking-tight">
-                  {format(overview[key])}
-                </div>
-              </div>
+        <>
+          {overview.total_requests === 0 ? (
+            <div className="rounded-xl border border-dashed p-12 text-center">
+              <ChartLine className="mx-auto size-8 text-muted-foreground/60" />
+              <h2 className="mt-3 font-heading text-lg font-medium">
+                No usage data yet
+              </h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Token usage will appear here after you make requests through the
+                API proxy.
+              </p>
             </div>
-          ))}
-        </div>
-      )}
-
-      {activeTab === "usage" && <>
-      {daily.length > 0 && (
-        <ChartPanel
-          title="Daily usage"
-          description="Token volume and estimated cost over the selected period"
-          className="min-h-[22rem]"
-        >
-          <div className="h-72">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart
-                data={daily}
-                margin={{ top: 8, right: 8, left: 4, bottom: 0 }}
-              >
-                <defs>
-                  <linearGradient
-                    id="tokensGradient"
-                    x1="0"
-                    y1="0"
-                    x2="0"
-                    y2="1"
-                  >
-                    <stop offset="0%" stopColor="#5BCEFA" stopOpacity={0.35} />
-                    <stop offset="100%" stopColor="#5BCEFA" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid
-                  vertical={false}
-                  strokeDasharray="4 4"
-                  className="stroke-border/60"
-                />
-                <XAxis
-                  dataKey="date"
-                  tickFormatter={formatDate}
-                  tick={AXIS}
-                  axisLine={false}
-                  tickLine={false}
-                  interval="preserveStartEnd"
-                  minTickGap={24}
-                />
-                <YAxis
-                  yAxisId="tokens"
-                  tick={AXIS}
-                  axisLine={false}
-                  tickLine={false}
-                  tickFormatter={formatNumber}
-                  width={48}
-                />
-                <YAxis
-                  yAxisId="cost"
-                  orientation="right"
-                  tick={AXIS}
-                  axisLine={false}
-                  tickLine={false}
-                  tickFormatter={formatCost}
-                  width={52}
-                />
-                <ChartTooltip
-                  content={
-                    <ChartTooltipContent
-                      formatters={{
-                        tokens_total: formatNumber,
-                        estimated_cost_usd: formatCost,
-                      }}
-                    />
-                  }
-                />
-                <Area
-                  yAxisId="tokens"
-                  type="monotone"
-                  dataKey="tokens_total"
-                  stroke="#5BCEFA"
-                  strokeWidth={2.5}
-                  fill="url(#tokensGradient)"
-                  name="Tokens"
-                  dot={false}
-                  activeDot={{ r: 4, strokeWidth: 2, fill: "var(--popover)" }}
-                />
-                <Line
-                  yAxisId="cost"
-                  type="monotone"
-                  dataKey="estimated_cost_usd"
-                  stroke="#F5A9B8"
-                  strokeWidth={2}
-                  dot={false}
-                  activeDot={{ r: 4, strokeWidth: 2, fill: "var(--popover)" }}
-                  name="Est. cost"
-                />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-        </ChartPanel>
-      )}
-
-      {byProvider.length > 0 && (
-        <ChartPanel
-          title="By provider"
-          description="Token volume grouped by provider"
-        >
-          <div className="h-72">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart
-                data={byProvider}
-                layout="vertical"
-                margin={{ top: 8, right: 16, left: 8, bottom: 8 }}
-              >
-                <CartesianGrid
-                  horizontal={false}
-                  strokeDasharray="4 4"
-                  className="stroke-border/60"
-                />
-                <XAxis
-                  type="number"
-                  tick={AXIS}
-                  axisLine={false}
-                  tickLine={false}
-                  tickFormatter={formatNumber}
-                />
-                <YAxis
-                  type="category"
-                  dataKey="provider_name"
-                  tick={AXIS}
-                  axisLine={false}
-                  tickLine={false}
-                  width={Math.min(
-                    150,
-                    Math.max(
-                      72,
-                      ...byProvider.map((p) => p.provider_name.length * 7.5),
-                    ),
-                  )}
-                  tickFormatter={(value: string) =>
-                    value.length > 18 ? `${value.slice(0, 17)}…` : value
-                  }
-                />
-                <ChartTooltip
-                  content={
-                    <ChartTooltipContent
-                      formatters={{ tokens_total: formatNumber }}
-                    />
-                  }
-                  cursor={{ fill: "var(--muted)", opacity: 0.4 }}
-                />
-                <Bar
-                  dataKey="tokens_total"
-                  name="Tokens"
-                  radius={[0, 6, 6, 0]}
-                  maxBarSize={26}
-                >
-                  {byProvider.map((_, index) => (
-                    <Cell key={index} fill={COLORS[index % COLORS.length]} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </ChartPanel>
-      )}
-
-      {byProvider.length > 0 && (
-        <div className="grid gap-6 md:grid-cols-2">
-          <ChartPanel
-            title="Token share"
-            description="Share of total tokens by provider"
-          >
-            <div className="min-h-80">
-              <DonutChart
-                data={byProvider}
-                dataKey="tokens_total"
-                nameKey="provider_name"
-                format={formatNumber}
-                centerLabel="Tokens"
-              />
-            </div>
-          </ChartPanel>
-
-          <ChartPanel
-            title="Requests by provider"
-            description="Request distribution by provider"
-          >
-            <div className="min-h-80">
-              <DonutChart
-                data={byProvider}
-                dataKey="requests"
-                nameKey="provider_name"
-                format={formatNumber}
-                centerLabel="Requests"
-              />
-            </div>
-          </ChartPanel>
-        </div>
-      )}
-
-      {byModel.length > 0 && (
-        <Card className="overflow-hidden p-0 gap-0">
-          <CardHeader className="flex flex-row items-center justify-between py-(--card-spacing)">
-            <CardTitle>By model</CardTitle>
-          </CardHeader>
-          <Separator />
-          <div className="max-h-96 overflow-y-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b text-left text-xs text-muted-foreground">
-                  <th className="p-3 font-medium">Model</th>
-                  <th className="p-3 font-medium">Provider</th>
-                  <th className="p-3 font-medium text-right">Requests</th>
-                  <th className="p-3 font-medium text-right">Tokens</th>
-                  <th className="p-3 font-medium text-right">Cache</th>
-                  <th className="p-3 font-medium text-right">Est. cost</th>
-                  <th className="p-3 font-medium text-right">Avg duration</th>
-                  <th className="p-3 font-medium text-right">TPS</th>
-                </tr>
-              </thead>
-              <tbody>
-                {byModel.map((m) => (
-                  <tr
-                    key={m.model_id}
-                    className="border-b last:border-0 hover:bg-muted/30"
-                  >
-                    <td className="p-3 font-mono text-xs">{m.model_name}</td>
-                    <td className="p-3">{m.provider_name}</td>
-                    <td className="p-3 text-right">
-                      {formatNumber(m.requests)}
-                    </td>
-                    <td className="p-3 text-right">
-                      {formatNumber(m.tokens_total)}
-                    </td>
-                    <td className="p-3 text-right">
-                      {formatNumber(m.tokens_cache_read)}
-                    </td>
-                    <td className="p-3 text-right font-medium">
-                      {formatCost(m.estimated_cost_usd)}
-                    </td>
-                    <td className="p-3 text-right">
-                      {formatDuration(m.avg_duration_ms)}
-                    </td>
-                    <td className="p-3 text-right font-mono text-xs">
-                      {m.tps !== null ? m.tps.toFixed(1) : "—"}
-                    </td>
-                  </tr>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
+                {statCards.map(({ icon: Icon, title, value, sub }) => (
+                  <StatCard
+                    key={title}
+                    icon={Icon}
+                    title={title}
+                    value={value}
+                    sub={sub}
+                  />
                 ))}
-              </tbody>
-            </table>
-          </div>
-        </Card>
-      )}
+              </div>
 
-      {!loading && !error && overview && overview.total_requests === 0 && (
-        <div className="rounded-xl border border-dashed p-12 text-center">
-          <h2 className="font-heading text-lg font-medium">
-            No usage data yet
-          </h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Token usage will appear here after you make requests through the API
-            proxy.
-          </p>
-        </div>
+              {daily.length > 0 && (
+                <ChartPanel
+                  title="Daily usage"
+                  description="Token volume and estimated cost per day"
+                  className="min-h-[22rem]"
+                  action={
+                    <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                      <span className="flex items-center gap-1.5">
+                        <span
+                          className="size-2 rounded-full"
+                          style={{ background: TOKENS_COLOR }}
+                        />
+                        Tokens
+                      </span>
+                      <span className="flex items-center gap-1.5">
+                        <span
+                          className="size-2 rounded-full"
+                          style={{ background: COST_COLOR }}
+                        />
+                        Est. cost
+                      </span>
+                    </div>
+                  }
+                >
+                  <div className="h-72">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart
+                        data={daily}
+                        margin={{ top: 8, right: 8, left: 4, bottom: 0 }}
+                      >
+                        <defs>
+                          <linearGradient
+                            id="tokensGradient"
+                            x1="0"
+                            y1="0"
+                            x2="0"
+                            y2="1"
+                          >
+                            <stop
+                              offset="0%"
+                              stopColor={TOKENS_COLOR}
+                              stopOpacity={0.35}
+                            />
+                            <stop
+                              offset="100%"
+                              stopColor={TOKENS_COLOR}
+                              stopOpacity={0}
+                            />
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid
+                          vertical={false}
+                          strokeDasharray="4 4"
+                          className="stroke-border/60"
+                        />
+                        <XAxis
+                          dataKey="date"
+                          tickFormatter={formatDate}
+                          tick={AXIS}
+                          axisLine={false}
+                          tickLine={false}
+                          interval="preserveStartEnd"
+                          minTickGap={24}
+                        />
+                        <YAxis
+                          yAxisId="tokens"
+                          tick={AXIS}
+                          axisLine={false}
+                          tickLine={false}
+                          tickFormatter={formatNumber}
+                          width={48}
+                        />
+                        <YAxis
+                          yAxisId="cost"
+                          orientation="right"
+                          tick={AXIS}
+                          axisLine={false}
+                          tickLine={false}
+                          tickFormatter={formatCost}
+                          width={52}
+                        />
+                        <ChartTooltip
+                          content={
+                            <ChartTooltipContent
+                              formatters={{
+                                tokens_total: formatNumber,
+                                estimated_cost_usd: formatCost,
+                              }}
+                            />
+                          }
+                        />
+                        <Area
+                          yAxisId="tokens"
+                          type="monotone"
+                          dataKey="tokens_total"
+                          stroke={TOKENS_COLOR}
+                          strokeWidth={2.5}
+                          fill="url(#tokensGradient)"
+                          name="Tokens"
+                          dot={false}
+                          activeDot={{
+                            r: 4,
+                            strokeWidth: 2,
+                            fill: "var(--popover)",
+                          }}
+                        />
+                        <Line
+                          yAxisId="cost"
+                          type="monotone"
+                          dataKey="estimated_cost_usd"
+                          stroke={COST_COLOR}
+                          strokeWidth={2}
+                          dot={false}
+                          activeDot={{
+                            r: 4,
+                            strokeWidth: 2,
+                            fill: "var(--popover)",
+                          }}
+                          name="Est. cost"
+                        />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </div>
+                </ChartPanel>
+              )}
+
+              {byProvider.length > 0 && (
+                <ChartPanel
+                  title="By provider"
+                  description="Token volume grouped by provider"
+                >
+                  <div className="h-72">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart
+                        data={byProvider}
+                        layout="vertical"
+                        margin={{ top: 8, right: 16, left: 8, bottom: 8 }}
+                      >
+                        <CartesianGrid
+                          horizontal={false}
+                          strokeDasharray="4 4"
+                          className="stroke-border/60"
+                        />
+                        <XAxis
+                          type="number"
+                          tick={AXIS}
+                          axisLine={false}
+                          tickLine={false}
+                          tickFormatter={formatNumber}
+                        />
+                        <YAxis
+                          type="category"
+                          dataKey="provider_name"
+                          tick={AXIS}
+                          axisLine={false}
+                          tickLine={false}
+                          width={Math.min(
+                            150,
+                            Math.max(
+                              72,
+                              ...byProvider.map(
+                                (p) => p.provider_name.length * 7.5,
+                              ),
+                            ),
+                          )}
+                          tickFormatter={(value: string) =>
+                            value.length > 18 ? `${value.slice(0, 17)}…` : value
+                          }
+                        />
+                        <ChartTooltip
+                          content={
+                            <ChartTooltipContent
+                              formatters={{ tokens_total: formatNumber }}
+                            />
+                          }
+                          cursor={{ fill: "var(--muted)", opacity: 0.4 }}
+                        />
+                        <Bar
+                          dataKey="tokens_total"
+                          name="Tokens"
+                          radius={[0, 6, 6, 0]}
+                          maxBarSize={26}
+                        >
+                          {byProvider.map((_, index) => (
+                            <Cell
+                              key={index}
+                              fill={COLORS[index % COLORS.length]}
+                            />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </ChartPanel>
+              )}
+
+              {byProvider.length > 0 && (
+                <div className="grid gap-6 md:grid-cols-2">
+                  <ChartPanel
+                    title="Token share"
+                    description="Share of total tokens by provider"
+                  >
+                    <div className="min-h-80">
+                      <DonutChart
+                        data={byProvider}
+                        dataKey="tokens_total"
+                        nameKey="provider_name"
+                        format={formatNumber}
+                        centerLabel="Tokens"
+                      />
+                    </div>
+                  </ChartPanel>
+
+                  <ChartPanel
+                    title="Requests by provider"
+                    description="Request distribution by provider"
+                  >
+                    <div className="min-h-80">
+                      <DonutChart
+                        data={byProvider}
+                        dataKey="requests"
+                        nameKey="provider_name"
+                        format={formatNumber}
+                        centerLabel="Requests"
+                      />
+                    </div>
+                  </ChartPanel>
+                </div>
+              )}
+
+              {byModel.length > 0 && (
+                <Card className="gap-0 overflow-hidden p-0">
+                  <CardHeader>
+                    <CardTitle>By model</CardTitle>
+                    <CardDescription>
+                      Per-model volume, latency and cost · click a column to
+                      sort
+                    </CardDescription>
+                    <CardAction>
+                      <span className="text-xs text-muted-foreground">
+                        {byModel.length} models
+                      </span>
+                    </CardAction>
+                  </CardHeader>
+                  <div className="max-h-[30rem] overflow-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-y bg-muted/30 text-left text-xs text-muted-foreground">
+                          <SortTh
+                            label="Model"
+                            k="model_name"
+                            sortKey={sortKey}
+                            sortDir={sortDir}
+                            onSort={handleSort}
+                          />
+                          <SortTh
+                            label="Provider"
+                            k="provider_name"
+                            sortKey={sortKey}
+                            sortDir={sortDir}
+                            onSort={handleSort}
+                          />
+                          <SortTh
+                            label="Requests"
+                            k="requests"
+                            sortKey={sortKey}
+                            sortDir={sortDir}
+                            onSort={handleSort}
+                            align="right"
+                          />
+                          <SortTh
+                            label="Tokens"
+                            k="tokens_total"
+                            sortKey={sortKey}
+                            sortDir={sortDir}
+                            onSort={handleSort}
+                            align="right"
+                          />
+                          <SortTh
+                            label="Cache"
+                            k="tokens_cache_read"
+                            sortKey={sortKey}
+                            sortDir={sortDir}
+                            onSort={handleSort}
+                            align="right"
+                          />
+                          <SortTh
+                            label="Est. cost"
+                            k="estimated_cost_usd"
+                            sortKey={sortKey}
+                            sortDir={sortDir}
+                            onSort={handleSort}
+                            align="right"
+                          />
+                          <SortTh
+                            label="Avg duration"
+                            k="avg_duration_ms"
+                            sortKey={sortKey}
+                            sortDir={sortDir}
+                            onSort={handleSort}
+                            align="right"
+                          />
+                          <SortTh
+                            label="TPS"
+                            k="tps"
+                            sortKey={sortKey}
+                            sortDir={sortDir}
+                            onSort={handleSort}
+                            align="right"
+                          />
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {sortedModels.map((m) => (
+                          <tr
+                            key={m.model_id}
+                            className="border-b last:border-0 hover:bg-muted/30"
+                          >
+                            <td
+                              className="max-w-56 truncate p-3 font-mono text-xs"
+                              title={m.model_name}
+                            >
+                              {m.model_name}
+                            </td>
+                            <td className="p-3 text-muted-foreground">
+                              {m.provider_name}
+                            </td>
+                            <td className="p-3 text-right tabular-nums">
+                              {formatNumber(m.requests)}
+                            </td>
+                            <td className="p-3 text-right tabular-nums">
+                              <TokenBreakdownTooltip
+                                prompt={m.tokens_prompt}
+                                completion={m.tokens_completion}
+                                cache={m.tokens_cache_read}
+                              >
+                                {formatNumber(m.tokens_total)}
+                              </TokenBreakdownTooltip>
+                            </td>
+                            <td
+                              className="p-3 text-right tabular-nums text-muted-foreground"
+                              title={
+                                m.tokens_total > 0
+                                  ? `${((m.tokens_cache_read / m.tokens_total) * 100).toFixed(0)}% cached`
+                                  : undefined
+                              }
+                            >
+                              {formatNumber(m.tokens_cache_read)}
+                            </td>
+                            <td className="p-3 text-right font-medium tabular-nums">
+                              {formatCost(m.estimated_cost_usd)}
+                            </td>
+                            <td className="p-3 text-right tabular-nums">
+                              {formatDuration(m.avg_duration_ms)}
+                            </td>
+                            <td className="p-3 text-right font-mono text-xs tabular-nums">
+                              {m.tps !== null ? m.tps.toFixed(1) : "—"}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot>
+                        <tr className="border-t bg-muted/30 text-xs font-medium">
+                          <td className="p-3" colSpan={2}>
+                            Total · {byModel.length} models
+                          </td>
+                          <td className="p-3 text-right tabular-nums">
+                            {formatNumber(modelTotals.requests)}
+                          </td>
+                          <td className="p-3 text-right tabular-nums">
+                            <TokenBreakdownTooltip
+                              prompt={modelTotals.prompt}
+                              completion={modelTotals.completion}
+                              cache={modelTotals.cache}
+                            >
+                              {formatNumber(modelTotals.tokens)}
+                            </TokenBreakdownTooltip>
+                          </td>
+                          <td className="p-3 text-right tabular-nums">
+                            {formatNumber(modelTotals.cache)}
+                          </td>
+                          <td className="p-3 text-right tabular-nums">
+                            {formatCost(modelTotals.cost)}
+                          </td>
+                          <td className="p-3 text-right tabular-nums">
+                            {formatDuration(modelTotals.avgDuration)}
+                          </td>
+                          <td className="p-3 text-right">—</td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                </Card>
+              )}
+            </>
+          )}
+        </>
       )}
-      </>}
     </div>
   );
 }

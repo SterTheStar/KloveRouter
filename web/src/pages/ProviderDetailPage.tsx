@@ -1113,26 +1113,7 @@ export default function ProviderDetailPage({
                 </div>
               )}
             </div>
-          ) : provider.protocol === "codex" || provider.protocol === "antigravity" ? (
-            <div className="space-y-3">
-              <div>
-                <Label>{provider.protocol === "codex" ? "Connected accounts" : "Connected Google accounts"}</Label>
-                <p className="text-xs text-muted-foreground">This integration uses OAuth accounts. Manage them in the Connection section above.</p>
-              </div>
-              <div className="space-y-2">
-                {credentials.filter((credential) => (credential.kind === "codex" || credential.kind === "antigravity") && (credential.account_id || credential.email)).length ? (
-                  credentials.filter((credential) => (credential.kind === "codex" || credential.kind === "antigravity") && (credential.account_id || credential.email)).map((credential) => (
-                    <div key={credential.id} className="flex items-center justify-between gap-3 rounded-md border bg-muted/40 px-3 py-2 text-sm">
-                      <span>{credential.label}</span>
-                      <span className="font-mono text-xs text-muted-foreground">{credential.email || credential.account_id || credential.id}</span>
-                    </div>
-                  ))
-                ) : (
-                  <div className="text-xs text-muted-foreground">No account connected.</div>
-                )}
-              </div>
-            </div>
-          ) : (
+          ) : provider.protocol === "codex" || provider.protocol === "antigravity" ? null : (
             <div className="space-y-3">
               <div className="flex items-center justify-between gap-3">
                 <Label>API keys</Label>

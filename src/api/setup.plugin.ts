@@ -21,9 +21,9 @@ export const setupPlugin = (app: Elysia) =>
           set.status = 400;
           return { error: "Profile name must be 40 characters or fewer" };
         }
-        if (body.password.length < 12) {
+        if (body.password.length < 6) {
           set.status = 400;
-          return { error: "Password must be at least 12 characters" };
+          return { error: "Password must be at least 6 characters" };
         }
         if (body.password !== body.confirm_password) {
           set.status = 400;
