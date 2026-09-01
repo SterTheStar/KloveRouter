@@ -424,6 +424,8 @@ export const requestLogs = {
       offset: number;
     }>(`/api/request-logs?${query}`);
   },
+  get: (id: string) =>
+    request<import("../types").RequestLogDetails>(`/api/request-logs/${encodeURIComponent(id)}`),
   clear: () =>
     request<{ success: boolean; removed: number }>("/api/request-logs", {
       method: "DELETE",

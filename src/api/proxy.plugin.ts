@@ -800,6 +800,13 @@ export const proxyPlugin = (app: Elysia) =>
           modelName: parsed.modelId,
           clientIp: clientIp(request, headers, server as any),
           requesterName: apiKey.name,
+          requestDetails: {
+            method: request.method,
+            url: new URL(request.url).pathname,
+            headers,
+            payload: body,
+            stream: Boolean(body.stream),
+          },
         });
 
         const requestSequence =
@@ -933,6 +940,7 @@ export const proxyPlugin = (app: Elysia) =>
               return fixThinkTag(toOpenAICompletion(completion));
             } catch (error: any) {
               failures.push(error);
+              requestLogService.captureError(requestLogId, error);
               if (isAbortError(error)) break;
               const status = errorStatus(error);
               if (status !== undefined) failureStatuses.push(status);
@@ -1061,6 +1069,7 @@ export const proxyPlugin = (app: Elysia) =>
                );
             } catch (error: any) {
               failures.push(error);
+              requestLogService.captureError(requestLogId, error);
               credentialService.markError(credential.id, error.message);
               if (isAbortError(error) || !isTransientProviderError(error) || provider.credential_mode !== "round_robin") break;
               credentialService.markCooldown(
@@ -1187,6 +1196,7 @@ export const proxyPlugin = (app: Elysia) =>
             } catch (error: any) {
               if (isModelNotFoundError(error)) {
                 failures.push(error);
+              requestLogService.captureError(requestLogId, error);
                 if (isAbortError(error) || !isTransientProviderError(error) || provider.credential_mode !== "round_robin") break;
                 const next = credentialService.select(
                   provider.id,
@@ -1201,6 +1211,7 @@ export const proxyPlugin = (app: Elysia) =>
               }
               credentialService.markError(credential.id, error.message);
               failures.push(error);
+              requestLogService.captureError(requestLogId, error);
               if (isAbortError(error) || !isTransientProviderError(error) || provider.credential_mode !== "round_robin") {
                 const statusCode = isQuotaError(error) ? 429 : errorStatus(error) ?? 502;
                 requestLogService.complete(requestLogId, {
@@ -1285,6 +1296,7 @@ export const proxyPlugin = (app: Elysia) =>
                 provider.base_url,
                 request.signal,
               );
+              requestLogService.captureResponse(requestLogId, { status: response.status, headers: response.headers, contentType: response.headers.get("content-type"), streaming: Boolean(body.stream) });
               const modelRecord = modelService.findByProviderAndModel(provider.id, parsed.modelId);
               if (!body.stream) {
                 requestLogService.complete(requestLogId, { durationMs: Math.round(performance.now() - start) });
@@ -1296,6 +1308,7 @@ export const proxyPlugin = (app: Elysia) =>
               }, start);
             } catch (error: any) {
               failures.push(error);
+              requestLogService.captureError(requestLogId, error);
               credentialService.markError(credential.id, error.message);
               if (isAbortError(error) || !isTransientProviderError(error) || provider.credential_mode !== "round_robin") break;
               const next = credentialService.select(provider.id, "round_robin", null, requestSequence);
@@ -1366,6 +1379,7 @@ export const proxyPlugin = (app: Elysia) =>
               }, start, undefined, { messages: body.messages, model: parsed.modelId, provider: provider.name });
             } catch (error: any) {
               failures.push(error);
+              requestLogService.captureError(requestLogId, error);
               credentialService.markError(credential.id, error.message);
               if (isAbortError(error) || !isTransientProviderError(error) || provider.credential_mode !== "round_robin") break;
               const next = credentialService.select(provider.id, "round_robin", null, requestSequence);
@@ -1414,6 +1428,7 @@ export const proxyPlugin = (app: Elysia) =>
               }, { messages: body.messages, model: parsed.modelId, provider: provider.name });
             } catch (error: any) {
               failures.push(error);
+              requestLogService.captureError(requestLogId, error);
               credentialService.markError(credential.id, error.message);
               if (isAbortError(error) || !isTransientProviderError(error) || provider.credential_mode !== "round_robin") break;
               credentialService.markCooldown(credential.id, 10, error.message, requestSequence);
@@ -1446,6 +1461,7 @@ export const proxyPlugin = (app: Elysia) =>
                 : fixThinkTag(result);
             } catch (error: any) {
               failures.push(error);
+              requestLogService.captureError(requestLogId, error);
               credentialService.markError(credential.id, error.message);
               if (isAbortError(error) || !isTransientProviderError(error) || provider.credential_mode !== "round_robin") break;
               credentialService.markCooldown(credential.id, 10, error.message, requestSequence);
@@ -1474,6 +1490,7 @@ export const proxyPlugin = (app: Elysia) =>
                 credential,
                 provider.base_url,
               );
+              requestLogService.captureResponse(requestLogId, { status: upstream.status, headers: upstream.headers, contentType: upstream.headers.get("content-type"), streaming: Boolean(body.stream) });
               const modelRecord = modelService.findByProviderAndModel(
                 provider.id,
                 parsed.modelId,
@@ -1556,6 +1573,7 @@ export const proxyPlugin = (app: Elysia) =>
               );
             } catch (error: any) {
               failures.push(error);
+              requestLogService.captureError(requestLogId, error);
               credentialService.markError(credential.id, error.message);
               if (isAbortError(error) || !isTransientProviderError(error) || provider.credential_mode !== "round_robin") break;
               credentialService.markCooldown(
@@ -1673,6 +1691,7 @@ export const proxyPlugin = (app: Elysia) =>
               });
             } catch (error: any) {
               failures.push(error);
+              requestLogService.captureError(requestLogId, error);
               credentialService.markError(credential.id, error.message);
               if (isAbortError(error) || !isTransientProviderError(error) || provider.credential_mode !== "round_robin") break;
               credentialService.markCooldown(
@@ -1748,6 +1767,7 @@ export const proxyPlugin = (app: Elysia) =>
               return fixThinkTag(completion);
             } catch (error: any) {
               failures.push(error);
+              requestLogService.captureError(requestLogId, error);
               credentialService.markError(credential.id, error.message);
               if (isAbortError(error) || !isTransientProviderError(error) || provider.credential_mode !== "round_robin") break;
               credentialService.markCooldown(

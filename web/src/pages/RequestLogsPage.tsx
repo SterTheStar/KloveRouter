@@ -13,6 +13,14 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -102,6 +110,10 @@ export default function RequestLogsPage() {
   const [error, setError] = useState<string | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [clearing, setClearing] = useState(false);
+  const [selected, setSelected] = useState<RequestLog | null>(null);
+  const [detail, setDetail] = useState<import("../types").RequestLogDetails | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState<string | null>(null);
   const loadedRef = useRef(false);
   const requestRef = useRef(false);
 
@@ -151,6 +163,20 @@ export default function RequestLogsPage() {
 
   const copy = async (value: string) => {
     await copyToClipboard(value);
+  };
+
+  const openDetail = async (log: RequestLog) => {
+    setSelected(log);
+    setDetail(null);
+    setDetailError(null);
+    setDetailLoading(true);
+    try {
+      setDetail(await requestLogs.get(log.id));
+    } catch (e: any) {
+      setDetailError(e.message || "Unable to load request details");
+    } finally {
+      setDetailLoading(false);
+    }
   };
 
   const handleClear = async () => {
@@ -299,7 +325,14 @@ export default function RequestLogsPage() {
                 {logs.map((log) => (
                   <tr
                     key={log.id}
-                    className="border-b align-top last:border-0 hover:bg-muted/20"
+                    className="cursor-pointer border-b align-top last:border-0 hover:bg-muted/20"
+                    onClick={() => openDetail(log)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") openDetail(log);
+                    }}
+                    tabIndex={0}
+                    role="button"
+                    aria-label={`Open request log ${log.id}`}
                   >
                     <td className="p-3">
                       <div className="flex items-center gap-1 font-mono text-xs">
@@ -308,7 +341,7 @@ export default function RequestLogsPage() {
                           variant="ghost"
                           size="icon"
                           className="size-6"
-                          onClick={() => copy(log.id)}
+                          onClick={(event) => { event.stopPropagation(); copy(log.id); }}
                           title="Copy request ID"
                         >
                           <CopyIcon className="size-3" />
@@ -449,6 +482,29 @@ export default function RequestLogsPage() {
           </div>
         </CardContent>
       </Card>
+
+      <Dialog open={!!selected} onOpenChange={(open) => !open && setSelected(null)}>
+        <DialogContent className="max-h-[90vh] gap-3 overflow-hidden sm:max-w-4xl">
+          <DialogHeader>
+            <DialogTitle>Request log details</DialogTitle>
+            <DialogDescription>{selected?.id} · {selected ? formatTime(selected.created_at) : ""}</DialogDescription>
+          </DialogHeader>
+          <ScrollArea className="max-h-[70vh] pr-3">
+            {detailLoading && <LoaderCircle className="mx-auto my-8 size-5 animate-spin" />}
+            {detailError && <Alert variant="destructive"><AlertDescription>Unable to load this request log: {detailError}</AlertDescription></Alert>}
+            {detail && <div className="space-y-4">
+              <div className="flex flex-wrap items-center gap-2"><StatusBadge log={detail} /><span>{detail.provider_name} / {detail.model_name}</span><span className="text-muted-foreground">{detail.credential_label || "credential masked"}</span></div>
+              {([ ["Request metadata / payload", detail.request_details], ["Response payload", detail.response_details], ["Error details", detail.error_details] ] as const).map(([title, value]) => (
+                <section key={title} className="space-y-1">
+                  <div className="flex items-center justify-between"><h3 className="font-medium">{title}</h3><Button variant="ghost" size="sm" disabled={value == null} onClick={() => copy(JSON.stringify(value, null, 2))}><CopyIcon className="size-3" /> Copy</Button></div>
+                  <pre className="max-h-72 overflow-auto rounded-md bg-muted/50 p-3 text-xs whitespace-pre-wrap break-words">{value == null ? "No details captured." : JSON.stringify(value, null, 2)}</pre>
+                </section>
+              ))}
+              {detail.error_message && <section><h3 className="font-medium text-destructive">Error</h3><pre className="mt-1 whitespace-pre-wrap text-xs text-destructive">{detail.error_message}</pre></section>}
+            </div>}
+          </ScrollArea>
+        </DialogContent>
+      </Dialog>
 
       <ConfirmDialog
         open={confirmOpen}

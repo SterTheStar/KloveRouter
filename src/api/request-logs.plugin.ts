@@ -23,6 +23,14 @@ export const requestLogsPlugin = (app: Elysia) =>
         }),
       },
     )
+    .get("/api/request-logs/:id", ({ params, set }) => {
+      const detail = requestLogService.get(params.id);
+      if (!detail) {
+        set.status = 404;
+        return { error: "Request log not found" };
+      }
+      return detail;
+    }, { params: t.Object({ id: t.String() }) })
     .delete("/api/request-logs", () => ({
       success: true,
       removed: requestLogService.clear(),

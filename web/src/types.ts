@@ -295,6 +295,12 @@ export interface RequestLog {
   completed_at: string | null;
 }
 
+export interface RequestLogDetails extends RequestLog {
+  request_details: unknown;
+  response_details: unknown;
+  error_details: unknown;
+}
+
 export interface UserProfile {
   name: string;
   avatar: string | null;

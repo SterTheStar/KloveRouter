@@ -231,6 +231,9 @@ export function initSchema(db: Database): void {
       tps REAL,
       duration_ms INTEGER,
       error_message TEXT,
+      request_details TEXT,
+      response_details TEXT,
+      error_details TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       completed_at TEXT,
       FOREIGN KEY (provider_id) REFERENCES providers(id) ON DELETE SET NULL
@@ -243,6 +246,15 @@ export function initSchema(db: Database): void {
     CREATE INDEX IF NOT EXISTS idx_request_logs_status_created
       ON request_logs(status, created_at);
   `);
+
+  const requestLogCols = db.query("PRAGMA table_info(request_logs)").all() as { name: string }[];
+  for (const [name, sql] of [
+    ["request_details", "ALTER TABLE request_logs ADD COLUMN request_details TEXT"],
+    ["response_details", "ALTER TABLE request_logs ADD COLUMN response_details TEXT"],
+    ["error_details", "ALTER TABLE request_logs ADD COLUMN error_details TEXT"],
+  ] as const) {
+    if (!requestLogCols.find((column) => column.name === name)) db.exec(sql);
+  }
 
   // Migrate existing tables: add avatar column if missing
   const cols = db.query("PRAGMA table_info(providers)").all() as {

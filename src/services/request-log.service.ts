@@ -26,6 +26,55 @@ export interface RequestLog {
   completed_at: string | null;
 }
 
+export interface RequestLogDetails extends RequestLog {
+  request_details: unknown;
+  response_details: unknown;
+  error_details: unknown;
+}
+
+const SENSITIVE_KEY = /authorization|api[-_]?key|cookie|token|secret|password|credential|private[-_]?key|access[-_]?key/i;
+const MAX_DETAIL_BYTES = 64 * 1024;
+const TRUNCATION_MARKER = "[truncated]";
+
+function limitString(value: string, max = MAX_DETAIL_BYTES): string {
+  if (value.length <= max) return value;
+  const suffix = `… ${TRUNCATION_MARKER}`;
+  return `${value.slice(0, Math.max(0, max - suffix.length))}${suffix}`;
+}
+
+export function redactLogDetail(value: unknown, depth = 0): unknown {
+  if (depth > 6) return "[truncated]";
+  if (typeof value === "string") return limitString(value);
+  if (typeof value === "bigint") return String(value);
+  if (Array.isArray(value)) return value.slice(0, 100).map((item) => redactLogDetail(item, depth + 1));
+  if (value && typeof value === "object") {
+    return Object.fromEntries(Object.entries(value).slice(0, 100).map(([key, item]) => [
+      key, SENSITIVE_KEY.test(key) ? "[redacted]" : redactLogDetail(item, depth + 1),
+    ]));
+  }
+  return value;
+}
+
+function serializeDetail(value: unknown): string | null {
+  if (value == null) return null;
+  try {
+    const serialized = JSON.stringify(redactLogDetail(value));
+    if (serialized.length <= MAX_DETAIL_BYTES) return serialized;
+    return JSON.stringify({
+      _truncated: true,
+      _original_bytes: serialized.length,
+      value_preview: limitString(serialized, MAX_DETAIL_BYTES - 96),
+    });
+  } catch {
+    return JSON.stringify({ _truncated: true, value: "[unavailable]" });
+  }
+}
+
+function parseDetail(value: string | null): unknown {
+  if (!value) return null;
+  try { return JSON.parse(value); } catch { return value; }
+}
+
 function requestId() {
   const stamp = new Date()
     .toISOString()
@@ -49,11 +98,12 @@ export const requestLogService = {
     modelName: string;
     clientIp?: string | null;
     requesterName?: string | null;
+    requestDetails?: unknown;
   }) {
     const id = requestId();
     getDb()
       .query(
-        "INSERT INTO request_logs (id, provider_id, provider_name, model_name, client_ip, requester_name) VALUES (?, ?, ?, ?, ?, ?)",
+        "INSERT INTO request_logs (id, provider_id, provider_name, model_name, client_ip, requester_name, request_details) VALUES (?, ?, ?, ?, ?, ?, ?)",
       )
       .run(
         id,
@@ -62,6 +112,7 @@ export const requestLogService = {
         input.modelName,
         input.clientIp ?? null,
         input.requesterName ?? null,
+        serializeDetail(input.requestDetails),
       );
     return id;
   },
@@ -100,6 +151,8 @@ export const requestLogService = {
       durationMs?: number;
       tps?: number | null;
       error?: string | null;
+      responseDetails?: unknown;
+      errorDetails?: unknown;
     },
   ) {
     const db = getDb();
@@ -133,7 +186,7 @@ export const requestLogService = {
         : 0;
     }
     db.query(
-      "UPDATE request_logs SET status = ?, status_code = ?, tokens_prompt = ?, tokens_completion = ?, tokens_cache_read = ?, tokens_cache_write = ?, tokens_total = ?, estimated_cost_usd = ?, duration_ms = ?, tps = ?, error_message = ?, completed_at = datetime('now') WHERE id = ? AND status = 'pending'",
+      "UPDATE request_logs SET status = ?, status_code = ?, tokens_prompt = ?, tokens_completion = ?, tokens_cache_read = ?, tokens_cache_write = ?, tokens_total = ?, estimated_cost_usd = ?, duration_ms = ?, tps = ?, error_message = ?, response_details = COALESCE(?, response_details), error_details = COALESCE(?, error_details), completed_at = datetime('now') WHERE id = ? AND status = 'pending'",
     ).run(
       input.status ?? "success",
       input.statusCode ?? 200,
@@ -148,9 +201,34 @@ export const requestLogService = {
         (input.durationMs && input.durationMs > 0
           ? completion / (input.durationMs / 1000)
           : null),
-      input.error ?? null,
+      typeof redactLogDetail(input.error) === "string" ? redactLogDetail(input.error) as string : input.error ? JSON.stringify(redactLogDetail(input.error)) : null,
+      serializeDetail(input.responseDetails ?? { status_code: input.statusCode ?? 200 }),
+      serializeDetail(input.errorDetails ?? (input.error ? { message: input.error } : null)),
       id,
     );
+  },
+
+  captureResponse(id: string, response: { status?: number; headers?: Headers | Record<string, string | undefined>; contentType?: string | null; streaming?: boolean }) {
+    try {
+      const headers = response.headers instanceof Headers
+        ? Object.fromEntries(response.headers.entries())
+        : response.headers;
+      getDb().query("UPDATE request_logs SET response_details = ? WHERE id = ?")
+        .run(serializeDetail({ status: response.status, headers, content_type: response.contentType, streaming: response.streaming }), id);
+    } catch { /* Logging must never affect the request. */ }
+  },
+
+  captureError(id: string, error: unknown) {
+    try {
+      getDb().query("UPDATE request_logs SET error_details = ? WHERE id = ?")
+        .run(serializeDetail(error instanceof Error ? { name: error.name, message: error.message, stack: error.stack } : error), id);
+    } catch { /* Logging must never affect the request. */ }
+  },
+
+  get(id: string): RequestLogDetails | null {
+    const row = getDb().query("SELECT * FROM request_logs WHERE id = ?").get(id) as (RequestLog & { request_details: string | null; response_details: string | null; error_details: string | null }) | null;
+    if (!row) return null;
+    return { ...row, request_details: parseDetail(row.request_details), response_details: parseDetail(row.response_details), error_details: parseDetail(row.error_details) };
   },
 
   list(
@@ -189,7 +267,7 @@ export const requestLogService = {
     const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
     const rows = db
       .query(
-        `SELECT * FROM request_logs ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`,
+        `SELECT id, provider_id, provider_name, model_name, client_ip, requester_name, credential_label, credential_identity, status, status_code, tokens_prompt, tokens_completion, tokens_cache_read, tokens_cache_write, tokens_total, estimated_cost_usd, tps, duration_ms, error_message, created_at, completed_at FROM request_logs ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`,
       )
       .all(...values, limit, offset) as RequestLog[];
     const total = (
