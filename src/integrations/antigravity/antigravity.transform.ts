@@ -15,6 +15,11 @@ function modelReasoningEffort(model: string) {
     return "high";
   return normalized.match(/-(low|medium|high)$/)?.[1];
 }
+
+// Gemini Pro variants have a minimum thinking budget and reject thinkingBudget 0.
+function geminiProModel(model: string) {
+  return /gemini/i.test(model) && /(^|[-_])pro([-_]|$)/i.test(model);
+}
 function textValue(value: any): string {
   if (typeof value === "string") return value;
   if (value && typeof value === "object")
@@ -272,7 +277,13 @@ export async function toGoogleBody(
       includeThoughts: !disabled,
     };
     if (disabled) {
-      thinkingConfig.thinkingBudget = 0;
+      if (geminiProModel(body.model)) {
+        if (/gemini-3/i.test(body.model))
+          thinkingConfig.thinkingLevel = "low";
+        else thinkingConfig.thinkingBudget = 128;
+      } else {
+        thinkingConfig.thinkingBudget = 0;
+      }
       generationConfig.thinkingConfig = thinkingConfig;
     } else
     if (effort && /gemini-2\.5/i.test(body.model))

@@ -22,7 +22,6 @@ const aliases: Record<string, string> = {
   false: "none",
   min: "minimal",
   normal: "medium",
-  default: "medium",
   max: "xhigh",
 };
 
@@ -33,6 +32,11 @@ export function normalizeReasoningEffort(value: unknown): string {
   if (!normalized)
     throw new ReasoningRequestError("Reasoning effort cannot be empty");
   return aliases[normalized] ?? normalized;
+}
+
+// "default" resolves per model, so it never goes through the static alias table.
+function isDefaultAlias(effort: string) {
+  return effort === "default";
 }
 
 export function parseReasoningEffort(body: any): {
@@ -77,13 +81,20 @@ export function resolveReasoningEffort(body: any, model: Model): {
 
   let selected: ReasoningEffort | undefined;
   if (parsed.effort) {
-    if (!model.reasoning_efforts.length)
+    if (!model.reasoning_efforts.length) {
+      // No configured list: pass the effort through, guessing medium for "default"
+      // so downstream consumers get a real level instead of the literal alias.
+      const effort = isDefaultAlias(parsed.effort) ? "medium" : parsed.effort;
       return {
         explicit: true,
-        effort: parsed.effort,
-        upstreamValue: parsed.effort,
+        effort,
+        upstreamValue: effort,
       };
-    selected = configuredEffort(model.reasoning_efforts, parsed.effort);
+    }
+    if (isDefaultAlias(parsed.effort))
+      selected = model.reasoning_efforts.find((item) => item.is_default) ??
+        model.reasoning_efforts[0];
+    else selected = configuredEffort(model.reasoning_efforts, parsed.effort);
     if (!selected)
       throw new ReasoningRequestError(
         `Reasoning effort "${parsed.effort}" is not configured for model "${model.model_id}"`,

@@ -39,7 +39,7 @@ describe("reasoning effort", () => {
     expect(normalizeReasoningEffort("OFF")).toBe("none");
     expect(normalizeReasoningEffort(false)).toBe("none");
     expect(normalizeReasoningEffort("Min")).toBe("minimal");
-    expect(normalizeReasoningEffort("DEFAULT")).toBe("medium");
+    expect(normalizeReasoningEffort("DEFAULT")).toBe("default");
     expect(normalizeReasoningEffort("max")).toBe("xhigh");
   });
 
@@ -83,5 +83,29 @@ describe("reasoning effort", () => {
         { ...model, capabilities: { ...model.capabilities, reasoning: null }, reasoning_efforts: [] },
       ),
     ).toEqual({ explicit: true, effort: "xhigh", upstreamValue: "xhigh" });
+  });
+
+  test("resolves the default alias to the model's default line", () => {
+    const lowDefaultModel = {
+      ...model,
+      reasoning_efforts: [
+        { effort: "low", display_name: "Low", upstream_value: "low-upstream", sort_order: 0, is_default: true },
+        { effort: "high", display_name: "High", upstream_value: "high-upstream", sort_order: 1, is_default: false },
+      ],
+    } as Model;
+    expect(resolveReasoningEffort({ effort: "default" }, lowDefaultModel)).toEqual({
+      explicit: true,
+      effort: "low",
+      upstreamValue: "low-upstream",
+    });
+  });
+
+  test("maps the default alias to medium without a configured list", () => {
+    expect(
+      resolveReasoningEffort(
+        { effort: "default" },
+        { ...model, capabilities: { ...model.capabilities, reasoning: null }, reasoning_efforts: [] },
+      ),
+    ).toEqual({ explicit: true, effort: "medium", upstreamValue: "medium" });
   });
 });

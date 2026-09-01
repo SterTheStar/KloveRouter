@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { cleanQwenStream, extractQwenContent } from "./qwen.client";
+import { cleanQwenStream, extractQwenContent, qwenPayload } from "./qwen.client";
 
 describe("extractQwenContent", () => {
   test("removes details and their contents", () => {
@@ -48,5 +48,60 @@ describe("extractQwenContent", () => {
     expect(text).not.toContain("<details>");
     expect(text).not.toContain("Response ID");
     expect(text).not.toContain("Request ID");
+  });
+});
+
+describe("qwenPayload", () => {
+  test("maps a resolved none effort to enable_thinking: false", () => {
+    const body: any = {
+      messages: [{ role: "user", content: "hi" }],
+      reasoning_effort: "none",
+      reasoning: { effort: "none" },
+    };
+    Object.defineProperty(body, "__klove_reasoning", {
+      value: { explicit: true, effort: "none", upstreamValue: "none" },
+      enumerable: false,
+    });
+    expect(qwenPayload(body, "qwen3-max")).toEqual({
+      messages: [{ role: "user", content: "hi" }],
+      model: "qwen3-max",
+      stream: false,
+      enable_thinking: false,
+    });
+  });
+
+  test("keeps unrelated reasoning keys while dropping the effort", () => {
+    const body: any = {
+      messages: [{ role: "user", content: "hi" }],
+      reasoning: { effort: "none", summary: "auto" },
+    };
+    expect(qwenPayload(body, "qwen3-max")).toEqual({
+      messages: [{ role: "user", content: "hi" }],
+      model: "qwen3-max",
+      stream: false,
+      reasoning: { summary: "auto" },
+      enable_thinking: false,
+    });
+  });
+
+  test("passes reasoning effort through for non-none efforts", () => {
+    const body: any = {
+      messages: [{ role: "user", content: "hi" }],
+      reasoning_effort: "high",
+    };
+    expect(qwenPayload(body, "qwen3-max")).toEqual({
+      messages: [{ role: "user", content: "hi" }],
+      model: "qwen3-max",
+      stream: false,
+      reasoning_effort: "high",
+    });
+  });
+
+  test("leaves bodies without effort untouched", () => {
+    expect(qwenPayload({ messages: [] }, "qwen-max")).toEqual({
+      messages: [],
+      model: "qwen-max",
+      stream: false,
+    });
   });
 });

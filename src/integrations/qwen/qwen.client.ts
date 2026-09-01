@@ -149,6 +149,31 @@ async function jsonError(response: Response, action: string) {
   throw new Error(`${action} failed (${response.status}): ${text.slice(0, 1000)}`);
 }
 
+// Qwen (DashScope-compatible) toggles thinking via enable_thinking; the OpenAI-style
+// reasoning fields are not understood upstream, so "none" must disable thinking
+// explicitly and the effort fields must be dropped.
+export function qwenPayload(body: any, model: string) {
+  const effort = body.__klove_reasoning?.effort ??
+    body.reasoning?.effort ??
+    body.reasoning_effort ??
+    body.effort;
+  const disabled = typeof effort === "string" &&
+    effort.trim().toLowerCase() === "none";
+  const payload = { ...body, model, stream: body.stream ?? false };
+  if (!disabled) return payload;
+  const { reasoning, reasoning_effort, enable_thinking, ...rest } = payload;
+  const keptReasoning = reasoning && typeof reasoning === "object"
+    ? Object.fromEntries(
+      Object.entries(reasoning).filter(([key]) => key !== "effort"),
+    )
+    : {};
+  return {
+    ...rest,
+    ...(Object.keys(keptReasoning).length ? { reasoning: keptReasoning } : {}),
+    enable_thinking: false,
+  };
+}
+
 export async function qwenResponses(
   body: any,
   model: string,
@@ -156,11 +181,7 @@ export async function qwenResponses(
   endpoint?: string,
 ): Promise<Response> {
   const upstream = baseUrl(endpoint);
-  const payload = {
-    ...body,
-    model,
-    stream: body.stream ?? false,
-  };
+  const payload = qwenPayload(body, model);
 
   const requestStarted = performance.now();
   const response = await fetch(`${upstream}/v1/chat/completions`, {

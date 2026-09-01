@@ -123,4 +123,49 @@ describe("toGoogleBody", () => {
       thinkingBudget: 0,
     });
   });
+
+  test("none on Gemini Pro clamps to the lowest thinking level instead of budget 0", async () => {
+    const body = {
+      model: "gemini-3-pro-agent",
+      messages: [{ role: "user", content: "hello" }],
+    } as any;
+    Object.defineProperty(body, "__klove_reasoning", {
+      value: { effort: "none", upstreamValue: "none", explicit: true },
+    });
+    const transformed = await toGoogleBody(body, "project");
+    expect(transformed.request.generationConfig.thinkingConfig).toEqual({
+      includeThoughts: false,
+      thinkingLevel: "low",
+    });
+  });
+
+  test("none on Gemini 2.5 Pro clamps to the minimum thinking budget", async () => {
+    const body = {
+      model: "gemini-2.5-pro",
+      messages: [{ role: "user", content: "hello" }],
+    } as any;
+    Object.defineProperty(body, "__klove_reasoning", {
+      value: { effort: "none", upstreamValue: "none", explicit: true },
+    });
+    const transformed = await toGoogleBody(body, "project");
+    expect(transformed.request.generationConfig.thinkingConfig).toEqual({
+      includeThoughts: false,
+      thinkingBudget: 128,
+    });
+  });
+
+  test("flash variants with preview in the name still disable with budget 0", async () => {
+    const body = {
+      model: "gemini-2.5-flash-preview",
+      messages: [{ role: "user", content: "hello" }],
+    } as any;
+    Object.defineProperty(body, "__klove_reasoning", {
+      value: { effort: "none", upstreamValue: "none", explicit: true },
+    });
+    const transformed = await toGoogleBody(body, "project");
+    expect(transformed.request.generationConfig.thinkingConfig).toEqual({
+      includeThoughts: false,
+      thinkingBudget: 0,
+    });
+  });
 });
