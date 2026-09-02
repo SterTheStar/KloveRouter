@@ -40,6 +40,7 @@ function normalizedHistory(messages: ChatMessage[]) {
 
 function resolveEffort(body: any): (typeof EFFORTS)[number] {
   const raw = body.__klove_reasoning?.upstreamValue ??
+    body.__klove_reasoning?.effort ??
     body.reasoning?.effort ??
     body.reasoning_effort ??
     body.effort;

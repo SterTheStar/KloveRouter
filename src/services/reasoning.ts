@@ -84,11 +84,14 @@ export function resolveReasoningEffort(body: any, model: Model): {
     if (!model.reasoning_efforts.length) {
       // No configured list: pass the effort through, guessing medium for "default"
       // so downstream consumers get a real level instead of the literal alias.
+      // "none" carries no upstream value — stripping the reasoning fields is the
+      // most compatible disable request, and protocol handlers act on the
+      // resolved effort itself.
       const effort = isDefaultAlias(parsed.effort) ? "medium" : parsed.effort;
       return {
         explicit: true,
         effort,
-        upstreamValue: effort,
+        upstreamValue: effort === "none" ? undefined : effort,
       };
     }
     if (isDefaultAlias(parsed.effort))
@@ -97,12 +100,15 @@ export function resolveReasoningEffort(body: any, model: Model): {
     else selected = configuredEffort(model.reasoning_efforts, parsed.effort);
     if (!selected) {
       // Disabling thinking is always allowed for reasoning models: "none"
-      // resolves even when the configured list has no none row.
+      // resolves even when the configured list has no none row — but without a
+      // configured upstream value, so nothing unsupported is sent upstream.
+      // Models that think by default and cannot be disabled simply keep their
+      // upstream default behavior.
       if (parsed.effort === "none")
         selected = {
           effort: "none",
           display_name: "None",
-          upstream_value: "none",
+          upstream_value: "",
           sort_order: -1,
           is_default: false,
         };
@@ -117,7 +123,7 @@ export function resolveReasoningEffort(body: any, model: Model): {
   return {
     explicit: parsed.explicit,
     effort: selected ? normalizeReasoningEffort(selected.effort) : undefined,
-    upstreamValue: selected?.upstream_value,
+    upstreamValue: selected?.upstream_value || undefined,
   };
 }
 

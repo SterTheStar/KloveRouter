@@ -76,7 +76,7 @@ describe("reasoning effort", () => {
     ).toThrow("does not support reasoning");
   });
 
-  test("allows none even when the configured list has no none row", () => {
+  test("allows none even when the configured list has no none row, without an upstream value", () => {
     const noNoneModel = {
       ...model,
       reasoning_efforts: model.reasoning_efforts.filter((item) => item.effort !== "none"),
@@ -84,8 +84,17 @@ describe("reasoning effort", () => {
     expect(resolveReasoningEffort({ effort: "off" }, noNoneModel)).toEqual({
       explicit: true,
       effort: "none",
-      upstreamValue: "none",
+      upstreamValue: undefined,
     });
+  });
+
+  test("none without a configured list strips the reasoning fields instead of sending a value", () => {
+    expect(
+      resolveReasoningEffort(
+        { effort: "none" },
+        { ...model, capabilities: { ...model.capabilities, reasoning: null }, reasoning_efforts: [] },
+      ),
+    ).toEqual({ explicit: true, effort: "none", upstreamValue: undefined });
   });
 
   test("passes normalized explicit effort through without a configured list", () => {

@@ -70,6 +70,23 @@ describe("qwenPayload", () => {
     });
   });
 
+  test("skips enable_thinking for models that cannot disable thinking", () => {
+    const body: any = {
+      messages: [{ role: "user", content: "hi" }],
+      reasoning_effort: "none",
+      reasoning: { effort: "none" },
+    };
+    Object.defineProperty(body, "__klove_reasoning", {
+      value: { explicit: true, effort: "none", upstreamValue: "none" },
+      enumerable: false,
+    });
+    expect(qwenPayload(body, "qwen3-always-thinks", false)).toEqual({
+      messages: [{ role: "user", content: "hi" }],
+      model: "qwen3-always-thinks",
+      stream: false,
+    });
+  });
+
   test("keeps unrelated reasoning keys while dropping the effort", () => {
     const body: any = {
       messages: [{ role: "user", content: "hi" }],

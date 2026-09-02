@@ -120,13 +120,28 @@ describe("toGoogleBody", () => {
     expect(transformed.request.generationConfig.maxOutputTokens).toBe(123);
     expect(transformed.request.generationConfig.thinkingConfig).toEqual({
       includeThoughts: false,
-      thinkingBudget: 0,
+      thinkingLevel: "low",
     });
   });
 
   test("none on Gemini Pro clamps to the lowest thinking level instead of budget 0", async () => {
     const body = {
       model: "gemini-3-pro-agent",
+      messages: [{ role: "user", content: "hello" }],
+    } as any;
+    Object.defineProperty(body, "__klove_reasoning", {
+      value: { effort: "none", upstreamValue: "none", explicit: true },
+    });
+    const transformed = await toGoogleBody(body, "project");
+    expect(transformed.request.generationConfig.thinkingConfig).toEqual({
+      includeThoughts: false,
+      thinkingLevel: "low",
+    });
+  });
+
+  test("none on level-based Gemini 3 Flash uses thinkingLevel instead of budget 0", async () => {
+    const body = {
+      model: "gemini-3-flash-agent",
       messages: [{ role: "user", content: "hello" }],
     } as any;
     Object.defineProperty(body, "__klove_reasoning", {

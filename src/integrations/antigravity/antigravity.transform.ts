@@ -277,10 +277,11 @@ export async function toGoogleBody(
       includeThoughts: !disabled,
     };
     if (disabled) {
-      if (geminiProModel(body.model)) {
-        if (/gemini-3/i.test(body.model))
-          thinkingConfig.thinkingLevel = "low";
-        else thinkingConfig.thinkingBudget = 128;
+      if (/gemini-3/i.test(body.model)) {
+        // Gemini 3 is level-based and cannot fully disable thinking.
+        thinkingConfig.thinkingLevel = "low";
+      } else if (geminiProModel(body.model)) {
+        thinkingConfig.thinkingBudget = 128;
       } else {
         thinkingConfig.thinkingBudget = 0;
       }

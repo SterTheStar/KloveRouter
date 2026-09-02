@@ -1326,6 +1326,10 @@ export const proxyPlugin = (app: Elysia) =>
         if (provider.protocol === "qwen") {
           const attempted = new Set<string>();
           const failures: unknown[] = [];
+          // Qwen marks think-skip-disabled models with capabilities.reasoning=true;
+          // those think by default and cannot receive enable_thinking: false.
+          const qwenModelRecord = modelService.findByProviderAndModel(provider.id, parsed.modelId);
+          const canDisableThinking = qwenModelRecord?.capabilities?.reasoning !== true;
           while (credential && !attempted.has(credential.id)) {
             attempted.add(credential.id);
             try {
@@ -1335,6 +1339,7 @@ export const proxyPlugin = (app: Elysia) =>
                 parsed.modelId,
                 credential,
                 provider.base_url,
+                canDisableThinking,
               );
               const modelRecord = modelService.findByProviderAndModel(provider.id, parsed.modelId);
               if (!body.stream) {
