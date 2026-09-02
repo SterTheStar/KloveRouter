@@ -1,5 +1,6 @@
 import { codexAuthService } from "./codex-auth.service";
 import { logger } from "../../logger";
+import { extractSseData, SSE_DONE } from "../../services/sse";
 
 const CODEX_BASE_URL = "https://chatgpt.com/backend-api/codex";
 const CODEX_CLIENT_VERSION = process.env.CODEX_CLIENT_VERSION || "1.0.0";
@@ -442,13 +443,8 @@ export function codexStreamToOpenAI(response: Response, model: string) {
           );
         };
         const processEvent = (event: string) => {
-          const raw = event
-            .split(/\r\n|\r|\n/)
-            .filter((line) => line.startsWith("data:"))
-            .map((line) => line.slice(5).replace(/^ /, ""))
-            .join("\n")
-            .trim();
-          if (!raw || raw === "[DONE]") return;
+          const raw = extractSseData(event);
+          if (!raw || raw === SSE_DONE) return;
           let data: any;
           try {
             data = JSON.parse(raw);
