@@ -1,21 +1,29 @@
-import { useCallback, useEffect, useRef, useState, type ClipboardEvent } from "react";
-import { RiLoader4Line as LoaderCircle } from "@remixicon/react";
+import { useCallback, useEffect, useRef, useState, type ClipboardEvent, type KeyboardEvent } from "react";
+import {
+  RiLoader4Line as LoaderCircle,
+  RiArrowDownLine as ArrowDownLine,
+} from "@remixicon/react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { chat, chats as chatsApi, models, settings } from "../api/client";
+import { Button } from "@/components/ui/button";
+import { chats as chatsApi } from "../api/client";
 import type {
   ChatAttachmentPreview,
   ChatContentPart,
   ChatMessage,
-  ModelWithProvider,
 } from "../types";
-import { modelApiId, readChatStream } from "../lib/chat";
-import { resolveChatModel } from "../lib/chat-model";
-import { queryCache, queryKeys, invalidateChats } from "../lib/query-cache";
+import { modelApiId } from "../lib/chat";
+import { effortOptions } from "../lib/chat-efforts";
 import ChatMessageView from "../components/chat/ChatMessage";
 import ChatComposer from "../components/chat/ChatComposer";
+import { useChatModels } from "../hooks/use-chat-models";
+import { useModelSelection } from "../hooks/use-model-selection";
+import { useChatMessages } from "../hooks/use-chat-messages";
 
-const MODEL_STORAGE_KEY = "klove_chat_model";
-const REASONING_STORAGE_PREFIX = "klove_chat_reasoning:";
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+const MAX_TEXT_BYTES = 2 * 1024 * 1024;
+const MAX_ATTACHMENTS = 8;
+const TEXT_EXTENSIONS = /\.(txt|md|json|csv|ts|tsx|js|jsx|py|java|go|rs|html|css|xml|yaml|yml|log)$/i;
+const TEXT_MIME_TYPES = /^(text\/|application\/(json|javascript|xml|yaml)|image\/svg\+xml)/i;
 
 export default function ChatPage({
   chatId,
@@ -32,236 +40,60 @@ export default function ChatPage({
   onChatActivity: (id: string) => void;
   username: string;
 }) {
-  const [modelList, setModelList] = useState<ModelWithProvider[]>([]);
-  const [loadingModels, setLoadingModels] = useState(true);
-  const [modelsError, setModelsError] = useState<string | null>(null);
-  const [modelSelectionError, setModelSelectionError] = useState<string | null>(null);
-  const [globalModel, setGlobalModel] = useState<string | null>(() =>
-    localStorage.getItem(MODEL_STORAGE_KEY),
-  );
-  const [modelsByChat, setModelsByChat] = useState<Record<string, string>>({});
-  const [persistModelPerChat, setPersistModelPerChat] = useState(false);
-  const persistModelPerChatRef = useRef(false);
-  const modelUpdateVersionsRef = useRef(new Map<string, number>());
-  const pendingModelUpdatesRef = useRef(new Set<string>());
-  const modelUpdateQueueRef = useRef(new Map<string, Promise<void>>());
-  const validModelIdsRef = useRef(new Set<string>());
-  const selectedModel = persistModelPerChat && chatId
-    ? modelsByChat[chatId] ?? globalModel
-    : globalModel;
-  const [selectedReasoningEffort, setSelectedReasoningEffort] = useState<string | null>(null);
-  const [messagesByChat, setMessagesByChat] = useState<Record<string, ChatMessage[]>>({});
+  const { modelList, loadingModels, modelsError, validModelIdsRef } = useChatModels();
+  const {
+    selectedModel,
+    selectedReasoningEffort,
+    modelSelectionError,
+    persistModelPerChat,
+    onSelectModel,
+    onSelectReasoningEffort,
+    resolveChatSessionModel,
+    getChatModelVersion,
+    assignChatModel,
+  } = useModelSelection({ chatId, modelList, loadingModels, validModelIdsRef });
+  const {
+    messages,
+    messagesRef,
+    usage,
+    streaming,
+    updateMessage,
+    setMessageList,
+    appendMessages,
+    skipNextLoad,
+    stop,
+    streamReply,
+  } = useChatMessages({
+    chatId,
+    loadingModels,
+    persistModelPerChat,
+    resolveChatSessionModel,
+    getChatModelVersion,
+  });
+
   const [input, setInput] = useState("");
   const [attachments, setAttachments] = useState<ChatAttachmentPreview[]>([]);
-  const [usageByChat, setUsageByChat] = useState<Record<string, {
-    prompt_tokens: number;
-    completion_tokens: number;
-    cache_read_tokens: number;
-    cache_write_tokens: number;
-  }>>({});
-  const [streamingByChat, setStreamingByChat] = useState<Record<string, boolean>>({});
-  const controllersRef = useRef(new Map<string, AbortController>());
-  const streamingChatsRef = useRef(new Set<string>());
-  const skipNextChatLoadRef = useRef<string | null>(null);
-  const messagesRef = useRef<ChatMessage[]>([]);
-  const messages = chatId ? messagesByChat[chatId] ?? [] : [];
-  const usage = chatId ? usageByChat[chatId] ?? {
-    prompt_tokens: 0,
-    completion_tokens: 0,
-    cache_read_tokens: 0,
-    cache_write_tokens: 0,
-  } : {
-    prompt_tokens: 0,
-    completion_tokens: 0,
-    cache_read_tokens: 0,
-    cache_write_tokens: 0,
-  };
-  const streaming = Boolean(chatId && streamingByChat[chatId]);
+  const [attachmentNotice, setAttachmentNotice] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [showScrollDown, setShowScrollDown] = useState(false);
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
   const endRef = useRef<HTMLDivElement | null>(null);
   const autoScrollRef = useRef(true);
 
-  useEffect(() => {
-    messagesRef.current = messages;
-  }, [messages]);
-
   const selectedModelRecord = modelList.find(
-    (model) => modelApiId(model.provider_name, model.model_id, model.pretty_id) === selectedModel,
+    (model) =>
+      modelApiId(model.provider_name, model.model_id, model.pretty_id) === selectedModel,
   );
-  const reasoningEfforts = selectedModelRecord?.reasoning_efforts ?? [];
-
-  const enqueueModelUpdate = useCallback((targetChatId: string, update: () => Promise<void>) => {
-    const previous = modelUpdateQueueRef.current.get(targetChatId) ?? Promise.resolve();
-    const queued = previous.catch(() => undefined).then(update);
-    modelUpdateQueueRef.current.set(targetChatId, queued);
-    void queued.finally(() => {
-      if (modelUpdateQueueRef.current.get(targetChatId) === queued) {
-        modelUpdateQueueRef.current.delete(targetChatId);
-      }
-    }).catch(() => undefined);
-    return queued;
-  }, []);
+  const reasoningEffortOptions = effortOptions(selectedModelRecord);
 
   useEffect(() => {
-    if (!selectedModel) {
-      setSelectedReasoningEffort(null);
-      return;
-    }
-    const efforts = modelList.find(
-      (model) => modelApiId(model.provider_name, model.model_id, model.pretty_id) === selectedModel,
-    )?.reasoning_efforts ?? [];
-    const stored = localStorage.getItem(`${REASONING_STORAGE_PREFIX}${selectedModel}`);
-    const next = efforts.some((effort) => effort.effort === stored)
-      ? stored
-      : efforts.find((effort) => effort.is_default)?.effort ?? efforts[0]?.effort ?? null;
-    setSelectedReasoningEffort(next);
-  }, [modelList, selectedModel]);
+    if (!attachmentNotice) return;
+    const timer = window.setTimeout(() => setAttachmentNotice(null), 8000);
+    return () => window.clearTimeout(timer);
+  }, [attachmentNotice]);
 
-  useEffect(() => {
-    if (globalModel) localStorage.setItem(MODEL_STORAGE_KEY, globalModel);
-  }, [globalModel]);
-
-  useEffect(() => {
-    let cancelled = false;
-    settings.chat().then((value) => {
-      if (cancelled) return;
-      persistModelPerChatRef.current = value.persist_model_per_chat;
-      setPersistModelPerChat(value.persist_model_per_chat);
-    }).catch((error) => {
-      if (!cancelled) setModelsError(error.message);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    queryCache.getOrFetch(queryKeys.models, 30_000, models.listAll).then((list) => {
-        if (cancelled) return;
-        const validIds = new Set(
-          list.map((model) => modelApiId(model.provider_name, model.model_id, model.pretty_id)),
-        );
-        validModelIdsRef.current = validIds;
-        setModelList(list);
-        setModelsError(null);
-        setGlobalModel((previous) => previous && validIds.has(previous) ? previous : null);
-        setModelsByChat((previous) => Object.fromEntries(
-          Object.entries(previous).filter(([, model]) => validIds.has(model)),
-        ));
-      })
-      .catch((error) => {
-        if (!cancelled) setModelsError(error.message);
-      })
-      .finally(() => {
-        if (!cancelled) setLoadingModels(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!chatId) return;
-    let cancelled = false;
-    if (skipNextChatLoadRef.current === chatId) {
-      skipNextChatLoadRef.current = null;
-      return;
-    }
-    let pollTimer: number | null = null;
-
-    const hasPendingResponse = (chatMessages: ChatMessage[]) => {
-      const lastMessage = chatMessages.at(-1);
-      return lastMessage?.role === "assistant" && !lastMessage.stats && !lastMessage.error;
-    };
-
-    const loadChat = () => {
-      const modelVersion = modelUpdateVersionsRef.current.get(chatId) ?? 0;
-      const request = queryCache.getOrFetch(
-        queryKeys.chat(chatId),
-        5_000,
-        () => chatsApi.get(chatId),
-      );
-      request.then((result) => {
-        if (cancelled) return;
-        if (
-          persistModelPerChatRef.current &&
-          !pendingModelUpdatesRef.current.has(chatId) &&
-          (modelUpdateVersionsRef.current.get(chatId) ?? 0) === modelVersion
-        ) {
-          const resolvedModel = resolveChatModel(
-            result.session.model,
-            result.messages,
-            globalModel,
-            validModelIdsRef.current,
-          );
-          if (resolvedModel) {
-            setModelsByChat((previous) => ({ ...previous, [chatId]: resolvedModel }));
-
-            if (!validModelIdsRef.current.has(result.session.model)) {
-              pendingModelUpdatesRef.current.add(chatId);
-              void enqueueModelUpdate(chatId, () => chatsApi.update(chatId, { model: resolvedModel })
-                .then(() => {
-                  if ((modelUpdateVersionsRef.current.get(chatId) ?? 0) !== modelVersion) return;
-                  pendingModelUpdatesRef.current.delete(chatId);
-                  queryCache.invalidate(queryKeys.chat(chatId));
-                  invalidateChats(chatId);
-                })
-                .catch(() => {
-                  if ((modelUpdateVersionsRef.current.get(chatId) ?? 0) === modelVersion) {
-                    pendingModelUpdatesRef.current.delete(chatId);
-                  }
-                }));
-            }
-          }
-        }
-        if (!streamingChatsRef.current.has(chatId)) {
-          setMessagesByChat((previous) => ({ ...previous, [chatId]: result.messages }));
-        }
-        const latestStats = [...result.messages]
-          .reverse()
-          .find((message) => message.role === "assistant" && message.stats)?.stats;
-        if (latestStats) {
-          setUsageByChat((previous) => ({
-            ...previous,
-            [chatId]: {
-              prompt_tokens: latestStats.prompt_tokens,
-              completion_tokens: latestStats.completion_tokens,
-              cache_read_tokens: latestStats.cache_read_tokens ?? 0,
-              cache_write_tokens: latestStats.cache_write_tokens ?? 0,
-            },
-          }));
-        } else if (result.messages.length === 0) {
-          setUsageByChat((previous) => ({
-            ...previous,
-            [chatId]: {
-              prompt_tokens: 0,
-              completion_tokens: 0,
-              cache_read_tokens: 0,
-              cache_write_tokens: 0,
-            },
-          }));
-        }
-        if (!hasPendingResponse(result.messages) && pollTimer !== null) {
-          window.clearInterval(pollTimer);
-          pollTimer = null;
-        }
-      }).catch(() => {
-        if (!cancelled && !streamingChatsRef.current.has(chatId)) {
-          setMessagesByChat((previous) => ({ ...previous, [chatId]: [] }));
-        }
-      });
-    };
-
-    loadChat();
-    pollTimer = window.setInterval(loadChat, 500);
-
-    return () => {
-      cancelled = true;
-      if (pollTimer !== null) window.clearInterval(pollTimer);
-    };
-  }, [chatId, persistModelPerChat, loadingModels, globalModel, enqueueModelUpdate]);
-
+  // Auto-scroll behavior: follow the stream only while the user is near the
+  // bottom; expose a jump-to-bottom button otherwise.
   useEffect(() => {
     const container = messagesContainerRef.current;
     if (!container) return;
@@ -270,6 +102,7 @@ export default function ChatPage({
       const distanceFromBottom =
         container.scrollHeight - container.scrollTop - container.clientHeight;
       autoScrollRef.current = distanceFromBottom <= 48;
+      setShowScrollDown(distanceFromBottom > 400);
     };
 
     updateAutoScroll();
@@ -284,68 +117,69 @@ export default function ChatPage({
     }
   }, [messages]);
 
-  const updateMessage = useCallback(
-    (chatId: string, id: string, updater: (message: ChatMessage) => ChatMessage) => {
-      setMessagesByChat((previous) => ({
-        ...previous,
-        [chatId]: (previous[chatId] ?? []).map((message) =>
-          message.id === id ? updater(message) : message,
-        ),
+  const scrollToBottom = () => {
+    autoScrollRef.current = true;
+    setShowScrollDown(false);
+    endRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+
+  const buildUserContent = (
+    text: string,
+    currentAttachments: ChatAttachmentPreview[],
+  ): ChatContentPart[] => {
+    const textAttachments = currentAttachments
+      .filter((attachment) => attachment.kind === "text")
+      .map(
+        (attachment) =>
+          `\n\n[Arquivo: ${attachment.name}]\n${attachment.data}`,
+      )
+      .join("");
+    const imageParts = currentAttachments
+      .filter((attachment) => attachment.kind === "image" && attachment.preview)
+      .map((attachment) => ({
+        type: "image_url" as const,
+        image_url: { url: attachment.preview! },
       }));
-    },
-    [],
-  );
-
-  const onSelectModel = (id: string) => {
-    setModelSelectionError(null);
-    setGlobalModel(id);
-    if (!persistModelPerChat || !chatId) return;
-
-    const previous = modelsByChat[chatId] ?? globalModel;
-    const version = (modelUpdateVersionsRef.current.get(chatId) ?? 0) + 1;
-    modelUpdateVersionsRef.current.set(chatId, version);
-    pendingModelUpdatesRef.current.add(chatId);
-    setModelsByChat((current) => ({ ...current, [chatId]: id }));
-    void enqueueModelUpdate(chatId, () => chatsApi.update(chatId, { model: id }).then(() => {
-      if (modelUpdateVersionsRef.current.get(chatId) !== version) return;
-      pendingModelUpdatesRef.current.delete(chatId);
-      queryCache.invalidate(queryKeys.chat(chatId));
-      invalidateChats(chatId);
-    }).catch((error) => {
-      if (modelUpdateVersionsRef.current.get(chatId) !== version) return;
-      pendingModelUpdatesRef.current.delete(chatId);
-      setModelsByChat((current) => {
-        const next = { ...current };
-        if (previous) next[chatId] = previous;
-        else delete next[chatId];
-        return next;
-      });
-      setModelSelectionError(error.message ?? "Could not save chat model");
-    }));
-  };
-
-  const onSelectReasoningEffort = (effort: string) => {
-    setSelectedReasoningEffort(effort);
-    if (selectedModel) localStorage.setItem(`${REASONING_STORAGE_PREFIX}${selectedModel}`, effort);
-  };
-
-  const stop = () => {
-    if (!chatId) return;
-    controllersRef.current.get(chatId)?.abort();
-    setStreamingByChat((previous) => ({ ...previous, [chatId]: false }));
+    return [
+      ...(text || textAttachments
+        ? [{ type: "text" as const, text: `${text}${textAttachments}`.trim() }]
+        : []),
+      ...imageParts,
+    ];
   };
 
   const addFiles = async (files: File[] | FileList | null) => {
     if (!files?.length) return;
-    const textExtensions = /\.(txt|md|json|csv|ts|tsx|js|jsx|py|java|go|rs|html|css|xml|yaml|yml|log)$/i;
-    const textMimeTypes = /^(text\/|application\/(json|javascript|xml|yaml)|image\/svg\+xml)/i;
-    const remaining = Math.max(0, 8 - attachments.length);
+    const notices: string[] = [];
+    const remaining = Math.max(0, MAX_ATTACHMENTS - attachments.length);
+    if (remaining === 0) {
+      setAttachmentNotice(`Attachment limit of ${MAX_ATTACHMENTS} reached.`);
+      return;
+    }
     const next: ChatAttachmentPreview[] = [];
     for (const file of Array.from(files).slice(0, remaining)) {
-      if (file.size > 20 * 1024 * 1024) continue;
       const isImage = file.type.startsWith("image/");
-      const isText = textMimeTypes.test(file.type) || textExtensions.test(file.name);
-      if (!isImage && !isText) continue;
+      const isText = TEXT_MIME_TYPES.test(file.type) || TEXT_EXTENSIONS.test(file.name);
+      if (!isImage && !isText) {
+        notices.push(`${file.name}: unsupported file type.`);
+        continue;
+      }
+      if (isImage && selectedModelRecord?.capabilities?.vision === false) {
+        notices.push(`${file.name}: the selected model does not support images.`);
+        continue;
+      }
+      if (isText && selectedModelRecord?.capabilities?.attachments === false) {
+        notices.push(`${file.name}: the selected model does not support file attachments.`);
+        continue;
+      }
+      if (isImage && file.size > MAX_IMAGE_BYTES) {
+        notices.push(`${file.name}: image exceeds ${formatBytes(MAX_IMAGE_BYTES)}.`);
+        continue;
+      }
+      if (isText && file.size > MAX_TEXT_BYTES) {
+        notices.push(`${file.name}: file exceeds ${formatBytes(MAX_TEXT_BYTES)}.`);
+        continue;
+      }
       if (isImage) {
         const data = await new Promise<string>((resolve, reject) => {
           const reader = new FileReader();
@@ -353,7 +187,10 @@ export default function ChatPage({
           reader.onerror = () => reject(reader.error);
           reader.readAsDataURL(file);
         }).catch(() => "");
-        if (!data) continue;
+        if (!data) {
+          notices.push(`${file.name}: could not read the file.`);
+          continue;
+        }
         next.push({
           id: crypto.randomUUID(),
           name: file.name,
@@ -374,6 +211,7 @@ export default function ChatPage({
         });
       }
     }
+    if (notices.length) setAttachmentNotice(notices.join(" "));
     setAttachments((current) => [...current, ...next]);
   };
 
@@ -390,33 +228,39 @@ export default function ChatPage({
     void addFiles(pastedFiles);
   };
 
+  const runChat = useCallback(
+    async (params: {
+      chatId: string;
+      history: { role: string; content: unknown }[];
+      assistantMessageId: string;
+      regenerate: boolean;
+      attachments?: unknown[];
+    }) => {
+      if (!selectedModel) return;
+      await streamReply({
+        chatId: params.chatId,
+        requestBody: {
+          model: selectedModel,
+          messages: params.history,
+          ...(params.regenerate ? { regenerate: true } : {}),
+          ...(params.regenerate ? {} : { attachments: params.attachments }),
+        },
+        assistantMessageId: params.assistantMessageId,
+        usageFallback: usage,
+        onTitle,
+      });
+    },
+    [onTitle, selectedModel, streamReply, usage],
+  );
+
   const send = async () => {
     const text = input.trim();
     if ((!text && !attachments.length) || streaming || !selectedModel) return;
 
-    const textAttachments = attachments
-      .filter((attachment) => attachment.kind === "text")
-      .map(
-        (attachment) =>
-          `\n\n[Arquivo: ${attachment.name}]\n${attachment.data}`,
-      )
-      .join("");
-    const imageParts = attachments
-      .filter((attachment) => attachment.kind === "image" && attachment.preview)
-      .map((attachment) => ({
-        type: "image_url" as const,
-        image_url: { url: attachment.preview! },
-      }));
-    const userContent: ChatContentPart[] = [
-      ...(text || textAttachments
-        ? [{ type: "text" as const, text: `${text}${textAttachments}`.trim() }]
-        : []),
-      ...imageParts,
-    ];
     const userMessage: ChatMessage = {
       id: crypto.randomUUID(),
       role: "user",
-      content: userContent,
+      content: buildUserContent(text, attachments),
       attachments: [...attachments],
     };
     const assistantMessage: ChatMessage = {
@@ -436,117 +280,132 @@ export default function ChatPage({
     if (!activeChatId) {
       const created = await chatsApi.create({ model: selectedModel });
       activeChatId = created.id;
-      if (persistModelPerChat) {
-        setModelsByChat((previous) => ({ ...previous, [created.id]: selectedModel }));
-      }
-      skipNextChatLoadRef.current = created.id;
+      assignChatModel(created.id, selectedModel);
+      skipNextLoad(created.id);
       onChatCreated(created.id);
     }
     if (activeChatId && messagesRef.current.length === 0) {
       onTitleGenerationStart(activeChatId);
     }
     onChatActivity(activeChatId!);
-    setMessagesByChat((previous) => ({
-      ...previous,
-      [activeChatId!]: [
-        ...(previous[activeChatId!] ?? messagesRef.current),
-        userMessage,
-        assistantMessage,
-      ],
-    }));
+    appendMessages(activeChatId, [userMessage, assistantMessage]);
+
     setInput("");
     setAttachments([]);
-    // Keep the previous context visible until this request reports new usage.
-    // Providers usually send usage only in the final stream chunk.
-    streamingChatsRef.current.add(activeChatId!);
-    setStreamingByChat((previous) => ({ ...previous, [activeChatId!]: true }));
+    setAttachmentNotice(null);
 
-    const controller = new AbortController();
-    controllersRef.current.set(activeChatId!, controller);
-
-    try {
-      const response = await chat.completions(
-        {
-          model: selectedModel,
-          ...(selectedReasoningEffort ? { reasoning_effort: selectedReasoningEffort } : {}),
-          chat_id: activeChatId ?? undefined,
-          attachments,
-          messages: history,
-        },
-        controller.signal,
-      );
-      await readChatStream(response, {
-        onContent: (delta) =>
-          updateMessage(activeChatId!, assistantMessage.id, (message) => ({
-            ...message,
-            content:
-              (typeof message.content === "string" ? message.content : "") +
-              delta,
-          })),
-        onReasoning: (delta) =>
-          updateMessage(activeChatId!, assistantMessage.id, (message) => ({
-            ...message,
-            reasoning: (message.reasoning ?? "") + delta,
-          })),
-        onUsage: (nextUsage) =>
-          setUsageByChat((previous) => {
-            const current = previous[activeChatId!] ?? usage;
-            return {
-              ...previous,
-              [activeChatId!]: {
-                prompt_tokens: Number(nextUsage.prompt_tokens ?? current.prompt_tokens),
-                completion_tokens: Number(nextUsage.completion_tokens ?? current.completion_tokens),
-                cache_read_tokens: Number(nextUsage.cache_read_tokens ?? current.cache_read_tokens),
-                cache_write_tokens: Number(nextUsage.cache_write_tokens ?? current.cache_write_tokens),
-              },
-            };
-          }),
-        onStats: (stats) => {
-          setUsageByChat((previous) => {
-            const current = previous[activeChatId!] ?? usage;
-            return {
-              ...previous,
-              [activeChatId!]: {
-                prompt_tokens: stats.prompt_tokens,
-                completion_tokens: stats.completion_tokens,
-                cache_read_tokens: stats.cache_read_tokens ?? current.cache_read_tokens,
-                cache_write_tokens: stats.cache_write_tokens ?? current.cache_write_tokens,
-              },
-            };
-          });
-          updateMessage(activeChatId!, assistantMessage.id, (message) => ({
-            ...message,
-            stats,
-          }));
-        },
-        onTitle,
-        onError: (errorMessage) =>
-          updateMessage(activeChatId!, assistantMessage.id, (message) => ({
-            ...message,
-            error: message.error
-              ? `${message.error}\n${errorMessage}`
-              : errorMessage,
-          })),
-      });
-    } catch (error: any) {
-      if (error?.name !== "AbortError") {
-        updateMessage(activeChatId!, assistantMessage.id, (message) => ({
-          ...message,
-          error: error?.message ?? "Chat request failed",
-        }));
-      }
-    } finally {
-      if (controllersRef.current.get(activeChatId!) === controller) {
-        controllersRef.current.delete(activeChatId!);
-        queryCache.invalidate(queryKeys.chat(activeChatId!));
-        invalidateChats(activeChatId!);
-        streamingChatsRef.current.delete(activeChatId!);
-        setStreamingByChat((previous) => ({ ...previous, [activeChatId!]: false }));
-      }
-    }
+    await runChat({
+      chatId: activeChatId,
+      history,
+      assistantMessageId: assistantMessage.id,
+      regenerate: false,
+      attachments: [...attachments],
+    });
   };
 
-  const onKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+  const regenerate = async (messageId: string) => {
+    if (!chatId || streaming || !selectedModel) return;
+    const index = messagesRef.current.findIndex((message) => message.id === messageId);
+    if (index < 0 || messagesRef.current[index]?.role !== "assistant") return;
+    try {
+      await chatsApi.deleteMessage(chatId, messageId);
+    } catch (error: any) {
+      setActionError(error?.message ?? "Could not delete the message");
+      return;
+    }
+    setActionError(null);
+    const remaining = messagesRef.current.slice(0, index);
+    setMessageList(chatId, remaining);
+    const assistantMessage: ChatMessage = {
+      id: crypto.randomUUID(),
+      role: "assistant",
+      content: "",
+      reasoning: undefined,
+      stats: null,
+    };
+    appendMessages(chatId, [assistantMessage]);
+    onChatActivity(chatId);
+    await runChat({
+      chatId,
+      history: remaining.map((message) => ({ role: message.role, content: message.content })),
+      assistantMessageId: assistantMessage.id,
+      regenerate: true,
+    });
+  };
+
+  const editMessage = async (messageId: string, newText: string) => {
+    if (!chatId || streaming || !selectedModel) return;
+    const index = messagesRef.current.findIndex((message) => message.id === messageId);
+    if (index < 0 || messagesRef.current[index]?.role !== "user") return;
+    const target = messagesRef.current[index];
+    const trimmed = newText.trim();
+    if (!trimmed) return;
+
+    // Replace the text while keeping other parts (images) intact.
+    let content: ChatMessage["content"];
+    if (Array.isArray(target.content)) {
+      const nextParts: ChatContentPart[] = [];
+      let inserted = false;
+      for (const part of target.content) {
+        if (part.type === "text") {
+          if (!inserted) {
+            nextParts.push({ type: "text", text: trimmed });
+            inserted = true;
+          }
+        } else {
+          nextParts.push(part);
+        }
+      }
+      if (!inserted) nextParts.unshift({ type: "text", text: trimmed });
+      content = nextParts;
+    } else {
+      content = trimmed;
+    }
+
+    try {
+      await chatsApi.updateMessage(chatId, messageId, {
+        content,
+        truncate_after: true,
+      });
+    } catch (error: any) {
+      setActionError(error?.message ?? "Could not update the message");
+      return;
+    }
+    setActionError(null);
+    const remaining = messagesRef.current
+      .slice(0, index + 1)
+      .map((message) => (message.id === messageId ? { ...message, content } : message));
+    setMessageList(chatId, remaining);
+    const assistantMessage: ChatMessage = {
+      id: crypto.randomUUID(),
+      role: "assistant",
+      content: "",
+      reasoning: undefined,
+      stats: null,
+    };
+    appendMessages(chatId, [assistantMessage]);
+    onChatActivity(chatId);
+    await runChat({
+      chatId,
+      history: remaining.map((message) => ({ role: message.role, content: message.content })),
+      assistantMessageId: assistantMessage.id,
+      regenerate: true,
+    });
+  };
+
+  const deleteMessage = async (messageId: string) => {
+    if (!chatId || streaming) return;
+    try {
+      await chatsApi.deleteMessage(chatId, messageId);
+    } catch (error: any) {
+      setActionError(error?.message ?? "Could not delete the message");
+      return;
+    }
+    setActionError(null);
+    setMessageList(chatId, messagesRef.current.filter((message) => message.id !== messageId));
+  };
+
+  const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
       event.preventDefault();
       void send();
@@ -561,12 +420,14 @@ export default function ChatPage({
     );
   }
 
+  const topError = actionError ?? modelSelectionError ?? modelsError;
+
   return (
     <div className="relative flex h-svh flex-col">
-      {(modelsError || modelSelectionError) && (
+      {topError && (
         <div className="flex justify-center px-6 pt-4">
           <Alert variant="destructive" className="w-full max-w-3xl">
-            <AlertDescription>{modelSelectionError || modelsError}</AlertDescription>
+            <AlertDescription>{topError}</AlertDescription>
           </Alert>
         </div>
       )}
@@ -581,22 +442,56 @@ export default function ChatPage({
               </h2>
             </div>
           ) : (
-            messages.map((message) => (
-              <ChatMessageView
-                key={message.id}
-                message={message}
-                model={message.stats?.model ? modelList.find((model) => modelApiId(model.provider_name, model.model_id, model.pretty_id) === message.stats?.model) : undefined}
-                modelName={message.stats?.model ? modelList.find((model) => modelApiId(model.provider_name, model.model_id, model.pretty_id) === message.stats?.model)?.display_name ?? undefined : undefined}
-                streaming={streaming && message.id === messages.at(-1)?.id}
-              />
-            ))
+            messages.map((message, index) => {
+              const isLast = index === messages.length - 1;
+              const statsModel = message.stats?.model
+                ? modelList.find(
+                    (candidate) =>
+                      modelApiId(candidate.provider_name, candidate.model_id, candidate.pretty_id) ===
+                      message.stats?.model,
+                  )
+                : undefined;
+              return (
+                <ChatMessageView
+                  key={message.id}
+                  message={message}
+                  model={statsModel}
+                  modelName={statsModel?.display_name ?? undefined}
+                  streaming={streaming && isLast}
+                  canRegenerate={isLast && message.role === "assistant"}
+                  onRegenerate={
+                    message.role === "assistant" ? () => void regenerate(message.id) : undefined
+                  }
+                  onEdit={message.role === "user" ? (text) => void editMessage(message.id, text) : undefined}
+                  onDelete={() => void deleteMessage(message.id)}
+                />
+              );
+            })
           )}
           <div ref={endRef} className="h-48 shrink-0" />
         </div>
       </div>
 
+      {showScrollDown && messages.length > 0 && (
+        <Button
+          type="button"
+          size="icon"
+          className="absolute bottom-44 right-6 z-10 rounded-full shadow-lg"
+          onClick={scrollToBottom}
+          title="Jump to latest"
+          aria-label="Jump to latest"
+        >
+          <ArrowDownLine className="size-4" />
+        </Button>
+      )}
+
       <div className="pointer-events-none absolute inset-x-0 bottom-0">
         <div className="pointer-events-auto">
+          {attachmentNotice && (
+            <div className="mx-auto mb-2 w-fit max-w-[90%] rounded-lg border border-border bg-popover px-3 py-1.5 text-xs text-muted-foreground shadow-sm">
+              {attachmentNotice}
+            </div>
+          )}
           <ChatComposer
             value={input}
             onChange={setInput}
@@ -605,14 +500,14 @@ export default function ChatPage({
             onSend={() => void send()}
             onStop={stop}
             attachments={attachments}
-            onAddFiles={addFiles}
+            onAddFiles={(files) => void addFiles(files)}
             onRemoveAttachment={(id) =>
               setAttachments((current) => current.filter((item) => item.id !== id))
             }
             models={modelList}
             selectedModel={selectedModel}
             onSelectModel={onSelectModel}
-            reasoningEfforts={reasoningEfforts}
+            reasoningEfforts={reasoningEffortOptions}
             selectedReasoningEffort={selectedReasoningEffort}
             onSelectReasoningEffort={onSelectReasoningEffort}
             contextWindow={selectedModelRecord?.context_window}
@@ -626,4 +521,8 @@ export default function ChatPage({
       </div>
     </div>
   );
+}
+
+function formatBytes(bytes: number): string {
+  return bytes >= 1024 * 1024 ? `${bytes / (1024 * 1024)} MB` : `${bytes / 1024} KB`;
 }

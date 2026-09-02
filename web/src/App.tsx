@@ -5,6 +5,7 @@ import { useAuth } from "./hooks/useAuth";
 import Sidebar from "./components/Sidebar";
 import ChatSidebar from "./components/ChatSidebar";
 import { chats as chatsApi } from "./api/client";
+import { downloadChatMarkdown } from "./lib/chat-export";
 import type { ChatSession } from "./types";
 import LoginPage from "./pages/LoginPage";
 import SetupPage from "./pages/SetupPage";
@@ -215,6 +216,14 @@ export default function App() {
     setChatSessions(remaining);
     if (activeChatId === id) setActiveChatId(remaining[0]?.id ?? null);
   };
+  const exportChat = async (chat: ChatSession) => {
+    try {
+      const result = await chatsApi.get(chat.id);
+      downloadChatMarkdown(result.session, result.messages, {});
+    } catch {
+      // Exporting is best-effort; a failed fetch simply keeps the current view.
+    }
+  };
 
   return (
     <ToastProvider>
@@ -229,6 +238,7 @@ export default function App() {
               onSelect={setActiveChatId}
               onRename={renameChat}
               onDelete={deleteChat}
+              onExport={(chat) => void exportChat(chat)}
               onBack={() => handleNavigate("dashboard")}
               onLogout={logout}
               generatingChats={generatingChats}

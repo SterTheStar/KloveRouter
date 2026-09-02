@@ -439,6 +439,7 @@ export const chat = {
       model: string;
       chat_id?: string;
       attachments?: unknown[];
+      regenerate?: boolean;
       messages: { role: string; content: unknown }[];
     },
     signal?: AbortSignal,
@@ -469,6 +470,24 @@ export const chats = {
     }),
   remove: (id: string) =>
     request<{ success: boolean }>(`/api/chats/${id}`, { method: "DELETE" }),
+  search: (query: string) =>
+    request<import("../types").ChatSearchResult[]>(
+      `/api/chats/search?q=${encodeURIComponent(query)}`,
+    ),
+  updateMessage: (
+    chatId: string,
+    messageId: string,
+    data: { content: unknown; attachments?: unknown[]; truncate_after?: boolean },
+  ) =>
+    request<import("../types").PersistedChatMessage>(
+      `/api/chats/${chatId}/messages/${messageId}`,
+      { method: "PATCH", body: JSON.stringify(data) },
+    ),
+  deleteMessage: (chatId: string, messageId: string) =>
+    request<{ success: boolean }>(
+      `/api/chats/${chatId}/messages/${messageId}`,
+      { method: "DELETE" },
+    ),
 };
 
 // RTK

@@ -8,6 +8,7 @@ import {
   RiCheckLine as CheckLine,
   RiDeleteBinLine as DeleteLine,
   RiEditLine as EditLine,
+  RiDownloadLine as DownloadLine,
   RiLogoutBoxRLine as LogoutLine,
 } from "@remixicon/react";
 import { Button } from "@/components/ui/button";
@@ -24,6 +25,7 @@ export default function ChatSidebar({
   onSelect,
   onRename,
   onDelete,
+  onExport,
   onBack,
   onLogout,
   generatingChats,
@@ -36,6 +38,7 @@ export default function ChatSidebar({
   onSelect: (id: string) => void;
   onRename: (id: string, title: string) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
+  onExport: (chat: ChatSession) => void;
   onBack: () => void;
   onLogout: () => void;
   generatingChats: Record<string, boolean>;
@@ -156,6 +159,7 @@ export default function ChatSidebar({
                       </span>
                     </button>
                     <div className="hidden items-center gap-0.5 group-hover:flex">
+                      <Button size="icon-xs" variant="ghost" onClick={() => onExport(chat)} title="Export as Markdown"><DownloadLine className="size-3.5" /></Button>
                       <Button size="icon-xs" variant="ghost" onClick={() => startRename(chat)} title="Rename"><EditLine className="size-3.5" /></Button>
                       <Button size="icon-xs" variant="ghost" className="hover:text-destructive" onClick={() => { if (window.confirm(`Delete “${chat.title}”?`)) void onDelete(chat.id); }} title="Delete"><DeleteLine className="size-3.5" /></Button>
                     </div>

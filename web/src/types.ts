@@ -319,6 +319,15 @@ export interface ChatSession {
   updated_at: string;
 }
 
+export interface ChatSearchResult {
+  chat_id: string;
+  message_id: string;
+  title: string;
+  role: "user" | "assistant";
+  snippet: string;
+  updated_at: string;
+}
+
 export interface PersistedChatMessage extends ChatMessage {
   chat_id: string;
   sequence: number;
