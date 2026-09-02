@@ -95,10 +95,22 @@ export function resolveReasoningEffort(body: any, model: Model): {
       selected = model.reasoning_efforts.find((item) => item.is_default) ??
         model.reasoning_efforts[0];
     else selected = configuredEffort(model.reasoning_efforts, parsed.effort);
-    if (!selected)
-      throw new ReasoningRequestError(
-        `Reasoning effort "${parsed.effort}" is not configured for model "${model.model_id}"`,
-      );
+    if (!selected) {
+      // Disabling thinking is always allowed for reasoning models: "none"
+      // resolves even when the configured list has no none row.
+      if (parsed.effort === "none")
+        selected = {
+          effort: "none",
+          display_name: "None",
+          upstream_value: "none",
+          sort_order: -1,
+          is_default: false,
+        };
+      else
+        throw new ReasoningRequestError(
+          `Reasoning effort "${parsed.effort}" is not configured for model "${model.model_id}"`,
+        );
+    }
   } else {
     selected = model.reasoning_efforts.find((item) => item.is_default);
   }
