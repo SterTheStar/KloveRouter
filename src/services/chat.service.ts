@@ -1,4 +1,5 @@
 import { getDb } from "../db/connection";
+import { textContentOf } from "./chat-content";
 
 export type ChatRole = "user" | "assistant";
 
@@ -21,6 +22,15 @@ export interface ChatMessage {
   error: string | null;
   sequence: number;
   created_at: string;
+}
+
+export interface ChatSearchResult {
+  chat_id: string;
+  message_id: string;
+  title: string;
+  role: ChatRole;
+  snippet: string;
+  updated_at: string;
 }
 
 function parseJson<T>(value: string | null | undefined, fallback: T): T {
@@ -92,7 +102,98 @@ export const chatService = {
   },
 
   delete(id: string): boolean {
-    return getDb().query("DELETE FROM chat_sessions WHERE id = ?").run(id).changes > 0;
+    const db = getDb();
+    // The FTS table has no foreign keys, so its rows are cleaned up here.
+    db.query("DELETE FROM chat_messages_fts WHERE chat_id = ?").run(id);
+    return db.query("DELETE FROM chat_sessions WHERE id = ?").run(id).changes > 0;
+  },
+
+  deleteMessage(id: string): boolean {
+    const db = getDb();
+    const row = db.query("SELECT chat_id FROM chat_messages WHERE id = ?").get(id) as
+      | { chat_id: string }
+      | undefined;
+    if (!row) return false;
+    db.query("DELETE FROM chat_messages_fts WHERE message_id = ?").run(id);
+    const deleted = db.query("DELETE FROM chat_messages WHERE id = ?").run(id).changes > 0;
+    if (deleted)
+      db.query("UPDATE chat_sessions SET updated_at = datetime('now') WHERE id = ?").run(row.chat_id);
+    return deleted;
+  },
+
+  /**
+   * Updates a message's content and optionally truncates everything after it
+   * (used by "edit message and resend").
+   */
+  updateMessageContent(
+    id: string,
+    input: { content?: unknown; attachments?: unknown[]; truncateAfter?: boolean },
+  ): ChatMessage | null {
+    const db = getDb();
+    const current = db.query("SELECT * FROM chat_messages WHERE id = ?").get(id) as any;
+    if (!current) return null;
+    db.query("UPDATE chat_messages SET content = ?, attachments = ? WHERE id = ?").run(
+      JSON.stringify(input.content === undefined ? parseJson(current.content, current.content) : input.content ?? ""),
+      input.attachments === undefined
+        ? current.attachments
+        : input.attachments?.length
+          ? JSON.stringify(input.attachments)
+          : null,
+      id,
+    );
+    if (input.truncateAfter) {
+      db.query("DELETE FROM chat_messages_fts WHERE message_id IN (SELECT id FROM chat_messages WHERE chat_id = ? AND sequence > ?)").run(
+        current.chat_id,
+        current.sequence,
+      );
+      db.query("DELETE FROM chat_messages WHERE chat_id = ? AND sequence > ?").run(
+        current.chat_id,
+        current.sequence,
+      );
+    }
+    db.query("UPDATE chat_sessions SET updated_at = datetime('now') WHERE id = ?").run(current.chat_id);
+    const updated = rowToMessage(db.query("SELECT * FROM chat_messages WHERE id = ?").get(id));
+    this.indexMessage(updated);
+    return updated;
+  },
+
+  search(query: string, limit = 20): ChatSearchResult[] {
+    const trimmed = query.trim();
+    if (!trimmed) return [];
+    // Quote each whitespace-separated term so FTS syntax in the query is
+    // treated as literal text; terms are combined with implicit AND.
+    const match = trimmed
+      .split(/\s+/)
+      .map((term) => `"${term.replace(/"/g, "")}"`)
+      .join(" ");
+    return getDb()
+      .query(
+        `
+        SELECT m.chat_id,
+               m.id AS message_id,
+               s.title,
+               m.role,
+               snippet(chat_messages_fts, 2, '«', '»', '…', 12) AS snippet,
+               s.updated_at
+        FROM chat_messages_fts
+        JOIN chat_messages m ON m.id = chat_messages_fts.message_id
+        JOIN chat_sessions s ON s.id = m.chat_id
+        WHERE chat_messages_fts MATCH ?
+        ORDER BY s.updated_at DESC, m.sequence ASC
+        LIMIT ?
+        `,
+      )
+      .all(match, limit) as ChatSearchResult[];
+  },
+
+  indexMessage(message: ChatMessage) {
+    const db = getDb();
+    db.query("DELETE FROM chat_messages_fts WHERE message_id = ?").run(message.id);
+    db.query("INSERT INTO chat_messages_fts (message_id, chat_id, content) VALUES (?, ?, ?)").run(
+      message.id,
+      message.chat_id,
+      textContentOf(message.content),
+    );
   },
 
   addMessage(input: {
@@ -126,7 +227,9 @@ export const chatService = {
       next.sequence,
     );
     db.query("UPDATE chat_sessions SET updated_at = datetime('now') WHERE id = ?").run(input.chatId);
-    return rowToMessage(db.query("SELECT * FROM chat_messages WHERE id = ?").get(id));
+    const created = rowToMessage(db.query("SELECT * FROM chat_messages WHERE id = ?").get(id));
+    if (created) this.indexMessage(created);
+    return created;
   },
 
   updateMessage(id: string, input: { content?: unknown; reasoning?: string; stats?: Record<string, unknown> | null; error?: string | null }): ChatMessage | null {
@@ -143,7 +246,9 @@ export const chatService = {
       id,
     );
     db.query("UPDATE chat_sessions SET updated_at = datetime('now') WHERE id = ?").run(current.chat_id);
-    return rowToMessage(db.query("SELECT * FROM chat_messages WHERE id = ?").get(id));
+    const updated = rowToMessage(db.query("SELECT * FROM chat_messages WHERE id = ?").get(id));
+    if (updated) this.indexMessage(updated);
+    return updated;
   },
 
   setTitleFromMessage(id: string, content: string) {

@@ -1,6 +1,16 @@
 import { Database } from "bun:sqlite";
 import { config } from "../config";
 import { encryptSecret } from "../services/secret.service";
+import { textContentOf } from "../services/chat-content";
+
+function parseJsonColumn(value: string | null): unknown {
+  if (!value) return "";
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
+}
 
 export function initSchema(db: Database): void {
   db.exec(`
@@ -321,6 +331,33 @@ export function initSchema(db: Database): void {
   }[];
   if (!chatMessageCols.find((c) => c.name === "reasoning")) {
     db.exec("ALTER TABLE chat_messages ADD COLUMN reasoning TEXT");
+  }
+
+  // Full-text search over chat message content (panel chat search).
+  db.exec(`
+    CREATE VIRTUAL TABLE IF NOT EXISTS chat_messages_fts USING fts5(
+      message_id UNINDEXED,
+      chat_id UNINDEXED,
+      content,
+      tokenize = 'unicode61'
+    )
+  `);
+  const ftsRowCount = (
+    db.query("SELECT COUNT(*) AS n FROM chat_messages_fts").all() as { n: number }[]
+  )[0]?.n ?? 0;
+  const chatMessageCount = (
+    db.query("SELECT COUNT(*) AS n FROM chat_messages").all() as { n: number }[]
+  )[0]?.n ?? 0;
+  if (ftsRowCount !== chatMessageCount) {
+    db.exec("DELETE FROM chat_messages_fts");
+    const rows = db
+      .query("SELECT id, chat_id, content FROM chat_messages")
+      .all() as { id: string; chat_id: string; content: string | null }[];
+    const insert = db.query(
+      "INSERT INTO chat_messages_fts (message_id, chat_id, content) VALUES (?, ?, ?)",
+    );
+    for (const row of rows)
+      insert.run(row.id, row.chat_id, textContentOf(parseJsonColumn(row.content)));
   }
   db.exec(`
     CREATE TRIGGER IF NOT EXISTS models_fill_updated_at

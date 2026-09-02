@@ -4,6 +4,7 @@ import { keyService } from "../services/key.service";
 import { chatService } from "../services/chat.service";
 import { chatTitleService } from "../services/chat-title.service";
 import { countMessages, countCompletion } from "../services/token-counter/token-counter";
+import { createSseSplitter, extractSseData, SSE_DONE } from "../services/sse";
 import { getDb } from "../db/connection";
 
 const DONE_MARKER = "data: [DONE]\n\n";
@@ -66,8 +67,8 @@ function chatStatsStream(
 
   const decoder = new TextDecoder();
   const encoder = new TextEncoder();
+  const splitEvent = createSseSplitter();
   const start = performance.now();
-  let buffer = "";
   let promptTokens = 0;
   let completionTokens = 0;
   let cacheReadTokens = 0;
@@ -105,7 +106,7 @@ function chatStatsStream(
     });
   };
 
-  const emitStats = (controller: ReadableStreamDefaultController) => {
+  const emitStats = (controller?: ReadableStreamDefaultController) => {
     if (statsEmitted) return;
     statsEmitted = true;
     if (!sawUsage) {
@@ -135,7 +136,7 @@ function chatStatsStream(
         stats,
       });
     }
-    controller.enqueue(encoder.encode(statsEvent(stats)));
+    if (controller && streamOpen) controller.enqueue(encoder.encode(statsEvent(stats)));
   };
 
   const emitUsage = (controller: ReadableStreamDefaultController) => {
@@ -202,23 +203,18 @@ function chatStatsStream(
         try {
           while (true) {
             const { done, value } = await reader.read();
-            buffer += decoder.decode(value ?? new Uint8Array(), {
-              stream: !done,
-            });
-            const events = buffer.split("\n\n");
-            buffer = events.pop() ?? "";
+            const events = splitEvent(
+              decoder.decode(value ?? new Uint8Array(), { stream: !done }),
+            );
             for (const event of events) {
-              const dataLine = event
-                .split("\n")
-                .find((line) => line.startsWith("data:"));
+              const raw = extractSseData(event);
               // SSE comments (": connected", keep-alives) are forwarded so
               // the panel connection stays alive while the upstream idles.
-              if (!dataLine) {
+              if (!raw) {
                 controller.enqueue(encoder.encode(`${event}\n\n`));
                 continue;
               }
-              const raw = dataLine.slice(5).trim();
-              if (raw === "[DONE]") {
+              if (raw === SSE_DONE) {
                 persistProgress(true);
                 emitTitle(controller);
                 emitStats(controller);
@@ -248,7 +244,7 @@ function chatStatsStream(
           // Upstream ended without a [DONE] marker — emit title and stats anyway.
           persistProgress(true);
           emitTitle(controller);
-          if (!statsEmitted) emitStats(controller);
+          emitStats(controller);
         } catch (error: any) {
           persistProgress(true);
           if (streamOpen) {
@@ -262,7 +258,7 @@ function chatStatsStream(
                 }),
               ),
             );
-            if (!statsEmitted) emitStats(controller);
+            emitStats(controller);
           }
         } finally {
           if (streamOpen) {
@@ -273,8 +269,11 @@ function chatStatsStream(
       },
       cancel() {
         // Client disconnected — stop pulling from the proxy so the upstream
-        // reader is released too.
+        // reader is released too. The partial answer stays persisted, with the
+        // token accounting computed so far.
         streamOpen = false;
+        persistProgress(true);
+        emitStats();
         void reader.cancel();
       },
     }),
@@ -311,6 +310,9 @@ export const chatPlugin = (app: Elysia) =>
 
       const input = body as any;
       const chatId = typeof input.chat_id === "string" ? input.chat_id : undefined;
+      // Regenerate/edit-resend: the user message is already persisted, so only
+      // the assistant placeholder is added.
+      const regenerate = input.regenerate === true;
       let assistantMessageId: string | undefined;
       let titleGenerator: (() => Promise<string>) | undefined;
       let titleMessage: string | undefined;
@@ -321,15 +323,17 @@ export const chatPlugin = (app: Elysia) =>
           return { error: "Chat not found" };
         }
         const lastMessage = input.messages.at(-1);
-        const userMessage = chatService.addMessage({
-          chatId,
-          role: "user",
-          content: lastMessage?.content ?? "",
-          attachments: input.attachments,
-        });
-        if (!userMessage) {
-          set.status = 404;
-          return { error: "Chat not found" };
+        if (!regenerate) {
+          const userMessage = chatService.addMessage({
+            chatId,
+            role: "user",
+            content: lastMessage?.content ?? "",
+            attachments: input.attachments,
+          });
+          if (!userMessage) {
+            set.status = 404;
+            return { error: "Chat not found" };
+          }
         }
         titleMessage = textFromContent(lastMessage?.content);
         shouldGenerateTitle = Boolean(
