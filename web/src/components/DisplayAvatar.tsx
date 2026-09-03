@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { RiUserLine } from "@remixicon/react";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -6,9 +7,10 @@ type Props = {
   src?: string | null;
   sources?: string[];
   className?: string;
+  fallback?: "initial" | "user";
 };
 
-export default function DisplayAvatar({ name, src, sources, className }: Props) {
+export default function DisplayAvatar({ name, src, sources, className, fallback = "initial" }: Props) {
   const candidates = src
     ? [src, ...(sources ?? []).filter((source) => source !== src)]
     : sources ?? [];
@@ -53,6 +55,15 @@ export default function DisplayAvatar({ name, src, sources, className }: Props) 
         setIndex((value) => value + 1);
       }}
     />
+  ) : fallback === "user" ? (
+    <span
+      className={cn(
+        "flex h-full w-full shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground",
+        className,
+      )}
+    >
+      <RiUserLine className="size-1/2" />
+    </span>
   ) : (
     <span className={cn("text-lg font-medium text-muted-foreground", className)}>{initial}</span>
   );

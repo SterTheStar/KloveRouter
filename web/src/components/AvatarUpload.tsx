@@ -9,6 +9,7 @@ export default function AvatarUpload({
   sources,
   label = "Avatar",
   onError,
+  fallback = "initial",
 }: {
   value: string | null;
   name: string;
@@ -16,6 +17,7 @@ export default function AvatarUpload({
   sources?: string[];
   label?: string;
   onError?: (message: string) => void;
+  fallback?: "initial" | "user";
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const select = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -43,7 +45,7 @@ export default function AvatarUpload({
         onChange={select}
       />
       <div className="flex size-16 shrink-0 items-center justify-center">
-        <DisplayAvatar name={name || "Avatar"} src={value} sources={sources} className="max-h-16 max-w-20" />
+        <DisplayAvatar name={name || "Avatar"} src={value} sources={sources} fallback={fallback} className="max-h-16 max-w-20" />
       </div>
       <div className="space-y-1">
         <div className="text-sm font-medium">{label}</div>

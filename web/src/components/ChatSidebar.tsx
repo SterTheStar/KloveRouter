@@ -173,7 +173,7 @@ export default function ChatSidebar({
       </div>
       <div className="space-y-2 p-3">
         <div className="flex items-center gap-2 rounded-xl bg-sidebar-accent/70 p-2.5">
-          <button type="button" onClick={onBack} className="flex min-w-0 flex-1 items-center gap-2 text-left"><DisplayAvatar name={profile.name} src={profile.avatar} className="size-8" /><span className="truncate text-sm">{profile.name}</span></button>
+          <button type="button" onClick={onBack} className="flex min-w-0 flex-1 items-center gap-2 text-left"><DisplayAvatar name={profile.name} src={profile.avatar} fallback="user" className="size-8" /><span className="truncate text-sm">{profile.name}</span></button>
           <Button size="icon-sm" variant="ghost" onClick={onLogout} title="Logout"><LogoutLine className="size-4" /></Button>
         </div>
       </div>

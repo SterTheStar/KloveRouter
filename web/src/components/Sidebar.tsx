@@ -133,6 +133,7 @@ export default function Sidebar({
             <DisplayAvatar
               name={profile.name}
               src={profile.avatar}
+              fallback="user"
               className="size-8"
             />
             <span className="truncate text-sm">{profile.name}</span>
