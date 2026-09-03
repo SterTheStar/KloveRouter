@@ -891,7 +891,7 @@ export default function StatsPage() {
 
               {byModel.length > 0 && (
                 <Card className="gap-0 overflow-hidden p-0">
-                  <CardHeader>
+                  <CardHeader className="py-(--card-spacing)">
                     <CardTitle>By model</CardTitle>
                     <CardAction>
                       <span className="text-xs text-muted-foreground">
