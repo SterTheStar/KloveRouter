@@ -30,8 +30,12 @@ export default function DisplayAvatar({ name, src, sources, className }: Props) 
     };
     const observer = new ResizeObserver(updateShape);
     observer.observe(image);
+    image.addEventListener("load", updateShape);
     if (image.complete) updateShape();
-    return () => observer.disconnect();
+    return () => {
+      image.removeEventListener("load", updateShape);
+      observer.disconnect();
+    };
   }, [current]);
   const initial = name.trim().charAt(0).toUpperCase() || "?";
   return current ? (
