@@ -61,7 +61,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import AvatarUpload from "../components/AvatarUpload";
-import DisplayAvatar from "../components/DisplayAvatar";
 import AddModelModal from "../components/AddModelModal";
 import EditModelModal from "../components/EditModelModal";
 import ConfirmDialog from "../components/ConfirmDialog";
@@ -862,16 +861,7 @@ export default function ProviderDetailPage({
           <ArrowLeft className="size-4" />
           <span className="hidden sm:inline">Back</span>
         </Button>
-        <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
-          <div className="flex size-9 shrink-0 items-center justify-center sm:size-10">
-            <DisplayAvatar name={name || provider.name} src={avatar || provider.avatar} sources={provider.avatar_sources} className="max-h-10 max-w-14" />
-          </div>
-          <div className="flex min-w-0 flex-1 items-center gap-2">
-            <h1 className="min-w-0 truncate font-heading text-lg font-semibold tracking-tight sm:text-2xl">{name || provider.name}</h1>
-            <Badge className="shrink-0 text-[10px] sm:text-xs" variant={provider.is_active ? "secondary" : "outline"}>{provider.is_active ? "Active" : "Inactive"}</Badge>
-            <span className="shrink-0 truncate text-xs text-muted-foreground">{provider.protocol}</span>
-          </div>
-        </div>
+        <h1 className="min-w-0 flex-1 truncate font-heading text-lg font-semibold tracking-tight sm:text-2xl">{name || provider.name}</h1>
         <div className="flex shrink-0 gap-1.5 sm:gap-2">
           <Button variant="ghost" size="sm" className="px-2 sm:px-2.5" onClick={discard} disabled={saving} aria-label="Discard changes">
             <CloseLine className="size-4 sm:hidden" />
