@@ -19,23 +19,23 @@ export default function DisplayAvatar({ name, src, sources, className }: Props) 
   const isTransparentLogo = current?.includes("router.bynara.id") ?? false;
   useEffect(() => {
     setIndex(0);
-    setIsSquare(false);
   }, [src, sources]);
+  // Shape comes from the image's intrinsic aspect ratio, which never changes
+  // for a given URL — unlike the rendered box, it cannot race refetches that
+  // recreate the sources array after the image has already loaded.
   useEffect(() => {
+    setIsSquare(false);
     const image = imageRef.current;
     if (!image) return;
     const updateShape = () => {
-      const { width, height } = image.getBoundingClientRect();
-      setIsSquare(width > 0 && height > 0 && Math.abs(width - height) < 1);
+      const width = image.naturalWidth || image.getBoundingClientRect().width;
+      const height = image.naturalHeight || image.getBoundingClientRect().height;
+      const largest = Math.max(width, height);
+      setIsSquare(width > 0 && height > 0 && largest - Math.min(width, height) <= largest * 0.05);
     };
-    const observer = new ResizeObserver(updateShape);
-    observer.observe(image);
     image.addEventListener("load", updateShape);
     if (image.complete) updateShape();
-    return () => {
-      image.removeEventListener("load", updateShape);
-      observer.disconnect();
-    };
+    return () => image.removeEventListener("load", updateShape);
   }, [current]);
   const initial = name.trim().charAt(0).toUpperCase() || "?";
   return current ? (
