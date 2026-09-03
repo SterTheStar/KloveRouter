@@ -893,10 +893,6 @@ export default function StatsPage() {
                 <Card className="gap-0 overflow-hidden p-0">
                   <CardHeader>
                     <CardTitle>By model</CardTitle>
-                    <CardDescription>
-                      Per-model volume, latency and cost · click a column to
-                      sort
-                    </CardDescription>
                     <CardAction>
                       <span className="text-xs text-muted-foreground">
                         {byModel.length} models
