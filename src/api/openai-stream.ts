@@ -51,6 +51,7 @@ export function openAIStreamResponse(
   let cancelled = false;
   let settled = false;
   let abortListener: (() => void) | undefined;
+  const toolNames = new Map<string, string>();
 
   const notify = (
     phase: "complete" | "error" | "cancel",
@@ -120,6 +121,22 @@ export function openAIStreamResponse(
                 if (typeof delta?.reasoning_content === "string")
                   streamedChars += delta.reasoning_content.length;
               }
+              for (const choice of chunk.choices ?? []) {
+                const delta = choice?.delta;
+                for (const call of delta?.tool_calls ?? []) {
+                  const key = `${choice.index ?? 0}:${call.index ?? 0}`;
+                  if (call?.function?.name) {
+                    const name = normalizeToolName(toolNames.get(key) ?? "", call.function.name);
+                    toolNames.set(key, name);
+                    call.function.name = name;
+                  }
+                }
+                if (delta?.function_call?.name) {
+                  const name = normalizeToolName(toolNames.get(`${choice.index ?? 0}:function`) ?? "", delta.function_call.name);
+                  toolNames.set(`${choice.index ?? 0}:function`, name);
+                  delta.function_call.name = name;
+                }
+              }
               if (chunk.usage) {
                 sawUsage = true;
                 promptTokens = Number(
@@ -181,3 +198,4 @@ export function openAIStreamResponse(
   );
 }
 import { logger } from "../logger";
+import { normalizeToolName } from "./tool-names";

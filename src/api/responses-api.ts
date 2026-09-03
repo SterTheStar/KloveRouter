@@ -1,3 +1,5 @@
+import { normalizeToolDefinitions, normalizeToolName } from "./tool-names";
+
 function idPart(value: unknown, fallback: string) {
   return String(value ?? fallback).replace(/[^a-zA-Z0-9_-]/g, "_");
 }
@@ -70,11 +72,14 @@ export function responsesInputToMessages(input: any, instructions?: string) {
 function chatTool(tool: any) {
   if (tool?.type === "function" && !tool.function) {
     return { type: "function", function: {
-      name: tool.name,
+      name: normalizeToolName("", tool.name),
       ...(tool.description !== undefined ? { description: tool.description } : {}),
       parameters: tool.parameters ?? {},
       ...(tool.strict !== undefined ? { strict: tool.strict } : {}),
     } };
+  }
+  if (tool?.function?.name) {
+    return { ...tool, function: { ...tool.function, name: normalizeToolName("", tool.function.name) } };
   }
   return tool;
 }
@@ -91,9 +96,11 @@ function responseFormat(format: any) {
   } };
 }
 
-export function responsesToChatBody(body: any) {
+export function responsesToChatBody(body: any): any {
   const format = responseFormat(body.text?.format ?? body.response_format);
-  const tools = Array.isArray(body.tools) ? body.tools.map(chatTool) : undefined;
+  const tools = Array.isArray(body.tools)
+    ? normalizeToolDefinitions(body.tools)?.map(chatTool)
+    : undefined;
   return {
     model: body.model,
     messages: responsesInputToMessages(body.input, body.instructions),
@@ -144,7 +151,7 @@ export function chatCompletionToResponse(completion: any) {
   }
   for (const call of message.tool_calls ?? []) {
     const callId = call.id ?? stableId("call", `${base}-${output.length}`, "call");
-    output.push({ id: callId, type: "function_call", status: "completed", call_id: call.call_id ?? callId, name: call.function?.name ?? "", arguments: call.function?.arguments ?? "{}" });
+    output.push({ id: callId, type: "function_call", status: "completed", call_id: call.call_id ?? callId, name: normalizeToolName("", call.function?.name), arguments: call.function?.arguments ?? "{}" });
   }
   const usage = usageObject(completion?.usage);
   return {
@@ -223,7 +230,8 @@ export function chatSseToResponses(response: Response, model: string, onCancel?:
             controller.enqueue(event("response.output_item.added", { output_index: call.index, item }));
           }
           if (callDelta.id) call.item.id = call.item.call_id = callDelta.id;
-          if (callDelta.function?.name) call.item.name += callDelta.function.name;
+          if (callDelta.function?.name)
+            call.item.name = normalizeToolName(call.item.name, callDelta.function.name);
           const args = callDelta.function?.arguments ?? ""; call.item.arguments += args;
           if (args) controller.enqueue(event("response.function_call_arguments.delta", { item_id: call.item.id, output_index: call.index, delta: args }));
         }

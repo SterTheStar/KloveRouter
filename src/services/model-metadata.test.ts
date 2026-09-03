@@ -34,13 +34,13 @@ describe("model metadata resolver", () => {
     ]);
   });
 
-  test("does not supplement fields absent from a normal API response", async () => {
+  test("uses the safe context fallback when a model omits its context", async () => {
     const metadata = await resolveModelMetadata(
       "openai",
       "sparse-model",
       { id: "sparse-model", object: "model" },
     );
-    expect(metadata.context_window).toBeUndefined();
+    expect(metadata.context_window).toBe(128_000);
     expect(metadata.max_output_tokens).toBeUndefined();
     expect(metadata.capabilities).toEqual({
       reasoning: undefined,
@@ -197,9 +197,9 @@ describe("model metadata resolver", () => {
     expect(parsed.max_output_tokens).toBe(8_192);
   });
 
-  test("dedicated integrations only auto-apply reliable numeric limits", async () => {
+  test("dedicated integrations use the safe context fallback when omitted", async () => {
     const metadata = await resolveModelMetadata("atomesus", "atomesus-2", {});
-    expect(metadata.context_window).toBeUndefined();
+    expect(metadata.context_window).toBe(128_000);
     expect(metadata.max_output_tokens).toBeUndefined();
     expect(metadata.capabilities).toBeUndefined();
     expect(metadata.reasoning_efforts).toBeUndefined();

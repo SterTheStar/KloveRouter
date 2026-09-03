@@ -1,3 +1,5 @@
+import { normalizeToolName } from "./tool-names";
+
 export type OpenAICompletionResult = {
   completion: any;
   firstDeltaAt: number | null;
@@ -107,7 +109,10 @@ export async function openAICompletionFromSse(
       if (delta.function_call) {
         choice.message.function_call ??= { name: "", arguments: "" };
         if (delta.function_call.name)
-          choice.message.function_call.name += delta.function_call.name;
+          choice.message.function_call.name = normalizeToolName(
+            choice.message.function_call.name,
+            delta.function_call.name,
+          );
         if (delta.function_call.arguments)
           choice.message.function_call.arguments += delta.function_call.arguments;
       }
@@ -125,7 +130,10 @@ export async function openAICompletionFromSse(
         if (callDelta.id) call.id += callDelta.id;
         if (callDelta.type) call.type = callDelta.type;
         if (callDelta.function?.name)
-          call.function.name += callDelta.function.name;
+          call.function.name = normalizeToolName(
+            call.function.name,
+            callDelta.function.name,
+          );
         if (callDelta.function?.arguments)
           call.function.arguments += callDelta.function.arguments;
       }

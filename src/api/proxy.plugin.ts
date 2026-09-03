@@ -51,6 +51,7 @@ import {
   responsesToChatBody,
 } from "./responses-api";
 import { validateChatCompletionRequest } from "./openai-request";
+import { normalizeToolDefinitions, normalizeToolName } from "./tool-names";
 import {
   fixMissingThinkOpeningTag,
   fixThinkTagAsyncIterable,
@@ -175,6 +176,17 @@ export function buildChatPayload(body: any, model: string, stream: boolean) {
   };
   for (const field of forwardedChatFields) {
     if (body[field] !== undefined) payload[field] = body[field];
+  }
+  if (body.tools !== undefined) payload.tools = normalizeToolDefinitions(body.tools);
+  if (body.functions !== undefined) payload.functions = normalizeToolDefinitions(body.functions);
+  if (body.tool_choice && typeof body.tool_choice === "object" && body.tool_choice.function?.name) {
+    payload.tool_choice = {
+      ...body.tool_choice,
+      function: {
+        ...body.tool_choice.function,
+        name: normalizeToolName("", body.tool_choice.function.name),
+      },
+    };
   }
   return payload;
 }
@@ -852,6 +864,17 @@ export const proxyPlugin = (app: Elysia) =>
           parsed.modelId,
           body.stream ?? false,
         );
+        logger.debug("Proxy request prepared", {
+          provider: provider.name,
+          requested_model: body.model,
+          upstream_model: parsed.modelId,
+          streaming: body.stream === true,
+          tool_count: Array.isArray(payload.tools) ? payload.tools.length : 0,
+          tool_names: Array.isArray(payload.tools)
+            ? payload.tools.map((tool: any) => tool.function?.name).filter(Boolean)
+            : [],
+          reasoning_effort: body.reasoning_effort ?? body.reasoning?.effort,
+        });
 
         if (provider.protocol === "anthropic") {
           const attempted = new Set<string>();

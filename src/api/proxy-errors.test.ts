@@ -45,6 +45,24 @@ describe("proxy error normalization", () => {
     });
   });
 
+  test("normalizes and deduplicates valid tool definitions", () => {
+    const payload = buildChatPayload({
+      messages: [],
+      tools: [
+        { type: "function", function: { name: "lookup", parameters: {} } },
+        { type: "function", function: { name: "lookup", parameters: { type: "object" } } },
+      ],
+    }, "model", false);
+    expect(payload.tools).toHaveLength(1);
+    expect((payload.tools as any[])[0].function.name).toBe("lookup");
+  });
+
+  test("rejects invalid tool names before sending upstream", () => {
+    expect(() => buildChatPayload({ messages: [], tools: [
+      { type: "function", function: { name: "bad.name", parameters: {} } },
+    ] }, "model", false)).toThrow("Tool name");
+  });
+
   test("normalizes developer messages for OpenAI-compatible upstreams", () => {
     const messages = [
       { role: "developer", content: "Follow these instructions" },

@@ -5,6 +5,8 @@ import type {
 } from "./model.service";
 import type { ProviderProtocol } from "./provider-appearance";
 
+const DEFAULT_CONTEXT_WINDOW = 128_000;
+
 function positiveInteger(value: unknown): number | null | undefined {
   if (value === null) return null;
   const parsed = typeof value === "string" ? Number(value) : value;
@@ -147,6 +149,8 @@ export async function resolveModelMetadata(
   raw: any = {},
 ): Promise<ModelMetadataInput> {
   const rawMetadata = parseRawModelMetadata(raw);
+  if (rawMetadata.context_window == null)
+    rawMetadata.context_window = DEFAULT_CONTEXT_WINDOW;
   if (protocol === "antigravity" || protocol === "codex")
     return rawMetadata;
   if (dedicatedIntegrations.has(protocol))

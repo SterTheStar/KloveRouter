@@ -110,6 +110,16 @@ describe("Responses API compatibility", () => {
     expect(text).toContain("response.completed");
   });
 
+  test("does not duplicate repeated complete tool names in Responses SSE", async () => {
+    const upstream = new Response(
+      'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"name":"EnterPlanMode"}}]}}]}\n\n' +
+      'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"name":"EnterPlanMode","arguments":"{}"}}]}}]}\n\n',
+    );
+    const text = await chatSseToResponses(upstream, "model").text();
+    expect(text).toContain('"name":"EnterPlanMode"');
+    expect(text).not.toContain('"name":"EnterPlanModeEnterPlanMode"');
+  });
+
   test("emits one error and failed response for upstream error", async () => {
     const text = await chatSseToResponses(new Response('data: {"error":{"message":"upstream down"}}\n\n'), "model").text();
     expect((text.match(/event: error/g) ?? []).length).toBe(1);

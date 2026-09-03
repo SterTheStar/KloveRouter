@@ -66,6 +66,18 @@ describe("openAICompletionFromSse", () => {
     expect(completion.usage.total_tokens).toBe(11);
   });
 
+  test("does not duplicate a repeated complete tool name", async () => {
+    const chunks = [
+      { choices: [{ index: 0, delta: { tool_calls: [{ index: 0, function: { name: "EnterPlanMode" } }] } }] },
+      { choices: [{ index: 0, delta: { tool_calls: [{ index: 0, function: { name: "EnterPlanMode", arguments: "{}" } }] } }] },
+    ];
+    const { completion } = await openAICompletionFromSse(
+      response(chunks.map((chunk) => `data: ${JSON.stringify(chunk)}\n\n`)),
+      "test",
+    );
+    expect(completion.choices[0].message.tool_calls[0].function.name).toBe("EnterPlanMode");
+  });
+
   test("returns null content for a tool-only completion", async () => {
     const chunk = { choices: [{ index: 0, delta: { tool_calls: [{ index: 0, id: "call", type: "function", function: { name: "run", arguments: "{}" } }] }, finish_reason: "tool_calls" }] };
     const { completion } = await openAICompletionFromSse(response([`data: ${JSON.stringify(chunk)}\n\n`]), "test");
