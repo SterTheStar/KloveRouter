@@ -377,42 +377,56 @@ export default function SettingsPage({
       )}
 
       {activeTab === "chat" && (
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle className="flex items-center gap-2"><RobotLine className="size-5" />Chat titles</CardTitle>
-              <Button onClick={saveChatSettings} disabled={chatSaving}>
-                {chatSaving ? <LoaderCircle className="size-4 animate-spin" /> : <Check className="size-4" />} Save
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <Label htmlFor="chat-title-model">Title generation model</Label>
-            <select id="chat-title-model" value={chatTitleModel} onChange={(event) => setChatTitleModel(event.target.value)} className="h-9 w-full rounded-md border bg-background px-3 text-sm">
-              <option value="auto">Auto (active model)</option>
-              {chatTitleModels.map((model) => {
-                const id = modelPublicId(model);
-                return <option key={id} value={id}>{model.display_name || modelDisplayId(model)} ({model.provider_name})</option>;
-              })}
-            </select>
-            <p className="text-xs text-muted-foreground">Titles are generated after the first message and never replace a custom title.</p>
-            <Separator />
-            <div className="flex items-center justify-between gap-4">
+        <div className="space-y-6">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle className="flex items-center gap-2"><RobotLine className="size-5" />Chat titles</CardTitle>
+                <Button onClick={saveChatSettings} disabled={chatSaving}>
+                  {chatSaving ? <LoaderCircle className="size-4 animate-spin" /> : <Check className="size-4" />} Save
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-3">
               <div>
-                <Label htmlFor="persist-model-per-chat">Remember model per chat</Label>
-                <p className="text-xs text-muted-foreground">
-                  Restore each chat's last selected model instead of using the global selection.
+                <Label htmlFor="chat-title-model">Title generation model</Label>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Choose which model creates titles for new conversations.
                 </p>
               </div>
-              <Switch
-                id="persist-model-per-chat"
-                checked={persistModelPerChat}
-                onCheckedChange={setPersistModelPerChat}
-                aria-label="Remember model per chat"
-              />
-            </div>
-          </CardContent>
-        </Card>
+              <select id="chat-title-model" value={chatTitleModel} onChange={(event) => setChatTitleModel(event.target.value)} className="h-9 w-full rounded-md border border-border bg-popover px-3 text-sm text-popover-foreground">
+                <option value="auto">Auto (active model)</option>
+                {chatTitleModels.map((model) => {
+                  const id = modelPublicId(model);
+                  return <option key={id} value={id}>{model.display_name || modelDisplayId(model)} ({model.provider_name})</option>;
+                })}
+              </select>
+              <p className="text-xs text-muted-foreground">Titles are generated after the first message and never replace a custom title.</p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Model selection</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <Label htmlFor="persist-model-per-chat">Remember the model for each chat</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Keep each conversation's last selected model instead of using one global model.
+                  </p>
+                </div>
+                <Switch
+                  id="persist-model-per-chat"
+                  checked={persistModelPerChat}
+                  onCheckedChange={setPersistModelPerChat}
+                  aria-label="Remember the model for each chat"
+                />
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       )}
 
       {activeTab === "plugins" && (
