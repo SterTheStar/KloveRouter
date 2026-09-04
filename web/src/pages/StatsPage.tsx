@@ -574,10 +574,12 @@ export default function StatsPage() {
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="font-heading text-2xl font-semibold tracking-tight">
-            Usage statistics
+            {activeTab === "status" ? "Provider status" : "Usage statistics"}
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Token usage, cost and performance across your providers.
+            {activeTab === "status"
+              ? "Availability, latency and routing health across your providers."
+              : "Token usage, cost and performance across your providers."}
           </p>
         </div>
         <div className="flex items-center gap-2">
