@@ -65,10 +65,10 @@ export default function ModelInput({
         disabled={disabled}
         aria-haspopup="dialog"
         aria-expanded={open}
-        title={current ? modelId(current) : "Selecione um modelo"}
+        title={current ? modelId(current) : "Select a model"}
       >
         <span className="min-w-0 truncate">
-          {current ? current.display_name || modelDisplayId(current) : "Selecione um modelo"}
+          {current ? current.display_name || modelDisplayId(current) : "Select a model"}
         </span>
         <ChevronDown className={`size-3.5 shrink-0 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`} />
       </button>

@@ -63,10 +63,10 @@ export default function ModelDetailsPane({ model, efforts, selectedEffort, onSel
             <DetailRow
               label="Max output"
               value={`${formatTokens(model.max_output_tokens)} (${model.max_output_tokens_source})`}
-              title={model.max_output_tokens_is_default ? "Default automático; configure manualmente para substituir" : undefined}
+              title={model.max_output_tokens_is_default ? "Automatic default; configure manually to override" : undefined}
             />
             {model.max_output_tokens_is_default && (
-              <p className="mt-1 text-[11px] text-muted-foreground">Default automático; configure manualmente para substituir.</p>
+              <p className="mt-1 text-[11px] text-muted-foreground">Automatic default; configure manually to override.</p>
             )}
             <DetailRow label="Capabilities" value={capabilities || "—"} title={capabilities || "No capabilities reported"} />
           </div>
