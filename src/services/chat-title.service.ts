@@ -23,7 +23,8 @@ function fallbackTitle(_message: string): string {
 
 function normalizeTitle(value: unknown, message: string): { title: string; fallbackReason?: string } {
   const title = String(value ?? "")
-    .replace(/```[\s\S]*?```/g, "")
+    .replace(/```(?:[^\n]*\n)?([\s\S]*?)```/g, "$1")
+    .replace(/^\s*(?:title|titulo|título)\s*:\s*/i, "")
     .replace(/[\"'“”‘’]/g, "")
     .replace(/^[#>*\-\s]+/, "")
     .replace(/[.!?;:,]+$/g, "")
@@ -33,7 +34,8 @@ function normalizeTitle(value: unknown, message: string): { title: string; fallb
     .filter(Boolean)
     .slice(0, 6)
     .join(" ")
-    .slice(0, FALLBACK_LIMIT);
+    .slice(0, FALLBACK_LIMIT)
+    .trim();
   if (!title) return { title: fallbackTitle(message), fallbackReason: "empty_response" };
   if (comparable(title) === comparable(message)) {
     return { title: fallbackTitle(message), fallbackReason: "same_as_message" };

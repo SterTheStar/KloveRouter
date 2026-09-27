@@ -65,6 +65,32 @@ describe("chat service", () => {
     chatService.delete(chat.id);
   });
 
+  test("findMessageInChat never resolves a message through another chat", () => {
+    const firstChat = chatService.create({ title: "Owner" });
+    const secondChat = chatService.create({ title: "Other" });
+    const message = chatService.addMessage({
+      chatId: firstChat.id,
+      role: "user",
+      content: "private message",
+    })!;
+
+    expect(chatService.findMessageInChat(firstChat.id, message.id)?.id).toBe(message.id);
+    expect(chatService.findMessageInChat(secondChat.id, message.id)).toBeNull();
+
+    chatService.delete(firstChat.id);
+    chatService.delete(secondChat.id);
+  });
+
+  test("search ignores punctuation-only queries and caps result limits", () => {
+    const chat = chatService.create({ title: "Search bounds" });
+    chatService.addMessage({ chatId: chat.id, role: "user", content: "bounded search result" });
+
+    expect(chatService.search('"" () !!!')).toEqual([]);
+    expect(chatService.search("bounded", Number.MAX_SAFE_INTEGER)).toHaveLength(1);
+
+    chatService.delete(chat.id);
+  });
+
   test("deleting a chat clears its search index", () => {
     const chat = chatService.create({ title: "Cleanup" });
     chatService.addMessage({ chatId: chat.id, role: "user", content: "orphaned searchable text" });

@@ -14,6 +14,10 @@ export const chatsPlugin = (app: Elysia) =>
     .patch(
       "/api/chats/:id/messages/:messageId",
       ({ params, body, set }) => {
+        if (!chatService.findMessageInChat(params.id, params.messageId)) {
+          set.status = 404;
+          return { error: "Message not found" };
+        }
         const updated = chatService.updateMessageContent(params.messageId, {
           content: body.content,
           attachments: body.attachments,
@@ -37,7 +41,7 @@ export const chatsPlugin = (app: Elysia) =>
     .delete(
       "/api/chats/:id/messages/:messageId",
       ({ params, set }) => {
-        if (!chatService.deleteMessage(params.messageId)) {
+        if (!chatService.findMessageInChat(params.id, params.messageId) || !chatService.deleteMessage(params.messageId)) {
           set.status = 404;
           return { error: "Message not found" };
         }

@@ -96,7 +96,7 @@ export const chatService = {
     const title = input.title === undefined ? current.title : normalizeTitle(input.title);
     const model = input.model === undefined ? current.model : input.model.trim();
     getDb()
-      .query("UPDATE chat_sessions SET title = ?, model = ?, updated_at = datetime('now') WHERE id = ?")
+      .query("UPDATE chat_sessions SET title = ?, model = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?")
       .run(title, model, id);
     return this.findById(id);
   },
@@ -119,6 +119,22 @@ export const chatService = {
     if (deleted)
       db.query("UPDATE chat_sessions SET updated_at = datetime('now') WHERE id = ?").run(row.chat_id);
     return deleted;
+  },
+
+  findMessageInChat(chatId: string, messageId: string): ChatMessage | null {
+    const row = getDb()
+      .query("SELECT * FROM chat_messages WHERE chat_id = ? AND id = ?")
+      .get(chatId, messageId);
+    return row ? rowToMessage(row) : null;
+  },
+
+  setMessageError(id: string, error: string): ChatMessage | null {
+    const db = getDb();
+    const current = db.query("SELECT * FROM chat_messages WHERE id = ?").get(id) as any;
+    if (!current) return null;
+    db.query("UPDATE chat_messages SET error = ? WHERE id = ?").run(error, id);
+    db.query("UPDATE chat_sessions SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?").run(current.chat_id);
+    return rowToMessage(db.query("SELECT * FROM chat_messages WHERE id = ?").get(id));
   },
 
   /**
@@ -158,14 +174,17 @@ export const chatService = {
   },
 
   search(query: string, limit = 20): ChatSearchResult[] {
-    const trimmed = query.trim();
+    const trimmed = query.trim().slice(0, 500);
     if (!trimmed) return [];
     // Quote each whitespace-separated term so FTS syntax in the query is
     // treated as literal text; terms are combined with implicit AND.
     const match = trimmed
       .split(/\s+/)
-      .map((term) => `"${term.replace(/"/g, "")}"`)
+      .map((term) => term.replace(/"/g, ""))
+      .filter(Boolean)
+      .map((term) => `"${term}"`)
       .join(" ");
+    if (!match) return [];
     return getDb()
       .query(
         `
@@ -183,7 +202,7 @@ export const chatService = {
         LIMIT ?
         `,
       )
-      .all(match, limit) as ChatSearchResult[];
+      .all(match, Math.max(1, Math.min(Math.floor(limit) || 20, 100))) as ChatSearchResult[];
   },
 
   indexMessage(message: ChatMessage) {
@@ -232,7 +251,11 @@ export const chatService = {
     return created;
   },
 
-  updateMessage(id: string, input: { content?: unknown; reasoning?: string; stats?: Record<string, unknown> | null; error?: string | null }): ChatMessage | null {
+  updateMessage(
+    id: string,
+    input: { content?: unknown; reasoning?: string; stats?: Record<string, unknown> | null; error?: string | null },
+    options: { index?: boolean } = {},
+  ): ChatMessage | null {
     const db = getDb();
     const current = db.query("SELECT * FROM chat_messages WHERE id = ?").get(id) as any;
     if (!current) return null;
@@ -247,7 +270,7 @@ export const chatService = {
     );
     db.query("UPDATE chat_sessions SET updated_at = datetime('now') WHERE id = ?").run(current.chat_id);
     const updated = rowToMessage(db.query("SELECT * FROM chat_messages WHERE id = ?").get(id));
-    if (updated) this.indexMessage(updated);
+    if (updated && options.index !== false) this.indexMessage(updated);
     return updated;
   },
 
