@@ -163,7 +163,7 @@ function ActionButton({
       onClick={onClick}
       title={title}
       aria-label={title}
-      className={`inline-flex size-6 items-center justify-center rounded-md transition-colors hover:bg-muted ${
+      className={`chat-action-button inline-flex size-7 items-center justify-center rounded-lg hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
         destructive ? "hover:text-destructive" : "hover:text-foreground"
       } text-muted-foreground`}
     >
@@ -267,7 +267,7 @@ export default function ChatMessageView({
     return (
       <div className="group flex flex-col items-end">
         {text && (
-          <div className="max-w-[85%] rounded-2xl rounded-br-md bg-primary px-4 py-2.5 text-sm leading-relaxed text-primary-foreground whitespace-pre-wrap sm:max-w-[75%]">
+          <div className="chat-message-user chat-message-enter max-w-[85%] rounded-2xl rounded-br-md bg-primary px-4 py-2.5 text-sm leading-relaxed text-primary-foreground whitespace-pre-wrap sm:max-w-[75%]">
             {text}
           </div>
         )}
@@ -294,27 +294,27 @@ export default function ChatMessageView({
   const classified = message.error ? classifyChatError(message.error) : null;
 
   return (
-    <div className="group min-w-0 max-w-full">
+    <div className={`group min-w-0 max-w-full ${streaming ? "" : "chat-message-enter"}`}>
       {message.reasoning ? (
         <ThinkingBlock content={message.reasoning} streaming={streaming} />
       ) : null}
       {typeof message.content === "string" && message.content ? (
         <Markdown content={message.content} streaming={streaming} />
       ) : streaming ? (
-        <div className="flex items-center gap-2 py-1 text-muted-foreground">
-          <LoaderCircle className="size-4 animate-spin" />
-          <span className="text-xs">Thinking…</span>
+        <div className="flex items-center gap-2 py-1 text-muted-foreground" role="status" aria-live="polite">
+          <LoaderCircle className="size-4 animate-spin text-primary" />
+          <span className="text-xs">{message.content === "" ? "Thinking" : "Continuing response"}</span>
         </div>
       ) : null}
       {classified ? (
-        <div className="mt-2 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+        <div className="chat-error-panel mt-3 rounded-xl border border-destructive/25 bg-destructive/5 px-3.5 py-3 text-xs text-destructive shadow-sm" role="alert">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <p className="font-medium">{classified.title}</p>
-              {classified.hint && (
+              {classified.hint && classified.kind !== "unknown" && (
                 <p className="mt-0.5 text-destructive/80">{classified.hint}</p>
               )}
-              {classified.kind !== "unknown" && message.error && (
+              {message.error && (
                 <p className="mt-1 break-all text-destructive/70">{message.error}</p>
               )}
             </div>

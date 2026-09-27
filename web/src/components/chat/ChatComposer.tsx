@@ -3,6 +3,8 @@ import {
   RiAddLine as AddLine,
   RiSendPlaneFill as SendPlaneFill,
   RiStopLine as StopLine,
+  RiCloseLine as CloseLine,
+  RiFileTextLine as FileTextLine,
 } from "@remixicon/react";
 import { Button } from "@/components/ui/button";
 import ModelSettingsMenu from "./ModelSettingsMenu";
@@ -66,7 +68,7 @@ export default function ChatComposer({
   return (
     <div className="chat-composer-shell shrink-0 px-6 pb-5 pt-3">
       <div className="mx-auto w-full max-w-3xl">
-        <div className="rounded-2xl border border-border bg-card px-4 pt-3.5 pb-3 shadow-sm">
+        <div className="chat-composer-card rounded-2xl border border-border bg-card px-4 pt-3.5 pb-3 shadow-sm">
           <input
             ref={fileInputRef}
             type="file"
@@ -79,34 +81,35 @@ export default function ChatComposer({
             }}
           />
           {attachments.length > 0 && (
-            <div className="mb-3 flex flex-wrap gap-2 px-1">
+            <div className="mb-3 flex max-h-28 flex-wrap gap-2 overflow-y-auto px-1 py-0.5">
               {attachments.map((attachment) => (
-                <div key={attachment.id} className="group relative flex items-center gap-2 rounded-xl bg-muted px-2 py-1.5 text-xs">
+                <div key={attachment.id} className="chat-inline-notice group relative flex max-w-full items-center gap-2 rounded-xl bg-muted/70 px-2 py-1.5 text-xs">
                   {attachment.kind === "image" && attachment.preview ? (
-                    <img src={attachment.preview} alt="" className="size-8 rounded-lg object-cover" />
-                  ) : null}
-                  <span className="max-w-32 truncate">{attachment.name}</span>
+                    <img src={attachment.preview} alt={`Preview: ${attachment.name}`} className="size-9 rounded-lg object-cover" />
+                  ) : <FileTextLine className="ml-1 size-4 shrink-0 text-muted-foreground" />}
+                  <span className="max-w-40 truncate font-medium">{attachment.name}</span>
+                  <span className="shrink-0 text-[10px] text-muted-foreground">{attachment.kind === "image" ? "Image" : "Text"}</span>
                   <button
                     type="button"
-                    className="text-muted-foreground hover:text-foreground"
+                    className="inline-flex size-6 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-background hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     onClick={() => onRemoveAttachment(attachment.id)}
                     aria-label={`Remove ${attachment.name}`}
                   >
-                    ×
+                    <CloseLine className="size-3.5" />
                   </button>
                 </div>
               ))}
             </div>
           )}
           <div className="px-1">
-            <textarea
+              <textarea
               className="block min-h-12 max-h-48 w-full resize-none overflow-y-auto bg-transparent p-0 text-[15px] leading-6 text-foreground outline-none placeholder:text-muted-foreground/60 disabled:cursor-not-allowed disabled:opacity-60"
               placeholder="Write a message..."
               value={value}
               onChange={(event) => onChange(event.target.value)}
               onKeyDown={onKeyDown}
               onPaste={onPaste}
-              disabled={disabled}
+              disabled={disabled || streaming}
               rows={2}
               aria-label="Chat message"
             />
@@ -148,7 +151,7 @@ export default function ChatComposer({
                   type="button"
                   variant="destructive"
                   size="icon"
-                  className="rounded-full"
+                  className="chat-send-button rounded-full"
                   onClick={onStop}
                   title="Stop generating"
                   aria-label="Stop generating"
@@ -159,7 +162,7 @@ export default function ChatComposer({
                 <Button
                   type="button"
                   size="icon"
-                  className="rounded-full"
+                  className="chat-send-button rounded-full"
                   onClick={onSend}
                   disabled={!canSend}
                   title="Send message"

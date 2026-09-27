@@ -66,7 +66,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             key={item.id}
             role="status"
             className={cn(
-              "pointer-events-auto flex items-start gap-3 rounded-lg border bg-card p-4 text-card-foreground shadow-lg",
+              "chat-inline-notice pointer-events-auto flex items-start gap-3 rounded-xl border bg-card p-4 text-card-foreground shadow-lg",
               item.type === "error" && "border-destructive/50",
               item.type === "success" && "border-green-500/40",
             )}

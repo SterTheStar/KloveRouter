@@ -59,7 +59,7 @@ export default function ChatSidebar({
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  });
+  }, []);
 
   const toggleCollapsed = () => {
     setCollapsed((current) => {
@@ -75,8 +75,13 @@ export default function ChatSidebar({
   };
 
   const saveRename = async (id: string) => {
-    if (title.trim()) await onRename(id, title.trim());
-    setEditing(null);
+    if (!title.trim()) return;
+    try {
+      await onRename(id, title.trim());
+      setEditing(null);
+    } catch {
+      // Keep the editor open so the user can retry or correct the title.
+    }
   };
 
   if (collapsed && !mobileOpen) {
@@ -153,12 +158,12 @@ export default function ChatSidebar({
                   </div>
                 ) : (
                   <div className="flex items-center gap-1 px-2 py-1">
-                    <button type="button" onClick={() => onSelect(chat.id)} className="flex min-w-0 flex-1 items-center py-1.5 text-left">
+                    <button type="button" onClick={() => onSelect(chat.id)} className="flex min-w-0 flex-1 items-center py-1.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60">
                       <span className={`truncate text-sm ${generatingChats[chat.id] ? "chat-title-generating" : ""}`}>
                         {generatingChats[chat.id] ? "Generating title" : chat.title}
                       </span>
                     </button>
-                    <div className="hidden items-center gap-0.5 group-hover:flex">
+                    <div className="chat-sidebar-actions flex items-center gap-0.5">
                       <Button size="icon-xs" variant="ghost" onClick={() => onExport(chat)} title="Export as Markdown"><DownloadLine className="size-3.5" /></Button>
                       <Button size="icon-xs" variant="ghost" onClick={() => startRename(chat)} title="Rename"><EditLine className="size-3.5" /></Button>
                       <Button size="icon-xs" variant="ghost" className="hover:text-destructive" onClick={() => { if (window.confirm(`Delete “${chat.title}”?`)) void onDelete(chat.id); }} title="Delete"><DeleteLine className="size-3.5" /></Button>
