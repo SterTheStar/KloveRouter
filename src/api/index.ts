@@ -5,7 +5,7 @@ import { keysPlugin } from "./keys.plugin";
 import { settingsPlugin } from "./settings.plugin";
 import { proxyPlugin } from "./proxy.plugin";
 import { statsPlugin } from "./stats.plugin";
-import { chatPlugin } from "./chat.plugin";
+import { chatPlugin, chatControlPlugin } from "./chat.plugin";
 import { chatsPlugin } from "./chats.plugin";
 import {
   codexPlugin,
@@ -35,6 +35,7 @@ export {
   requestLogsPlugin,
   rtkPlugin,
   chatPlugin,
+  chatControlPlugin,
   chatsPlugin,
   setupPlugin,
   avatarMediaPlugin,

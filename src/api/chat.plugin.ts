@@ -6,6 +6,8 @@ import { chatTitleService } from "../services/chat-title.service";
 import { countMessages, countCompletion } from "../services/token-counter/token-counter";
 import { createSseSplitter, extractSseData, SSE_DONE } from "../services/sse";
 import { getDb } from "../db/connection";
+import { logger } from "../logger";
+import { chatGenerationService } from "../services/chat-generation.service";
 
 const DONE_MARKER = "data: [DONE]\n\n";
 
@@ -23,14 +25,18 @@ function textFromContent(content: unknown): string {
     .trim();
 }
 
-function streamDelta(value: string, previous: string): string {
-  if (!value || value === previous) return "";
-  if (!previous || value.startsWith(previous)) return value.slice(previous.length);
-  if (previous.startsWith(value)) return "";
-  if (value.length < previous.length) return value;
-  let overlap = Math.min(previous.length, value.length);
-  while (overlap > 0 && !previous.endsWith(value.slice(0, overlap))) overlap--;
-  return overlap > 0 ? value.slice(overlap) : value;
+export function withUsageStreamOptions<T extends Record<string, any>>(input: T): T & {
+  stream: true;
+  stream_options: Record<string, unknown> & { include_usage: true };
+} {
+  return {
+    ...input,
+    stream: true,
+    stream_options: {
+      ...(input.stream_options && typeof input.stream_options === "object" ? input.stream_options : {}),
+      include_usage: true,
+    },
+  } as T & { stream: true; stream_options: Record<string, unknown> & { include_usage: true } };
 }
 
 export function startTitleGeneration(
@@ -60,10 +66,19 @@ function chatStatsStream(
   chatId?: string,
   assistantMessageId?: string,
   titleGenerator?: (() => Promise<string>) | undefined,
-  titleFallback = "New chat",
+  onFinish?: (() => void) | undefined,
+  generationSignal?: AbortSignal,
 ): Response {
   const reader = response.body?.getReader();
-  if (!reader) return response;
+  if (!reader) {
+    const error = "Provider returned an empty response body instead of a stream.";
+    if (assistantMessageId) chatService.setMessageError(assistantMessageId, error);
+    onFinish?.();
+    return new Response(statsEvent({ error: { message: error } }) + DONE_MARKER, {
+      status: 502,
+      headers: { "Content-Type": "text/event-stream; charset=utf-8", "Cache-Control": "no-cache" },
+    });
+  }
 
   const decoder = new TextDecoder();
   const encoder = new TextEncoder();
@@ -73,15 +88,27 @@ function chatStatsStream(
   let completionTokens = 0;
   let cacheReadTokens = 0;
   let cacheWriteTokens = 0;
-  let streamedChars = 0;
   let assistantContent = "";
   let assistantReasoning = "";
+  let assistantError: string | null = null;
   let sawUsage = false;
   let usageEmitted = false;
   let statsEmitted = false;
   let titleEmitted = false;
+  let receivedDone = false;
   let streamOpen = true;
+  let clientConnected = true;
+  let sawToolOrRefusalOutput = false;
   let lastProgressPersist = start;
+
+  const enqueue = (controller: ReadableStreamDefaultController, value: Uint8Array) => {
+    if (!clientConnected) return;
+    try {
+      controller.enqueue(value);
+    } catch {
+      clientConnected = false;
+    }
+  };
 
   const persistProgress = (force = false) => {
     if (!assistantMessageId) return;
@@ -91,7 +118,8 @@ function chatStatsStream(
     chatService.updateMessage(assistantMessageId, {
       content: assistantContent,
       reasoning: assistantReasoning,
-    });
+      ...(assistantError ? { error: assistantError } : {}),
+    }, { index: false });
   };
 
   const emitTitle = (controller: ReadableStreamDefaultController) => {
@@ -100,9 +128,7 @@ function chatStatsStream(
     startTitleGeneration(titleGenerator, (title) => {
       const session = chatService.setGeneratedTitle(chatId, title);
       if (!session) return;
-      if (streamOpen) {
-        controller.enqueue(encoder.encode(statsEvent({ type: "klove_chat_title", chat_id: chatId, title: session.title })));
-      }
+       if (streamOpen && clientConnected) enqueue(controller, encoder.encode(statsEvent({ type: "klove_chat_title", chat_id: chatId, title: session.title })));
     });
   };
 
@@ -130,19 +156,23 @@ function chatStatsStream(
       tps,
     };
     if (assistantMessageId) {
+      if (assistantError && controller && streamOpen) {
+        enqueue(controller, encoder.encode(statsEvent({ type: "klove_chat_error", message: assistantError })));
+      }
       chatService.updateMessage(assistantMessageId, {
         content: assistantContent,
         reasoning: assistantReasoning,
         stats,
+        ...(assistantError ? { error: assistantError } : {}),
       });
     }
-    if (controller && streamOpen) controller.enqueue(encoder.encode(statsEvent(stats)));
+    if (controller && streamOpen) enqueue(controller, encoder.encode(statsEvent(stats)));
   };
 
   const emitUsage = (controller: ReadableStreamDefaultController) => {
     if (usageEmitted) return;
     usageEmitted = true;
-    controller.enqueue(encoder.encode(statsEvent({
+    enqueue(controller, encoder.encode(statsEvent({
       type: "klove_usage",
       prompt_tokens: promptTokens,
       completion_tokens: completionTokens,
@@ -153,6 +183,11 @@ function chatStatsStream(
   };
 
   const sniff = (chunk: any, controller: ReadableStreamDefaultController) => {
+              if (chunk?.error && !assistantError) {
+      assistantError = typeof chunk.error === "string"
+        ? chunk.error
+        : chunk.error.message ?? "Chat request failed";
+    }
     const usage = chunk?.usage;
     if (usage) {
       sawUsage = true;
@@ -182,17 +217,17 @@ function chatStatsStream(
     }
     for (const choice of chunk?.choices ?? []) {
       const delta = choice?.delta;
+      if (delta?.tool_calls?.length || delta?.function_call || delta?.refusal) sawToolOrRefusalOutput = true;
       if (typeof delta?.content === "string") {
-        const contentDelta = streamDelta(delta.content, assistantContent);
-        streamedChars += contentDelta.length;
+        // OpenAI-compatible streams contain incremental deltas. Trying to
+        // infer cumulative chunks from matching text drops legitimate repeats
+        // (for example "ha", "ha" becoming only "ha").
+        const contentDelta = delta.content;
         assistantContent += contentDelta;
-        if (contentDelta !== delta.content) delta.content = contentDelta;
       }
       if (typeof delta?.reasoning_content === "string") {
-        const reasoningDelta = streamDelta(delta.reasoning_content, assistantReasoning);
-        streamedChars += reasoningDelta.length;
+        const reasoningDelta = delta.reasoning_content;
         assistantReasoning += reasoningDelta;
-        if (reasoningDelta !== delta.reasoning_content) delta.reasoning_content = reasoningDelta;
       }
     }
   };
@@ -211,14 +246,18 @@ function chatStatsStream(
               // SSE comments (": connected", keep-alives) are forwarded so
               // the panel connection stays alive while the upstream idles.
               if (!raw) {
-                controller.enqueue(encoder.encode(`${event}\n\n`));
+                 enqueue(controller, encoder.encode(`${event}\n\n`));
                 continue;
               }
               if (raw === SSE_DONE) {
+                receivedDone = true;
+                if (!assistantContent.trim() && !assistantReasoning.trim() && !sawToolOrRefusalOutput && !assistantError) {
+                  assistantError = "The model returned an empty response: no text, reasoning, tool call, or refusal was received.";
+                }
                 persistProgress(true);
                 emitTitle(controller);
                 emitStats(controller);
-                controller.enqueue(encoder.encode(DONE_MARKER));
+                enqueue(controller, encoder.encode(DONE_MARKER));
                 continue;
               }
               let chunk: any;
@@ -226,34 +265,47 @@ function chatStatsStream(
                 chunk = JSON.parse(raw);
               } catch {
                 // Forward non-JSON events verbatim.
-                controller.enqueue(encoder.encode(`data: ${raw}\n\n`));
+                 enqueue(controller, encoder.encode(`data: ${raw}\n\n`));
                 continue;
               }
               if (
                 chunk.type === "klove_stats" ||
                 chunk.usage ||
+                chunk.error ||
                 Array.isArray(chunk.choices)
               ) {
                 sniff(chunk, controller);
                 persistProgress();
               }
-              controller.enqueue(encoder.encode(`data: ${raw}\n\n`));
+              enqueue(controller, encoder.encode(`data: ${JSON.stringify(chunk)}\n\n`));
             }
             if (done) break;
           }
           // Upstream ended without a [DONE] marker — emit title and stats anyway.
+          if (!receivedDone) {
+            assistantError = generationSignal?.aborted
+              ? String(generationSignal.reason?.message ?? "Generation stopped by user. The partial response was saved.")
+              : assistantError ?? "Chat stream ended before completion: the provider closed the stream without a [DONE] event.";
+          }
+          else if (!assistantContent.trim() && !assistantReasoning.trim() && !sawToolOrRefusalOutput && !assistantError) {
+            assistantError = "The model returned an empty response: no text, reasoning, tool call, or refusal was received.";
+          }
           persistProgress(true);
           emitTitle(controller);
           emitStats(controller);
         } catch (error: any) {
+          assistantError = generationSignal?.aborted
+            ? String(generationSignal.reason?.message ?? "Generation stopped by user. The partial response was saved.")
+            : error?.message ?? "Chat stream interrupted";
           persistProgress(true);
+          emitTitle(controller);
           if (streamOpen) {
-            controller.enqueue(
-              encoder.encode(
+             enqueue(controller,
+               encoder.encode(
                 statsEvent({
                   error: {
                     message:
-                      error?.message ?? "Chat stream interrupted",
+                      assistantError,
                   },
                 }),
               ),
@@ -261,20 +313,23 @@ function chatStatsStream(
             emitStats(controller);
           }
         } finally {
-          if (streamOpen) {
-            streamOpen = false;
-            controller.close();
+          onFinish?.();
+           if (streamOpen && clientConnected) {
+             streamOpen = false;
+             try { controller.close(); } catch { /* consumer already disconnected */ }
           }
         }
       },
-      cancel() {
-        // Client disconnected — stop pulling from the proxy so the upstream
-        // reader is released too. The partial answer stays persisted, with the
-        // token accounting computed so far.
-        streamOpen = false;
-        persistProgress(true);
-        emitStats();
-        void reader.cancel();
+      cancel(reason) {
+        // A disconnected tab must not cancel generation. The detached reader
+        // continues draining the proxy and persists every chunk. Only the
+        // explicit stop endpoint below aborts the upstream request.
+        clientConnected = false;
+        logger.info("Chat response consumer disconnected; generation continues", {
+          chat_id: chatId,
+          assistant_message_id: assistantMessageId,
+          reason: reason instanceof Error ? reason.message : reason,
+        });
       },
     }),
     {
@@ -302,6 +357,7 @@ export const chatPlugin = (app: Elysia) =>
         !body ||
         typeof body !== "object" ||
         typeof (body as any).model !== "string" ||
+        !(body as any).model.trim() ||
         !Array.isArray((body as any).messages)
       ) {
         set.status = 400;
@@ -310,6 +366,17 @@ export const chatPlugin = (app: Elysia) =>
 
       const input = body as any;
       const chatId = typeof input.chat_id === "string" ? input.chat_id : undefined;
+      if (!input.messages.length || input.messages.some((message: any) =>
+        !message || typeof message !== "object" ||
+        !["user", "assistant", "system", "tool", "developer"].includes(message.role) ||
+        message.content === undefined ||
+        (typeof message.role === "string" && message.role !== "assistant" &&
+          message.role !== "user" && message.role !== "system" && message.role !== "developer" &&
+          typeof message.tool_call_id !== "string")
+      )) {
+        set.status = 400;
+        return { error: "Invalid request", message: "messages must contain valid roles and content" };
+      }
       // Regenerate/edit-resend: the user message is already persisted, so only
       // the assistant placeholder is added.
       const regenerate = input.regenerate === true;
@@ -322,7 +389,39 @@ export const chatPlugin = (app: Elysia) =>
           set.status = 404;
           return { error: "Chat not found" };
         }
+        if (chatService.get(chatId)?.messages.some((message) =>
+          message.role === "assistant" && !message.stats && !message.error && chatGenerationService.isActive(chatId, message.id),
+        )) {
+          set.status = 409;
+          return { error: "Generation already active", message: "This conversation is already generating a response" };
+        }
+        if (regenerate && typeof input.assistant_message_id !== "string") {
+          set.status = 400;
+          return { error: "Invalid request", message: "assistant_message_id is required to regenerate" };
+        }
+        if (
+          typeof input.assistant_message_id === "string" &&
+          chatService.findMessageInChat(chatId, input.assistant_message_id)
+        ) {
+          set.status = 409;
+          return { error: "Duplicate message id", message: "This assistant message already exists" };
+        }
         const lastMessage = input.messages.at(-1);
+        if (!regenerate && lastMessage?.role !== "user") {
+          set.status = 400;
+          return { error: "Invalid request", message: "the final message must be from the user" };
+        }
+        if (regenerate) {
+          if (lastMessage?.role !== "user") {
+            set.status = 400;
+            return { error: "Invalid request", message: "the final message must be the user prompt being retried" };
+          }
+          const storedMessages = chatService.get(chatId)?.messages ?? [];
+          if (storedMessages.at(-1)?.role !== "user") {
+            set.status = 409;
+            return { error: "Invalid conversation state", message: "The conversation no longer ends with a user prompt" };
+          }
+        }
         if (!regenerate) {
           const userMessage = chatService.addMessage({
             chatId,
@@ -336,10 +435,19 @@ export const chatPlugin = (app: Elysia) =>
           }
         }
         titleMessage = textFromContent(lastMessage?.content);
+        if (!titleMessage && input.attachments?.length) {
+          const names = input.attachments
+            .map((attachment: any) => typeof attachment?.name === "string" ? attachment.name : "")
+            .filter(Boolean)
+            .slice(0, 8);
+          titleMessage = names.length ? `Conversation about these files: ${names.join(", ")}` : "Conversation about an attached image";
+        }
         shouldGenerateTitle = Boolean(
           titleMessage && chatService.findById(chatId)?.title === "New chat",
         );
-        assistantMessageId = crypto.randomUUID();
+        assistantMessageId = typeof input.assistant_message_id === "string"
+          ? input.assistant_message_id
+          : crypto.randomUUID();
         chatService.addMessage({
           chatId,
           id: assistantMessageId,
@@ -357,48 +465,182 @@ export const chatPlugin = (app: Elysia) =>
                WHERE key = 'persist_model_per_chat' AND value = 'true'
              )`,
           )
-          .run(input.model, chatId);
+        .run(input.model, chatId);
       }
 
-      const response = await fetch(
-        `http://127.0.0.1:${config.port}/v1/chat/completions`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Accept: "text/event-stream",
-            Authorization: `Bearer ${keyService.internalKey()}`,
-          },
-          body: JSON.stringify({
-            ...input,
-            stream: true,
-            stream_options: { include_usage: true },
-          }),
-        },
-      );
-
-      if (!response.ok) {
-        const data = await response.json().catch(() => null);
-        set.status = response.status;
-        return {
-          error: data?.error || "Chat request failed",
-          message:
-            data?.message ||
-            (typeof data?.error === "string" ? data.error : undefined) ||
-            `HTTP ${response.status}: ${response.statusText}`,
-        };
-      }
-
-      if (shouldGenerateTitle && titleMessage) {
+        if (shouldGenerateTitle && titleMessage && !regenerate) {
         titleGenerator = () => chatTitleService.generate(titleMessage!, input.model);
       }
 
-      return chatStatsStream(response, input.model, input.messages, chatId, assistantMessageId, titleGenerator);
+      const generationController = new AbortController();
+      if (chatId && assistantMessageId) {
+        chatGenerationService.start(chatId, assistantMessageId, generationController);
+      }
+      let response: Response;
+      try {
+        response = await fetch(
+          `http://127.0.0.1:${config.port}/v1/chat/completions`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Accept: "text/event-stream",
+              Authorization: `Bearer ${keyService.internalKey()}`,
+            },
+            signal: generationController.signal,
+            body: JSON.stringify(withUsageStreamOptions(input)),
+          },
+        );
+      } catch (error: any) {
+        const message = error?.message ?? "Could not connect to the chat service";
+        if (assistantMessageId) chatService.updateMessage(assistantMessageId, { error: message });
+        if (chatId && assistantMessageId) chatGenerationService.finish(chatId, assistantMessageId);
+        if (titleGenerator && chatId) {
+          startTitleGeneration(titleGenerator, (title) => chatService.setGeneratedTitle(chatId!, title));
+        }
+        set.status = 502;
+        return { error: "Chat request failed", message };
+      }
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => null);
+        const message =
+          data?.message ||
+          (typeof data?.error === "string" ? data.error : undefined) ||
+          `HTTP ${response.status}: ${response.statusText}`;
+        if (assistantMessageId) chatService.updateMessage(assistantMessageId, { error: message });
+        if (chatId && assistantMessageId) chatGenerationService.finish(chatId, assistantMessageId);
+        if (titleGenerator && chatId) {
+          startTitleGeneration(titleGenerator, (title) => chatService.setGeneratedTitle(chatId!, title));
+        }
+        set.status = response.status;
+        return {
+          error: data?.error || "Chat request failed",
+          message,
+        };
+      }
+
+      return chatStatsStream(
+        response,
+        input.model,
+        input.messages,
+        chatId,
+        assistantMessageId,
+        titleGenerator,
+        chatId && assistantMessageId
+          ? () => chatGenerationService.finish(chatId!, assistantMessageId!)
+          : undefined,
+        generationController.signal,
+      );
     },
     {
       // Forward-compatible like the proxy: required fields are validated at
       // runtime and everything else (temperature, reasoning, tools, ...) is
       // passed through untouched.
       body: t.Any(),
+    },
+  );
+
+export const chatControlPlugin = (app: Elysia) =>
+  app.get(
+    "/api/chats/:id/messages/:messageId/stream",
+    ({ params, set }) => {
+      const initial = chatService.findMessageInChat(params.id, params.messageId);
+      if (!initial || initial.role !== "assistant") {
+        set.status = 404;
+        return { error: "Assistant response not found" };
+      }
+      let closed = false;
+      return new Response(new ReadableStream<Uint8Array>({
+        async start(controller) {
+          const encoder = new TextEncoder();
+          let content = typeof initial.content === "string" ? initial.content : "";
+          let reasoning = initial.reasoning ?? "";
+          let lastError: string | null = null;
+          let statsSent = false;
+          const send = (value: Record<string, unknown>) => {
+            if (!closed) {
+              try { controller.enqueue(encoder.encode(`data: ${JSON.stringify(value)}\n\n`)); }
+              catch { closed = true; }
+            }
+          };
+          try {
+            while (!closed) {
+              const message = chatService.findMessageInChat(params.id, params.messageId);
+              if (!message) {
+                send({ error: { message: "Assistant response was deleted while generation was active" } });
+                break;
+              }
+              const nextContent = typeof message.content === "string" ? message.content : "";
+              if (nextContent.startsWith(content) && nextContent.length > content.length) {
+                send({ choices: [{ delta: { content: nextContent.slice(content.length) } }] });
+              } else if (nextContent !== content) {
+                send({ type: "klove_chat_snapshot", content: nextContent });
+              }
+              content = nextContent;
+              const nextReasoning = message.reasoning ?? "";
+              if (nextReasoning.startsWith(reasoning) && nextReasoning.length > reasoning.length) {
+                send({ choices: [{ delta: { reasoning_content: nextReasoning.slice(reasoning.length) } }] });
+              } else if (nextReasoning !== reasoning) {
+                send({ type: "klove_chat_reasoning_snapshot", reasoning: nextReasoning });
+              }
+              reasoning = nextReasoning;
+              const active = chatGenerationService.isActive(params.id, params.messageId);
+              if (message.error && !active && message.error !== lastError) {
+                send({ type: "klove_chat_error", message: message.error });
+                lastError = message.error;
+              }
+              if (message.stats && !statsSent) {
+                send({ type: "klove_stats", ...(message.stats as Record<string, unknown>) });
+                statsSent = true;
+              }
+              if (message.stats || !active) break;
+              await new Promise((resolve) => setTimeout(resolve, 300));
+            }
+            if (!closed) {
+              try { controller.enqueue(encoder.encode("data: [DONE]\n\n")); }
+              catch { closed = true; }
+            }
+          } catch (error: any) {
+            send({ error: { message: error?.message ?? "Could not resume chat stream" } });
+            if (!closed) {
+              try { controller.enqueue(encoder.encode("data: [DONE]\n\n")); }
+              catch { closed = true; }
+            }
+          } finally {
+            if (!closed) {
+              closed = true;
+              try { controller.close(); } catch { /* consumer disconnected */ }
+            }
+          }
+        },
+        cancel() { closed = true; },
+      }), {
+        headers: {
+          "Content-Type": "text/event-stream; charset=utf-8",
+          "Cache-Control": "no-cache, no-transform",
+          Connection: "keep-alive",
+        },
+      });
+    },
+    { params: t.Object({ id: t.String({ minLength: 1 }), messageId: t.String({ minLength: 1 }) }) },
+  ).post(
+    "/api/chats/:id/messages/:messageId/stop",
+    ({ params, set }) => {
+      const message = chatService.findMessageInChat(params.id, params.messageId);
+      if (!message || message.role !== "assistant" || message.stats || message.error) {
+        set.status = 409;
+        return { error: "Generation is not active", message: "This response is already finished" };
+      }
+      if (!chatGenerationService.isActive(params.id, params.messageId)) {
+        set.status = 409;
+        return { error: "Generation not found", message: "The active generation could not be found" };
+      }
+      chatService.setMessageError(params.messageId, "Generation stopped by user. The partial response was saved.");
+      chatGenerationService.stop(params.id, params.messageId);
+      return { success: true };
+    },
+    {
+      params: t.Object({ id: t.String({ minLength: 1 }), messageId: t.String({ minLength: 1 }) }),
     },
   );

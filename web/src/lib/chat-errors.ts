@@ -3,6 +3,7 @@ export type ChatErrorKind =
   | "auth"
   | "config"
   | "transient"
+  | "empty_response"
   | "provider"
   | "unknown";
 
@@ -20,6 +21,20 @@ const patterns: Array<{
   hint?: string;
   retryable: boolean;
 }> = [
+  {
+    kind: "empty_response",
+    pattern: /empty response|no text, reasoning|returned no content/i,
+    title: "Empty response",
+    hint: "The provider completed the request without returning visible output. Check the provider/model logs or retry with another model.",
+    retryable: true,
+  },
+  {
+    kind: "transient",
+    pattern: /generation stopped by user/i,
+    title: "Generation stopped",
+    hint: "The partial response was saved. Retry to receive a complete response.",
+    retryable: true,
+  },
   {
     kind: "rate_limit",
     pattern: /\b429\b|rate.?limit|usage_limit|quota exceeded|too many requests/i,

@@ -20,10 +20,13 @@ const EMPTY_USAGE: ChatUsageSnapshot = {
 
 export interface StreamReplyOptions {
   chatId: string;
-  requestBody: {
-    model: string;
+    requestBody: {
+      model: string;
+      chat_id?: string;
+      reasoning_effort?: string;
     messages: { role: string; content: unknown }[];
     regenerate?: boolean;
+    assistant_message_id?: string;
     attachments?: unknown[];
   };
   assistantMessageId: string;
@@ -70,6 +73,11 @@ export function useChatMessages({
     messagesRef.current = messages;
   }, [messages]);
 
+  useEffect(() => () => {
+    for (const controller of controllersRef.current.values()) controller.abort();
+    controllersRef.current.clear();
+  }, []);
+
   useEffect(() => {
     if (!chatId) return;
     let cancelled = false;
@@ -78,20 +86,15 @@ export function useChatMessages({
       return;
     }
     let pollTimer: number | null = null;
-
     const hasPendingResponse = (chatMessages: ChatMessage[]) => {
       const lastMessage = chatMessages.at(-1);
       return lastMessage?.role === "assistant" && !lastMessage.stats && !lastMessage.error;
     };
 
     const loadChat = () => {
+      if (cancelled) return;
       const modelVersion = getChatModelVersion(chatId);
-      const request = queryCache.getOrFetch(
-        queryKeys.chat(chatId),
-        5_000,
-        () => chatsApi.get(chatId),
-      );
-      request.then((result) => {
+      chatsApi.get(chatId).then((result) => {
         if (cancelled) return;
         resolveChatSessionModel(chatId, result.session.model, result.messages, modelVersion);
         if (!streamingChatsRef.current.has(chatId)) {
@@ -125,7 +128,7 @@ export function useChatMessages({
     };
 
     loadChat();
-    pollTimer = window.setInterval(loadChat, 500);
+    pollTimer = window.setInterval(loadChat, 1000);
 
     return () => {
       cancelled = true;
@@ -171,11 +174,83 @@ export function useChatMessages({
     invalidateChats(targetChatId);
   }, []);
 
-  const stop = useCallback(() => {
-    if (!chatId) return;
-    controllersRef.current.get(chatId)?.abort();
-    setStreamingByChat((previous) => ({ ...previous, [chatId]: false }));
-  }, [chatId]);
+  const stop = useCallback((targetChatId?: string) => {
+    const id = targetChatId ?? chatId;
+    if (!id) return;
+    const pending = [...(messagesByChat[id] ?? [])].reverse().find(
+      (message) => message.role === "assistant" && !message.stats && !message.error,
+    );
+    setStreamingByChat((previous) => ({ ...previous, [id]: false }));
+    if (pending?.role === "assistant") {
+      void chatsApi.stopGeneration(id, pending.id).then(() => {
+        controllersRef.current.get(id)?.abort();
+      }).catch((error: Error) => {
+        updateMessage(id, pending.id, (message) => ({
+          ...message,
+          error: `${message.error ? `${message.error}\n` : ""}Could not stop generation: ${error.message}`,
+        }));
+      });
+    }
+  }, [chatId, messagesByChat, updateMessage]);
+
+  const resumeGeneration = useCallback(async (
+    targetChatId: string,
+    assistantMessageId: string,
+    model: string,
+    onTitle: StreamReplyOptions["onTitle"],
+  ) => {
+    if (controllersRef.current.has(targetChatId)) return;
+    const controller = new AbortController();
+    controllersRef.current.set(targetChatId, controller);
+    streamingChatsRef.current.add(targetChatId);
+    setStreamingByChat((previous) => ({ ...previous, [targetChatId]: true }));
+    try {
+      const response = await chatApi.resume(targetChatId, assistantMessageId, controller.signal);
+      await readChatStream(response, {
+        onContent: (delta) => updateMessage(targetChatId, assistantMessageId, (message) => ({
+          ...message,
+          content: delta.startsWith("\u0000snapshot:")
+            ? delta.slice("\u0000snapshot:".length)
+            : (typeof message.content === "string" ? message.content : "") + delta,
+        })),
+        onReasoning: (delta) => updateMessage(targetChatId, assistantMessageId, (message) => ({
+          ...message,
+          reasoning: delta.startsWith("\u0000snapshot:")
+            ? delta.slice("\u0000snapshot:".length)
+            : (message.reasoning ?? "") + delta,
+        })),
+        onUsage: () => undefined,
+        onStats: (stats) => {
+          updateMessage(targetChatId, assistantMessageId, (message) => ({ ...message, stats }));
+          void chatsApi.get(targetChatId).then((result) => {
+            setMessagesByChat((previous) => ({ ...previous, [targetChatId]: result.messages }));
+          }).catch(() => undefined);
+        },
+        onTitle,
+        onError: (error) => updateMessage(targetChatId, assistantMessageId, (message) => ({
+          ...message,
+          error: error,
+        })),
+      });
+    } catch (error: any) {
+      if (error?.name !== "AbortError") {
+        updateMessage(targetChatId, assistantMessageId, (message) => ({
+          ...message,
+          error: error?.message ?? "Could not resume generation",
+        }));
+      }
+    } finally {
+      if (controllersRef.current.get(targetChatId) === controller) {
+        controllersRef.current.delete(targetChatId);
+        streamingChatsRef.current.delete(targetChatId);
+        setStreamingByChat((previous) => ({ ...previous, [targetChatId]: false }));
+        invalidateChat(targetChatId);
+        void chatsApi.get(targetChatId).then((result) => {
+          setMessagesByChat((previous) => ({ ...previous, [targetChatId]: result.messages }));
+        }).catch(() => undefined);
+      }
+    }
+  }, [invalidateChat, updateMessage]);
 
   const streamReply = useCallback(
     async ({
@@ -196,6 +271,7 @@ export function useChatMessages({
           {
             ...requestBody,
             chat_id: targetChatId,
+            assistant_message_id: assistantMessageId,
           },
           controller.signal,
         );
@@ -203,14 +279,16 @@ export function useChatMessages({
           onContent: (delta) =>
             updateMessage(targetChatId, assistantMessageId, (message) => ({
               ...message,
-              content:
-                (typeof message.content === "string" ? message.content : "") +
-                delta,
+              content: delta.startsWith("\u0000snapshot:")
+                ? delta.slice("\u0000snapshot:".length)
+                : (typeof message.content === "string" ? message.content : "") + delta,
             })),
           onReasoning: (delta) =>
             updateMessage(targetChatId, assistantMessageId, (message) => ({
               ...message,
-              reasoning: (message.reasoning ?? "") + delta,
+              reasoning: delta.startsWith("\u0000snapshot:")
+                ? delta.slice("\u0000snapshot:".length)
+                : (message.reasoning ?? "") + delta,
             })),
           onUsage: (nextUsage: ChatStreamUsage) =>
             setUsageByChat((previous) => {
@@ -247,22 +325,38 @@ export function useChatMessages({
           onError: (errorMessage) =>
             updateMessage(targetChatId, assistantMessageId, (message) => ({
               ...message,
-              error: message.error
-                ? `${message.error}\n${errorMessage}`
-                : errorMessage,
+              error: errorMessage,
             })),
         });
       } catch (error: any) {
         if (error?.name !== "AbortError") {
+          const errorMessage = error?.message ?? "Chat request failed";
           updateMessage(targetChatId, assistantMessageId, (message) => ({
             ...message,
-            error: error?.message ?? "Chat request failed",
+            error: errorMessage,
           }));
         }
       } finally {
         if (controllersRef.current.get(targetChatId) === controller) {
           controllersRef.current.delete(targetChatId);
           invalidateChat(targetChatId);
+          void chatsApi.get(targetChatId).then((result) => {
+            setMessagesByChat((previous) => ({ ...previous, [targetChatId]: result.messages }));
+            const latestStats = [...result.messages]
+              .reverse()
+              .find((message) => message.role === "assistant" && message.stats)?.stats;
+            if (latestStats) {
+              setUsageByChat((previous) => ({
+                ...previous,
+                [targetChatId]: {
+                  prompt_tokens: latestStats.prompt_tokens,
+                  completion_tokens: latestStats.completion_tokens,
+                  cache_read_tokens: latestStats.cache_read_tokens ?? 0,
+                  cache_write_tokens: latestStats.cache_write_tokens ?? 0,
+                },
+              }));
+            }
+          }).catch(() => undefined);
           streamingChatsRef.current.delete(targetChatId);
           setStreamingByChat((previous) => ({ ...previous, [targetChatId]: false }));
         }
@@ -284,5 +378,6 @@ export function useChatMessages({
     invalidateChat,
     stop,
     streamReply,
+    resumeGeneration,
   };
 }

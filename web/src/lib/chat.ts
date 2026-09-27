@@ -123,6 +123,18 @@ function handleChunk(raw: string, handlers: ChatStreamHandlers): void {
     });
     return;
   }
+  if (chunk.type === "klove_chat_error") {
+    handlers.onError(String(chunk.message ?? "Chat request failed"));
+    return;
+  }
+  if (chunk.type === "klove_chat_snapshot") {
+    handlers.onContent(`\u0000snapshot:${String(chunk.content ?? "")}`);
+    return;
+  }
+  if (chunk.type === "klove_chat_reasoning_snapshot") {
+    handlers.onReasoning(`\u0000snapshot:${String(chunk.reasoning ?? "")}`);
+    return;
+  }
   if (chunk.error) {
     handlers.onError(
       typeof chunk.error === "string"
@@ -158,15 +170,21 @@ export async function readChatStream(
 
   const decoder = new TextDecoder();
   const splitEvent = createSseSplitter();
+  let receivedDone = false;
 
   while (true) {
     const { done, value } = await reader.read();
     const events = splitEvent(decoder.decode(value ?? new Uint8Array(), { stream: !done }));
     for (const event of events) {
       const raw = extractSseData(event);
-      if (!raw || raw === "[DONE]") continue;
+      if (!raw) continue;
+      if (raw === "[DONE]") {
+        receivedDone = true;
+        continue;
+      }
       handleChunk(raw, handlers);
     }
     if (done) break;
   }
+  if (!receivedDone) throw new Error("Chat stream ended before completion");
 }

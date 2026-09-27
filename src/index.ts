@@ -21,6 +21,7 @@ import {
   requestLogsPlugin,
   rtkPlugin,
   chatPlugin,
+  chatControlPlugin,
   chatsPlugin,
   setupPlugin,
   avatarMediaPlugin,
@@ -109,6 +110,7 @@ const protectedApp = new Elysia()
   .use(cavemanPlugin)
   .use(customSkillsPlugin)
   .use(chatsPlugin)
+  .use(chatControlPlugin)
   .use(chatPlugin);
 
 app.use(protectedApp as any);

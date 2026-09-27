@@ -440,6 +440,8 @@ export const chat = {
       chat_id?: string;
       attachments?: unknown[];
       regenerate?: boolean;
+      assistant_message_id?: string;
+      reasoning_effort?: string;
       messages: { role: string; content: unknown }[];
     },
     signal?: AbortSignal,
@@ -449,6 +451,11 @@ export const chat = {
       body: JSON.stringify(body),
       signal,
     }),
+  resume: (chatId: string, messageId: string, signal?: AbortSignal) =>
+    request<Response>(
+      `/api/chats/${encodeURIComponent(chatId)}/messages/${encodeURIComponent(messageId)}/stream`,
+      { method: "GET", headers: { Accept: "text/event-stream" }, signal },
+    ),
 };
 
 export const chats = {
@@ -487,6 +494,11 @@ export const chats = {
     request<{ success: boolean }>(
       `/api/chats/${chatId}/messages/${messageId}`,
       { method: "DELETE" },
+    ),
+  stopGeneration: (chatId: string, messageId: string) =>
+    request<{ success: boolean }>(
+      `/api/chats/${encodeURIComponent(chatId)}/messages/${encodeURIComponent(messageId)}/stop`,
+      { method: "POST" },
     ),
 };
 

@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState, type ClipboardEvent, type Key
 import {
   RiLoader4Line as LoaderCircle,
   RiArrowDownLine as ArrowDownLine,
+  RiErrorWarningLine as WarningLine,
+  RiInformationLine as InfoLine,
 } from "@remixicon/react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -63,6 +65,7 @@ export default function ChatPage({
     skipNextLoad,
     stop,
     streamReply,
+    resumeGeneration,
   } = useChatMessages({
     chatId,
     loadingModels,
@@ -79,6 +82,8 @@ export default function ChatPage({
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
   const endRef = useRef<HTMLDivElement | null>(null);
   const autoScrollRef = useRef(true);
+  const clientStartedMessagesRef = useRef(new Set<string>());
+  const resumedMessagesRef = useRef(new Set<string>());
 
   const selectedModelRecord = modelList.find(
     (model) =>
@@ -151,13 +156,18 @@ export default function ChatPage({
   const addFiles = async (files: File[] | FileList | null) => {
     if (!files?.length) return;
     const notices: string[] = [];
-    const remaining = Math.max(0, MAX_ATTACHMENTS - attachments.length);
+    const currentAttachments = attachments;
+    const remaining = Math.max(0, MAX_ATTACHMENTS - currentAttachments.length);
     if (remaining === 0) {
       setAttachmentNotice(`Attachment limit of ${MAX_ATTACHMENTS} reached.`);
       return;
     }
     const next: ChatAttachmentPreview[] = [];
-    for (const file of Array.from(files).slice(0, remaining)) {
+    const candidates = Array.from(files).slice(0, remaining);
+    if (Array.from(files).length > candidates.length) {
+      notices.push(`Only ${MAX_ATTACHMENTS} attachments can be added to one message.`);
+    }
+    for (const file of candidates) {
       const isImage = file.type.startsWith("image/");
       const isText = TEXT_MIME_TYPES.test(file.type) || TEXT_EXTENSIONS.test(file.name);
       if (!isImage && !isText) {
@@ -200,8 +210,11 @@ export default function ChatPage({
           preview: data,
         });
       } else {
-        const text = await file.text().catch(() => "");
-        if (!text) continue;
+        const text = await file.text().catch(() => null);
+        if (text === null) {
+          notices.push(`${file.name}: could not read the file.`);
+          continue;
+        }
         next.push({
           id: crypto.randomUUID(),
           name: file.name,
@@ -212,7 +225,7 @@ export default function ChatPage({
       }
     }
     if (notices.length) setAttachmentNotice(notices.join(" "));
-    setAttachments((current) => [...current, ...next]);
+    setAttachments((current) => [...current, ...next].slice(0, MAX_ATTACHMENTS));
   };
 
   const onPaste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
@@ -237,10 +250,12 @@ export default function ChatPage({
       attachments?: unknown[];
     }) => {
       if (!selectedModel) return;
+      clientStartedMessagesRef.current.add(params.assistantMessageId);
       await streamReply({
         chatId: params.chatId,
         requestBody: {
           model: selectedModel,
+          ...(selectedReasoningEffort ? { reasoning_effort: selectedReasoningEffort } : {}),
           messages: params.history,
           ...(params.regenerate ? { regenerate: true } : {}),
           ...(params.regenerate ? {} : { attachments: params.attachments }),
@@ -249,6 +264,7 @@ export default function ChatPage({
         usageFallback: usage,
         onTitle,
       });
+      clientStartedMessagesRef.current.delete(params.assistantMessageId);
     },
     [onTitle, selectedModel, streamReply, usage],
   );
@@ -277,12 +293,17 @@ export default function ChatPage({
     }));
 
     let activeChatId = chatId;
-    if (!activeChatId) {
-      const created = await chatsApi.create({ model: selectedModel });
-      activeChatId = created.id;
-      assignChatModel(created.id, selectedModel);
-      skipNextLoad(created.id);
-      onChatCreated(created.id);
+    try {
+      if (!activeChatId) {
+        const created = await chatsApi.create({ model: selectedModel });
+        activeChatId = created.id;
+        assignChatModel(created.id, selectedModel);
+        skipNextLoad(created.id);
+        onChatCreated(created.id);
+      }
+    } catch (error: any) {
+      setActionError(error?.message ?? "Could not create the conversation");
+      return;
     }
     if (activeChatId && messagesRef.current.length === 0) {
       onTitleGenerationStart(activeChatId);
@@ -341,30 +362,15 @@ export default function ChatPage({
     const trimmed = newText.trim();
     if (!trimmed) return;
 
-    // Replace the text while keeping other parts (images) intact.
-    let content: ChatMessage["content"];
-    if (Array.isArray(target.content)) {
-      const nextParts: ChatContentPart[] = [];
-      let inserted = false;
-      for (const part of target.content) {
-        if (part.type === "text") {
-          if (!inserted) {
-            nextParts.push({ type: "text", text: trimmed });
-            inserted = true;
-          }
-        } else {
-          nextParts.push(part);
-        }
-      }
-      if (!inserted) nextParts.unshift({ type: "text", text: trimmed });
-      content = nextParts;
-    } else {
-      content = trimmed;
-    }
+    // Rebuild multimodal content from the saved attachment metadata so text
+    // files remain included in the resent prompt along with pasted images.
+    const savedAttachments = target.attachments ?? [];
+    const content = buildUserContent(trimmed, savedAttachments);
 
     try {
       await chatsApi.updateMessage(chatId, messageId, {
         content,
+        attachments: savedAttachments,
         truncate_after: true,
       });
     } catch (error: any) {
@@ -374,7 +380,7 @@ export default function ChatPage({
     setActionError(null);
     const remaining = messagesRef.current
       .slice(0, index + 1)
-      .map((message) => (message.id === messageId ? { ...message, content } : message));
+      .map((message) => (message.id === messageId ? { ...message, content, attachments: savedAttachments } : message));
     setMessageList(chatId, remaining);
     const assistantMessage: ChatMessage = {
       id: crypto.randomUUID(),
@@ -412,10 +418,40 @@ export default function ChatPage({
     }
   };
 
+  useEffect(() => {
+    if (!chatId || !messages.length) return;
+    const last = messages.at(-1);
+    const pending = [...messages].reverse().find(
+      (message) => message.role === "assistant" && !message.stats && !message.error,
+    );
+    if (!pending) return;
+    if (clientStartedMessagesRef.current.has(pending.id) || resumedMessagesRef.current.has(pending.id)) return;
+    resumedMessagesRef.current.add(pending.id);
+    void resumeGeneration(chatId, pending.id, selectedModel ?? "auto", onTitle).finally(() => {
+      if (!pending.stats && !pending.error) resumedMessagesRef.current.delete(pending.id);
+    });
+  }, [chatId, messages.at(-1)?.id, messages.at(-1)?.stats, messages.at(-1)?.error, selectedModel, onTitle, resumeGeneration]);
+
+  useEffect(() => {
+    setInput("");
+    setAttachments([]);
+    setAttachmentNotice(null);
+    setActionError(null);
+    setShowScrollDown(false);
+    autoScrollRef.current = true;
+  }, [chatId]);
+
+  useEffect(() => {
+    if (!actionError) return;
+    const timer = window.setTimeout(() => setActionError(null), 8000);
+    return () => window.clearTimeout(timer);
+  }, [actionError]);
+
   if (loadingModels) {
     return (
       <div className="flex justify-center p-12">
         <LoaderCircle className="size-5 animate-spin text-muted-foreground" />
+        <span className="sr-only">Loading models</span>
       </div>
     );
   }
@@ -426,7 +462,8 @@ export default function ChatPage({
     <div className="relative flex h-svh flex-col">
       {topError && (
         <div className="flex justify-center px-6 pt-4">
-          <Alert variant="destructive" className="w-full max-w-3xl">
+          <Alert variant="destructive" className="chat-error-panel w-full max-w-3xl">
+            <WarningLine />
             <AlertDescription>{topError}</AlertDescription>
           </Alert>
         </div>
@@ -442,8 +479,9 @@ export default function ChatPage({
               </h2>
             </div>
           ) : (
-            messages.map((message, index) => {
+          messages.map((message, index) => {
               const isLast = index === messages.length - 1;
+              const isStreamingMessage = streaming && isLast;
               const statsModel = message.stats?.model
                 ? modelList.find(
                     (candidate) =>
@@ -457,7 +495,7 @@ export default function ChatPage({
                   message={message}
                   model={statsModel}
                   modelName={statsModel?.display_name ?? undefined}
-                  streaming={streaming && isLast}
+                  streaming={isStreamingMessage}
                   canRegenerate={isLast && message.role === "assistant"}
                   onRegenerate={
                     message.role === "assistant" ? () => void regenerate(message.id) : undefined
@@ -476,7 +514,7 @@ export default function ChatPage({
         <Button
           type="button"
           size="icon"
-          className="absolute bottom-44 right-6 z-10 rounded-full shadow-lg"
+          className="chat-inline-notice absolute bottom-44 right-6 z-10 rounded-full shadow-lg"
           onClick={scrollToBottom}
           title="Jump to latest"
           aria-label="Jump to latest"
@@ -485,14 +523,14 @@ export default function ChatPage({
         </Button>
       )}
 
-      <div className="pointer-events-none absolute inset-x-0 bottom-0">
-        <div className="pointer-events-auto">
-          {attachmentNotice && (
-            <div className="mx-auto mb-2 w-fit max-w-[90%] rounded-lg border border-border bg-popover px-3 py-1.5 text-xs text-muted-foreground shadow-sm">
-              {attachmentNotice}
-            </div>
-          )}
-          <ChatComposer
+      <div className="shrink-0">
+        {attachmentNotice && (
+          <div className="chat-inline-notice mx-auto mb-2 flex w-fit max-w-[90%] items-start gap-2 rounded-xl border border-border bg-popover px-3 py-2 text-xs text-muted-foreground shadow-md" role="status" aria-live="polite">
+            <InfoLine className="mt-0.5 size-3.5 shrink-0 text-primary" />
+            {attachmentNotice}
+          </div>
+        )}
+        <ChatComposer
             value={input}
             onChange={setInput}
             onKeyDown={onKeyDown}
@@ -516,8 +554,7 @@ export default function ChatPage({
             cacheReadTokens={usage.cache_read_tokens}
             cacheWriteTokens={usage.cache_write_tokens}
             streaming={streaming}
-          />
-        </div>
+        />
       </div>
     </div>
   );
