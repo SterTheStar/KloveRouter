@@ -65,7 +65,6 @@ function chatStatsStream(
   messages: unknown,
   chatId?: string,
   assistantMessageId?: string,
-  titleGenerator?: (() => Promise<string>) | undefined,
   onFinish?: (() => void) | undefined,
   generationSignal?: AbortSignal,
 ): Response {
@@ -94,7 +93,6 @@ function chatStatsStream(
   let sawUsage = false;
   let usageEmitted = false;
   let statsEmitted = false;
-  let titleEmitted = false;
   let receivedDone = false;
   let streamOpen = true;
   let clientConnected = true;
@@ -120,16 +118,6 @@ function chatStatsStream(
       reasoning: assistantReasoning,
       ...(assistantError ? { error: assistantError } : {}),
     }, { index: false });
-  };
-
-  const emitTitle = (controller: ReadableStreamDefaultController) => {
-    if (titleEmitted || !titleGenerator || !chatId) return;
-    titleEmitted = true;
-    startTitleGeneration(titleGenerator, (title) => {
-      const session = chatService.setGeneratedTitle(chatId, title);
-      if (!session) return;
-       if (streamOpen && clientConnected) enqueue(controller, encoder.encode(statsEvent({ type: "klove_chat_title", chat_id: chatId, title: session.title })));
-    });
   };
 
   const emitStats = (controller?: ReadableStreamDefaultController) => {
@@ -255,7 +243,6 @@ function chatStatsStream(
                   assistantError = "The model returned an empty response: no text, reasoning, tool call, or refusal was received.";
                 }
                 persistProgress(true);
-                emitTitle(controller);
                 emitStats(controller);
                 enqueue(controller, encoder.encode(DONE_MARKER));
                 continue;
@@ -281,7 +268,7 @@ function chatStatsStream(
             }
             if (done) break;
           }
-          // Upstream ended without a [DONE] marker — emit title and stats anyway.
+          // Upstream ended without a [DONE] marker — emit stats anyway.
           if (!receivedDone) {
             assistantError = generationSignal?.aborted
               ? String(generationSignal.reason?.message ?? "Generation stopped by user. The partial response was saved.")
@@ -291,14 +278,12 @@ function chatStatsStream(
             assistantError = "The model returned an empty response: no text, reasoning, tool call, or refusal was received.";
           }
           persistProgress(true);
-          emitTitle(controller);
           emitStats(controller);
         } catch (error: any) {
           assistantError = generationSignal?.aborted
             ? String(generationSignal.reason?.message ?? "Generation stopped by user. The partial response was saved.")
             : error?.message ?? "Chat stream interrupted";
           persistProgress(true);
-          emitTitle(controller);
           if (streamOpen) {
              enqueue(controller,
                encoder.encode(
@@ -476,6 +461,11 @@ export const chatPlugin = (app: Elysia) =>
       if (chatId && assistantMessageId) {
         chatGenerationService.start(chatId, assistantMessageId, generationController);
       }
+      if (titleGenerator && chatId) {
+        startTitleGeneration(titleGenerator, (title) => {
+          chatService.setGeneratedTitle(chatId!, title);
+        });
+      }
       let response: Response;
       try {
         response = await fetch(
@@ -495,9 +485,6 @@ export const chatPlugin = (app: Elysia) =>
         const message = error?.message ?? "Could not connect to the chat service";
         if (assistantMessageId) chatService.updateMessage(assistantMessageId, { error: message });
         if (chatId && assistantMessageId) chatGenerationService.finish(chatId, assistantMessageId);
-        if (titleGenerator && chatId) {
-          startTitleGeneration(titleGenerator, (title) => chatService.setGeneratedTitle(chatId!, title));
-        }
         set.status = 502;
         return { error: "Chat request failed", message };
       }
@@ -510,9 +497,6 @@ export const chatPlugin = (app: Elysia) =>
           `HTTP ${response.status}: ${response.statusText}`;
         if (assistantMessageId) chatService.updateMessage(assistantMessageId, { error: message });
         if (chatId && assistantMessageId) chatGenerationService.finish(chatId, assistantMessageId);
-        if (titleGenerator && chatId) {
-          startTitleGeneration(titleGenerator, (title) => chatService.setGeneratedTitle(chatId!, title));
-        }
         set.status = response.status;
         return {
           error: data?.error || "Chat request failed",
@@ -526,7 +510,6 @@ export const chatPlugin = (app: Elysia) =>
         input.messages,
         chatId,
         assistantMessageId,
-        titleGenerator,
         chatId && assistantMessageId
           ? () => chatGenerationService.finish(chatId!, assistantMessageId!)
           : undefined,

@@ -32,12 +32,17 @@ describe("chatGenerationService", () => {
 describe("startTitleGeneration", () => {
   test("does not wait for title generation before returning", async () => {
     let release!: (title: string) => void;
+    let generationStarted = false;
     const generated = new Promise<string>((resolve) => {
       release = resolve;
     });
     const titles: string[] = [];
 
-    startTitleGeneration(() => generated, (title) => titles.push(title));
+    startTitleGeneration(() => {
+      generationStarted = true;
+      return generated;
+    }, (title) => titles.push(title));
+    expect(generationStarted).toBe(true);
     expect(titles).toEqual([]);
 
     release("A useful title");
