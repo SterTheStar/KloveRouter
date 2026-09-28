@@ -5,6 +5,9 @@ import {
   RiStopLine as StopLine,
   RiCloseLine as CloseLine,
   RiFileTextLine as FileTextLine,
+  RiMusic2Line as AudioLine,
+  RiVideoLine as VideoLine,
+  RiFilePdf2Line as PdfLine,
 } from "@remixicon/react";
 import { Button } from "@/components/ui/button";
 import ModelSettingsMenu from "./ModelSettingsMenu";
@@ -73,7 +76,7 @@ export default function ChatComposer({
             ref={fileInputRef}
             type="file"
             multiple
-            accept="image/*,.txt,.md,.json,.csv,.ts,.tsx,.js,.jsx,.py,.java,.go,.rs,.html,.css,.xml,.yaml,.yml,.log"
+            accept="image/*,audio/*,video/mp4,video/webm,video/quicktime,application/pdf,.txt,.md,.json,.csv,.ts,.tsx,.js,.jsx,.py,.java,.go,.rs,.html,.css,.xml,.yaml,.yml,.log"
             className="hidden"
             onChange={(event) => {
               onAddFiles(event.target.files);
@@ -86,9 +89,9 @@ export default function ChatComposer({
                 <div key={attachment.id} className="chat-inline-notice group relative flex max-w-full items-center gap-2 rounded-xl bg-muted/70 px-2 py-1.5 text-xs">
                   {attachment.kind === "image" && attachment.preview ? (
                     <img src={attachment.preview} alt={`Preview: ${attachment.name}`} className="size-9 rounded-lg object-cover" />
-                  ) : <FileTextLine className="ml-1 size-4 shrink-0 text-muted-foreground" />}
+                  ) : attachment.kind === "audio" ? <AudioLine className="ml-1 size-4 shrink-0 text-muted-foreground" /> : attachment.kind === "video" ? <VideoLine className="ml-1 size-4 shrink-0 text-muted-foreground" /> : attachment.kind === "file" ? <PdfLine className="ml-1 size-4 shrink-0 text-muted-foreground" /> : <FileTextLine className="ml-1 size-4 shrink-0 text-muted-foreground" />}
                   <span className="max-w-40 truncate font-medium">{attachment.name}</span>
-                  <span className="shrink-0 text-[10px] text-muted-foreground">{attachment.kind === "image" ? "Image" : "Text"}</span>
+                  <span className="shrink-0 text-[10px] text-muted-foreground">{attachment.kind === "image" ? "Image" : attachment.kind === "audio" ? "Audio" : attachment.kind === "video" ? "Video" : attachment.kind === "file" ? "PDF" : "Text"}</span>
                   <button
                     type="button"
                     className="inline-flex size-6 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-background hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -123,8 +126,8 @@ export default function ChatComposer({
                 className="rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={streaming}
-                title="Add images or files"
-                aria-label="Add images or files"
+                title="Add images, audio, video or files"
+                aria-label="Add images, audio, video or files"
               >
                 <AddLine className="size-[18px]" />
               </Button>

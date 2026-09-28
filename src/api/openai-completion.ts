@@ -95,6 +95,8 @@ export async function openAICompletionFromSse(
         typeof delta.content === "string" ||
         typeof delta.reasoning_content === "string" ||
         typeof delta.refusal === "string" ||
+        delta.audio !== undefined ||
+        delta.audio_transcript !== undefined ||
         Array.isArray(delta.tool_calls) ||
         delta.function_call;
       if (semantic) firstDeltaAt ??= now();
@@ -106,6 +108,18 @@ export async function openAICompletionFromSse(
       if (typeof delta.refusal === "string")
         choice.message.refusal =
           (choice.message.refusal ?? "") + delta.refusal;
+      if (delta.audio !== undefined) {
+        const audio = typeof delta.audio === "string" ? { data: delta.audio } : delta.audio;
+        choice.message.audio ??= { data: "", transcript: "" };
+        if (typeof audio.data === "string") choice.message.audio.data += audio.data;
+        if (typeof audio.transcript === "string") choice.message.audio.transcript += audio.transcript;
+        if (audio.format) choice.message.audio.format = audio.format;
+        if (audio.voice) choice.message.audio.voice = audio.voice;
+      }
+      if (typeof delta.audio_transcript === "string") {
+        choice.message.audio ??= { data: "", transcript: "" };
+        choice.message.audio.transcript += delta.audio_transcript;
+      }
       if (delta.function_call) {
         choice.message.function_call ??= { name: "", arguments: "" };
         if (delta.function_call.name)

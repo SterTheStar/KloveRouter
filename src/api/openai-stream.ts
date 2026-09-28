@@ -25,6 +25,8 @@ function hasSemanticDelta(chunk: any) {
     return Boolean(
       delta?.content ||
       delta?.reasoning_content ||
+      delta?.audio ||
+      delta?.audio_transcript ||
       delta?.refusal ||
       delta?.tool_calls?.length ||
       delta?.function_call?.name ||

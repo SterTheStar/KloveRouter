@@ -22,6 +22,8 @@ function anthropicContent(content: any): any {
         return [{ type: "image", source: { type: "url", url: source } }];
       return [];
     }
+    if (["input_audio", "audio_url", "video_url", "input_video", "file", "input_file"].includes(part?.type))
+      throw new Error(`Anthropic Messages does not support ${part.type} input through this adapter`);
     if (part?.type === "text") return [{ type: "text", text: part.text ?? "" }];
     return [part];
   });

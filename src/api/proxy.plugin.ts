@@ -711,6 +711,19 @@ export const proxyPlugin = (app: Elysia) =>
           set.status = 400;
           return { error: { message: error?.message ?? "Unsupported Responses request", type: "invalid_request_error", code: null } };
         }
+        const selectedParsedModel = typeof body.model === "string" ? parseModelName(body.model) : null;
+        const selectedProvider = selectedParsedModel ? providerService.findByName(selectedParsedModel.providerName) : null;
+        const selectedModel = selectedParsedModel && selectedProvider
+          ? modelService.findByPublicId(selectedProvider.id, selectedParsedModel.modelId)
+          : null;
+        if (selectedModel) {
+          try { validateModelRequest(chatBody, selectedModel); }
+          catch (error: any) {
+            if (!(error instanceof ModelRequestError) && !(error instanceof MultimodalRequestError)) throw error;
+            set.status = 400;
+            return { error: { message: error.message, type: "invalid_request_error", code: null } };
+          }
+        }
         const poolSlug = typeof body.model === "string" ? poolSlugFromModelId(body.model) : null;
         if (poolSlug) {
           const candidates = modelPoolService.routeCandidates(poolSlug);
@@ -719,6 +732,11 @@ export const proxyPlugin = (app: Elysia) =>
             return { error: { message: `Pool "${poolSlug}" is inactive or has no active members`, type: "server_error", code: "compound_model_unavailable" } };
           }
           const poolConfig = modelPoolService.findBySlug(poolSlug)!;
+          const incompatibility = validatePoolMemberCompatibility(candidates.map((candidate) => candidate.model), chatBody);
+          if (incompatibility) {
+            set.status = 400;
+            return { error: { message: incompatibility, type: "invalid_request_error", code: "unsupported_modality" } };
+          }
           const tokenLimitError = poolTokenLimitError(poolConfig, chatBody);
           if (tokenLimitError && tokenLimitError.startsWith("Estimated input")) {
             set.status = 400;

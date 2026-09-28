@@ -18,11 +18,13 @@ function statsEvent(input: Record<string, unknown>): string {
 function textFromContent(content: unknown): string {
   if (typeof content === "string") return content;
   if (!Array.isArray(content)) return "";
-  return content
-    .filter((part): part is { type: "text"; text?: unknown } => part?.type === "text")
-    .map((part) => typeof part.text === "string" ? part.text : "")
-    .join("\n")
-    .trim();
+  return content.map((part: any) => {
+    if (part?.type === "text" || part?.type === "input_text") return typeof part.text === "string" ? part.text : "";
+    if (["input_audio", "audio_url", "audio"].includes(part?.type)) return "[Audio attachment]";
+    if (["input_video", "video_url", "video"].includes(part?.type)) return "[Video attachment]";
+    if (["input_file", "file", "document"].includes(part?.type)) return `[File: ${part.filename ?? part.file?.filename ?? "attachment"}]`;
+    return "";
+  }).filter(Boolean).join("\n").trim();
 }
 
 export function withUsageStreamOptions<T extends Record<string, any>>(input: T): T & {
@@ -87,7 +89,7 @@ function chatStatsStream(
   let completionTokens = 0;
   let cacheReadTokens = 0;
   let cacheWriteTokens = 0;
-  let assistantContent = "";
+  let assistantContent: any = "";
   let assistantReasoning = "";
   let assistantError: string | null = null;
   let sawUsage = false;
@@ -125,7 +127,7 @@ function chatStatsStream(
     statsEmitted = true;
     if (!sawUsage) {
       promptTokens = countMessages(messages, { model });
-      completionTokens = countCompletion(assistantContent + assistantReasoning, { model });
+      completionTokens = countCompletion((typeof assistantContent === "string" ? assistantContent : "") + assistantReasoning, { model });
     }
     const durationMs = Math.round(performance.now() - start);
     const tps =
@@ -205,17 +207,27 @@ function chatStatsStream(
     }
     for (const choice of chunk?.choices ?? []) {
       const delta = choice?.delta;
-      if (delta?.tool_calls?.length || delta?.function_call || delta?.refusal) sawToolOrRefusalOutput = true;
+      if (delta?.tool_calls?.length || delta?.function_call || delta?.refusal || delta?.audio || delta?.audio_transcript) sawToolOrRefusalOutput = true;
       if (typeof delta?.content === "string") {
         // OpenAI-compatible streams contain incremental deltas. Trying to
         // infer cumulative chunks from matching text drops legitimate repeats
         // (for example "ha", "ha" becoming only "ha").
         const contentDelta = delta.content;
-        assistantContent += contentDelta;
+        if (typeof assistantContent !== "string") assistantContent.content = (assistantContent.content ?? "") + contentDelta;
+        else assistantContent += contentDelta;
       }
       if (typeof delta?.reasoning_content === "string") {
         const reasoningDelta = delta.reasoning_content;
         assistantReasoning += reasoningDelta;
+      }
+      if (delta?.audio !== undefined || delta?.audio_transcript !== undefined) {
+        if (typeof assistantContent === "string") assistantContent = { role: "assistant", content: "", audio: { data: "", transcript: "" } };
+        const audio = typeof delta.audio === "string" ? { data: delta.audio } : delta.audio ?? {};
+        if (typeof audio.data === "string") assistantContent.audio.data += audio.data;
+        if (typeof audio.transcript === "string") assistantContent.audio.transcript += audio.transcript;
+        if (typeof delta.audio_transcript === "string") assistantContent.audio.transcript += delta.audio_transcript;
+        if (audio.format) assistantContent.audio.format = audio.format;
+        if (audio.voice) assistantContent.audio.voice = audio.voice;
       }
     }
   };
@@ -239,7 +251,7 @@ function chatStatsStream(
               }
               if (raw === SSE_DONE) {
                 receivedDone = true;
-                if (!assistantContent.trim() && !assistantReasoning.trim() && !sawToolOrRefusalOutput && !assistantError) {
+                if (!(typeof assistantContent === "string" ? assistantContent : assistantContent.content ?? "").trim() && !assistantReasoning.trim() && !sawToolOrRefusalOutput && !assistantError) {
                   assistantError = "The model returned an empty response: no text, reasoning, tool call, or refusal was received.";
                 }
                 persistProgress(true);
@@ -274,7 +286,7 @@ function chatStatsStream(
               ? String(generationSignal.reason?.message ?? "Generation stopped by user. The partial response was saved.")
               : assistantError ?? "Chat stream ended before completion: the provider closed the stream without a [DONE] event.";
           }
-          else if (!assistantContent.trim() && !assistantReasoning.trim() && !sawToolOrRefusalOutput && !assistantError) {
+          else if (!(typeof assistantContent === "string" ? assistantContent : assistantContent.content ?? "").trim() && !assistantReasoning.trim() && !sawToolOrRefusalOutput && !assistantError) {
             assistantError = "The model returned an empty response: no text, reasoning, tool call, or refusal was received.";
           }
           persistProgress(true);
@@ -425,7 +437,7 @@ export const chatPlugin = (app: Elysia) =>
             .map((attachment: any) => typeof attachment?.name === "string" ? attachment.name : "")
             .filter(Boolean)
             .slice(0, 8);
-          titleMessage = names.length ? `Conversation about these files: ${names.join(", ")}` : "Conversation about an attached image";
+          titleMessage = names.length ? `Conversation about these files: ${names.join(", ")}` : "Conversation about attached media";
         }
         shouldGenerateTitle = Boolean(
           titleMessage && chatService.findById(chatId)?.title === "New chat",
@@ -537,7 +549,7 @@ export const chatControlPlugin = (app: Elysia) =>
       return new Response(new ReadableStream<Uint8Array>({
         async start(controller) {
           const encoder = new TextEncoder();
-          let content = typeof initial.content === "string" ? initial.content : "";
+          let content: any = initial.content ?? "";
           let reasoning = initial.reasoning ?? "";
           let lastError: string | null = null;
           let statsSent = false;
@@ -554,13 +566,19 @@ export const chatControlPlugin = (app: Elysia) =>
                 send({ error: { message: "Assistant response was deleted while generation was active" } });
                 break;
               }
-              const nextContent = typeof message.content === "string" ? message.content : "";
-              if (nextContent.startsWith(content) && nextContent.length > content.length) {
+              const nextContent: any = message.content ?? "";
+              if (typeof nextContent !== "string") {
+                if (JSON.stringify(nextContent) !== JSON.stringify(content)) send({ type: "klove_chat_snapshot", content: nextContent });
+                content = nextContent;
+              } else if (typeof content !== "string") {
+                if (nextContent !== (content.content ?? "")) send({ type: "klove_chat_snapshot", content: { ...content, content: nextContent } });
+                content = { ...content, content: nextContent };
+              } else if (nextContent.startsWith(content) && nextContent.length > content.length) {
                 send({ choices: [{ delta: { content: nextContent.slice(content.length) } }] });
               } else if (nextContent !== content) {
                 send({ type: "klove_chat_snapshot", content: nextContent });
               }
-              content = nextContent;
+              if (typeof nextContent === "string") content = nextContent;
               const nextReasoning = message.reasoning ?? "";
               if (nextReasoning.startsWith(reasoning) && nextReasoning.length > reasoning.length) {
                 send({ choices: [{ delta: { reasoning_content: nextReasoning.slice(reasoning.length) } }] });

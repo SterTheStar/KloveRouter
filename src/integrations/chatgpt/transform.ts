@@ -17,6 +17,24 @@ function chatGptPart(part: any): unknown {
       return { content_type: "image_url", image_url: { url, ...(image?.detail ? { detail: image.detail } : {}) } };
     }
   }
+  if (part?.type === "input_audio") {
+    const audio = part.input_audio ?? part;
+    if (typeof audio.data === "string" && typeof audio.format === "string")
+      return { content_type: "audio", audio: { data: audio.data, format: audio.format } };
+  }
+  if (part?.type === "video_url" || part?.type === "input_video") {
+    const video = part.video_url ?? part;
+    const url = typeof video === "string" ? video : video.url ?? video.image_url;
+    if (typeof url === "string" && /^https:\/\//i.test(url))
+      return { content_type: "video_url", video_url: { url, ...(video.timestamp ? { timestamp: video.timestamp } : {}) } };
+  }
+  if (part?.type === "file" || part?.type === "input_file") {
+    const file = part.file ?? part;
+    if (file.file_id) return { content_type: "file", file_id: file.file_id };
+    if (typeof file.file_data === "string") return { content_type: "file", file_data: file.file_data, ...(file.filename ? { filename: file.filename } : {}) };
+  }
+  if (["input_audio", "audio_url", "video_url", "input_video"].includes(part?.type))
+    throw new Error(`ChatGPT integration does not support ${part.type} content through this endpoint`);
   return null;
 }
 

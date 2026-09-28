@@ -65,6 +65,11 @@ export function parseRawModelMetadata(raw: any): ModelMetadataInput {
       ? architecture.modality.split(/[+>,/]/)
       : []),
   ].map((value) => String(value).toLowerCase());
+  const outputModalities = [
+    ...(Array.isArray(raw?.output_modalities) ? raw.output_modalities : []),
+    ...(Array.isArray(raw?.modalities?.output) ? raw.modalities.output : []),
+    ...(Array.isArray(architecture?.output_modalities) ? architecture.output_modalities : []),
+  ].map((value) => String(value).toLowerCase());
   const explicit = raw?.capabilities && typeof raw.capabilities === "object"
     ? raw.capabilities
     : {};
@@ -99,8 +104,11 @@ export function parseRawModelMetadata(raw: any): ModelMetadataInput {
         ((raw?.supports_parallel_tool_calls === true || typeof raw?.tool_mode === "string" ||
           (Array.isArray(raw?.experimental_supported_tools) && raw.experimental_supported_tools.length > 0)) ||
           supported(["tools", "tool_choice", "function_call"]))),
-      vision: capability("vision", boolean(raw?.supportsImages) ?? boolean(raw?.supportsVideo) ?? (inputModalities.length ? inputModalities.some((item) => item.includes("image")) : undefined)),
-      attachments: capability("attachments", boolean(raw?.supportsAttachments) ?? boolean(raw?.attachment) ?? (supportedMimeTypes.length ? supportedMimeTypes.some((item: string) => !item.startsWith("image/") && item !== "text/plain") : (inputModalities.length ? inputModalities.some((item) => item.includes("file")) : undefined))),
+      vision: capability("vision", boolean(raw?.supportsImages) ?? (inputModalities.length ? inputModalities.some((item) => item.includes("image")) : undefined)),
+      audio_input: capability("audio_input", boolean(raw?.supportsAudioInput) ?? (inputModalities.length ? inputModalities.some((item) => item.includes("audio") || item.includes("speech")) : undefined)),
+      audio_output: capability("audio_output", boolean(raw?.supportsAudioOutput) ?? (outputModalities.length ? outputModalities.some((item) => item.includes("audio") || item.includes("speech")) : undefined)),
+      video: capability("video", boolean(raw?.supportsVideo) ?? (inputModalities.length ? inputModalities.some((item) => item.includes("video")) : undefined)),
+      attachments: capability("attachments", boolean(raw?.supportsAttachments) ?? boolean(raw?.attachment) ?? (supportedMimeTypes.length ? supportedMimeTypes.some((item: string) => !item.startsWith("image/") && !item.startsWith("audio/") && !item.startsWith("video/") && item !== "text/plain") : (inputModalities.length ? inputModalities.some((item) => item.includes("file")) : undefined))),
       streaming: capability("streaming", boolean(raw?.supportsStreaming) ?? boolean(raw?.streaming) ?? boolean(raw?.supports_streaming)),
       non_streaming: capability("non_streaming", boolean(raw?.supportsNonStreaming) ?? boolean(raw?.non_streaming) ?? boolean(raw?.supports_non_streaming)),
     },
@@ -129,7 +137,7 @@ export function mergeMetadata(...sources: ModelMetadataInput[]): ModelMetadataIn
   const scalar = (key: "context_window" | "max_output_tokens") =>
     sources.find((source) => source[key] != null)?.[key];
   const capabilities = Object.fromEntries(
-    ["reasoning", "tools", "vision", "attachments", "streaming", "non_streaming"].map((key) => [
+    ["reasoning", "tools", "vision", "audio_input", "audio_output", "video", "attachments", "streaming", "non_streaming"].map((key) => [
       key,
       sources.find((source) => source.capabilities?.[key as keyof ModelCapabilities] !== undefined)
         ?.capabilities?.[key as keyof ModelCapabilities],

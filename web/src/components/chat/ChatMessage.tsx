@@ -9,6 +9,9 @@ import {
   RiEditLine as EditLine,
   RiDeleteBinLine as DeleteBinLine,
   RiCloseLine as CloseLine,
+  RiMusic2Line as AudioLine,
+  RiVideoLine as VideoLine,
+  RiFilePdf2Line as PdfLine,
 } from "@remixicon/react";
 import { Button } from "@/components/ui/button";
 import type { ChatMessage, ModelWithProvider } from "../../types";
@@ -16,6 +19,20 @@ import { classifyChatError } from "../../lib/chat-errors";
 import { formatDuration, formatTokens, formatTps } from "../../lib/chat";
 import { Markdown } from "./Markdown";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
+
+function AssistantAudio({ audio }: { audio: { data?: string; format?: string; transcript?: string } }) {
+  const [url, setUrl] = useState("");
+  useEffect(() => {
+    if (!audio.data) { setUrl(""); return; }
+    const mime = audio.format?.startsWith("audio/") ? audio.format : `audio/${audio.format ?? "mpeg"}`;
+    const binary = atob(audio.data);
+    const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+    const objectUrl = URL.createObjectURL(new Blob([bytes], { type: mime }));
+    setUrl(objectUrl);
+    return () => URL.revokeObjectURL(objectUrl);
+  }, [audio.data, audio.format]);
+  return <div className="mt-2 max-w-xl space-y-2">{url && <audio controls src={url} className="w-full" />}{audio.transcript && <p className="text-sm text-muted-foreground">{audio.transcript}</p>}</div>;
+}
 
 function formatModelNumber(value: number | null) {
   return value == null ? "—" : new Intl.NumberFormat().format(value);
@@ -60,6 +77,12 @@ function UserAttachments({
               alt=""
               className="size-5 shrink-0 rounded object-cover"
             />
+          ) : attachment.kind === "audio" ? (
+            <AudioLine className="size-4 shrink-0 text-muted-foreground" />
+          ) : attachment.kind === "video" ? (
+            <VideoLine className="size-4 shrink-0 text-muted-foreground" />
+          ) : attachment.kind === "file" ? (
+            <PdfLine className="size-4 shrink-0 text-muted-foreground" />
           ) : (
             <span className="flex size-5 shrink-0 items-center justify-center rounded bg-muted text-[8px] font-semibold text-muted-foreground">
               TXT
@@ -220,7 +243,6 @@ export default function ChatMessageView({
           .filter((part) => part.type === "text")
           .map((part) => part.text ?? "")
           .join("")
-          .replace(/\n\n\[Arquivo: [^\]]+\]\n[\s\S]*$/g, "")
           .trim()
       : message.content;
 
@@ -300,6 +322,8 @@ export default function ChatMessageView({
       ) : null}
       {typeof message.content === "string" && message.content ? (
         <Markdown content={message.content} streaming={streaming} />
+      ) : message.content && typeof message.content === "object" && (message.content as any).audio ? (
+        <><Markdown content={(message.content as any).content ?? ""} streaming={streaming} /><AssistantAudio audio={(message.content as any).audio} /></>
       ) : streaming ? (
         <div className="flex items-center gap-2 py-1 text-muted-foreground" role="status" aria-live="polite">
           <LoaderCircle className="size-4 animate-spin text-primary" />

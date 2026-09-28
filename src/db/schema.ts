@@ -57,6 +57,9 @@ export function initSchema(db: Database): void {
       reasoning INTEGER,
       tools INTEGER,
       vision INTEGER,
+      audio_input INTEGER,
+      audio_output INTEGER,
+      video INTEGER,
       attachments INTEGER,
       streaming INTEGER,
       non_streaming INTEGER,
@@ -362,6 +365,12 @@ export function initSchema(db: Database): void {
   if (!modelCols.find((c) => c.name === "updated_at")) {
     db.exec("ALTER TABLE models ADD COLUMN updated_at TEXT NOT NULL DEFAULT ''");
     db.exec("UPDATE models SET updated_at = created_at WHERE updated_at = ''");
+  }
+
+  const capabilityCols = db.query("PRAGMA table_info(model_capabilities)").all() as { name: string }[];
+  for (const [name, type] of [["audio_input", "INTEGER"], ["audio_output", "INTEGER"], ["video", "INTEGER"]] as const) {
+    if (!capabilityCols.some((column) => column.name === name))
+      db.exec(`ALTER TABLE model_capabilities ADD COLUMN ${name} ${type}`);
   }
 
   const chatMessageCols = db.query("PRAGMA table_info(chat_messages)").all() as {

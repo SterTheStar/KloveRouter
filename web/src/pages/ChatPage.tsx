@@ -22,10 +22,13 @@ import { useModelSelection } from "../hooks/use-model-selection";
 import { useChatMessages } from "../hooks/use-chat-messages";
 
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+const MAX_MEDIA_BYTES = 20 * 1024 * 1024;
 const MAX_TEXT_BYTES = 2 * 1024 * 1024;
 const MAX_ATTACHMENTS = 8;
 const TEXT_EXTENSIONS = /\.(txt|md|json|csv|ts|tsx|js|jsx|py|java|go|rs|html|css|xml|yaml|yml|log)$/i;
 const TEXT_MIME_TYPES = /^(text\/|application\/(json|javascript|xml|yaml)|image\/svg\+xml)/i;
+const AUDIO_MIME_TYPES = /^audio\/(mpeg|mp3|mp4|m4a|wav|webm|ogg|flac|aac|x-wav)$/i;
+const VIDEO_MIME_TYPES = /^video\/(mp4|webm|quicktime|mpeg|3gpp)$/i;
 
 export default function ChatPage({
   chatId,
@@ -145,11 +148,30 @@ export default function ChatPage({
         type: "image_url" as const,
         image_url: { url: attachment.preview! },
       }));
+    const audioParts = currentAttachments
+      .filter((attachment) => attachment.kind === "audio")
+      .map((attachment) => ({
+        type: "input_audio" as const,
+        input_audio: { data: attachment.data.split(",").at(-1) ?? attachment.data, format: attachment.mimeType.split("/").at(-1)?.replace("mpeg", "mp3") ?? "wav" },
+      }));
+    const videoParts = currentAttachments
+      .filter((attachment) => attachment.kind === "video")
+      .map((attachment) => ({
+        type: "input_video" as const,
+        video_url: { url: attachment.data },
+      }));
     return [
       ...(text || textAttachments
         ? [{ type: "text" as const, text: `${text}${textAttachments}`.trim() }]
         : []),
       ...imageParts,
+      ...audioParts,
+      ...videoParts,
+      ...currentAttachments.filter((attachment) => attachment.kind === "file").map((attachment) => ({
+        type: "input_file" as const,
+        file_data: attachment.data,
+        filename: attachment.name,
+      })),
     ];
   };
 
@@ -170,7 +192,10 @@ export default function ChatPage({
     for (const file of candidates) {
       const isImage = file.type.startsWith("image/");
       const isText = TEXT_MIME_TYPES.test(file.type) || TEXT_EXTENSIONS.test(file.name);
-      if (!isImage && !isText) {
+      const isAudio = AUDIO_MIME_TYPES.test(file.type);
+      const isVideo = VIDEO_MIME_TYPES.test(file.type);
+      const isFile = file.type === "application/pdf";
+      if (!isImage && !isText && !isAudio && !isVideo && !isFile) {
         notices.push(`${file.name}: unsupported file type.`);
         continue;
       }
@@ -182,12 +207,28 @@ export default function ChatPage({
         notices.push(`${file.name}: the selected model does not support file attachments.`);
         continue;
       }
+      if (isFile && selectedModelRecord?.capabilities?.attachments === false) {
+        notices.push(`${file.name}: the selected model does not support file attachments.`);
+        continue;
+      }
+      if (isAudio && selectedModelRecord?.capabilities?.audio_input === false) {
+        notices.push(`${file.name}: the selected model does not support audio input.`);
+        continue;
+      }
+      if (isVideo && selectedModelRecord?.capabilities?.video === false) {
+        notices.push(`${file.name}: the selected model does not support video input.`);
+        continue;
+      }
       if (isImage && file.size > MAX_IMAGE_BYTES) {
         notices.push(`${file.name}: image exceeds ${formatBytes(MAX_IMAGE_BYTES)}.`);
         continue;
       }
       if (isText && file.size > MAX_TEXT_BYTES) {
         notices.push(`${file.name}: file exceeds ${formatBytes(MAX_TEXT_BYTES)}.`);
+        continue;
+      }
+      if ((isAudio || isVideo) && file.size > MAX_MEDIA_BYTES) {
+        notices.push(`${file.name}: media exceeds ${formatBytes(MAX_MEDIA_BYTES)}.`);
         continue;
       }
       if (isImage) {
@@ -208,6 +249,25 @@ export default function ChatPage({
           mimeType: file.type,
           data,
           preview: data,
+        });
+      } else if (isAudio || isVideo || isFile) {
+        const data = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(String(reader.result ?? ""));
+          reader.onerror = () => reject(reader.error);
+          reader.readAsDataURL(file);
+        }).catch(() => "");
+        if (!data) {
+          notices.push(`${file.name}: could not read the file.`);
+          continue;
+        }
+        next.push({
+          id: crypto.randomUUID(),
+          name: file.name,
+          kind: isAudio ? "audio" : isVideo ? "video" : "file",
+          mimeType: file.type,
+          data,
+          preview: URL.createObjectURL(file),
         });
       } else {
         const text = await file.text().catch(() => null);

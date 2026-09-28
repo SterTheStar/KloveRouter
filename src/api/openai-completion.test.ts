@@ -43,6 +43,16 @@ describe("openAICompletionFromSse", () => {
     });
   });
 
+  test("aggregates audio output chunks and transcripts", async () => {
+    const events = [
+      { choices: [{ index: 0, delta: { audio: { data: "YWJj", format: "wav" } }, finish_reason: null }] },
+      { choices: [{ index: 0, delta: { audio_transcript: "spoken words" }, finish_reason: "stop" }] },
+    ];
+    const raw = `${events.map((event) => `data: ${JSON.stringify(event)}`).join("\n\n")}\n\ndata: [DONE]\n\n`;
+    const { completion } = await openAICompletionFromSse(response([raw]), "fallback");
+    expect(completion.choices[0].message.audio).toEqual({ data: "YWJj", format: "wav", transcript: "spoken words" });
+  });
+
   test("preserves cache details when a later usage chunk omits them", async () => {
     const first = {
       choices: [{ index: 0, delta: { content: "ok" }, finish_reason: null }],

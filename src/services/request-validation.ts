@@ -39,9 +39,14 @@ function textCharacters(value: unknown): number {
   return value.reduce((total, part) => {
     if (!part || typeof part !== "object") return total;
     const record = part as Record<string, unknown>;
+    const media = record.input_audio && typeof record.input_audio === "object"
+      ? String((record.input_audio as Record<string, unknown>).data ?? "").length
+      : typeof record.image_url === "string" ? record.image_url.length
+      : typeof record.video_url === "string" ? record.video_url.length
+      : 0;
     return total +
       (typeof record.text === "string" ? record.text.length : 0) +
-      (typeof record.content === "string" ? record.content.length : 0);
+      (typeof record.content === "string" ? record.content.length : 0) + media;
   }, 0);
 }
 

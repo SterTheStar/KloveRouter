@@ -208,9 +208,11 @@ export function useChatMessages({
       await readChatStream(response, {
         onContent: (delta) => updateMessage(targetChatId, assistantMessageId, (message) => ({
           ...message,
-          content: delta.startsWith("\u0000snapshot:")
-            ? delta.slice("\u0000snapshot:".length)
-            : (typeof message.content === "string" ? message.content : "") + delta,
+          content: typeof delta === "object" && delta?.__snapshot
+            ? delta.content
+            : typeof delta === "object" && delta?.__audio
+              ? { role: "assistant", content: typeof message.content === "string" ? message.content : message.content?.content ?? "", audio: { ...(message.content as any)?.audio, ...(typeof delta.__audio === "string" ? { data: ((message.content as any)?.audio?.data ?? "") + delta.__audio } : delta.__audio ?? {}), transcript: ((message.content as any)?.audio?.transcript ?? "") + (delta.transcript ?? "") } }
+              : typeof message.content === "string" ? message.content + delta : { ...(message.content as any), content: ((message.content as any)?.content ?? "") + delta },
         })),
         onReasoning: (delta) => updateMessage(targetChatId, assistantMessageId, (message) => ({
           ...message,
@@ -278,9 +280,11 @@ export function useChatMessages({
           onContent: (delta) =>
             updateMessage(targetChatId, assistantMessageId, (message) => ({
               ...message,
-              content: delta.startsWith("\u0000snapshot:")
-                ? delta.slice("\u0000snapshot:".length)
-                : (typeof message.content === "string" ? message.content : "") + delta,
+              content: typeof delta === "object" && delta?.__snapshot
+                ? delta.content
+                : typeof delta === "object" && delta?.__audio
+                  ? { role: "assistant", content: typeof message.content === "string" ? message.content : message.content?.content ?? "", audio: { ...(message.content as any)?.audio, ...(typeof delta.__audio === "string" ? { data: ((message.content as any)?.audio?.data ?? "") + delta.__audio } : delta.__audio ?? {}), transcript: ((message.content as any)?.audio?.transcript ?? "") + (delta.transcript ?? "") } }
+                  : typeof message.content === "string" ? message.content + delta : { ...(message.content as any), content: ((message.content as any)?.content ?? "") + delta },
             })),
           onReasoning: (delta) =>
             updateMessage(targetChatId, assistantMessageId, (message) => ({

@@ -39,6 +39,9 @@ export const capabilityKeys = [
   "reasoning",
   "tools",
   "vision",
+  "audio_input",
+  "audio_output",
+  "video",
   "attachments",
   "streaming",
   "non_streaming",
@@ -459,7 +462,7 @@ function seedMissingMetadata(modelId: string, input: ModelMetadataInput): void {
     .query("SELECT context_window, max_output_tokens FROM models WHERE id = ?")
     .get(modelId) as { context_window: number | null; max_output_tokens: number | null };
   const capabilities = db
-    .query("SELECT reasoning, tools, vision, attachments, streaming, non_streaming FROM model_capabilities WHERE model_id = ?")
+    .query("SELECT reasoning, tools, vision, audio_input, audio_output, video, attachments, streaming, non_streaming FROM model_capabilities WHERE model_id = ?")
     .get(modelId) as Record<(typeof capabilityKeys)[number], number | null> | null;
   const seededCapabilities = input.capabilities
     ? Object.fromEntries(
@@ -511,7 +514,7 @@ function hydrate(model: Model | null): Model | null {
   if (!model) return null;
   const db = getDb();
   const capabilities = db
-    .query("SELECT reasoning, tools, vision, attachments, streaming, non_streaming FROM model_capabilities WHERE model_id = ?")
+    .query("SELECT reasoning, tools, vision, audio_input, audio_output, video, attachments, streaming, non_streaming FROM model_capabilities WHERE model_id = ?")
     .get(model.id) as Record<(typeof capabilityKeys)[number], number | null> | null;
   const source = model.max_output_tokens_source ?? (model.is_manual ? "manual" : "api");
   const maxOutput = model.max_output_tokens ?? automaticMaxOutputTokens(model.context_window);

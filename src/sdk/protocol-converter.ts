@@ -31,6 +31,28 @@ function responseContentPart(part: any): any[] {
     const url = typeof image === "string" ? image : image?.url;
     return [{ type: "image_url", image_url: { url, ...(image?.detail ? { detail: image.detail } : {}) } }];
   }
+  if (part.type === "input_audio" || part.type === "audio_url") {
+    const audio = part.input_audio ?? part.audio_url ?? part;
+    const url = audio.url ?? part.url;
+    if (part.type === "audio_url" && typeof url === "string") {
+      const match = url.match(/^data:audio\/([\w.+-]+);base64,(.+)$/i);
+      if (!match) throw new Error("Audio URLs must be base64 data URLs when converting to Chat Completions");
+      return [{ type: "input_audio", input_audio: { data: match[2], format: match[1] } }];
+    }
+    return [{ type: "input_audio", input_audio: { data: audio.data, format: audio.format } }];
+  }
+  if (part.type === "video_url" || part.type === "input_video" || part.type === "video") {
+    const video = part.video_url ?? part;
+    const url = typeof video === "string" ? video : video.url ?? video.image_url;
+    if (typeof url !== "string" || !url) throw new Error("Video content requires a video URL or frame URL");
+    return [{ type: "input_video", video_url: { url, ...(video.timestamp ? { timestamp: video.timestamp } : {}) } }];
+  }
+  if (part.type === "file" || part.type === "input_file") {
+    const file = part.file ?? part;
+    if (file.file_data) return [{ type: "input_file", file_data: file.file_data, ...(file.filename ? { filename: file.filename } : {}) }];
+    if (file.file_id) return [{ type: "input_file", file_id: file.file_id }];
+    throw new Error("File parts require file_data or file_id");
+  }
   if (part.type === "refusal") return [{ type: "refusal", refusal: part.refusal ?? part.text ?? "" }];
   throw new Error(`Content part type "${part.type}" is not supported by the Chat Completions adapter`);
 }
@@ -44,6 +66,12 @@ function anthropicContentPart(part: any): any[] {
     if (source.type === "base64") return [{ type: "image_url", image_url: { url: `data:${source.media_type};base64,${source.data}` } }];
     if (source.type === "url") return [{ type: "image_url", image_url: { url: source.url } }];
   }
+  if (part.type === "audio") {
+    const source = part.source ?? {};
+    if (source.type === "base64") return [{ type: "input_audio", input_audio: { data: source.data, format: String(source.media_type ?? "audio/wav").split("/").at(-1) } }];
+    if (source.type === "url") return responseContentPart({ type: "audio_url", audio_url: { url: source.url } });
+  }
+  if (part.type === "video") return responseContentPart({ type: "input_video", video_url: part.video_url ?? part.url ?? part.source?.url });
   if (part.type === "tool_use") return [{
     type: "__tool_use",
     id: part.id,
@@ -61,6 +89,8 @@ function anthropicContentPart(part: any): any[] {
   if (part.type === "thinking" || part.type === "redacted_thinking")
     return [{ type: "__reasoning", text: part.thinking ?? "", data: part.data }];
   if (part.type === "image_url" || part.type === "input_image") return responseContentPart(part);
+  if (part.type === "input_audio" || part.type === "audio_url" || part.type === "video_url" || part.type === "input_video" || part.type === "video" || part.type === "file" || part.type === "input_file")
+    throw new Error(`Anthropic Messages does not support ${part.type} input through this adapter`);
   throw new Error(`Anthropic content block type "${part.type}" cannot be converted to Chat Completions`);
 }
 
@@ -165,7 +195,7 @@ function inputToMessages(input: any, instructions?: string): any[] {
       const content = Array.isArray(item.content) ? item.content.flatMap(responseContentPart) : item.content ?? "";
       if (item.role === "system" && instructions !== undefined && content === instructions) foundInstructions = true;
       messages.push({ role: item.role, content });
-    } else if (["input_text", "input_image", "image_url"].includes(item.type)) {
+    } else if (["input_text", "input_image", "image_url", "input_audio", "audio_url", "video_url", "input_video", "video", "file", "input_file"].includes(item.type)) {
       messages.push({ role: "user", content: [item].flatMap(responseContentPart) });
     } else if (item.type) {
       throw new Error(`Responses input item type "${item.type}" cannot be converted to Chat Completions`);
@@ -197,6 +227,7 @@ function anthropicInputToMessages(body: AnyRecord): any[] {
       if (block.type === "__tool_use") calls.push({ id: block.id, type: "function", function: { name: block.name, arguments: JSON.stringify(block.input ?? {}) } });
       else if (block.type === "__tool_result") results.push({ role: "tool", tool_call_id: block.tool_call_id, content: block.content, ...(block.is_error ? { is_error: true } : {}) });
       else if (block.type === "__reasoning") thoughts.push(block.text ?? "");
+      else if (block.type === "input_audio") normal.push({ type: "input_audio", input_audio: block.input_audio });
       else normal.push(block);
     }
     if (message.role === "assistant") {
@@ -249,6 +280,8 @@ export function requestToChat(from: Protocol, body: unknown): AnyRecord {
       ...(source.effort !== undefined ? { effort: source.effort } : {}),
       ...(source.metadata !== undefined ? { metadata: source.metadata } : {}),
       ...(source.service_tier !== undefined ? { service_tier: source.service_tier } : {}),
+      ...(source.modalities !== undefined ? { modalities: source.modalities } : {}),
+      ...(source.audio !== undefined ? { audio: source.audio } : {}),
       ...(source.store !== undefined ? { store: source.store } : {}),
       ...(source.user !== undefined ? { user: source.user } : {}),
       ...(source.prompt_cache_key !== undefined ? { prompt_cache_key: source.prompt_cache_key } : {}),
@@ -313,7 +346,7 @@ function chatMessagesToResponses(messages: any[]) {
     if (message.role === "assistant" && message.reasoning_content) input.push({ type: "reasoning", summary: [{ type: "summary_text", text: message.reasoning_content }] });
     if (message.role === "assistant" && message.refusal) input.push({ type: "message", role: "assistant", content: [{ type: "refusal", refusal: message.refusal }] });
     if (message.content != null && message.content !== "") {
-      const content = typeof message.content === "string" ? [{ type: message.role === "assistant" ? "output_text" : "input_text", text: message.content }] : message.content.flatMap(responseContentPart).map((part: any) => part.type === "text" ? { type: message.role === "assistant" ? "output_text" : "input_text", text: part.text } : part.type === "image_url" ? { type: "input_image", image_url: part.image_url } : part);
+      const content = typeof message.content === "string" ? [{ type: message.role === "assistant" ? "output_text" : "input_text", text: message.content }] : message.content.flatMap(responseContentPart).map((part: any) => part.type === "text" ? { type: message.role === "assistant" ? "output_text" : "input_text", text: part.text } : part.type === "image_url" ? { type: "input_image", image_url: part.image_url } : part.type === "file" ? { ...part, type: "input_file", ...(part.file ?? {}) } : part);
       input.push({ type: "message", role: message.role, content });
     }
     for (const call of message.tool_calls ?? []) input.push({ type: "function_call", call_id: call.id, name: call.function?.name, arguments: call.function?.arguments ?? "{}" });
@@ -351,6 +384,8 @@ export function requestFromChat(to: Protocol, body: unknown): AnyRecord {
       ...(source.metadata !== undefined ? { metadata: source.metadata } : {}),
       ...(source.store !== undefined ? { store: source.store } : {}),
       ...(source.service_tier !== undefined ? { service_tier: source.service_tier } : {}),
+      ...(source.modalities !== undefined ? { output_modalities: source.modalities } : {}),
+      ...(source.audio !== undefined ? { audio: source.audio } : {}),
       ...(source.user !== undefined ? { user: source.user } : {}),
       stream: source.stream ?? false,
     };
@@ -376,7 +411,9 @@ export function requestFromChat(to: Protocol, body: unknown): AnyRecord {
         const url = typeof part.image_url === "string" ? part.image_url : part.image_url?.url;
         const match = typeof url === "string" ? url.match(/^data:(image\/[\w.+-]+);base64,(.+)$/i) : null;
         content.push(match ? { type: "image", source: { type: "base64", media_type: match[1], data: match[2] } } : { type: "image", source: { type: "url", url } });
-      } else throw new Error(`Chat Completions content part type "${part.type}" cannot be converted to Anthropic Messages`);
+      } else if (["input_audio", "audio_url", "audio", "video_url", "input_video", "video", "file", "input_file"].includes(part.type))
+        throw new Error(`Chat Completions ${part.type} content cannot be represented by Anthropic Messages without losing media data`);
+      else throw new Error(`Chat Completions content part type "${part.type}" cannot be converted to Anthropic Messages`);
     }
     for (const call of message.tool_calls ?? []) {
       let input: any = call.function?.arguments ?? "{}";
@@ -445,6 +482,7 @@ export function chatCompletionToAnthropic(completion: AnyRecord) {
     throw new Error("Anthropic Messages supports one completion choice; Chat Completions n > 1 is not representable");
   const choice = completion.choices?.[0] ?? {};
   const message = choice.message ?? {};
+  if (message.audio) throw new Error("Audio output cannot be represented by Anthropic Messages");
   const content: any[] = [];
   if (message.reasoning_content || message.reasoning) throw new Error("Chat Completions reasoning content cannot be converted into Anthropic thinking without a provider-issued signature");
   const responseText = typeof message.content === "string" ? message.content : "";
@@ -488,6 +526,16 @@ export function chatCompletionToResponse(completion: AnyRecord) {
   const message = choice.message ?? {};
   const id = responseId(completion.id);
   const output: any[] = [];
+  if (message.audio) {
+    const audio = message.audio;
+    output.push({
+      id: `msg_${id.slice(5)}_audio`,
+      type: "message",
+      status: "completed",
+      role: "assistant",
+      content: [{ type: "output_audio", data: audio.data ?? "", transcript: audio.transcript ?? "", ...(audio.format ? { format: audio.format } : {}) }],
+    });
+  }
   if (message.reasoning_content || message.reasoning) output.push({ id: `rs_${id.slice(5)}_reasoning`, type: "reasoning", summary: [{ type: "summary_text", text: message.reasoning_content ?? message.reasoning }] });
   if (typeof message.content === "string" && message.content && !message.refusal) output.push({ id: `msg_${id.slice(5)}_message`, type: "message", status: "completed", role: "assistant", content: [{ type: "output_text", text: message.content, annotations: [] }] });
   else if (typeof message.content === "string" && message.content && message.refusal) output.push({ id: `msg_${id.slice(5)}_message`, type: "message", status: "completed", role: "assistant", content: [{ type: "refusal", refusal: message.refusal }, ...(message.content.startsWith(message.refusal) && message.content.length > message.refusal.length ? [{ type: "output_text", text: message.content.slice(message.refusal.length), annotations: [] }] : [])] });
@@ -610,10 +658,14 @@ function responseToChatCompletion(response: AnyRecord) {
   const message: AnyRecord = { role: "assistant", content: "" };
   const tools: any[] = [];
   const reasoning: string[] = [];
+  let audio: AnyRecord | undefined;
   let refusal = "";
   for (const item of response.output ?? []) {
     if (item.type === "message") {
       const text = (item.content ?? []).filter((part: any) => part.type === "output_text" || part.type === "text").map((part: any) => part.text ?? "").join("");
+      const audioPart = (item.content ?? []).find((part: any) => part.type === "output_audio");
+      if (audioPart) audio = { data: audioPart.data ?? "", transcript: audioPart.transcript ?? "", ...(audioPart.format ? { format: audioPart.format } : {}) };
+      if (!audioPart && (item.content ?? []).some((part: any) => part.type === "output_audio")) throw new Error("Responses audio output item is malformed");
       const refusalText = (item.content ?? []).filter((part: any) => part.type === "refusal").map((part: any) => part.refusal ?? "").join("");
       message.content += text;
       if (refusalText) {
@@ -622,12 +674,20 @@ function responseToChatCompletion(response: AnyRecord) {
       }
     }
     else if (item.type === "reasoning") reasoning.push((item.summary ?? []).map((part: any) => part.text ?? "").join(""));
+    else if (item.type === "message" && (item.content ?? []).some((part: any) => ["input_image", "output_audio", "refusal"].includes(part.type))) {
+      const parts = item.content ?? [];
+      const image = parts.find((part: any) => part.type === "input_image");
+      const audioPart = parts.find((part: any) => part.type === "output_audio");
+      if (image) message.content = [{ type: "image_url", image_url: image.image_url }];
+      if (audioPart) message.audio = { data: audioPart.data ?? "", transcript: audioPart.transcript ?? "", ...(audioPart.format ? { format: audioPart.format } : {}) };
+    }
     else if (item.type === "function_call") tools.push({ id: item.call_id ?? item.id, type: "function", function: { name: item.name, arguments: item.arguments ?? "{}" } });
     else if (["computer_call", "web_search_call", "code_interpreter_call"].includes(item.type))
       throw new Error(`Responses output item type "${item.type}" cannot be represented as a Chat Completion`);
   }
   if (!message.content) message.content = null;
   if (reasoning.length) message.reasoning_content = reasoning.join("");
+  if (audio) message.audio = audio;
   if (tools.length) message.tool_calls = tools;
   const usage = response.usage;
   return { id: response.id, object: "chat.completion", created: response.created_at, model: response.model, choices: [{ index: 0, message, finish_reason: response.status === "incomplete" ? "length" : tools.length ? "tool_calls" : "stop" }], ...(usage ? { usage: { prompt_tokens: usage.input_tokens ?? 0, completion_tokens: usage.output_tokens ?? 0, total_tokens: usage.total_tokens ?? (usage.input_tokens ?? 0) + (usage.output_tokens ?? 0), prompt_tokens_details: usage.input_tokens_details } } : {}) };
@@ -649,6 +709,11 @@ export function chatSseToResponses(response: Response, model: string, onCancel?:
   let finishReason: string | null = null;
   let message: any;
   let messageIndex = -1;
+  let audioMessage: AnyRecord | undefined;
+  let audioMessageIndex = -1;
+  let audioPart: AnyRecord | undefined;
+  let audioData = "";
+  let audioTranscript = "";
   const calls = new Map<number, { index: number; item: AnyRecord }>();
   const output: any[] = [];
   const emit = (type: string, payload: AnyRecord = {}) => encoder.encode(`event: ${type}\ndata: ${JSON.stringify({ type, sequence_number: sequence++, ...payload })}\n\n`);
@@ -663,12 +728,52 @@ export function chatSseToResponses(response: Response, model: string, onCancel?:
         controller.enqueue(emit("response.content_part.added", { item_id: message.id, output_index: messageIndex, content_index: 0, part: { type: "output_text", text: "", annotations: [] } }));
         return message;
       };
+      const addAudioPart = () => {
+        if (audioPart) return audioPart;
+        if (!audioMessage) {
+          audioMessage = { id: `msg_${id.slice(5)}_audio`, type: "message", status: "in_progress", role: "assistant", content: [] };
+          audioMessageIndex = output.length;
+          output.push(audioMessage);
+          controller.enqueue(emit("response.output_item.added", { output_index: audioMessageIndex, item: audioMessage }));
+        }
+        audioPart = { type: "output_audio", data: "", transcript: "" };
+        audioMessage.content.push(audioPart);
+        controller.enqueue(emit("response.content_part.added", { item_id: audioMessage.id, output_index: audioMessageIndex, content_index: 0, part: audioPart }));
+        return audioPart;
+      };
       const process = (raw: string) => {
         if (!raw || raw === "[DONE]") return;
         const chunk = JSON.parse(raw);
         if (chunk.error) { error = chunk.error; controller.enqueue(emit("error", { error })); return; }
         usage = chunk.usage ?? usage;
         const delta = chunk.choices?.[0]?.delta ?? {};
+        if (delta.audio) {
+          const audio = addAudioPart();
+          const audioDelta = typeof delta.audio === "string" ? delta.audio : delta.audio.data;
+          if (typeof audioDelta === "string" && audioDelta) {
+            audioData += audioDelta;
+            audio.data = audioData;
+            controller.enqueue(emit("response.output_audio.delta", { item_id: audioMessage!.id, output_index: audioMessageIndex, content_index: 0, delta: audioDelta }));
+          }
+          if (typeof delta.audio.transcript === "string" && delta.audio.transcript) {
+            audioTranscript += delta.audio.transcript;
+            audio.transcript = audioTranscript;
+            controller.enqueue(emit("response.output_audio_transcript.delta", { item_id: audioMessage!.id, output_index: audioMessageIndex, content_index: 0, delta: delta.audio.transcript }));
+          }
+          if (delta.audio.format) audio.format = delta.audio.format;
+        }
+        if (typeof delta.audio_transcript === "string" && delta.audio_transcript) {
+          const audio = addAudioPart();
+          audioTranscript += delta.audio_transcript;
+          audio.transcript = audioTranscript;
+          controller.enqueue(emit("response.output_audio_transcript.delta", { item_id: audioMessage!.id, output_index: audioMessageIndex, content_index: 0, delta: delta.audio_transcript }));
+        }
+        if (typeof delta.audio === "string" && delta.audio) {
+          const audio = addAudioPart();
+          audioData += delta.audio;
+          audio.data = audioData;
+          controller.enqueue(emit("response.output_audio.delta", { item_id: audioMessage!.id, output_index: audioMessageIndex, content_index: 0, delta: delta.audio }));
+        }
         const reasoningDelta = delta.reasoning_content ?? delta.reasoning;
         if (typeof reasoningDelta === "string" && reasoningDelta) {
           if (!reasoningRecord) {
@@ -722,6 +827,13 @@ export function chatSseToResponses(response: Response, model: string, onCancel?:
         } else {
           for (const [sourceIndex, call] of calls) { call.item.status = "completed"; controller.enqueue(emit("response.function_call_arguments.done", { item_id: call.item.id, output_index: call.index, arguments: call.item.arguments })); controller.enqueue(emit("response.output_item.done", { output_index: call.index, item: call.item })); void sourceIndex; }
           if (message) { const part = { type: "output_text", text: content, annotations: [] }; message.content = [part]; message.status = "completed"; controller.enqueue(emit("response.output_text.done", { item_id: message.id, output_index: messageIndex, content_index: 0, text: content })); controller.enqueue(emit("response.content_part.done", { item_id: message.id, output_index: messageIndex, content_index: 0, part })); controller.enqueue(emit("response.output_item.done", { output_index: messageIndex, item: message })); }
+          if (audioMessage && audioPart) {
+            audioMessage.status = "completed";
+            controller.enqueue(emit("response.output_audio.done", { item_id: audioMessage.id, output_index: audioMessageIndex, content_index: 0, audio: audioData }));
+            if (audioTranscript) controller.enqueue(emit("response.output_audio_transcript.done", { item_id: audioMessage.id, output_index: audioMessageIndex, content_index: 0, transcript: audioTranscript }));
+            controller.enqueue(emit("response.content_part.done", { item_id: audioMessage.id, output_index: audioMessageIndex, content_index: 0, part: audioPart }));
+            controller.enqueue(emit("response.output_item.done", { output_index: audioMessageIndex, item: audioMessage }));
+          }
           if (reasoningRecord) { const part = { type: "summary_text", text: reasoning }; reasoningRecord.item.summary = [part]; reasoningRecord.item.status = "completed"; controller.enqueue(emit("response.reasoning_summary_text.done", { item_id: reasoningRecord.item.id, output_index: reasoningRecord.index, summary_index: 0, text: reasoning })); controller.enqueue(emit("response.reasoning_summary_part.done", { item_id: reasoningRecord.item.id, output_index: reasoningRecord.index, summary_index: 0, part })); controller.enqueue(emit("response.output_item.done", { output_index: reasoningRecord.index, item: reasoningRecord.item })); }
           responseObject.status = finishReason === "length" ? "incomplete" : "completed";
           if (finishReason === "length") responseObject.incomplete_details = { reason: "max_output_tokens" };
@@ -925,15 +1037,18 @@ export function responsesSseToChat(response: Response, model: string, onCancel?:
         const type = event.type ?? parsed.event;
         if (type === "response.output_item.added" && event.item?.type === "reasoning")
           throw new Error("Responses reasoning cannot be converted to Chat Completions without losing signed reasoning semantics");
+        const itemContainsAudio = event.item?.type === "message" && event.item?.content?.some((part: any) => part.type === "output_audio");
         if (type === "response.output_item.added" && event.item?.type !== "message" && event.item?.type !== "function_call")
           throw new Error(`Responses output item type "${event.item?.type}" cannot be represented as a Chat Completion`);
         if (type === "response.created") { id = (event.response?.id ?? id).replace(/^resp_/, "chatcmpl-"); created = event.response?.created_at ?? created; emit({ choices: [{ index: 0, delta: { role: "assistant" }, finish_reason: null }] }); }
         else if (type === "response.output_item.added" && event.item?.type === "function_call") { sawToolCall = true; const index = nextTool++; calls.set(event.output_index, index); emit({ choices: [{ index: 0, delta: { tool_calls: [{ index, id: event.item.call_id ?? event.item.id, type: "function", function: { name: event.item.name ?? "", arguments: "" } }] }, finish_reason: null }] }); }
         else if (type === "response.output_text.delta") emit({ choices: [{ index: 0, delta: { content: event.delta ?? "" }, finish_reason: null }] });
+        else if (type === "response.output_audio.delta") emit({ choices: [{ index: 0, delta: { audio: event.delta ?? "" }, finish_reason: null }] });
+        else if (type === "response.output_audio_transcript.delta") emit({ choices: [{ index: 0, delta: { audio_transcript: event.delta ?? "" }, finish_reason: null }] });
         else if (type === "response.reasoning_summary_text.delta") throw new Error("Responses reasoning cannot be converted to Chat Completions without losing signed reasoning semantics");
         else if (type === "response.refusal.delta") emit({ choices: [{ index: 0, delta: { refusal: event.delta ?? "" }, finish_reason: null }] });
         else if (type === "response.function_call_arguments.delta") emit({ choices: [{ index: 0, delta: { tool_calls: [{ index: calls.get(event.output_index) ?? 0, function: { arguments: event.delta ?? "" } }] }, finish_reason: null }] });
-        else if (type.endsWith(".delta") && /audio|image|video|code_interpreter|computer_call|web_search/.test(type))
+        else if (type.endsWith(".delta") && /image|video|code_interpreter|computer_call|web_search/.test(type))
           throw new Error(`Responses stream event "${type}" cannot be represented as a Chat Completion`);
         else if (type === "response.completed" || type === "response.incomplete") { sawTerminal = true; incomplete = type === "response.incomplete" || event.response?.status === "incomplete"; const usage = event.response?.usage; emit({ choices: [{ index: 0, delta: {}, finish_reason: incomplete ? "length" : sawToolCall ? "tool_calls" : finishReason }], ...(usage ? { usage: { prompt_tokens: usage.input_tokens ?? 0, completion_tokens: usage.output_tokens ?? 0, total_tokens: usage.total_tokens ?? 0, prompt_tokens_details: usage.input_tokens_details } } : {}) }); controller.enqueue(encoder.encode("data: [DONE]\n\n")); ended = true; }
         else if (type === "response.failed" || type === "error") { sawTerminal = true; emit({ error: event.error ?? event.response?.error ?? { message: "Responses stream failed" } }); controller.enqueue(encoder.encode("data: [DONE]\n\n")); ended = true; }

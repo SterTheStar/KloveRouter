@@ -1,5 +1,5 @@
 import { logger } from "../../logger";
-import { resolveImageData, openAIImageUrl } from "../../services/multimodal";
+import { resolveImageData, openAIImageUrl, audioSource } from "../../services/multimodal";
 
 function modelId(model: string) {
   return model.toLowerCase().replace(/^antigravity-/, "");
@@ -44,6 +44,28 @@ async function contentParts(content: any) {
           ? [{ inlineData: { mimeType: image.mimeType, data: image.data } }]
           : [];
       }
+      if (p?.type === "input_audio") {
+        const audio = audioSource(p);
+        if (!audio) throw new Error("Antigravity audio input requires base64 data and an audio format");
+        return [{ inlineData: { mimeType: `audio/${audio.format === "mp3" ? "mpeg" : audio.format}`, data: audio.data } }];
+      }
+      if (p?.type === "video_url" || p?.type === "input_video") {
+        const video = p.video_url ?? p;
+        const source = typeof video === "string" ? video : video.url ?? video.image_url;
+        const media = typeof source === "string" ? await resolveImageData(source) : null;
+        if (!media || !media.mimeType.startsWith("video/"))
+          throw new Error("Antigravity video input requires a reachable HTTPS video URL");
+        return [{ inlineData: { mimeType: media.mimeType, data: media.data } }];
+      }
+      if (p?.type === "input_file" || p?.type === "file") {
+        const file = p.file ?? p;
+        if (typeof file.file_data !== "string") throw new Error("Antigravity file input requires a data URL");
+        const media = await resolveImageData(file.file_data);
+        if (!media) throw new Error("Antigravity could not resolve file data");
+        return [{ inlineData: { mimeType: media.mimeType, data: media.data } }];
+      }
+      if (["file", "input_file"].includes(p?.type))
+        throw new Error("Antigravity file attachments must be supplied as supported media parts");
       return [];
     }))).flat();
   const text = textValue(content);

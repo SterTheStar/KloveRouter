@@ -74,6 +74,31 @@ describe("protocol conversion SDK", () => {
     expect(body.stream).toBe(true);
   });
 
+  test("preserves image, audio, video, and file parts through Responses conversion", () => {
+    const converted = requestFromChat("responses", {
+      model: "model",
+      messages: [{ role: "user", content: [
+        { type: "input_audio", input_audio: { data: "YWJj", format: "wav" } },
+        { type: "input_video", video_url: { url: "https://example.com/video.mp4" } },
+        { type: "input_file", file_id: "file-1" },
+      ] }],
+      stream: false,
+    });
+    expect(converted.input[0].content).toEqual([
+      { type: "input_audio", input_audio: { data: "YWJj", format: "wav" } },
+      { type: "input_video", video_url: { url: "https://example.com/video.mp4" } },
+      { type: "input_file", file_id: "file-1" },
+    ]);
+  });
+
+  test("returns a clear error instead of silently discarding audio for Anthropic", () => {
+    expect(() => requestFromChat("anthropic", {
+      model: "model",
+      messages: [{ role: "user", content: [{ type: "input_audio", input_audio: { data: "YWJj", format: "wav" } }] }],
+      max_tokens: 100,
+    })).toThrow("cannot be represented by Anthropic Messages");
+  });
+
   test("rewrites upstream response model IDs in Responses streams without changing event semantics", async () => {
     const stream = await rewriteResponsesStreamModel(new Response([
       'event: response.created\ndata: {"type":"response.created","response":{"id":"resp_1","model":"upstream-name"}}\n\n',

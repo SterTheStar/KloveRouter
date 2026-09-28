@@ -184,6 +184,15 @@ describe("model pool routing", () => {
     expect(validatePoolMemberCompatibility(members.slice(1), { stream: true, tools: [{ type: "function" }] })).toContain("No active member supports tools");
   });
 
+  test("requires audio and video capable members when those inputs are present", () => {
+    const members: any[] = [
+      { capabilities: { audio_input: false, video: false, vision: true, tools: true } },
+      { capabilities: { audio_input: false, video: false, vision: true, tools: true } },
+    ];
+    expect(validatePoolMemberCompatibility(members, { messages: [{ role: "user", content: [{ type: "input_audio", input_audio: { data: "YWJj", format: "wav" } }] }] })).toContain("No active member supports audio input");
+    expect(validatePoolMemberCompatibility(members, { messages: [{ role: "user", content: [{ type: "video_url", video_url: { url: "https://example.com/clip.mp4" } }] }] })).toContain("No active member supports video input");
+  });
+
   test("retries with the next priority model after a retryable upstream failure", async () => {
     modelPoolService.create(input());
     const attempted: string[] = [];

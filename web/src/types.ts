@@ -61,6 +61,9 @@ export interface ModelCapabilities {
   reasoning: boolean | null;
   tools: boolean | null;
   vision: boolean | null;
+  audio_input: boolean | null;
+  audio_output: boolean | null;
+  video: boolean | null;
   attachments: boolean | null;
   streaming: boolean | null;
   non_streaming: boolean | null;
@@ -381,15 +384,20 @@ export interface ChatStats {
 }
 
 export interface ChatContentPart {
-  type: "text" | "image_url";
+  type: "text" | "image_url" | "input_audio" | "input_video" | "input_file";
   text?: string;
-  image_url?: { url: string };
+  image_url?: { url: string; detail?: string };
+  input_audio?: { data: string; format: string };
+  video_url?: { url: string };
+  file_data?: string;
+  file_id?: string;
+  filename?: string;
 }
 
 export interface ChatAttachmentPreview {
   id: string;
   name: string;
-  kind: "image" | "text";
+  kind: "image" | "text" | "audio" | "video" | "file";
   mimeType: string;
   data: string;
   preview?: string;

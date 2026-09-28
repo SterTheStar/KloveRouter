@@ -78,6 +78,7 @@ describe("model metadata resolver", () => {
       input_token_limit: "1048576",
       output_token_limit: 65_536,
       modalities: { input: ["text", "image", "file"] },
+      output_modalities: ["text", "audio"],
       tool_call: true,
       capabilities: { reasoning: true },
       reasoning: { efforts: ["low", "medium", "high"], default_effort: "high" },
@@ -87,6 +88,7 @@ describe("model metadata resolver", () => {
     expect(parsed.capabilities).toEqual(expect.objectContaining({
       tools: true,
       vision: true,
+      audio_output: true,
       attachments: true,
     }));
     expect(parsed.reasoning_efforts?.find((effort) => effort.is_default)?.effort).toBe("high");

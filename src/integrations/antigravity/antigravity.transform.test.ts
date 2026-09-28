@@ -107,6 +107,18 @@ describe("toGoogleBody", () => {
     ]);
   });
 
+  test("converts audio content parts to Gemini inline data", async () => {
+    const transformed = await toGoogleBody({
+      model: "gemini-test",
+      messages: [{ role: "user", content: [
+        { type: "input_audio", input_audio: { data: "YWJj", format: "wav" } },
+      ] }],
+    }, "project");
+    expect(transformed.request.contents[0].parts).toEqual([
+      { inlineData: { mimeType: "audio/wav", data: "YWJj" } },
+    ]);
+  });
+
   test("explicit effort beats model suffix and none disables thoughts", async () => {
     const body = {
       model: "gemini-3.6-flash-high",

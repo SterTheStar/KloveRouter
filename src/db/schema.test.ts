@@ -19,6 +19,17 @@ describe("model timestamps", () => {
     db.close();
   });
 
+  test("adds input/output audio and video capabilities to an existing model capabilities table", () => {
+    const db = new Database(":memory:");
+    db.exec("CREATE TABLE model_capabilities (model_id TEXT PRIMARY KEY, reasoning INTEGER, tools INTEGER, vision INTEGER, attachments INTEGER, streaming INTEGER, non_streaming INTEGER);");
+    initSchema(db);
+    const columns = db.query("PRAGMA table_info(model_capabilities)").all() as Array<{ name: string }>;
+    expect(columns.map((column) => column.name)).toContain("audio_input");
+    expect(columns.map((column) => column.name)).toContain("audio_output");
+    expect(columns.map((column) => column.name)).toContain("video");
+    db.close();
+  });
+
   test("adds updated_at to an existing models table without changing created_at", () => {
     const db = new Database(":memory:");
     db.exec(`

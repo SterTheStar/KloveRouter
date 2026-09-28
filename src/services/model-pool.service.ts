@@ -57,7 +57,8 @@ export function validatePoolMemberCompatibility(
   members: ModelWithProvider[],
   body: { stream?: boolean; tools?: unknown; messages?: any[]; reasoning_effort?: string },
 ) {
-  if (body.messages?.some((message) => Array.isArray(message?.content) && message.content.some((part: any) => part?.type === "file" || part?.type === "input_file"))) {
+  const contentParts = body.messages?.flatMap((message) => Array.isArray(message?.content) ? message.content : [] ) ?? [];
+  if (contentParts.some((part: any) => part?.type === "file" || part?.type === "input_file")) {
     if (members.every((model) => model.capabilities?.attachments === false)) return "No active member supports file attachments";
   }
   if (body.stream === true && members.every((model) => model.capabilities?.streaming === false)) {
@@ -66,14 +67,20 @@ export function validatePoolMemberCompatibility(
   if (Array.isArray(body.tools) && body.tools.length && members.every((model) => model.capabilities?.tools === false)) {
     return "No active member supports tools required by this request";
   }
-  const hasImage = body.messages?.some((message) => Array.isArray(message?.content) && message.content.some((part: any) => part?.type === "image_url" || part?.type === "input_image"));
+  const hasImage = contentParts.some((part: any) => ["image_url", "input_image", "image"].includes(part?.type));
+  const hasAudio = contentParts.some((part: any) => ["input_audio", "audio_url", "audio"].includes(part?.type));
+  const hasVideo = contentParts.some((part: any) => ["video_url", "input_video", "video"].includes(part?.type));
+  const hasFile = contentParts.some((part: any) => part?.type === "input_file" || part?.type === "file");
   if (hasImage && members.every((model) => model.capabilities?.vision === false)) return "No active member supports image input in this request";
+  if (hasAudio && members.every((model) => model.capabilities?.audio_input === false)) return "No active member supports audio input in this request";
+  if (hasVideo && members.every((model) => model.capabilities?.video === false)) return "No active member supports video input in this request";
+  if (hasFile && members.every((model) => model.capabilities?.attachments === false)) return "No active member supports file attachments";
   const hasUnsupportedConol = members.some((model) =>
     (model as ModelWithProvider & { provider_protocol?: string }).provider_protocol === "conol",
   );
   if (hasUnsupportedConol && members.length === 1 &&
-    ((Array.isArray(body.tools) && body.tools.length > 0) || hasImage)) {
-    return "A Conol model only supports text requests without tools or images";
+    ((Array.isArray(body.tools) && body.tools.length > 0) || hasImage || hasAudio || hasVideo)) {
+    return "A Conol model only supports text requests without tools or media";
   }
   if (typeof body.reasoning_effort === "string" && body.reasoning_effort) {
     const capable = members.filter((model) => model.reasoning_efforts.some((effort) => effort.effort === body.reasoning_effort));
