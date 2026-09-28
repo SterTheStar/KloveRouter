@@ -65,6 +65,10 @@ export function useChatMessages({
   const skipNextChatLoadRef = useRef<string | null>(null);
   const messagesRef = useRef<ChatMessage[]>([]);
 
+  // A page unmount is only a view disconnect, not a request to stop generation.
+  // Leave stream controllers alone here; the explicit Stop action calls the
+  // backend stop endpoint before aborting its local stream connection.
+
   const messages = chatId ? messagesByChat[chatId] ?? [] : [];
   const usage = chatId ? usageByChat[chatId] ?? EMPTY_USAGE : EMPTY_USAGE;
   const streaming = Boolean(chatId && streamingByChat[chatId]);
@@ -72,11 +76,6 @@ export function useChatMessages({
   useEffect(() => {
     messagesRef.current = messages;
   }, [messages]);
-
-  useEffect(() => () => {
-    for (const controller of controllersRef.current.values()) controller.abort();
-    controllersRef.current.clear();
-  }, []);
 
   useEffect(() => {
     if (!chatId) return;
