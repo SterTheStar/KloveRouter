@@ -161,7 +161,7 @@ export default function ChatSidebar({
         </Button>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto px-2">
-        <div className="sticky top-0 z-10 flex items-center justify-between bg-sidebar px-2 pb-2 pt-1">
+        <div className="sticky top-0 z-10 flex h-9 shrink-0 items-center justify-between bg-sidebar px-2">
           <h2 className="text-sm font-medium text-sidebar-foreground">Conversations</h2>
           {chats.length > 0 && <span className="text-xs tabular-nums text-muted-foreground">{chats.length}</span>}
         </div>
