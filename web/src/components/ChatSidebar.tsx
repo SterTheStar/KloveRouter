@@ -4,7 +4,6 @@ import {
   RiHome4Line as HomeLine,
   RiLayoutLeftLine as CollapseLine,
   RiSearchLine as SearchLine,
-  RiArrowDownSLine as ArrowDownLine,
   RiCheckLine as CheckLine,
   RiDeleteBinLine as DeleteLine,
   RiEditLine as EditLine,
@@ -17,7 +16,7 @@ import type { ChatSession, UserProfile } from "../types";
 import DisplayAvatar from "./DisplayAvatar";
 import ChatCommandPalette from "./ChatCommandPalette";
 
-const CALENDAR_DATE_FORMATTER = new Intl.DateTimeFormat(undefined, {
+const CALENDAR_DATE_FORMATTER = new Intl.DateTimeFormat("en-US", {
   month: "long",
   day: "numeric",
   year: "numeric",
@@ -75,7 +74,6 @@ export default function ChatSidebar({
   const [editing, setEditing] = useState<string | null>(null);
   const [title, setTitle] = useState("");
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem("klove_chat_sidebar_collapsed") === "true");
-  const [recentChatsOpen, setRecentChatsOpen] = useState(() => localStorage.getItem("klove_recent_chats_open") !== "false");
   const [commandOpen, setCommandOpen] = useState(false);
   const chatGroups = groupChatsByDate(chats);
 
@@ -163,54 +161,43 @@ export default function ChatSidebar({
         </Button>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto px-2">
-        <button
-          type="button"
-          onClick={() => setRecentChatsOpen((current) => {
-            const next = !current;
-            localStorage.setItem("klove_recent_chats_open", String(next));
-            return next;
-          })}
-          className="flex w-full items-center justify-between rounded-lg px-2 py-2 text-left text-xs font-medium text-muted-foreground hover:text-sidebar-foreground"
-          aria-expanded={recentChatsOpen}
-        >
-          <span>Recent chats</span>
-          <ArrowDownLine className={`size-4 transition-transform ${recentChatsOpen ? "" : "-rotate-90"}`} />
-        </button>
-        {recentChatsOpen && (
-          <div className="space-y-4 pb-3">
-            {chatGroups.map(([group, groupedChats]) => (
-              <section key={group} aria-label={group}>
-                <h3 className="sticky top-0 z-10 px-2 pb-1.5 pt-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/80 bg-sidebar">{group}</h3>
-                <div className="space-y-0.5">
-                  {groupedChats.map((chat) => (
-                    <div key={chat.id} className={`chat-sidebar-item group rounded-lg ${activeChatId === chat.id ? "bg-sidebar-accent" : "hover:bg-sidebar-accent/60"}`}>
-                      {editing === chat.id ? (
-                        <div className="flex items-center gap-1 px-2 py-1">
-                          <Input autoFocus value={title} onChange={(event) => setTitle(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void saveRename(chat.id); if (event.key === "Escape") setEditing(null); }} className="h-7 min-w-0" />
-                          <Button size="icon-xs" variant="ghost" onClick={() => void saveRename(chat.id)}><CheckLine className="size-3.5" /></Button>
+        <div className="sticky top-0 z-10 flex items-center justify-between bg-sidebar px-2 pb-2 pt-1">
+          <h2 className="text-sm font-medium text-sidebar-foreground">Conversations</h2>
+          {chats.length > 0 && <span className="text-xs tabular-nums text-muted-foreground">{chats.length}</span>}
+        </div>
+        <div className="space-y-4 pb-3">
+          {chatGroups.map(([group, groupedChats]) => (
+            <section key={group} aria-label={group}>
+              <h3 className="sticky top-9 z-[1] bg-sidebar px-2 pb-1.5 pt-2 text-xs font-medium text-muted-foreground">{group}</h3>
+              <div className="space-y-0.5">
+                {groupedChats.map((chat) => (
+                  <div key={chat.id} className={`chat-sidebar-item group rounded-lg ${activeChatId === chat.id ? "bg-sidebar-accent" : "hover:bg-sidebar-accent/60"}`}>
+                    {editing === chat.id ? (
+                      <div className="flex items-center gap-1 px-2 py-1">
+                        <Input autoFocus value={title} onChange={(event) => setTitle(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void saveRename(chat.id); if (event.key === "Escape") setEditing(null); }} className="h-7 min-w-0" />
+                        <Button size="icon-xs" variant="ghost" onClick={() => void saveRename(chat.id)}><CheckLine className="size-3.5" /></Button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1 px-2 py-1">
+                        <button type="button" onClick={() => onSelect(chat.id)} className="flex min-w-0 flex-1 items-center py-1.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60">
+                          <span className={`truncate text-sm ${generatingChats[chat.id] ? "chat-title-generating" : ""}`}>
+                            {generatingChats[chat.id] ? "Generating title" : chat.title}
+                          </span>
+                        </button>
+                        <div className="chat-sidebar-actions flex items-center gap-0.5">
+                          <Button size="icon-xs" variant="ghost" onClick={() => onExport(chat)} title="Export as Markdown"><DownloadLine className="size-3.5" /></Button>
+                          <Button size="icon-xs" variant="ghost" onClick={() => startRename(chat)} title="Rename"><EditLine className="size-3.5" /></Button>
+                          <Button size="icon-xs" variant="ghost" className="hover:text-destructive" onClick={() => { if (window.confirm(`Delete “${chat.title}”?`)) void onDelete(chat.id); }} title="Delete"><DeleteLine className="size-3.5" /></Button>
                         </div>
-                      ) : (
-                        <div className="flex items-center gap-1 px-2 py-1">
-                          <button type="button" onClick={() => onSelect(chat.id)} className="flex min-w-0 flex-1 items-center py-1.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60">
-                            <span className={`truncate text-sm ${generatingChats[chat.id] ? "chat-title-generating" : ""}`}>
-                              {generatingChats[chat.id] ? "Generating title" : chat.title}
-                            </span>
-                          </button>
-                          <div className="chat-sidebar-actions flex items-center gap-0.5">
-                            <Button size="icon-xs" variant="ghost" onClick={() => onExport(chat)} title="Export as Markdown"><DownloadLine className="size-3.5" /></Button>
-                            <Button size="icon-xs" variant="ghost" onClick={() => startRename(chat)} title="Rename"><EditLine className="size-3.5" /></Button>
-                            <Button size="icon-xs" variant="ghost" className="hover:text-destructive" onClick={() => { if (window.confirm(`Delete “${chat.title}”?`)) void onDelete(chat.id); }} title="Delete"><DeleteLine className="size-3.5" /></Button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </section>
-            ))}
-            {chats.length === 0 && <p className="px-3 py-8 text-center text-xs text-muted-foreground">No chats yet</p>}
-          </div>
-        )}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </section>
+          ))}
+          {chats.length === 0 && <p className="px-3 py-8 text-center text-xs text-muted-foreground">No conversations yet</p>}
+        </div>
       </div>
       <div className="space-y-2 p-3">
         <div className="flex items-center gap-2 rounded-xl bg-sidebar-accent/70 p-2.5">
