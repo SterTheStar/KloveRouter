@@ -17,6 +17,34 @@ import type { ChatSession, UserProfile } from "../types";
 import DisplayAvatar from "./DisplayAvatar";
 import ChatCommandPalette from "./ChatCommandPalette";
 
+const CALENDAR_DATE_FORMATTER = new Intl.DateTimeFormat(undefined, {
+  month: "long",
+  day: "numeric",
+  year: "numeric",
+});
+
+function chatDateGroup(value: string, now: Date): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Earlier";
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const chatDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const daysAgo = Math.round((today.getTime() - chatDay.getTime()) / 86_400_000);
+  if (daysAgo <= 0) return "Today";
+  if (daysAgo === 1) return "Yesterday";
+  return CALENDAR_DATE_FORMATTER.format(date);
+}
+
+function groupChatsByDate(chats: ChatSession[], now = new Date()) {
+  const groups = new Map<string, ChatSession[]>();
+  for (const chat of chats) {
+    const group = chatDateGroup(chat.updated_at || chat.created_at, now);
+    const entries = groups.get(group) ?? [];
+    entries.push(chat);
+    groups.set(group, entries);
+  }
+  return [...groups.entries()];
+}
+
 export default function ChatSidebar({
   chats,
   activeChatId,
@@ -49,6 +77,7 @@ export default function ChatSidebar({
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem("klove_chat_sidebar_collapsed") === "true");
   const [recentChatsOpen, setRecentChatsOpen] = useState(() => localStorage.getItem("klove_recent_chats_open") !== "false");
   const [commandOpen, setCommandOpen] = useState(false);
+  const chatGroups = groupChatsByDate(chats);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -148,29 +177,36 @@ export default function ChatSidebar({
           <ArrowDownLine className={`size-4 transition-transform ${recentChatsOpen ? "" : "-rotate-90"}`} />
         </button>
         {recentChatsOpen && (
-          <div className="space-y-1 pb-2">
-            {chats.map((chat) => (
-              <div key={chat.id} className={`chat-sidebar-item group rounded-lg ${activeChatId === chat.id ? "bg-sidebar-accent" : "hover:bg-sidebar-accent/60"}`}>
-                {editing === chat.id ? (
-                  <div className="flex items-center gap-1 px-2 py-1">
-                    <Input autoFocus value={title} onChange={(event) => setTitle(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void saveRename(chat.id); if (event.key === "Escape") setEditing(null); }} className="h-7 min-w-0" />
-                    <Button size="icon-xs" variant="ghost" onClick={() => void saveRename(chat.id)}><CheckLine className="size-3.5" /></Button>
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-1 px-2 py-1">
-                    <button type="button" onClick={() => onSelect(chat.id)} className="flex min-w-0 flex-1 items-center py-1.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60">
-                      <span className={`truncate text-sm ${generatingChats[chat.id] ? "chat-title-generating" : ""}`}>
-                        {generatingChats[chat.id] ? "Generating title" : chat.title}
-                      </span>
-                    </button>
-                    <div className="chat-sidebar-actions flex items-center gap-0.5">
-                      <Button size="icon-xs" variant="ghost" onClick={() => onExport(chat)} title="Export as Markdown"><DownloadLine className="size-3.5" /></Button>
-                      <Button size="icon-xs" variant="ghost" onClick={() => startRename(chat)} title="Rename"><EditLine className="size-3.5" /></Button>
-                      <Button size="icon-xs" variant="ghost" className="hover:text-destructive" onClick={() => { if (window.confirm(`Delete “${chat.title}”?`)) void onDelete(chat.id); }} title="Delete"><DeleteLine className="size-3.5" /></Button>
+          <div className="space-y-4 pb-3">
+            {chatGroups.map(([group, groupedChats]) => (
+              <section key={group} aria-label={group}>
+                <h3 className="sticky top-0 z-10 px-2 pb-1.5 pt-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/80 bg-sidebar">{group}</h3>
+                <div className="space-y-0.5">
+                  {groupedChats.map((chat) => (
+                    <div key={chat.id} className={`chat-sidebar-item group rounded-lg ${activeChatId === chat.id ? "bg-sidebar-accent" : "hover:bg-sidebar-accent/60"}`}>
+                      {editing === chat.id ? (
+                        <div className="flex items-center gap-1 px-2 py-1">
+                          <Input autoFocus value={title} onChange={(event) => setTitle(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void saveRename(chat.id); if (event.key === "Escape") setEditing(null); }} className="h-7 min-w-0" />
+                          <Button size="icon-xs" variant="ghost" onClick={() => void saveRename(chat.id)}><CheckLine className="size-3.5" /></Button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1 px-2 py-1">
+                          <button type="button" onClick={() => onSelect(chat.id)} className="flex min-w-0 flex-1 items-center py-1.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60">
+                            <span className={`truncate text-sm ${generatingChats[chat.id] ? "chat-title-generating" : ""}`}>
+                              {generatingChats[chat.id] ? "Generating title" : chat.title}
+                            </span>
+                          </button>
+                          <div className="chat-sidebar-actions flex items-center gap-0.5">
+                            <Button size="icon-xs" variant="ghost" onClick={() => onExport(chat)} title="Export as Markdown"><DownloadLine className="size-3.5" /></Button>
+                            <Button size="icon-xs" variant="ghost" onClick={() => startRename(chat)} title="Rename"><EditLine className="size-3.5" /></Button>
+                            <Button size="icon-xs" variant="ghost" className="hover:text-destructive" onClick={() => { if (window.confirm(`Delete “${chat.title}”?`)) void onDelete(chat.id); }} title="Delete"><DeleteLine className="size-3.5" /></Button>
+                          </div>
+                        </div>
+                      )}
                     </div>
-                  </div>
-                )}
-              </div>
+                  ))}
+                </div>
+              </section>
             ))}
             {chats.length === 0 && <p className="px-3 py-8 text-center text-xs text-muted-foreground">No chats yet</p>}
           </div>
