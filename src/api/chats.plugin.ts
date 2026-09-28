@@ -1,5 +1,11 @@
 import { Elysia, t } from "elysia";
 import { chatService } from "../services/chat.service";
+import { chatGenerationService } from "../services/chat-generation.service";
+
+async function waitForChatGeneration(chatId: string) {
+  await Promise.all(chatGenerationService.activeMessageIds(chatId)
+    .map((messageId) => chatGenerationService.waitForIdle(chatId, messageId)));
+}
 
 const chatIdParams = t.Object({ id: t.String({ minLength: 1 }) });
 
@@ -13,7 +19,8 @@ export const chatsPlugin = (app: Elysia) =>
     )
     .patch(
       "/api/chats/:id/messages/:messageId",
-      ({ params, body, set }) => {
+      async ({ params, body, set }) => {
+        await waitForChatGeneration(params.id);
         if (!chatService.findMessageInChat(params.id, params.messageId)) {
           set.status = 404;
           return { error: "Message not found" };
@@ -40,7 +47,8 @@ export const chatsPlugin = (app: Elysia) =>
     )
     .delete(
       "/api/chats/:id/messages/:messageId",
-      ({ params, set }) => {
+      async ({ params, set }) => {
+        await waitForChatGeneration(params.id);
         if (!chatService.findMessageInChat(params.id, params.messageId) || !chatService.deleteMessage(params.messageId)) {
           set.status = 404;
           return { error: "Message not found" };
@@ -58,7 +66,8 @@ export const chatsPlugin = (app: Elysia) =>
     )
     .get(
       "/api/chats/:id",
-      ({ params, set }) => {
+      async ({ params, set }) => {
+        await waitForChatGeneration(params.id);
         const chat = chatService.get(params.id);
         if (!chat) {
           set.status = 404;
@@ -70,7 +79,8 @@ export const chatsPlugin = (app: Elysia) =>
     )
     .patch(
       "/api/chats/:id",
-      ({ params, body, set }) => {
+      async ({ params, body, set }) => {
+        await waitForChatGeneration(params.id);
         const chat = chatService.update(params.id, body);
         if (!chat) {
           set.status = 404;
