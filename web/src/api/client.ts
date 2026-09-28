@@ -90,6 +90,7 @@ export const providers = {
     secret?: string;
     account_id?: string;
     avatar?: string;
+    custom_headers?: unknown;
       protocol?: "openai" | "openai-responses" | "anthropic" | "codex" | "chatgpt" | "antigravity" | "freebuff" | "qwen" | "atomesus" | "conol";
    }) =>
      request<import("../types").Provider>("/api/providers", {
@@ -103,6 +104,7 @@ export const providers = {
        base_url?: string;
        api_key?: string;
        avatar?: string | null;
+        custom_headers?: unknown;
        protocol?: "openai" | "openai-responses" | "anthropic" | "codex" | "chatgpt" | "antigravity" | "freebuff" | "qwen" | "atomesus" | "conol";
       credential_mode?: "fixed" | "round_robin";
       fixed_credential_id?: string | null;

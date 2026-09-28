@@ -16,6 +16,7 @@ export interface Provider {
 
 export interface ProviderDetail extends Provider {
   api_key: string;
+  custom_headers: Record<string, string>;
 }
 
 export interface ProviderCredential {

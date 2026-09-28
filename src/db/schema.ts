@@ -21,6 +21,7 @@ export function initSchema(db: Database): void {
       api_key     TEXT NOT NULL,
       avatar      TEXT,
       protocol    TEXT NOT NULL DEFAULT 'openai',
+      custom_headers TEXT NOT NULL DEFAULT 'enc:v1:',
       credential_mode TEXT NOT NULL DEFAULT 'fixed',
       fixed_credential_id TEXT,
       is_active   INTEGER NOT NULL DEFAULT 1,
@@ -319,6 +320,9 @@ export function initSchema(db: Database): void {
   }
   if (!cols.find((c) => c.name === "fixed_credential_id")) {
     db.exec("ALTER TABLE providers ADD COLUMN fixed_credential_id TEXT");
+  }
+  if (!cols.find((c) => c.name === "custom_headers")) {
+    db.exec("ALTER TABLE providers ADD COLUMN custom_headers TEXT NOT NULL DEFAULT 'enc:v1:'");
   }
   for (const [name, sql] of [
     ["last_test_at", "ALTER TABLE providers ADD COLUMN last_test_at TEXT"],

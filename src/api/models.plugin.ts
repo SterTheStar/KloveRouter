@@ -37,6 +37,7 @@ import { serializeModel, serializeModelWithProvider } from "./serializers";
 import { modelPoolService } from "../services/model-pool.service";
 import { getDb } from "../db/connection";
 import { convertResponse } from "../sdk/protocol-converter";
+import { upstreamProviderHeaders } from "../services/provider-headers";
 
 const nullableBoolean = t.Union([t.Boolean(), t.Null()]);
 const capabilitiesSchema = t.Object({
@@ -445,14 +446,12 @@ export const modelsPlugin = (app: Elysia) =>
             ? anthropicEndpoint(provider, "models")
             : `${normalizedBase}${normalizedBase.endsWith("/v1") ? "" : "/v1"}/models`;
           await assertSafeRemoteUrl(url);
-          const authHeaders: Record<string, string> = credential?.secret
-            ? provider.protocol === "anthropic"
-              ? {
-                  "x-api-key": credential.secret,
-                  "anthropic-version": "2023-06-01",
-                }
-              : { Authorization: `Bearer ${credential.secret}` }
-            : {};
+            const standardHeaders: Record<string, string> = credential?.secret
+              ? provider.protocol === "anthropic"
+                ? { "x-api-key": credential.secret, "anthropic-version": "2023-06-01" }
+                : { Authorization: `Bearer ${credential.secret}` }
+              : {};
+            const authHeaders: Record<string, string> = upstreamProviderHeaders(provider, standardHeaders);
           const res = await fetch(url, {
             headers: {
               Accept: "application/json",
@@ -641,11 +640,11 @@ export const modelsPlugin = (app: Elysia) =>
                           await assertSafeRemoteUrl(openAIEndpoint(provider, "responses"));
                           const response = await fetch(openAIEndpoint(provider, "responses"), {
                             method: "POST",
-                            headers: {
+                            headers: upstreamProviderHeaders(provider, {
                               Authorization: `Bearer ${credential.secret ?? ""}`,
                               "Content-Type": "application/json",
                               Accept: "application/json",
-                            },
+                            }),
                             body: JSON.stringify({
                               model: model.model_id,
                               input: "Say 'ok' and nothing else.",

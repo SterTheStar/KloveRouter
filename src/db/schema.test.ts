@@ -3,6 +3,22 @@ import { describe, expect, test } from "bun:test";
 import { initSchema } from "./schema";
 
 describe("model timestamps", () => {
+  test("adds encrypted custom headers to an existing providers table", () => {
+    const db = new Database(":memory:");
+    db.exec(`CREATE TABLE providers (
+      id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE, base_url TEXT NOT NULL,
+      api_key TEXT NOT NULL, avatar TEXT, protocol TEXT NOT NULL DEFAULT 'openai',
+      credential_mode TEXT NOT NULL DEFAULT 'fixed', fixed_credential_id TEXT,
+      is_active INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );`);
+    initSchema(db);
+    const columns = db.query("PRAGMA table_info(providers)").all() as Array<{ name: string }>;
+    expect(columns.some((column) => column.name === "custom_headers")).toBe(true);
+    expect(db.query("SELECT custom_headers FROM providers").all()).toEqual([]);
+    db.close();
+  });
+
   test("adds updated_at to an existing models table without changing created_at", () => {
     const db = new Database(":memory:");
     db.exec(`
@@ -46,6 +62,16 @@ describe("model timestamps", () => {
       .get() as { created_at: string; updated_at: string };
     expect(timestamps.created_at).toBe("2020-01-02 03:04:05");
     expect(timestamps.updated_at).not.toBe(timestamps.created_at);
+    db.close();
+  });
+
+  test("fresh provider schema stores custom headers in a dedicated column", () => {
+    const db = new Database(":memory:");
+    initSchema(db);
+    const columns = db.query("PRAGMA table_info(providers)").all() as Array<{ name: string; dflt_value: string | null }>;
+    const headerColumn = columns.find((column) => column.name === "custom_headers");
+    expect(headerColumn).toBeDefined();
+    expect(headerColumn?.dflt_value).toBe("'enc:v1:'");
     db.close();
   });
 });

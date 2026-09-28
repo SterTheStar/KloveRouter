@@ -1,5 +1,6 @@
 import { Elysia, t } from "elysia";
-import { providerService } from "../services/provider.service";
+import { providerService, validateCustomHeaders, withDecryptedProviderHeaders } from "../services/provider.service";
+import { upstreamProviderHeaders } from "../services/provider-headers";
 import { credentialService } from "../services/credential.service";
 import { codexAuthService } from "../integrations/codex";
 import { logger } from "../logger";
@@ -53,10 +54,10 @@ export const providersPlugin = (app: Elysia) =>
               ? anthropicEndpoint(provider as any, "models")
               : `${provider.base_url.replace(/\/+$/, "")}${provider.base_url.replace(/\/+$/, "").endsWith("/v1") ? "" : "/v1"}/models`;
             await assertSafeRemoteUrl(url);
-            const headers: Record<string, string> = protocol === "anthropic"
+            const standardHeaders: Record<string, string> = protocol === "anthropic"
               ? { Accept: "application/json", "x-api-key": secret ?? "", "anthropic-version": "2023-06-01" }
               : { Accept: "application/json", Authorization: `Bearer ${secret ?? ""}` };
-            const response = await fetch(url, { headers });
+            const response = await fetch(url, { headers: upstreamProviderHeaders(provider as any, standardHeaders) });
             const data: any = await response.json().catch(() => null);
             if (!response.ok) throw new Error(`${protocol === "openai-responses" ? "OpenAI Responses API" : protocol} model listing failed (${response.status})`);
             const models = Array.isArray(data) ? data : data?.data ?? data?.models;
@@ -93,6 +94,7 @@ export const providersPlugin = (app: Elysia) =>
       });
       return {
         ...pub,
+        custom_headers: withDecryptedProviderHeaders(provider)?.custom_headers ?? {},
         api_key: provider.api_key
           ? provider.api_key.slice(0, 6) + "..." + provider.api_key.slice(-4)
           : null,
@@ -118,7 +120,8 @@ export const providersPlugin = (app: Elysia) =>
         }
         let provider;
         try {
-          provider = providerService.create({ ...body, api_key: body.api_key ?? body.auth_code ?? body.secret, account_id: body.account_id });
+          const customHeaders = body.custom_headers === undefined ? undefined : validateCustomHeaders(body.custom_headers);
+          provider = providerService.create({ ...body, custom_headers: customHeaders, api_key: body.api_key ?? body.auth_code ?? body.secret, account_id: body.account_id });
         } catch (error: any) {
           set.status = 400;
           return { error: error.message };
@@ -138,6 +141,7 @@ export const providersPlugin = (app: Elysia) =>
           secret: t.Optional(t.String({ minLength: 1 })),
           account_id: t.Optional(t.String({ minLength: 1 })),
           avatar: t.Optional(t.String()),
+          custom_headers: t.Optional(t.Record(t.String(), t.String())),
           protocol: t.Optional(
             t.Union([
               t.Literal("openai"),
@@ -180,8 +184,10 @@ export const providersPlugin = (app: Elysia) =>
           }
         }
         try {
-          const updated = providerService.update(id, { ...body, api_key: body.api_key ?? body.auth_code });
-          return updated ? serializeProvider(updated, { includeAvatarOverride: true }) : updated;
+          const customHeaders = body.custom_headers === undefined ? undefined : validateCustomHeaders(body.custom_headers);
+          const updated = providerService.update(id, { ...body, custom_headers: customHeaders, api_key: body.api_key ?? body.auth_code });
+          if (!updated) return updated;
+          return { ...serializeProvider(updated, { includeAvatarOverride: true }), custom_headers: withDecryptedProviderHeaders(providerService.findById(id))?.custom_headers ?? {} };
         } catch (error: any) {
           set.status = 400;
           return { error: error.message };
@@ -194,6 +200,7 @@ export const providersPlugin = (app: Elysia) =>
           api_key: t.Optional(t.String({ minLength: 1 })),
           auth_code: t.Optional(t.String({ minLength: 1 })),
           avatar: t.Optional(t.Union([t.String(), t.Null()])),
+          custom_headers: t.Optional(t.Record(t.String(), t.String())),
           protocol: t.Optional(
             t.Union([
               t.Literal("openai"),

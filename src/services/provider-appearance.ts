@@ -14,6 +14,12 @@ export function isOpenAICompatibleProtocol(protocol: ProviderProtocol): boolean 
   return protocol === "openai" || protocol === "openai-responses";
 }
 
+export const openCodeProviderIds = new Set(["opencode", "opencodezen", "opencodezengo"]);
+
+export function isOpenCodeProvider(name: string): boolean {
+  return openCodeProviderIds.has(name.toLowerCase().replace(/[\s_-]+/g, ""));
+}
+
 const protocolIcons: Partial<Record<ProviderProtocol, string>> = {
   antigravity: "https://antigravity.google/assets/image/brand/antigravity-icon__full-color.png",
   chatgpt: "https://chatgpt.com/favicon.ico",

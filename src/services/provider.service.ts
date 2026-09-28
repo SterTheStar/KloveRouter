@@ -11,6 +11,7 @@ export interface Provider {
   api_key: string;
   avatar: string | null;
   protocol: ProviderProtocol;
+  custom_headers: Record<string, string> | string;
   credential_mode: CredentialMode;
   fixed_credential_id: string | null;
   is_active: number;
@@ -40,6 +41,7 @@ export type CreateProviderInput = {
   account_id?: string;
   avatar?: string;
   protocol?: ProviderProtocol;
+  custom_headers?: Record<string, string>;
   credential_mode?: CredentialMode;
   fixed_credential_id?: string | null;
 };
@@ -50,6 +52,7 @@ export type UpdateProviderInput = {
   api_key?: string;
   avatar?: string | null;
   protocol?: ProviderProtocol;
+  custom_headers?: Record<string, string>;
   credential_mode?: CredentialMode;
   fixed_credential_id?: string | null;
   is_active?: number;
@@ -57,6 +60,39 @@ export type UpdateProviderInput = {
 
 export function providerPrefix(name: string): string {
   return name.toLowerCase().replace(/\s+/g, "");
+}
+
+const forbiddenHeaderNames = new Set([
+  "authorization",
+  "host",
+  "content-length",
+  "connection",
+  "transfer-encoding",
+  "cookie",
+  "set-cookie",
+  "x-api-key",
+  "anthropic-version",
+  "x-opencode-session",
+  "content-type",
+]);
+
+export function validateCustomHeaders(value: unknown): Record<string, string> {
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    throw new Error("Custom headers must be a JSON object of header names and values");
+  const entries = Object.entries(value as Record<string, unknown>);
+  if (entries.length > 50) throw new Error("A provider can have at most 50 custom headers");
+  const headers: Record<string, string> = {};
+  for (const [rawName, rawValue] of entries) {
+    const name = rawName.trim();
+    if (!/^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/.test(name))
+      throw new Error(`Invalid custom header name: ${rawName}`);
+    if (forbiddenHeaderNames.has(name.toLowerCase()))
+      throw new Error(`Custom header "${name}" is managed by Klove and cannot be overridden`);
+    if (typeof rawValue !== "string" || /[\r\n\0]/.test(rawValue))
+      throw new Error(`Custom header "${name}" must have a single-line string value`);
+    headers[name] = rawValue;
+  }
+  return headers;
 }
 
 function toPublic(p: Provider): ProviderPublic {
@@ -84,6 +120,19 @@ function withDecryptedApiKey(provider: Provider | null): Provider | null {
   };
 }
 
+export function withDecryptedProviderHeaders(provider: Provider | null): Provider | null {
+  if (!provider) return null;
+  let customHeaders: Record<string, string> = {};
+  const encryptedHeaders = provider.custom_headers as unknown as string;
+  try {
+    const parsed = JSON.parse(encryptedHeaders === "enc:v1:" ? "{}" : decryptSecret(encryptedHeaders) ?? "{}");
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) customHeaders = validateCustomHeaders(parsed);
+  } catch {
+    customHeaders = {};
+  }
+  return { ...provider, custom_headers: customHeaders };
+}
+
 export const providerService = {
   findAll(): ProviderPublic[] {
     const db = getDb();
@@ -96,25 +145,26 @@ export const providerService = {
 
   findById(id: string): Provider | null {
     const db = getDb();
-    return withDecryptedApiKey(
+    return withDecryptedProviderHeaders(withDecryptedApiKey(
       db.query("SELECT * FROM providers WHERE id = ?").get(id) as Provider | null,
-    );
+    ));
   },
 
   findPublicById(id: string): ProviderPublic | null {
-    const p = this.findById(id);
-    return p ? toPublic(p) : null;
+    const db = getDb();
+    const row = db.query("SELECT * FROM providers WHERE id = ?").get(id) as Provider | null;
+    return row ? toPublic(row) : null;
   },
 
   findByName(name: string): Provider | null {
     const db = getDb();
-    return withDecryptedApiKey(
+    return withDecryptedProviderHeaders(withDecryptedApiKey(
       db
         .query(
           "SELECT * FROM providers WHERE LOWER(REPLACE(name, ' ', '')) = LOWER(?)",
         )
         .get(providerPrefix(name.trim())) as Provider | null,
-    );
+    ));
   },
 
   create(input: CreateProviderInput): ProviderPublic {
@@ -129,8 +179,9 @@ export const providerService = {
     const encryptedApiKey = input.api_key
       ? encryptSecret(input.api_key)
       : null;
+    const encryptedHeaders = encryptSecret(JSON.stringify(validateCustomHeaders(input.custom_headers ?? {})));
     db.query(
-      "INSERT INTO providers (id, name, base_url, api_key, avatar, protocol) VALUES (?, ?, ?, ?, ?, ?)",
+      "INSERT INTO providers (id, name, base_url, api_key, avatar, protocol, custom_headers) VALUES (?, ?, ?, ?, ?, ?, ?)",
     ).run(
       id,
       input.name,
@@ -138,6 +189,7 @@ export const providerService = {
       encryptedApiKey ?? "",
       input.avatar ?? null,
       protocol,
+      encryptedHeaders,
     );
     const credentialId = crypto.randomUUID();
     db.query(
@@ -228,6 +280,10 @@ export const providerService = {
     if (input.protocol !== undefined) {
       updates.push("protocol = ?");
       values.push(input.protocol);
+    }
+    if (input.custom_headers !== undefined) {
+      updates.push("custom_headers = ?");
+      values.push(encryptSecret(JSON.stringify(validateCustomHeaders(input.custom_headers))));
     }
     if (input.credential_mode !== undefined) {
       updates.push("credential_mode = ?");

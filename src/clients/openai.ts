@@ -1,13 +1,16 @@
 import OpenAI from "openai";
 import type { Provider } from "../services/provider.service";
+import { upstreamProviderHeaders } from "../services/provider-headers";
 
 export function createOpenAIClient(
   provider: Provider,
   apiKey = provider.api_key,
+  incomingSessionId?: string,
 ): OpenAI {
   return new OpenAI({
     baseURL: provider.base_url,
     apiKey,
+    defaultHeaders: upstreamProviderHeaders(provider, {}, undefined, incomingSessionId),
   });
 }
 

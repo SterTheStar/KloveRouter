@@ -25,6 +25,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Tabs } from "@/components/ui/tabs";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
@@ -191,6 +192,13 @@ export default function ProviderDetailPage({
   const [success, setSuccess] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [baseUrl, setBaseUrl] = useState("");
+  const [customHeaderRows, setCustomHeaderRows] = useState<Array<{ id: string; name: string; value: string }>>([]);
+  const [activeTab, setActiveTab] = useState("models");
+  const headerCount = customHeaderRows.filter((row) => row.name.trim()).length;
+  const addCustomHeader = () => setCustomHeaderRows((rows) => [
+    ...rows,
+    { id: crypto.randomUUID(), name: "", value: "" },
+  ]);
   const newKeyLabelRef = useRef<HTMLInputElement>(null);
   const newKeySecretRef = useRef<HTMLInputElement>(null);
   const newAuthCodeRef = useRef<HTMLInputElement>(null);
@@ -252,6 +260,7 @@ export default function ProviderDetailPage({
       setList(models);
       setName(current.name);
       setBaseUrl(current.base_url);
+      setCustomHeaderRows(Object.entries(current.custom_headers ?? {}).map(([headerName, value], index) => ({ id: `${index}-${headerName}`, name: headerName, value })));
       setAvatar(current.avatar_override ?? null);
       originalAvatarRef.current = current.avatar_override ?? null;
       setConnectedAccount(
@@ -284,6 +293,7 @@ export default function ProviderDetailPage({
   const discard = () => {
     setName(provider?.name ?? "");
     setBaseUrl(provider?.base_url ?? "");
+    setCustomHeaderRows(Object.entries(provider?.custom_headers ?? {}).map(([headerName, value], index) => ({ id: `${index}-${headerName}`, name: headerName, value })));
     setAvatar(provider?.avatar_override ?? null);
     setError(null);
     setSuccess("Unsaved changes discarded.");
@@ -292,12 +302,25 @@ export default function ProviderDetailPage({
   const save = async () => {
     setSaving(true);
     try {
+      const customHeaders: Record<string, string> = {};
+      const seenHeaders = new Set<string>();
+      for (const row of customHeaderRows) {
+        const headerName = row.name.trim();
+        if (!headerName && !row.value) continue;
+        if (!headerName) throw new Error("Enter a name for each custom header.");
+        const normalized = headerName.toLowerCase();
+        if (seenHeaders.has(normalized)) throw new Error(`Header "${headerName}" is listed more than once.`);
+        seenHeaders.add(normalized);
+        customHeaders[headerName] = row.value;
+      }
       const updated = await providers.update(providerId, {
         name,
         base_url: baseUrl,
+        custom_headers: customHeaders,
         ...(avatar !== originalAvatarRef.current ? { avatar } : {}),
       });
       setProvider(updated);
+      setCustomHeaderRows(Object.entries(updated.custom_headers ?? {}).map(([headerName, value], index) => ({ id: `${index}-${headerName}`, name: headerName, value })));
       setSuccess("Provider updated.");
     } catch (e: any) {
       setError(e.message);
@@ -887,6 +910,19 @@ export default function ProviderDetailPage({
         </CardContent>
       </Card>
 
+      <Tabs
+        tabs={[
+          { id: "models", label: `Models (${list.length})` },
+          { id: "credentials", label: "Credentials" },
+          { id: "headers", label: `Headers${headerCount ? ` (${headerCount})` : ""}` },
+        ]}
+        active={activeTab}
+        onChange={setActiveTab}
+        ariaLabel="Provider sections"
+        className="overflow-x-auto"
+      />
+
+      {activeTab === "credentials" && <>
       {(routableCredentials.length > 1 || provider.protocol === "codex" || provider.protocol === "antigravity") && <Card>
         <CardHeader className="flex flex-row items-center justify-between gap-3"><div><CardTitle>Connection</CardTitle><p className="mt-1 text-sm text-muted-foreground">Routing and account status.</p></div><div className="flex flex-wrap justify-end gap-2">
             {(provider.protocol === "codex" || provider.protocol === "antigravity") && <>
@@ -1158,6 +1194,8 @@ export default function ProviderDetailPage({
         </CardContent>
       </Card>}
 
+      </>}
+      {activeTab === "models" && <>
       <Card variant="plain" className="overflow-hidden p-0 gap-0">
         <CardHeader className="flex flex-row items-center justify-between py-(--card-spacing)">
           <CardTitle>
@@ -1365,6 +1403,15 @@ export default function ProviderDetailPage({
           </>
         )}
       </Card>
+      </>}
+      {activeTab === "headers" && <Card>
+        <CardHeader><CardTitle>Custom headers</CardTitle><p className="text-sm text-muted-foreground">Headers sent with requests to this provider. Authentication and protocol headers stay managed separately.</p></CardHeader>
+        <CardContent className="space-y-4">
+          {customHeaderRows.map((row) => <div key={row.id} className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)_auto]"><Input aria-label="Header name" placeholder="Header name" autoComplete="off" value={row.name} onChange={(event) => setCustomHeaderRows((rows) => rows.map((item) => item.id === row.id ? { ...item, name: event.target.value } : item))} /><Input aria-label="Header value" placeholder="Value" autoComplete="new-password" value={row.value} onChange={(event) => setCustomHeaderRows((rows) => rows.map((item) => item.id === row.id ? { ...item, value: event.target.value } : item))} /><Button type="button" variant="ghost" size="icon" aria-label={`Remove ${row.name || "header"}`} onClick={() => setCustomHeaderRows((rows) => rows.filter((item) => item.id !== row.id))}><Trash2 className="size-4" /></Button></div>)}
+          {!customHeaderRows.length && <div className="rounded-lg border border-dashed p-6 text-center"><p className="text-sm font-medium">No custom headers</p><p className="mt-1 text-xs text-muted-foreground">Add headers required by this provider's gateway.</p></div>}
+          <div className="flex flex-wrap items-center justify-between gap-3"><p className="text-xs text-muted-foreground">Values are encrypted at rest. Authorization/protocol headers are managed separately. OpenCode receives a stable session ID per conversation.</p><Button type="button" variant="outline" onClick={addCustomHeader}><Add className="size-4" />Add header</Button></div>
+        </CardContent>
+      </Card>}
       <SyncModelsModal
         open={syncOpen}
         items={syncItems}

@@ -1,6 +1,7 @@
 import type { Provider } from "../services/provider.service";
 import { parseDataImage, openAIImageUrl } from "../services/multimodal";
 import { anthropicResponseToChat } from "../sdk/protocol-converter";
+import { upstreamProviderHeaders } from "../services/provider-headers";
 
 export type AnthropicMessage = {
   role: "user" | "assistant" | "system" | "developer" | "tool";
@@ -80,12 +81,12 @@ function headers(
   apiKey = provider.api_key,
   stream = false,
 ): Record<string, string> {
-  return {
+  return upstreamProviderHeaders(provider, {
     Accept: stream ? "text/event-stream" : "application/json",
     "Content-Type": "application/json",
     "x-api-key": apiKey,
     "anthropic-version": "2023-06-01",
-  };
+  });
 }
 
 export function splitAnthropicMessages(messages: AnthropicMessage[]) {
