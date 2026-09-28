@@ -247,7 +247,12 @@ export default function AddProviderModal({
       return setError("Select a cookies.txt file.");
     if (selectedType?.protocol === "conol" && !conolParsedAccountId)
       return setError("Conol.ai account_id is required. Enter it separately or use account_id=<id> on the first line.");
-    const shouldVerify = !skipVerification;
+    const hasCredentialToVerify = selectedType?.protocol === "chatgpt"
+      ? Boolean(cookieFile)
+      : selectedType?.protocol === "freebuff" || selectedType?.protocol === "qwen" || selectedType?.protocol === "atomesus" || selectedType?.protocol === "conol"
+        ? Boolean(authCode.trim())
+        : Boolean(apiKey.trim());
+    const shouldVerify = !skipVerification && hasCredentialToVerify;
     setLoading(true);
     setVerifying(shouldVerify);
     setError(null);
@@ -462,7 +467,7 @@ export default function AddProviderModal({
                   </AlertDescription>
                 </Alert>
               )}
-              <AvatarUpload value={avatar} name={name} onChange={(value) => { setAvatar(value); setAvatarManuallySet(true); }} label="Provider avatar" onError={(message) => notifyError("Invalid avatar", message)} />
+              <AvatarUpload value={avatar} previewSrc={selectedType?.logo} name={name} onChange={(value) => { setAvatar(value); setAvatarManuallySet(true); }} label="Provider avatar" onError={(message) => notifyError("Invalid avatar", message)} />
               <div className="space-y-2">
                 <Label htmlFor="provider-name">Provider name</Label>
                 <Input

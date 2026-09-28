@@ -174,6 +174,7 @@ export const providerService = {
     validateCredential(protocol, kind, protocol === "codex" || protocol === "antigravity" ? undefined : input.api_key, {
       accountId: input.account_id,
       allowIncompleteOAuth: protocol === "codex" || protocol === "antigravity" || protocol === "chatgpt",
+      allowEmptySecret: true,
     });
     const id = crypto.randomUUID();
     const encryptedApiKey = input.api_key

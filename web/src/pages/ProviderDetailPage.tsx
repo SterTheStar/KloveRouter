@@ -82,6 +82,7 @@ import { copyToClipboard } from "../lib/clipboard";
 import { useToast } from "../components/ui/toast";
 import { modelDisplayId, modelPublicId } from "../lib/model-id";
 import { queryCache, queryKeys, invalidateModels, invalidateProviders } from "../lib/query-cache";
+import { isOpenCodeProvider } from "../../../src/services/provider-appearance";
 
 const metadataCapabilityLabels: Record<keyof ModelCapabilities, string> = {
   reasoning: "Reasoning",
@@ -194,6 +195,17 @@ export default function ProviderDetailPage({
   const [baseUrl, setBaseUrl] = useState("");
   const [customHeaderRows, setCustomHeaderRows] = useState<Array<{ id: string; name: string; value: string }>>([]);
   const [activeTab, setActiveTab] = useState("models");
+  const requiresOpenCodeSession = Boolean(provider && (
+    isOpenCodeProvider(provider.name) ||
+    (() => {
+      try {
+        const url = new URL(baseUrl);
+        return url.hostname === "opencode.ai" && /\/zen(?:\/go)?(?:\/|$)/.test(url.pathname);
+      } catch {
+        return false;
+      }
+    })()
+  ));
   const headerCount = customHeaderRows.filter((row) => row.name.trim()).length;
   const addCustomHeader = () => setCustomHeaderRows((rows) => [
     ...rows,
@@ -902,7 +914,7 @@ export default function ProviderDetailPage({
       <Card>
         <CardHeader><CardTitle>Provider</CardTitle></CardHeader>
         <CardContent className="space-y-5">
-          <AvatarUpload value={avatar} sources={provider.avatar_sources} name={name} onChange={setAvatar} label="Provider avatar" onError={(message) => notifyError("Invalid avatar", message)} />
+          <AvatarUpload value={avatar} previewSrc={provider.avatar} sources={provider.avatar_sources} name={name} onChange={setAvatar} label="Provider avatar" onError={(message) => notifyError("Invalid avatar", message)} />
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2"><Label htmlFor="provider-name">Provider name</Label><Input id="provider-name" value={name} onChange={(e) => setName(e.target.value)} /></div>
             <div className="space-y-2"><Label htmlFor="provider-url">Base URL</Label><Input id="provider-url" value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} /></div>
@@ -1407,6 +1419,7 @@ export default function ProviderDetailPage({
       {activeTab === "headers" && <Card>
         <CardHeader><CardTitle>Custom headers</CardTitle><p className="text-sm text-muted-foreground">Headers sent with requests to this provider. Authentication and protocol headers stay managed separately.</p></CardHeader>
         <CardContent className="space-y-4">
+          {requiresOpenCodeSession && <div className="grid gap-2 rounded-md border border-primary/20 bg-primary/5 p-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)_auto]"><div className="flex items-center rounded-md border bg-background px-3 text-sm font-mono text-foreground">x-opencode-session</div><div className="flex min-h-9 items-center rounded-md border bg-muted/50 px-3 text-sm text-muted-foreground">Generated automatically per conversation</div><Badge variant="secondary" className="min-h-9 justify-center">Required</Badge><p className="text-xs text-muted-foreground sm:col-span-3">Sent automatically to OpenCode. This protected header cannot be edited or removed.</p></div>}
           {customHeaderRows.map((row) => <div key={row.id} className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)_auto]"><Input aria-label="Header name" placeholder="Header name" autoComplete="off" value={row.name} onChange={(event) => setCustomHeaderRows((rows) => rows.map((item) => item.id === row.id ? { ...item, name: event.target.value } : item))} /><Input aria-label="Header value" placeholder="Value" autoComplete="new-password" value={row.value} onChange={(event) => setCustomHeaderRows((rows) => rows.map((item) => item.id === row.id ? { ...item, value: event.target.value } : item))} /><Button type="button" variant="ghost" size="icon" aria-label={`Remove ${row.name || "header"}`} onClick={() => setCustomHeaderRows((rows) => rows.filter((item) => item.id !== row.id))}><Trash2 className="size-4" /></Button></div>)}
           {!customHeaderRows.length && <div className="rounded-lg border border-dashed p-6 text-center"><p className="text-sm font-medium">No custom headers</p><p className="mt-1 text-xs text-muted-foreground">Add headers required by this provider's gateway.</p></div>}
           <div className="flex flex-wrap items-center justify-between gap-3"><p className="text-xs text-muted-foreground">Values are encrypted at rest. Authorization/protocol headers are managed separately. OpenCode receives a stable session ID per conversation.</p><Button type="button" variant="outline" onClick={addCustomHeader}><Add className="size-4" />Add header</Button></div>

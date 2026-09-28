@@ -136,9 +136,9 @@ export const providersPlugin = (app: Elysia) =>
         body: t.Object({
           name: t.String({ minLength: 1 }),
           base_url: t.String({ minLength: 1 }),
-          api_key: t.Optional(t.String({ minLength: 1 })),
-          auth_code: t.Optional(t.String({ minLength: 1 })),
-          secret: t.Optional(t.String({ minLength: 1 })),
+          api_key: t.Optional(t.String()),
+          auth_code: t.Optional(t.String()),
+          secret: t.Optional(t.String()),
           account_id: t.Optional(t.String({ minLength: 1 })),
           avatar: t.Optional(t.String()),
           custom_headers: t.Optional(t.Record(t.String(), t.String())),

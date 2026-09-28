@@ -5,6 +5,7 @@ describe("credential validation", () => {
   test("accepts API key credentials for the OpenAI Responses protocol", () => {
     expect(validateCredential("openai-responses", "api_key", "secret").valid).toBe(true);
     expect(() => validateCredential("openai-responses", "api_key", "")).toThrow("non-empty secret");
+    expect(validateCredential("openai-responses", "api_key", "", { allowEmptySecret: true }).valid).toBe(true);
   });
 
   test("requires matching kind and secret for token providers", () => {
