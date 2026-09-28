@@ -444,7 +444,7 @@ function saveMetadata(modelId: string, input: ModelMetadataInput): void {
       return value === null ? null : value ? 1 : 0;
     });
     db.query(`INSERT INTO model_capabilities (model_id, ${capabilityKeys.join(", ")})
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      VALUES (${Array(capabilityKeys.length + 1).fill("?").join(", ")})
       ON CONFLICT(model_id) DO UPDATE SET ${capabilityKeys.map((key) => `${key} = excluded.${key}`).join(", ")}`)
       .run(modelId, ...values);
   }
