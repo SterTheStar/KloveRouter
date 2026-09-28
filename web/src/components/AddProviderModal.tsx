@@ -480,7 +480,7 @@ export default function AddProviderModal({
                   onChange={(e) => {
                     const value = e.target.value;
                     setBaseUrl(value);
-                    if (selectedType?.protocol === "openai" && !avatarManuallySet) {
+                    if ((selectedType?.protocol === "openai" || selectedType?.protocol === "openai-responses") && !avatarManuallySet) {
                       try {
                         const hostname = new URL(value).hostname;
                         if (hostname) setAvatar(`https://www.google.com/s2/favicons?domain=${encodeURIComponent(hostname)}&sz=64`);

@@ -11,6 +11,12 @@ export function createOpenAIClient(
   });
 }
 
+export function openAIEndpoint(provider: Provider, resource: "models" | "responses"): string {
+  const baseUrl = provider.base_url.replace(/\/+$/, "");
+  const versionedBase = baseUrl.endsWith("/v1") ? baseUrl : `${baseUrl}/v1`;
+  return `${versionedBase}/${resource}`;
+}
+
 export function parseModelName(
   model: string,
 ): { providerName: string; modelId: string } | null {

@@ -6,6 +6,16 @@ import {
 } from "./model-metadata";
 
 describe("model metadata resolver", () => {
+  test("uses the standard API metadata resolver for OpenAI Responses providers", async () => {
+    const metadata = await resolveModelMetadata("openai-responses", "response-model", {
+      context_window: 90_000,
+      supported_reasoning_efforts: [{ reasoning_effort: "high" }],
+      default_reasoning_effort: "high",
+    });
+    expect(metadata.context_window).toBe(90_000);
+    expect(metadata.reasoning_efforts).toEqual([expect.objectContaining({ effort: "high", is_default: true })]);
+  });
+
   test("normal API metadata applies only values returned by the API", async () => {
     const metadata = await resolveModelMetadata(
       "openai",

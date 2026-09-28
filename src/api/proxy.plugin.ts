@@ -3,12 +3,11 @@ import { keyService } from "../services/key.service";
 import { providerService } from "../services/provider.service";
 import { modelService, providerModelPublicId } from "../services/model.service";
 import { usageService } from "../services/usage.service";
-import { createOpenAIClient, parseModelName } from "../clients/openai";
+import { createOpenAIClient, openAIEndpoint, parseModelName } from "../clients/openai";
 import {
   AnthropicRequestError,
   createAnthropicMessage,
   createAnthropicStream,
-  splitAnthropicMessages,
   toOpenAICompletion,
 } from "../clients/anthropic";
 import { codexResponses, codexStreamToOpenAI } from "../integrations/codex";
@@ -46,13 +45,20 @@ import {
 import { MultimodalRequestError } from "../services/multimodal";
 import { countMessages, countCompletion } from "../services/token-counter/token-counter";
 import { config } from "../config";
-import {
-  chatCompletionToResponse,
-  chatSseToResponses,
-  responsesToChatBody,
-} from "./responses-api";
+import { assertSafeRemoteUrl } from "../services/ssrf";
+import { isOpenAICompatibleProtocol } from "../services/provider-appearance";
 import { validateChatCompletionRequest } from "./openai-request";
 import { normalizeToolDefinitions, normalizeToolName } from "./tool-names";
+import {
+  chatCompletionToAnthropic,
+  chatCompletionToResponse as convertChatCompletionToResponse,
+  convertResponse,
+  requestFromChat,
+  requestToChat,
+  convertStream,
+  responsesSseToChat,
+  rewriteResponsesStreamModel,
+} from "../sdk/protocol-converter";
 import {
   fixMissingThinkOpeningTag,
   fixThinkTagAsyncIterable,
@@ -60,7 +66,7 @@ import {
 } from "./think-tag-fix";
 
 function anthropicPayload(body: any, modelId: string, stream = false) {
-  const messages = splitAnthropicMessages(body.messages);
+  const converted = requestFromChat("anthropic", { ...body, model: modelId, stream });
   const effort = body.__klove_reasoning?.effort;
   const maxTokens =
     body.max_output_tokens ??
@@ -81,10 +87,15 @@ function anthropicPayload(body: any, modelId: string, stream = false) {
       ? Math.min(configuredBudget, maxTokens - 1)
       : undefined;
   return {
+    ...converted,
     model: modelId,
-    messages: messages.messages,
-    ...(messages.system ? { system: messages.system } : {}),
     max_tokens: maxTokens,
+    ...(body.top_k !== undefined ? { top_k: body.top_k } : {}),
+    ...(body.response_format?.type === "json_schema"
+      ? { output_config: { ...(effort ? { effort } : {}), format: { type: "json_schema", name: body.response_format.json_schema?.name ?? "response", schema: body.response_format.json_schema?.schema } } }
+      : body.response_format?.type === "json_object"
+        ? { output_config: { ...(effort ? { effort } : {}), format: { type: "json_object" } } }
+        : {}),
     ...(effort === "none"
       ? { thinking: { type: "disabled" } }
       : body.thinking
@@ -92,35 +103,6 @@ function anthropicPayload(body: any, modelId: string, stream = false) {
       : budget
         ? { thinking: { type: "enabled", budget_tokens: budget } }
         : {}),
-    ...(body.temperature !== undefined
-      ? { temperature: body.temperature }
-      : {}),
-    ...(body.top_p !== undefined ? { top_p: body.top_p } : {}),
-    ...(body.stop !== undefined
-      ? { stop_sequences: Array.isArray(body.stop) ? body.stop : [body.stop] }
-      : {}),
-    ...(body.tools?.length
-      ? {
-          tools: body.tools.map((tool: any) => ({
-            name: tool.function?.name,
-            description: tool.function?.description,
-            input_schema: tool.function?.parameters ?? {
-              type: "object",
-              properties: {},
-            },
-          })),
-        }
-      : {}),
-    ...(body.tool_choice !== undefined
-      ? {
-          tool_choice:
-            body.tool_choice === "auto" || body.tool_choice === "none"
-              ? { type: body.tool_choice }
-              : body.tool_choice === "required"
-                ? { type: "any" }
-                : { type: "tool", name: body.tool_choice?.function?.name },
-        }
-      : {}),
     stream,
   };
 }
@@ -143,6 +125,7 @@ const forwardedChatFields = [
   "tools",
   "tool_choice",
   "parallel_tool_calls",
+  "max_tool_calls",
   "response_format",
   "seed",
   "service_tier",
@@ -353,92 +336,7 @@ function anthropicStreamResponse(
   model: string,
   onCancel?: () => void,
 ) {
-  const reader = response.body?.getReader();
-  if (!reader) throw new Error("Anthropic returned an empty stream");
-  const decoder = new TextDecoder();
-  const encoder = new TextEncoder();
-  let buffer = "";
-  let promptTokens = 0;
-  let completionTokens = 0;
-  let cacheRead = 0;
-  let cacheWrite = 0;
-  let firstTokenAt: number | null = null;
-  let closed = false;
-  let usageRecorded = false;
-
-  return new Response(
-    new ReadableStream({
-      async start(controller) {
-        const emit = (chunk: Record<string, unknown>) => {
-          if (!closed) controller.enqueue(encoder.encode(`data: ${JSON.stringify(chunk)}\n\n`));
-        };
-        const processEvent = (event: string) => {
-          const data = event
-            .split(/\r?\n/)
-            .filter((line) => line.startsWith("data:"))
-            .map((line) => line.slice(5).trim())
-            .join("\n");
-          if (!data || data === "[DONE]") return;
-          const parsed = JSON.parse(data);
-          if (parsed.type === "message_start") {
-            promptTokens = parsed.message?.usage?.input_tokens ?? 0;
-            ({ cacheRead, cacheWrite } = tokenDetails(parsed.message?.usage));
-          } else if (parsed.type === "content_block_delta" && parsed.delta?.type === "thinking_delta") {
-            firstTokenAt ??= performance.now();
-            emit({ id: parsed.index ?? `chatcmpl-${Date.now()}`, object: "chat.completion.chunk", created: Math.floor(Date.now() / 1000), model, choices: [{ index: parsed.index ?? 0, delta: { reasoning_content: parsed.delta.thinking ?? "" }, finish_reason: null }] });
-          } else if (parsed.type === "content_block_delta" && parsed.delta?.text) {
-            firstTokenAt ??= performance.now();
-            emit({ id: parsed.index ?? `chatcmpl-${Date.now()}`, object: "chat.completion.chunk", created: Math.floor(Date.now() / 1000), model, choices: [{ index: parsed.index ?? 0, delta: { content: parsed.delta.text }, finish_reason: null }] });
-          } else if (parsed.type === "content_block_start" && parsed.content_block?.type === "tool_use") {
-            emit({ id: `chatcmpl-${Date.now()}`, object: "chat.completion.chunk", created: Math.floor(Date.now() / 1000), model, choices: [{ index: parsed.index ?? 0, delta: { tool_calls: [{ index: parsed.index ?? 0, id: parsed.content_block.id, type: "function", function: { name: parsed.content_block.name, arguments: "" } }] }, finish_reason: null }] });
-          } else if (parsed.type === "content_block_delta" && parsed.delta?.type === "input_json_delta") {
-            emit({ id: `chatcmpl-${Date.now()}`, object: "chat.completion.chunk", created: Math.floor(Date.now() / 1000), model, choices: [{ index: parsed.index ?? 0, delta: { tool_calls: [{ index: parsed.index ?? 0, type: "function", function: { arguments: parsed.delta.partial_json ?? "" } }] }, finish_reason: null }] });
-          } else if (parsed.type === "message_delta") {
-            completionTokens = parsed.usage?.output_tokens ?? completionTokens;
-            ({ cacheRead, cacheWrite } = tokenDetails({ ...parsed.usage, ...parsed.message?.usage }));
-            emit({ id: `chatcmpl-${Date.now()}`, object: "chat.completion.chunk", created: Math.floor(Date.now() / 1000), model, choices: [{ index: parsed.index ?? 0, delta: {}, finish_reason: parsed.delta?.stop_reason ?? "stop" }], usage: { prompt_tokens: promptTokens, completion_tokens: completionTokens, total_tokens: promptTokens + completionTokens, prompt_tokens_details: { cached_tokens: cacheRead } } });
-          }
-        };
-        const finish = () => {
-          if (closed) return;
-          closed = true;
-          if (!usageRecorded) {
-            usageRecorded = true;
-            onUsage(promptTokens, completionTokens, Math.round(performance.now() - start), Math.round(performance.now() - (firstTokenAt ?? start)), { cacheRead, cacheWrite });
-          }
-          controller.enqueue(encoder.encode("data: [DONE]\n\n"));
-          controller.close();
-        };
-        try {
-          while (true) {
-            const { done, value } = await reader.read();
-            buffer += decoder.decode(value ?? new Uint8Array(), { stream: !done });
-            const events = buffer.split(/\r?\n\r?\n/);
-            buffer = events.pop() ?? "";
-            for (const event of events) processEvent(event);
-            if (done) {
-              if (buffer.trim()) processEvent(buffer);
-              finish();
-              break;
-            }
-          }
-        } catch (error: any) {
-          if (!closed) {
-            closed = true;
-            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ error: { message: error?.message ?? String(error) } })}\n\n`));
-            controller.enqueue(encoder.encode("data: [DONE]\n\n"));
-            controller.close();
-          }
-        }
-      },
-      cancel(reason) {
-        closed = true;
-        onCancel?.();
-        void reader.cancel(reason).catch(() => undefined);
-      },
-    }),
-    { headers: streamingHeaders() },
-  );
+  return recordSseUsageResponse(convertStream("anthropic", "chat_completions", response, model, onCancel), onUsage, start, undefined, { model });
 }
 
 export function recordSseUsageResponse(
@@ -560,10 +458,8 @@ export function recordSseUsageResponse(
 
 async function verifyApiKey(headers: Record<string, string | undefined>) {
   const auth = headers.authorization;
-  if (!auth || !auth.startsWith("Bearer ")) {
-    return null;
-  }
-  const key = auth.slice(7);
+  const key = auth?.startsWith("Bearer ") ? auth.slice(7) : headers["x-api-key"];
+  if (!key) return null;
   return keyService.verify(key);
 }
 
@@ -571,6 +467,16 @@ export const proxyPlugin = (app: Elysia) =>
   app
     .onError(({ error, set, request }) => {
       const pathname = new URL(request.url).pathname;
+      if (pathname === "/v1/messages") {
+        set.status = proxyErrorStatus(error, 500);
+        return {
+          type: "error",
+          error: {
+            type: (error as any)?.type ?? "api_error",
+            message: errorMessage(error, "Internal proxy error"),
+          },
+        };
+      }
       if (pathname === "/v1/chat/completions" || pathname === "/v1/responses") {
         set.status = proxyErrorStatus(error, 500);
         return proxyErrorBody(error, "Internal proxy error");
@@ -627,6 +533,76 @@ export const proxyPlugin = (app: Elysia) =>
       };
     })
     .post(
+      "/v1/messages",
+      async ({ body, set, headers, request }) => {
+        if (!body || typeof body !== "object" || typeof body.model !== "string" || !Array.isArray(body.messages) || typeof body.max_tokens !== "number") {
+          set.status = 400;
+          return { type: "error", error: { type: "invalid_request_error", message: "model, messages, and max_tokens are required" } };
+        }
+        const apiKey = await verifyApiKey(headers);
+        if (!apiKey) {
+          set.status = 401;
+          return { type: "error", error: { type: "authentication_error", message: "Valid API key required" } };
+        }
+        let chatBody: any;
+        try {
+          chatBody = requestToChat("anthropic", body);
+        } catch (error: any) {
+          set.status = 400;
+          return { type: "error", error: { type: "invalid_request_error", message: error?.message ?? "Unsupported Anthropic request" } };
+        }
+        const model = typeof body.model === "string" ? body.model : "";
+        const poolSlug = poolSlugFromModelId(model);
+        if (poolSlug) {
+          const candidates = modelPoolService.routeCandidates(poolSlug);
+          if (!candidates?.length) {
+            set.status = 503;
+            return { type: "error", error: { type: "api_error", message: `Compound model "${poolSlug}" is unavailable` } };
+          }
+          const response = await routeModelPool(poolSlug, chatBody, headers.authorization ?? `Bearer ${headers["x-api-key"]}`, request.signal, async (_input, init) => fetch(`http://127.0.0.1:${config.port}/v1/chat/completions`, { ...init, headers: { ...(init?.headers as Record<string, string>), "X-Klove-Model-Pool-Attempt": "true" } }));
+          if (!response.ok) { set.status = response.status; const error = await response.json().catch(() => null) as any; return { type: "error", error: { type: error?.error?.type ?? "api_error", message: error?.error?.message ?? error?.message ?? "Provider request failed" } }; }
+          if (body.stream) return convertStream("chat_completions", "anthropic", response, model);
+          try {
+            return chatCompletionToAnthropic(await response.json());
+          } catch (error: any) {
+            set.status = 502;
+            return { type: "error", error: { type: "api_error", message: error?.message ?? "Response conversion failed" } };
+          }
+        }
+        const abort = new AbortController();
+        const abortUpstream = () => abort.abort(request.signal.reason);
+        if (request.signal.aborted) abortUpstream();
+        else request.signal.addEventListener("abort", abortUpstream, { once: true });
+        try {
+          const chatResponse = await fetch(`http://127.0.0.1:${config.port}/v1/chat/completions`, {
+            method: "POST",
+            headers: { Authorization: headers.authorization ?? `Bearer ${headers["x-api-key"]}`, "Content-Type": "application/json", Accept: body.stream ? "text/event-stream" : "application/json" },
+            body: JSON.stringify(chatBody),
+            signal: abort.signal,
+          });
+          if (!chatResponse.ok) {
+            set.status = chatResponse.status;
+            const raw = await chatResponse.text().catch(() => "");
+            let upstream: any = null;
+            try { upstream = raw ? JSON.parse(raw) : null; } catch { upstream = { message: raw }; }
+            return { type: "error", error: { type: upstream?.error?.type ?? "api_error", message: upstream?.error?.message ?? upstream?.message ?? "Provider request failed" } };
+          }
+          if (body.stream) return convertStream("chat_completions", "anthropic", chatResponse, body.model, abortUpstream);
+          try {
+            return chatCompletionToAnthropic(await chatResponse.json());
+          } catch (error: any) {
+            set.status = 502;
+            return { type: "error", error: { type: "api_error", message: error?.message ?? "Response conversion failed" } };
+          }
+        } catch (error: any) {
+          if (request.signal.aborted) throw error;
+          set.status = 502;
+          return { type: "error", error: { type: "api_error", message: error?.message ?? "Proxy request failed" } };
+        }
+      },
+      { body: t.Any() },
+    )
+    .post(
       "/v1/responses",
       async ({ body, set, headers, request }) => {
         if (!body || typeof body !== "object" || typeof body.model !== "string" || body.input === undefined) {
@@ -645,7 +621,87 @@ export const proxyPlugin = (app: Elysia) =>
           set.status = 401;
           return { error: { message: "Valid API key required", type: "authentication_error", code: null } };
         }
-        const chatBody = responsesToChatBody(body);
+        const parsedModel = parseModelName(body.model);
+        if (parsedModel) {
+          const provider = providerService.findByName(parsedModel.providerName);
+          if (provider?.protocol === "openai-responses" && provider.is_active) {
+            const modelRecord = modelService.findByPublicId(provider.id, parsedModel.modelId);
+            if (!modelRecord || !modelRecord.is_active) {
+              set.status = 404;
+              return { error: { message: `No active model "${parsedModel.modelId}" is configured for provider "${provider.name}"`, type: "invalid_request_error", code: "model_not_found" } };
+            }
+            const requestModel = modelRecord.model_id;
+            const canonicalBody = requestToChat("responses", body);
+            try {
+              validateModelRequest(canonicalBody, modelRecord);
+              applyResolvedReasoning(canonicalBody, modelRecord);
+            } catch (error: any) {
+              set.status = 400;
+              return { error: { message: error.message, type: "invalid_request_error", code: null } };
+            }
+            let convertedRequest: any;
+            try { convertedRequest = { ...body, model: requestModel }; }
+            catch (error: any) { set.status = 400; return { error: { message: error.message, type: "invalid_request_error", code: null } }; }
+            const upstreamController = new AbortController();
+            const abort = () => upstreamController.abort(request.signal.reason);
+            if (request.signal.aborted) abort(); else request.signal.addEventListener("abort", abort, { once: true });
+            const providerCredential = credentialService.select(provider.id, provider.credential_mode, provider.fixed_credential_id)
+              || credentialService.select(provider.id, "round_robin");
+            if (!providerCredential) {
+              set.status = 503;
+              return { error: { message: "No active provider credential", type: "server_error", code: "no_active_credential" } };
+            }
+            const requestLogId = requestLogService.start({
+              providerId: provider.id,
+              providerName: provider.name,
+              modelName: requestModel,
+              clientIp: clientIp(request, headers),
+              requesterName: apiKey.name,
+              requestDetails: { method: request.method, url: "/v1/responses", headers, payload: body, stream: Boolean(body.stream) },
+            });
+            await assertSafeRemoteUrl(openAIEndpoint(provider, "responses"));
+            const started = performance.now();
+            const upstream = await fetch(openAIEndpoint(provider, "responses"), {
+              method: "POST",
+              headers: { Authorization: `Bearer ${providerCredential.secret ?? ""}`, "Content-Type": "application/json", Accept: body.stream ? "text/event-stream" : "application/json" },
+              body: JSON.stringify(convertedRequest),
+              signal: upstreamController.signal,
+            });
+            if (!upstream.ok) {
+              set.status = upstream.status;
+              const failureBody = await upstream.json().catch(() => null);
+              const failure = { status: upstream.status, body: failureBody };
+              requestLogService.captureError(requestLogId, failure);
+              requestLogService.complete(requestLogId, { status: "error", statusCode: upstream.status, error: errorMessage(failure) });
+              return proxyErrorBody(failure);
+            }
+            if (body.stream) return recordSseUsageResponse(rewriteResponsesStreamModel(upstream, body.model, abort), (promptTokens, completionTokens, durationMs, generationDurationMs, details) => {
+              const usage = usageService.record(provider.id, modelRecord.id, requestModel, promptTokens, completionTokens, durationMs, generationDurationMs, details);
+              requestLogService.complete(requestLogId, { promptTokens, completionTokens, cacheRead: details?.cacheRead, cacheWrite: details?.cacheWrite, cost: usage.estimated_cost_usd, durationMs });
+              credentialService.clearError(providerCredential.id);
+              credentialService.clearCooldown(providerCredential.id);
+            }, started, (error) => {
+              credentialService.markError(providerCredential.id, error.message);
+              requestLogService.complete(requestLogId, { status: "error", statusCode: 502, error: error.message });
+            }, { messages: canonicalBody.messages, model: requestModel, provider: provider.name });
+            const result = await upstream.json();
+            const inputTokens = Number(result.usage?.input_tokens ?? 0);
+            const outputTokens = Number(result.usage?.output_tokens ?? 0);
+            const durationMs = Math.round(performance.now() - started);
+            const usage = usageService.record(provider.id, modelRecord.id, requestModel, inputTokens, outputTokens, durationMs, durationMs);
+            requestLogService.complete(requestLogId, { promptTokens: inputTokens, completionTokens: outputTokens, cost: usage.estimated_cost_usd, durationMs });
+            credentialService.clearError(providerCredential.id);
+            credentialService.clearCooldown(providerCredential.id);
+            return { ...result, model: body.model };
+          }
+        }
+        let chatBody: any;
+        try {
+          chatBody = requestToChat("responses", body);
+        } catch (error: any) {
+          set.status = 400;
+          return { error: { message: error?.message ?? "Unsupported Responses request", type: "invalid_request_error", code: null } };
+        }
         const poolSlug = typeof body.model === "string" ? poolSlugFromModelId(body.model) : null;
         if (poolSlug) {
           const candidates = modelPoolService.routeCandidates(poolSlug);
@@ -667,8 +723,19 @@ export const proxyPlugin = (app: Elysia) =>
             set.status = poolResponse.status;
             return proxyErrorBody({ status: poolResponse.status, body: await poolResponse.json().catch(() => null) });
           }
-          if (body.stream) return chatSseToResponses(poolResponse, body.model);
-          return chatCompletionToResponse(await poolResponse.json());
+          if (body.stream) return convertStream("chat_completions", "responses", poolResponse, body.model);
+          try {
+            return convertChatCompletionToResponse(await poolResponse.json());
+          } catch (error: any) {
+            set.status = 502;
+            return { error: { message: error?.message ?? "Response conversion failed", type: "server_error", code: null } };
+          }
+        }
+        const parsedTarget = parseModelName(body.model);
+        const targetProvider = parsedTarget ? providerService.findByName(parsedTarget.providerName) : null;
+        if (targetProvider?.protocol === "openai-responses") {
+          set.status = 400;
+          return { error: { message: "OpenAI Responses providers require requests to /v1/responses", type: "invalid_request_error", code: "incompatible_endpoint" } };
         }
         const upstreamController = new AbortController();
         const abortUpstream = () => upstreamController.abort(request.signal.reason);
@@ -676,11 +743,7 @@ export const proxyPlugin = (app: Elysia) =>
         else request.signal.addEventListener("abort", abortUpstream, { once: true });
         const chatResponse = await fetch(`http://127.0.0.1:${config.port}/v1/chat/completions`, {
           method: "POST",
-          headers: {
-            Authorization: headers.authorization!,
-            "Content-Type": "application/json",
-            Accept: body.stream ? "text/event-stream" : "application/json",
-          },
+          headers: { Authorization: headers.authorization ?? `Bearer ${headers["x-api-key"]}`, "Content-Type": "application/json", Accept: body.stream ? "text/event-stream" : "application/json" },
           body: JSON.stringify(chatBody),
           signal: upstreamController.signal,
         });
@@ -695,8 +758,23 @@ export const proxyPlugin = (app: Elysia) =>
           }
           return proxyErrorBody({ status: chatResponse.status, body: error });
         }
-        if (body.stream) return chatSseToResponses(chatResponse, body.model, abortUpstream);
-        return chatCompletionToResponse(await chatResponse.json());
+        if (body.stream) {
+          const parsed = parseModelName(body.model);
+          const provider = parsed ? providerService.findByName(parsed.providerName) : null;
+          if (provider?.protocol === "openai-responses") {
+            await chatResponse.body?.cancel();
+            const error = new Error("Requests using Responses-only providers must be sent to /v1/responses");
+            set.status = 400;
+            return proxyErrorBody(error, "Incompatible endpoint");
+          }
+          return convertStream("chat_completions", "responses", chatResponse, body.model, abortUpstream);
+        }
+        try {
+          return convertChatCompletionToResponse(await chatResponse.json());
+        } catch (error: any) {
+          set.status = 502;
+          return { error: { message: error?.message ?? "Response conversion failed", type: "server_error", code: null } };
+        }
       },
       { body: t.Any() },
     )
@@ -756,6 +834,11 @@ export const proxyPlugin = (app: Elysia) =>
             message:
               'Model must be in format "providername/modelname" (e.g. "openai/gpt-4")',
           };
+        }
+        const selectedProvider = providerService.findByName(parsed.providerName);
+        if (selectedProvider?.protocol === "openai-responses") {
+          set.status = 400;
+          return { error: "Incompatible API endpoint", message: `Provider "${selectedProvider.name}" uses the Responses API. Send this request to /v1/responses.` };
         }
 
         const poolSlug = poolSlugFromModelId(body.model);
@@ -929,6 +1012,157 @@ export const proxyPlugin = (app: Elysia) =>
             : [],
           reasoning_effort: body.reasoning_effort ?? body.reasoning?.effort,
         });
+
+        if (provider.protocol === "openai-responses") {
+          const attempted = new Set<string>();
+          const failures: unknown[] = [];
+          let responsesBody: Record<string, any>;
+          try {
+            responsesBody = requestFromChat("responses", { ...body, model: parsed.modelId, stream: Boolean(body.stream) });
+          } catch (error: any) {
+            requestLogService.complete(requestLogId, { status: "error", statusCode: 400, error: error.message });
+            set.status = 400;
+            return { error: "Invalid request for OpenAI Responses API", message: error.message };
+          }
+          while (credential && !attempted.has(credential.id)) {
+            attempted.add(credential.id);
+            const credentialId = credential.id;
+            const start = performance.now();
+            try {
+              await assertSafeRemoteUrl(openAIEndpoint(provider, "responses"));
+              const upstream = await fetch(openAIEndpoint(provider, "responses"), {
+                method: "POST",
+                headers: {
+                  Authorization: `Bearer ${credential.secret ?? ""}`,
+                  "Content-Type": "application/json",
+                  Accept: body.stream ? "text/event-stream" : "application/json",
+                },
+                body: JSON.stringify(responsesBody),
+                signal: request.signal,
+              });
+              requestLogService.captureResponse(requestLogId, { status: upstream.status, headers: upstream.headers, contentType: upstream.headers.get("content-type"), streaming: Boolean(body.stream) });
+              if (!upstream.ok) {
+                const data = await upstream.json().catch(() => null);
+                throw Object.assign(new Error(data?.error?.message ?? `Responses API returned HTTP ${upstream.status}`), { status: upstream.status, body: data });
+              }
+              if (body.stream) {
+                const chatStream = fixThinkTagStream(convertStream("responses", "chat_completions", upstream, parsed.modelId, () => undefined));
+                return recordSseUsageResponse(chatStream, (promptTokens, completionTokens, durationMs, generationDurationMs, details) => {
+                  const usage = usageService.record(provider.id, modelRecord?.id ?? parsed.modelId, parsed.modelId, promptTokens, completionTokens, durationMs, generationDurationMs, details);
+                  requestLogService.complete(requestLogId, { promptTokens, completionTokens, cacheRead: details?.cacheRead, cacheWrite: details?.cacheWrite, cost: usage.estimated_cost_usd, durationMs });
+                  credentialService.clearError(credentialId);
+                  credentialService.clearCooldown(credentialId);
+                }, start, (error) => {
+                  credentialService.markError(credentialId, error.message);
+                  requestLogService.complete(requestLogId, { status: "error", statusCode: 502, error: error.message });
+                }, { messages: body.messages, model: parsed.modelId, provider: provider.name });
+              }
+              const completion = convertResponse("responses", "chat_completions", await upstream.json());
+              const durationMs = Math.round(performance.now() - start);
+              const details = tokenDetails(completion.usage);
+              const usage = usageService.record(provider.id, modelRecord?.id ?? parsed.modelId, parsed.modelId, completion.usage?.prompt_tokens ?? 0, completion.usage?.completion_tokens ?? 0, durationMs, durationMs, details);
+              requestLogService.complete(requestLogId, { promptTokens: completion.usage?.prompt_tokens, completionTokens: completion.usage?.completion_tokens, cacheRead: details.cacheRead, cacheWrite: details.cacheWrite, cost: usage.estimated_cost_usd, durationMs });
+              credentialService.clearError(credentialId);
+              credentialService.clearCooldown(credentialId);
+              return fixThinkTag(completion);
+            } catch (error: any) {
+              failures.push(error);
+              requestLogService.captureError(requestLogId, error);
+              credentialService.markError(credentialId, error.message);
+              if (isAbortError(error) || !isTransientProviderError(error) || provider.credential_mode !== "round_robin") break;
+              credentialService.markCooldown(credentialId, 10, error.message, requestSequence);
+              const next = credentialService.select(provider.id, "round_robin", null, requestSequence);
+              if (!next || attempted.has(next.id)) break;
+              credential = next;
+              requestLogService.setCredential(requestLogId, credential);
+            }
+          }
+          const statusCode = failureStatus(failures);
+          const message = errorMessage(failures.at(-1));
+          requestLogService.complete(requestLogId, { status: "error", statusCode, error: message });
+          set.status = statusCode;
+          return { error: "OpenAI Responses request failed", message };
+        }
+
+        if (isOpenAICompatibleProtocol(provider.protocol) && body.stream) {
+          const attempted = new Set<string>();
+          const failures: unknown[] = [];
+          while (credential && !attempted.has(credential.id)) {
+            attempted.add(credential.id);
+            const credentialId = credential.id;
+            const start = performance.now();
+            try {
+              const client = createOpenAIClient({ ...provider, api_key: credential.secret ?? "" });
+              const stream = (await client.chat.completions.create({ ...payload, stream: true, stream_options: { include_usage: true } }, { signal: request.signal })) as any;
+              return openAIStreamResponse(fixThinkTagAsyncIterable(stream, modelRecord.think_opening_tag_mode), {
+                start,
+                tokenDetails,
+                signal: request.signal,
+                onComplete: ({ promptTokens, completionTokens, cacheRead, cacheWrite, durationMs, generationDurationMs }) => {
+                  const usage = usageService.record(provider.id, modelRecord.id, parsed.modelId, promptTokens, completionTokens, durationMs, generationDurationMs, { cacheRead, cacheWrite });
+                  requestLogService.complete(requestLogId, { promptTokens, completionTokens, cacheRead, cacheWrite, cost: usage.estimated_cost_usd, durationMs });
+                  credentialService.clearError(credentialId);
+                  credentialService.clearCooldown(credentialId);
+                },
+                onError: (error, stats) => {
+                  credentialService.markError(credentialId, error.message);
+                  requestLogService.complete(requestLogId, { status: "error", statusCode: 502, promptTokens: stats.promptTokens, completionTokens: stats.completionTokens, cacheRead: stats.cacheRead, cacheWrite: stats.cacheWrite, durationMs: stats.durationMs, error: error.message });
+                },
+                onCancel: (stats) => requestLogService.complete(requestLogId, { status: "error", statusCode: 499, promptTokens: stats.promptTokens, completionTokens: stats.completionTokens, cacheRead: stats.cacheRead, cacheWrite: stats.cacheWrite, durationMs: stats.durationMs, error: "Client disconnected" }),
+              });
+            } catch (error: any) {
+              failures.push(error);
+              requestLogService.captureError(requestLogId, error);
+              credentialService.markError(credentialId, error.message);
+              if (isAbortError(error) || !isTransientProviderError(error) || provider.credential_mode !== "round_robin") break;
+              credentialService.markCooldown(credentialId, 10, error.message, requestSequence);
+              const next = credentialService.select(provider.id, "round_robin", null, requestSequence);
+              if (!next || attempted.has(next.id)) break;
+              credential = next;
+              requestLogService.setCredential(requestLogId, credential);
+            }
+          }
+          const statusCode = failureStatus(failures);
+          const message = errorMessage(failures.at(-1));
+          requestLogService.complete(requestLogId, { status: "error", statusCode, error: message });
+          set.status = statusCode;
+          return { error: "OpenAI Chat Completions request failed", message };
+        }
+
+        if (isOpenAICompatibleProtocol(provider.protocol) && !body.stream) {
+          const attempted = new Set<string>();
+          const failures: unknown[] = [];
+          while (credential && !attempted.has(credential.id)) {
+            attempted.add(credential.id);
+            const credentialId = credential.id;
+            const start = performance.now();
+            try {
+              const completion = await createOpenAIClient({ ...provider, api_key: credential.secret ?? "" }).chat.completions.create(payload, { signal: request.signal });
+              const durationMs = Math.round(performance.now() - start);
+              const details = tokenDetails(completion.usage);
+              const usage = usageService.record(provider.id, modelRecord.id, parsed.modelId, completion.usage?.prompt_tokens ?? 0, completion.usage?.completion_tokens ?? 0, durationMs, durationMs, details);
+              requestLogService.complete(requestLogId, { promptTokens: completion.usage?.prompt_tokens, completionTokens: completion.usage?.completion_tokens, cacheRead: details.cacheRead, cacheWrite: details.cacheWrite, cost: usage.estimated_cost_usd, durationMs });
+              credentialService.clearError(credentialId);
+              credentialService.clearCooldown(credentialId);
+              return fixThinkTag(completion);
+            } catch (error: any) {
+              failures.push(error);
+              requestLogService.captureError(requestLogId, error);
+              credentialService.markError(credentialId, error.message);
+              if (isAbortError(error) || !isTransientProviderError(error) || provider.credential_mode !== "round_robin") break;
+              credentialService.markCooldown(credentialId, 10, error.message, requestSequence);
+              const next = credentialService.select(provider.id, "round_robin", null, requestSequence);
+              if (!next || attempted.has(next.id)) break;
+              credential = next;
+              requestLogService.setCredential(requestLogId, credential);
+            }
+          }
+          const statusCode = failureStatus(failures);
+          const message = errorMessage(failures.at(-1));
+          requestLogService.complete(requestLogId, { status: "error", statusCode, error: message });
+          set.status = statusCode;
+          return { error: "OpenAI Chat Completions request failed", message };
+        }
 
         if (provider.protocol === "anthropic") {
           const attempted = new Set<string>();
@@ -1694,16 +1928,9 @@ export const proxyPlugin = (app: Elysia) =>
               attempted.add(credential.id);
               const credentialId = credential.id;
               const start = performance.now();
-              const client = createOpenAIClient({
-                ...provider,
-                api_key: credential.secret ?? "",
-              });
+              const client = createOpenAIClient({ ...provider, api_key: credential.secret ?? "" });
               const stream = (await client!.chat.completions.create(
-                {
-                  ...payload,
-                  stream: true,
-                  stream_options: { include_usage: true },
-                },
+                { ...payload, stream: true, stream_options: { include_usage: true } },
                 { signal: request.signal },
               )) as any;
 

@@ -1,5 +1,6 @@
 import type { Provider } from "../services/provider.service";
 import { parseDataImage, openAIImageUrl } from "../services/multimodal";
+import { anthropicResponseToChat } from "../sdk/protocol-converter";
 
 export type AnthropicMessage = {
   role: "user" | "assistant" | "system" | "developer" | "tool";
@@ -165,57 +166,5 @@ export async function createAnthropicStream(
 }
 
 export function toOpenAICompletion(response: AnthropicResponse) {
-  const text =
-    response.content
-      ?.filter((block) => block.type === "text")
-      .map((block) => block.text ?? "")
-      .join("") ?? "";
-  const toolCalls =
-    response.content
-      ?.filter((block) => block.type === "tool_use")
-      .map((block, index) => ({
-        index,
-        id: block.id ?? `call_${crypto.randomUUID()}`,
-        type: "function",
-        function: {
-          name: block.name ?? "",
-          arguments: JSON.stringify(block.input ?? {}),
-        },
-      })) ?? [];
-  const message: Record<string, unknown> = {
-    role: "assistant",
-    content: text || null,
-  };
-  const reasoning =
-    response.content
-      ?.filter((block) => block.type === "thinking")
-      .map((block) => block.thinking ?? "")
-      .join("") ?? "";
-  if (reasoning) message.reasoning_content = reasoning;
-  if (toolCalls.length) message.tool_calls = toolCalls;
-  const promptTokens = response.usage?.input_tokens ?? 0;
-  const completionTokens = response.usage?.output_tokens ?? 0;
-  return {
-    id: response.id,
-    object: "chat.completion",
-    created: Math.floor(Date.now() / 1000),
-    model: response.model,
-    choices: [
-      {
-        index: 0,
-        message,
-        finish_reason: toolCalls.length
-          ? "tool_calls"
-          : (response.stop_reason ?? "stop"),
-      },
-    ],
-    usage: {
-      prompt_tokens: promptTokens,
-      completion_tokens: completionTokens,
-      total_tokens: promptTokens + completionTokens,
-      cache_read_input_tokens: response.usage?.cache_read_input_tokens ?? 0,
-      cache_creation_input_tokens:
-        response.usage?.cache_creation_input_tokens ?? 0,
-    },
-  };
+  return anthropicResponseToChat(response as unknown as Record<string, any>);
 }

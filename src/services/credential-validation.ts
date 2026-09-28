@@ -3,6 +3,7 @@ import type { ProviderProtocol } from "./provider-appearance";
 
 const protocolKinds: Record<ProviderProtocol, CredentialKind> = {
   openai: "api_key",
+  "openai-responses": "api_key",
   anthropic: "api_key",
   codex: "codex",
   chatgpt: "chatgpt",
@@ -59,3 +60,5 @@ export function validateCredential(
   }
   return { valid: true, protocol, kind };
 }
+
+export const credentialKindsByProtocol = protocolKinds;

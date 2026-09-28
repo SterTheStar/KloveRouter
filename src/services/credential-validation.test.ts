@@ -2,6 +2,11 @@ import { describe, expect, test } from "bun:test";
 import { CredentialValidationError, validateCredential } from "./credential-validation";
 
 describe("credential validation", () => {
+  test("accepts API key credentials for the OpenAI Responses protocol", () => {
+    expect(validateCredential("openai-responses", "api_key", "secret").valid).toBe(true);
+    expect(() => validateCredential("openai-responses", "api_key", "")).toThrow("non-empty secret");
+  });
+
   test("requires matching kind and secret for token providers", () => {
     expect(() => validateCredential("chatgpt", "api_key", "token")).toThrow(CredentialValidationError);
     expect(() => validateCredential("chatgpt", "chatgpt", " ")).toThrow("requires a non-empty secret");

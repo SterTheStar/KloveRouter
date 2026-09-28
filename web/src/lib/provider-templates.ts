@@ -52,7 +52,7 @@ const chatgptLogo = "https://chatgpt.com/favicon.ico";
 
 export type ProviderTemplate = {
   id: string;
-  protocol: "openai" | "antigravity" | "anthropic" | "codex" | "chatgpt" | "freebuff" | "qwen" | "atomesus" | "conol";
+  protocol: "openai" | "openai-responses" | "antigravity" | "anthropic" | "codex" | "chatgpt" | "freebuff" | "qwen" | "atomesus" | "conol";
   name: string;
   description: string;
   logo: string;
@@ -179,7 +179,8 @@ const presetLogos: Record<string, string> = {
 };
 
 const providerDescriptions: Record<string, string> = {
-  openai: "OpenAI's hosted models through the familiar Chat Completions API.",
+  openai: "OpenAI-compatible Chat Completions API (POST /v1/chat/completions).",
+  openaiResponses: "OpenAI-compatible Responses API (POST /v1/responses).",
   antigravity:
     "Google account access to Gemini models through Klove's Antigravity integration.",
   anthropic:
@@ -295,10 +296,28 @@ export const PROVIDER_TEMPLATES: readonly ProviderTemplate[] = [
   {
     id: "openai",
     protocol: "openai",
-    name: "OpenAI Compatible",
+    name: "OpenAI Compatible (Chat Completions)",
     description: providerDescriptions.openai,
     logo: openAiLogo,
     placeholder: "https://api.openai.com/v1",
+    preset: false,
+  },
+  {
+    id: "openai-responses",
+    protocol: "openai-responses",
+    name: "OpenAI Compatible (Responses API)",
+    description: providerDescriptions.openaiResponses,
+    logo: openAiLogo,
+    placeholder: "https://api.openai.com/v1",
+    preset: false,
+  },
+  {
+    id: "anthropic",
+    protocol: "anthropic",
+    name: "Anthropic Compatible (Messages API)",
+    description: providerDescriptions.anthropic,
+    logo: anthropicLogo,
+    placeholder: "https://api.anthropic.com",
     preset: false,
   },
   {
@@ -308,15 +327,6 @@ export const PROVIDER_TEMPLATES: readonly ProviderTemplate[] = [
     description: providerDescriptions.antigravity,
     logo: antigravityLogo,
     placeholder: "https://cloudcode-pa.googleapis.com",
-    preset: false,
-  },
-  {
-    id: "anthropic",
-    protocol: "anthropic",
-    name: "Anthropic",
-    description: providerDescriptions.anthropic,
-    logo: anthropicLogo,
-    placeholder: "https://api.anthropic.com",
     preset: false,
   },
   {

@@ -1,5 +1,6 @@
 export type ProviderProtocol =
   | "openai"
+  | "openai-responses"
   | "anthropic"
   | "codex"
   | "chatgpt"
@@ -8,6 +9,10 @@ export type ProviderProtocol =
   | "qwen"
   | "atomesus"
   | "conol";
+
+export function isOpenAICompatibleProtocol(protocol: ProviderProtocol): boolean {
+  return protocol === "openai" || protocol === "openai-responses";
+}
 
 const protocolIcons: Partial<Record<ProviderProtocol, string>> = {
   antigravity: "https://antigravity.google/assets/image/brand/antigravity-icon__full-color.png",

@@ -3,7 +3,7 @@ import { providerService } from "../services/provider.service";
 import { credentialService } from "../services/credential.service";
 import { codexAuthService } from "../integrations/codex";
 import { logger } from "../logger";
-import { isValidAvatar } from "../services/provider-appearance";
+import { isOpenAICompatibleProtocol, isValidAvatar } from "../services/provider-appearance";
 import { assertSafeRemoteUrl } from "../services/ssrf";
 import { chatgptModels, parseChatGptCookies } from "../integrations/chatgpt";
 import { qwenModels } from "../integrations/qwen";
@@ -48,7 +48,7 @@ export const providersPlugin = (app: Elysia) =>
           } else if (protocol === "qwen") {
             const models = await qwenModels(credential, provider.base_url);
             if (!models.length) throw new Error("Qwen returned no models");
-          } else if (protocol === "openai" || protocol === "anthropic") {
+          } else if (isOpenAICompatibleProtocol(protocol) || protocol === "anthropic") {
             const url = protocol === "anthropic"
               ? anthropicEndpoint(provider as any, "models")
               : `${provider.base_url.replace(/\/+$/, "")}${provider.base_url.replace(/\/+$/, "").endsWith("/v1") ? "" : "/v1"}/models`;
@@ -58,9 +58,9 @@ export const providersPlugin = (app: Elysia) =>
               : { Accept: "application/json", Authorization: `Bearer ${secret ?? ""}` };
             const response = await fetch(url, { headers });
             const data: any = await response.json().catch(() => null);
-            if (!response.ok) throw new Error(`${protocol} model listing failed (${response.status})`);
+            if (!response.ok) throw new Error(`${protocol === "openai-responses" ? "OpenAI Responses API" : protocol} model listing failed (${response.status})`);
             const models = Array.isArray(data) ? data : data?.data ?? data?.models;
-            if (!Array.isArray(models) || !models.length) throw new Error(`${protocol} returned no models`);
+            if (!Array.isArray(models) || !models.length) throw new Error(`${protocol === "openai-responses" ? "OpenAI Responses API" : protocol} returned no models`);
           } else {
             return { valid: true, verified: false, message: "This integration has no authenticated model catalog endpoint; verification will occur when models are synced." };
           }
@@ -73,7 +73,7 @@ export const providersPlugin = (app: Elysia) =>
       {
         body: t.Object({
           base_url: t.String({ minLength: 1 }),
-          protocol: t.Optional(t.Union([t.Literal("openai"), t.Literal("anthropic"), t.Literal("codex"), t.Literal("chatgpt"), t.Literal("antigravity"), t.Literal("freebuff"), t.Literal("qwen"), t.Literal("atomesus"), t.Literal("conol")])),
+           protocol: t.Optional(t.Union([t.Literal("openai"), t.Literal("openai-responses"), t.Literal("anthropic"), t.Literal("codex"), t.Literal("chatgpt"), t.Literal("antigravity"), t.Literal("freebuff"), t.Literal("qwen"), t.Literal("atomesus"), t.Literal("conol")])),
           api_key: t.Optional(t.String()),
           auth_code: t.Optional(t.String()),
           secret: t.Optional(t.String()),
@@ -141,6 +141,7 @@ export const providersPlugin = (app: Elysia) =>
           protocol: t.Optional(
             t.Union([
               t.Literal("openai"),
+              t.Literal("openai-responses"),
               t.Literal("anthropic"),
               t.Literal("codex"),
               t.Literal("chatgpt"),
@@ -196,6 +197,7 @@ export const providersPlugin = (app: Elysia) =>
           protocol: t.Optional(
             t.Union([
               t.Literal("openai"),
+              t.Literal("openai-responses"),
               t.Literal("anthropic"),
               t.Literal("codex"),
               t.Literal("chatgpt"),
@@ -375,7 +377,7 @@ export const providersPlugin = (app: Elysia) =>
         const removed = credentialService.remove(credentialId);
         if (
           removed &&
-          (providerService.findById(id)?.protocol === "openai" ||
+          (isOpenAICompatibleProtocol(providerService.findById(id)?.protocol ?? "openai") ||
             providerService.findById(id)?.protocol === "anthropic")
         ) {
           const remaining = credentialService

@@ -7,7 +7,7 @@ import {
   modelService,
 } from "../services/model.service";
 import { providerService } from "../services/provider.service";
-import { createOpenAIClient } from "../clients/openai";
+import { createOpenAIClient, openAIEndpoint } from "../clients/openai";
 import {
   createAnthropicMessage,
   toOpenAICompletion,
@@ -36,6 +36,7 @@ import { healthService } from "../services/health.service";
 import { serializeModel, serializeModelWithProvider } from "./serializers";
 import { modelPoolService } from "../services/model-pool.service";
 import { getDb } from "../db/connection";
+import { convertResponse } from "../sdk/protocol-converter";
 
 const nullableBoolean = t.Union([t.Boolean(), t.Null()]);
 const capabilitiesSchema = t.Object({
@@ -624,18 +625,38 @@ export const modelsPlugin = (app: Elysia) =>
                      ? await atomesusTest(model.model_id, credential, provider.base_url)
                    : provider.protocol === "conol"
                      ? await conolTest(model.model_id, credential, provider.base_url)
-                   : provider.protocol === "chatgpt"
-                     ? {
+              : provider.protocol === "chatgpt"
+                      ? {
                          choices: [
                            {
                              message: {
                                content: await chatgptTest(model.model_id, credential, provider.base_url),
                              },
                            },
-                         ],
-                         usage: null,
-                       }
-                   : await createOpenAIClient(
+                          ],
+                          usage: null,
+                        }
+                    : provider.protocol === "openai-responses"
+                      ? await (async () => {
+                          await assertSafeRemoteUrl(openAIEndpoint(provider, "responses"));
+                          const response = await fetch(openAIEndpoint(provider, "responses"), {
+                            method: "POST",
+                            headers: {
+                              Authorization: `Bearer ${credential.secret ?? ""}`,
+                              "Content-Type": "application/json",
+                              Accept: "application/json",
+                            },
+                            body: JSON.stringify({
+                              model: model.model_id,
+                              input: "Say 'ok' and nothing else.",
+                              max_output_tokens: 10,
+                            }),
+                          });
+                          const data = await response.json().catch(() => null);
+                          if (!response.ok) throw new Error(data?.error?.message ?? `Responses API returned HTTP ${response.status}`);
+                          return convertResponse("responses", "chat_completions", data);
+                        })()
+                    : await createOpenAIClient(
                     credentialProvider,
                   ).chat.completions.create({
                     model: model.model_id,

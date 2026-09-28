@@ -9,6 +9,7 @@ describe("provider appearance", () => {
   it("uses one favicon format for generic providers", () => {
     expect(faviconUrl("https://api.example.co.uk/v1")).toBe("https://www.google.com/s2/favicons?domain=api.example.co.uk&sz=64");
     expect(resolveProviderAvatar(null, "openai", "https://api.example.co.uk/v1")).toBe(faviconUrl("https://api.example.co.uk/v1"));
+    expect(resolveProviderAvatar(null, "openai-responses", "https://api.example.co.uk/v1")).toBe(faviconUrl("https://api.example.co.uk/v1"));
   });
 
   it("keeps fallback sources ordered and deduplicated", () => {
