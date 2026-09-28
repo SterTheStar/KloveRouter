@@ -1,4 +1,5 @@
 import { Children, memo, useState, type ReactElement, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
@@ -28,6 +29,7 @@ function CodeBlock({
   const [previewMaximized, setPreviewMaximized] = useState(false);
   const isHtml = /^(html?|xhtml)$/i.test(language);
   const isLongCode = code.split("\n").length > 24;
+  const isMaximizedPreview = previewMaximized && isHtml && activeTab === "preview";
 
   const copy = async () => {
     try {
@@ -39,11 +41,11 @@ function CodeBlock({
     }
   };
 
-  return (
+  const content = (
     <div
       className={
-        previewMaximized && isHtml && activeTab === "preview"
-          ? "fixed inset-3 z-50 flex flex-col overflow-hidden rounded-lg border bg-muted shadow-2xl dark:bg-muted/20"
+        isMaximizedPreview
+          ? "fixed inset-[1%] z-50 flex flex-col overflow-hidden rounded-lg border bg-muted shadow-2xl dark:bg-muted/20"
           : "my-3 overflow-hidden rounded-lg border bg-muted/40 dark:bg-muted/20"
       }
     >
@@ -114,7 +116,8 @@ function CodeBlock({
         <HtmlPreview
           code={code}
           streaming={streaming}
-          className={previewMaximized ? "min-h-0 flex-1" : undefined}
+          fill={isMaximizedPreview}
+          className={isMaximizedPreview ? "min-h-0 flex-1" : undefined}
         />
       ) : (
         <>
@@ -147,6 +150,8 @@ function CodeBlock({
       )}
     </div>
   );
+
+  return isMaximizedPreview ? createPortal(content, document.body) : content;
 }
 
 const inlineCodeClass =

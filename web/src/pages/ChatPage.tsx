@@ -459,7 +459,7 @@ export default function ChatPage({
   const topError = actionError ?? modelSelectionError ?? modelsError;
 
   return (
-    <div className="relative flex h-svh flex-col">
+    <div className="relative flex h-svh min-h-0 flex-col overflow-hidden">
       {topError && (
         <div className="flex justify-center px-6 pt-4">
           <Alert variant="destructive" className="chat-error-panel w-full max-w-3xl">
@@ -470,7 +470,7 @@ export default function ChatPage({
       )}
 
       <div ref={messagesContainerRef} className="min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto flex min-h-full w-full max-w-4xl flex-col gap-5 px-6 pb-6 pt-6">
+        <div className="mx-auto flex min-h-full w-full max-w-4xl flex-col gap-5 px-6 pb-44 pt-6 sm:pb-48">
           {messages.length === 0 ? (
             <div className="flex min-h-0 flex-1 items-center justify-center px-4 text-center">
               <h2 className="chat-greeting-title text-4xl tracking-tight sm:text-5xl">
@@ -522,14 +522,15 @@ export default function ChatPage({
         </Button>
       )}
 
-      <div className="shrink-0">
+      <div className="chat-composer-shell pointer-events-none absolute inset-x-0 bottom-0 z-20 px-3 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-12 sm:px-6">
         {attachmentNotice && (
           <div className="chat-inline-notice mx-auto mb-2 flex w-fit max-w-[90%] items-start gap-2 rounded-xl border border-border bg-popover px-3 py-2 text-xs text-muted-foreground shadow-md" role="status" aria-live="polite">
             <InfoLine className="mt-0.5 size-3.5 shrink-0 text-primary" />
             {attachmentNotice}
           </div>
         )}
-        <ChatComposer
+        <div className="pointer-events-auto">
+          <ChatComposer
             value={input}
             onChange={setInput}
             onKeyDown={onKeyDown}
@@ -553,7 +554,8 @@ export default function ChatPage({
             cacheReadTokens={usage.cache_read_tokens}
             cacheWriteTokens={usage.cache_write_tokens}
             streaming={streaming}
-        />
+          />
+        </div>
       </div>
     </div>
   );

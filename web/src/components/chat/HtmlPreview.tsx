@@ -80,10 +80,12 @@ export function HtmlPreview({
   code,
   className,
   streaming = false,
+  fill = false,
 }: {
   code: string;
   className?: string;
   streaming?: boolean;
+  fill?: boolean;
 }) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const tokenRef = useRef(crypto.randomUUID());
@@ -125,7 +127,7 @@ export function HtmlPreview({
         title="HTML preview"
         sandbox="allow-scripts allow-forms allow-pointer-lock"
         srcDoc={srcDoc}
-        className="h-[min(65vh,720px)] min-h-[28rem] w-full flex-1 border-0 bg-white"
+        className={fill ? "min-h-0 w-full flex-1 border-0 bg-white" : "h-[min(65vh,720px)] min-h-[28rem] w-full flex-1 border-0 bg-white"}
       />
       <div className="shrink-0 border-t bg-muted/60 dark:bg-muted">
         <div className="flex items-center gap-1 px-2 py-1">

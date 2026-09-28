@@ -66,7 +66,7 @@ export default function ChatComposer({
   const canSend = Boolean(selectedModel && (value.trim() || attachments.length) && !streaming);
 
   return (
-    <div className="chat-composer-shell shrink-0 px-6 pb-5 pt-3">
+    <div className="px-0">
       <div className="mx-auto w-full max-w-3xl">
         <div className="chat-composer-card rounded-2xl border border-border bg-card px-4 pt-3.5 pb-3 shadow-sm">
           <input
