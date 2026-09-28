@@ -192,6 +192,40 @@ export function initSchema(db: Database): void {
       UNIQUE(model_id, threshold_tokens)
     );
 
+    CREATE TABLE IF NOT EXISTS model_pools (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      slug TEXT NOT NULL UNIQUE,
+      strategy TEXT NOT NULL DEFAULT 'priority' CHECK(strategy IN ('priority', 'random')),
+      hide_members INTEGER NOT NULL DEFAULT 0,
+      is_active INTEGER NOT NULL DEFAULT 1,
+      max_input_tokens INTEGER,
+      max_output_tokens INTEGER,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS model_pool_members (
+      pool_id TEXT NOT NULL,
+      model_id TEXT NOT NULL,
+      priority INTEGER NOT NULL DEFAULT 0,
+      fallback INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      PRIMARY KEY(pool_id, model_id),
+      UNIQUE(pool_id, priority),
+      FOREIGN KEY (pool_id) REFERENCES model_pools(id) ON DELETE CASCADE,
+      FOREIGN KEY (model_id) REFERENCES models(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_model_pool_members_model ON model_pool_members(model_id);
+    CREATE TRIGGER IF NOT EXISTS model_pool_disable_when_underfilled
+    AFTER DELETE ON model_pool_members
+    BEGIN
+      UPDATE model_pools
+      SET is_active = 0, updated_at = datetime('now')
+      WHERE id = OLD.pool_id
+        AND (SELECT COUNT(*) FROM model_pool_members WHERE pool_id = OLD.pool_id) < 2;
+    END;
+
     CREATE TABLE IF NOT EXISTS chat_sessions (
       id TEXT PRIMARY KEY,
       title TEXT NOT NULL DEFAULT 'New chat',
@@ -342,6 +376,19 @@ export function initSchema(db: Database): void {
       tokenize = 'unicode61'
     )
   `);
+
+  const poolMemberCols = db.query("PRAGMA table_info(model_pool_members)").all() as { name: string }[];
+  if (!poolMemberCols.some((column) => column.name === "fallback")) {
+    db.exec("ALTER TABLE model_pool_members ADD COLUMN fallback INTEGER NOT NULL DEFAULT 1");
+  }
+
+  const modelPoolCols = db.query("PRAGMA table_info(model_pools)").all() as { name: string }[];
+  if (!modelPoolCols.some((column) => column.name === "max_input_tokens")) {
+    db.exec("ALTER TABLE model_pools ADD COLUMN max_input_tokens INTEGER");
+  }
+  if (!modelPoolCols.some((column) => column.name === "max_output_tokens")) {
+    db.exec("ALTER TABLE model_pools ADD COLUMN max_output_tokens INTEGER");
+  }
   const ftsRowCount = (
     db.query("SELECT COUNT(*) AS n FROM chat_messages_fts").all() as { n: number }[]
   )[0]?.n ?? 0;

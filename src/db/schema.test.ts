@@ -153,3 +153,16 @@ describe("chat settings", () => {
     db.close();
   });
 });
+
+describe("compound model schema", () => {
+  test("creates pools with cascading ordered member relations", () => {
+    const db = new Database(":memory:");
+    initSchema(db);
+    const tables = db.query("SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('model_pools', 'model_pool_members') ORDER BY name").all();
+    expect(tables).toEqual([{ name: "model_pool_members" }, { name: "model_pools" }]);
+    const poolColumns = db.query("PRAGMA table_info(model_pools)").all() as Array<{ name: string }>;
+    expect(poolColumns.map((column) => column.name)).toContain("max_input_tokens");
+    expect(poolColumns.map((column) => column.name)).toContain("max_output_tokens");
+    db.close();
+  });
+});

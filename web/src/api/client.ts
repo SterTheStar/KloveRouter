@@ -273,7 +273,7 @@ export const freebuff = {
 
 // Models
 export const models = {
-  listAll: () => request<import("../types").ModelWithProvider[]>("/api/models"),
+  listAll: () => request<Array<import("../types").ModelWithProvider & { model_pool?: boolean; pool_id?: string; strategy?: import("../types").ModelPoolStrategy; members?: Array<{ id: string; display_name: string | null; provider_name: string; priority: number }> }>>("/api/models"),
   listByProvider: (providerId: string) =>
     request<import("../types").Model[]>(`/api/providers/${providerId}/models`),
   create: (
@@ -359,6 +359,23 @@ export const models = {
     }>(`/api/models/${id}/test`, {
       method: "POST",
     }),
+};
+
+export const modelPools = {
+  list: () => request<import("../types").ModelPool[]>("/api/model-pools"),
+  models: () => request<import("../types").ModelWithProvider[]>("/api/model-pools/models"),
+  create: (data: Pick<import("../types").ModelPool, "name" | "slug" | "strategy" | "hide_members" | "is_active"> & {
+    members: Array<{ model_id: string; priority: number; fallback?: boolean }>;
+    max_input_tokens?: number | null;
+    max_output_tokens?: number | null;
+  }) => request<import("../types").ModelPool>("/api/model-pools", { method: "POST", body: JSON.stringify(data) }),
+  update: (id: string, data: Pick<import("../types").ModelPool, "name" | "slug" | "strategy" | "hide_members" | "is_active"> & {
+    members: Array<{ model_id: string; priority: number; fallback?: boolean }>;
+    max_input_tokens?: number | null;
+    max_output_tokens?: number | null;
+  }) => request<import("../types").ModelPool>(`/api/model-pools/${encodeURIComponent(id)}`, { method: "PUT", body: JSON.stringify(data) }),
+  remove: (id: string) => request<{ success: boolean }>(`/api/model-pools/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  test: (id: string) => request<{ success: boolean; model?: string; duration_ms: number; error?: string }>(`/api/model-pools/${encodeURIComponent(id)}/test`, { method: "POST" }),
 };
 
 // API Keys

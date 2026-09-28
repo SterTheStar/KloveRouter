@@ -31,7 +31,7 @@ export default function ModelSettingsMenu({
   const searchRef = useRef<HTMLInputElement | null>(null);
 
   const current = models.find((model) => modelPublicId(model) === selectedModel);
-  const selectedProvider = current?.provider_name;
+  const selectedProvider = current?.model_pool ? "Compound models" : current?.provider_name;
   // Strict: only display an effort when one is actually selected (and sent).
   // The synthetic "None" must not appear as chosen while nothing is sent.
   const selectedEffort = selectedReasoningEffort
@@ -48,12 +48,14 @@ export default function ModelSettingsMenu({
         model.display_name ?? "",
         modelDisplayId(model),
         modelPublicId(model),
+        ...(model.members ?? []).flatMap((member) => [member.provider_name, member.display_name ?? ""]),
       ].join(" ").toLowerCase();
 
       if (normalizedQuery && !searchable.includes(normalizedQuery)) continue;
-      const providerModels = grouped.get(model.provider_name) ?? [];
+      const providerName = model.model_pool ? "Compound models" : model.provider_name;
+      const providerModels = grouped.get(providerName) ?? [];
       providerModels.push(model);
-      grouped.set(model.provider_name, providerModels);
+      grouped.set(providerName, providerModels);
     }
 
     return [...grouped.entries()].map(([name, providerModels]) => ({

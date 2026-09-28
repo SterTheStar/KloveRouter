@@ -87,7 +87,7 @@ export default function ChatPage({
 
   const selectedModelRecord = modelList.find(
     (model) =>
-      modelApiId(model.provider_name, model.model_id, model.pretty_id) === selectedModel,
+      (model.model_pool ? `pool/${model.pretty_id || model.model_id}` : modelApiId(model.provider_name, model.model_id, model.pretty_id)) === selectedModel,
   );
   const reasoningEffortOptions = effortOptions(selectedModelRecord);
 
@@ -485,8 +485,7 @@ export default function ChatPage({
               const statsModel = message.stats?.model
                 ? modelList.find(
                     (candidate) =>
-                      modelApiId(candidate.provider_name, candidate.model_id, candidate.pretty_id) ===
-                      message.stats?.model,
+                      (candidate.model_pool ? `pool/${candidate.pretty_id || candidate.model_id}` : modelApiId(candidate.provider_name, candidate.model_id, candidate.pretty_id)) === message.stats?.model,
                   )
                 : undefined;
               return (

@@ -17,6 +17,7 @@ import { logger } from "../logger";
 import { antigravityResponses } from "../integrations/antigravity";
 import { isBlockedAntigravityModel } from "../integrations/antigravity";
 import { requestLogService } from "../services/request-log.service";
+import { modelPoolService, poolSlugFromModelId, poolTokenLimitError, routeModelPool, validatePoolMemberCompatibility } from "../services/model-pool.service";
 import { openAIStreamResponse } from "./openai-stream";
 import { openAICompletionFromSse } from "./openai-completion";
 import { freebuffResponses } from "../integrations/freebuff";
@@ -582,12 +583,14 @@ export const proxyPlugin = (app: Elysia) =>
         return { error: "Unauthorized", message: "Valid API key required" };
       }
 
-      const models = modelService.findAllActive();
+       const hiddenMembers = modelPoolService.memberModelIdsHiddenFromCatalog();
+       const models = modelService.findAllActive().filter((model) => !hiddenMembers.has(model.id));
       const providers = providerService.findAll();
 
       return {
         object: "list",
-        data: models.map((m) => {
+          data: [
+           ...models.map((m) => {
           const provider = providers.find((p) => p.id === m.provider_id);
           return {
             id: provider
@@ -618,7 +621,9 @@ export const proxyPlugin = (app: Elysia) =>
                    ?.effort ?? null,
              },
            };
-        }),
+           }),
+           ...modelPoolService.apiModels(),
+         ],
       };
     })
     .post(
@@ -641,6 +646,30 @@ export const proxyPlugin = (app: Elysia) =>
           return { error: { message: "Valid API key required", type: "authentication_error", code: null } };
         }
         const chatBody = responsesToChatBody(body);
+        const poolSlug = typeof body.model === "string" ? poolSlugFromModelId(body.model) : null;
+        if (poolSlug) {
+          const candidates = modelPoolService.routeCandidates(poolSlug);
+          if (!candidates?.length) {
+            set.status = 503;
+            return { error: { message: `Pool "${poolSlug}" is inactive or has no active members`, type: "server_error", code: "compound_model_unavailable" } };
+          }
+          const poolConfig = modelPoolService.findBySlug(poolSlug)!;
+          const tokenLimitError = poolTokenLimitError(poolConfig, chatBody);
+          if (tokenLimitError && tokenLimitError.startsWith("Estimated input")) {
+            set.status = 400;
+            return { error: { message: tokenLimitError, type: "invalid_request_error", code: "compound_input_limit_exceeded" } };
+          }
+          const poolResponse = await routeModelPool(poolSlug, chatBody, headers.authorization!, request.signal, async (_input, init) => fetch(`http://127.0.0.1:${config.port}/v1/chat/completions`, {
+            ...init,
+            headers: { ...(init?.headers as Record<string, string>), "X-Klove-Model-Pool-Attempt": "true" },
+          }));
+          if (!poolResponse.ok) {
+            set.status = poolResponse.status;
+            return proxyErrorBody({ status: poolResponse.status, body: await poolResponse.json().catch(() => null) });
+          }
+          if (body.stream) return chatSseToResponses(poolResponse, body.model);
+          return chatCompletionToResponse(await poolResponse.json());
+        }
         const upstreamController = new AbortController();
         const abortUpstream = () => upstreamController.abort(request.signal.reason);
         if (request.signal.aborted) abortUpstream();
@@ -727,6 +756,31 @@ export const proxyPlugin = (app: Elysia) =>
             message:
               'Model must be in format "providername/modelname" (e.g. "openai/gpt-4")',
           };
+        }
+
+        const poolSlug = poolSlugFromModelId(body.model);
+        if (poolSlug) {
+          const candidates = modelPoolService.routeCandidates(poolSlug);
+          if (!candidates?.length) {
+            set.status = 503;
+            return { error: "Compound model unavailable", message: `Pool "${poolSlug}" is inactive or has no active member models` };
+          }
+          const poolConfig = modelPoolService.findBySlug(poolSlug)!;
+          const tokenLimitError = poolTokenLimitError(poolConfig, body);
+          if (tokenLimitError && tokenLimitError.startsWith("Estimated input")) {
+            set.status = 400;
+            return { error: "Compound model input token limit exceeded", message: tokenLimitError };
+          }
+          const response = await routeModelPool(poolSlug, body, headers.authorization!, request.signal, async (_input, init) => fetch(`http://127.0.0.1:${config.port}/v1/chat/completions`, {
+            ...init,
+            headers: { ...(init?.headers as Record<string, string>), "X-Klove-Model-Pool-Attempt": "true" },
+          }));
+          if (response.headers.get("X-Klove-Model-Pool-Attempt") === "true" && !response.ok) {
+            set.status = response.status;
+            return response;
+          }
+          set.status = response.status;
+          return response;
         }
 
         // Find provider

@@ -3,6 +3,7 @@ import { getDb } from "../db/connection";
 import { keyService } from "./key.service";
 import { modelService, providerModelPublicId } from "./model.service";
 import { logger } from "../logger";
+import { modelPoolService } from "./model-pool.service";
 
 const DEFAULT_MODEL = "auto";
 const FALLBACK_TITLE = "New conversation";
@@ -48,7 +49,10 @@ function configuredModel(activeModel: string): string | null {
   const setting = row?.value || DEFAULT_MODEL;
   if (setting === DEFAULT_MODEL) return activeModel;
   const models = modelService.findAllActiveWithProvider();
-  return models.some((model) => providerModelPublicId(model.provider_name, model) === setting) ? setting : null;
+  return models.some((model) => providerModelPublicId(model.provider_name, model) === setting) ||
+    modelPoolService.apiModels().some((pool) => pool.id === setting)
+    ? setting
+    : null;
 }
 
 export const chatTitleService = {

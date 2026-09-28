@@ -111,7 +111,7 @@ export default function ModelsPage() {
   }, [queryError]);
 
   const providers = useMemo(() => {
-    const names = new Set(list.map((m) => m.provider_name));
+    const names = new Set(list.map((m) => m.model_pool ? "Compound models" : m.provider_name));
     return Array.from(names).sort();
   }, [list]);
 
@@ -122,20 +122,21 @@ export default function ModelsPage() {
       const q = searchQuery.toLowerCase();
       result = result.filter(
         (m) =>
-          (m.pretty_id ? modelPublicId(m) : modelDisplayId(m)).toLowerCase().includes(q) ||
+          (m.model_pool ? `pool/${m.pretty_id || m.model_id}` : (m.pretty_id ? modelPublicId(m) : modelDisplayId(m))).toLowerCase().includes(q) ||
           (m.display_name?.toLowerCase().includes(q) ?? false) ||
+          (m.members?.some((member) => `${member.display_name ?? ""} ${member.provider_name}`.toLowerCase().includes(q) ?? false) ?? false) ||
           m.provider_name.toLowerCase().includes(q),
       );
     }
 
     if (sourceFilter === "manual") {
-      result = result.filter((m) => m.is_manual === 1);
+      result = result.filter((m) => m.is_manual === 1 || m.model_pool);
     } else if (sourceFilter === "synced") {
       result = result.filter((m) => m.is_manual === 0);
     }
 
-    if (selectedProviders.size > 0) {
-      result = result.filter((m) => selectedProviders.has(m.provider_name));
+       if (selectedProviders.size > 0) {
+       result = result.filter((m) => selectedProviders.has(m.model_pool ? "Compound models" : m.provider_name));
     }
 
     return result;
@@ -144,10 +145,11 @@ export default function ModelsPage() {
   const grouped = useMemo(() => {
     const groups: Record<string, ModelWithProvider[]> = {};
     for (const model of filteredList) {
-      if (!groups[model.provider_name]) {
-        groups[model.provider_name] = [];
+      const provider = model.model_pool ? "Compound models" : model.provider_name;
+      if (!groups[provider]) {
+        groups[provider] = [];
       }
-      groups[model.provider_name].push(model);
+      groups[provider].push(model);
     }
     return groups;
   }, [filteredList]);
@@ -344,7 +346,7 @@ export default function ModelsPage() {
                       models.map((model) => {
                         const tps = tpsMap[model.id];
                         const result = testResult[model.id];
-                        const fullModelId = modelPublicId(model);
+                        const fullModelId = model.model_pool ? `pool/${model.pretty_id || model.model_id}` : modelPublicId(model);
                         return (
                           <TableRow key={model.id}>
                             <TableCell className="font-mono text-xs">
@@ -358,14 +360,14 @@ export default function ModelsPage() {
                                 <ModelMetadataBadges model={model} />
                               </div>
                             </TableCell>
-                            <TableCell>{model.provider_name}</TableCell>
+                            <TableCell>{model.model_pool ? "Compound model" : model.provider_name}</TableCell>
                             <TableCell>
                               <Badge
                                 variant={
                                   model.is_manual ? "outline" : "secondary"
                                 }
                               >
-                                {model.is_manual ? "Manual" : "Auto-synced"}
+                                {model.model_pool ? "Compound" : model.is_manual ? "Manual" : "Auto-synced"}
                               </Badge>
                             </TableCell>
                             <TableCell className="font-mono text-xs">
@@ -388,7 +390,7 @@ export default function ModelsPage() {
                                       e.stopPropagation();
                                       testModel(model.id);
                                     }}
-                                    disabled={testingId === model.id}
+                                    disabled={testingId === model.id || model.model_pool}
                                   >
                                     {testingId === model.id ? (
                                       <LoaderCircle className="size-5 animate-spin" />

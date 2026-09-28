@@ -3,6 +3,7 @@ import { userInfo } from "node:os";
 import { getDb } from "../db/connection";
 import { isValidAvatar } from "../services/provider-appearance";
 import { modelService, providerModelPublicId } from "../services/model.service";
+import { modelPoolService } from "../services/model-pool.service";
 
 function defaultProfileName() {
   try {
@@ -42,7 +43,7 @@ export const settingsPlugin = (app: Elysia) =>
         if (value !== "auto") {
           const valid = modelService.findAllActiveWithProvider().some(
             (model) => providerModelPublicId(model.provider_name, model) === value,
-          );
+          ) || modelPoolService.apiModels().some((pool) => pool.id === value);
           if (!valid) {
             set.status = 400;
             return { error: "Chat title model must be auto or an active configured model" };

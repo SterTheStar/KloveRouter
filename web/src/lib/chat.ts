@@ -5,6 +5,7 @@ import type { ChatStats } from "../types";
  * `providerPrefix()` on the backend: "googleantigravity/gemini-3-flash".
  */
 export function modelApiId(providerName: string, modelId: string, prettyId?: string | null): string {
+  if (providerName.toLowerCase() === "pool") return `pool/${prettyId || modelId}`;
   return `${providerName.toLowerCase().replace(/\s+/g, "")}/${prettyId || modelId}`;
 }
 

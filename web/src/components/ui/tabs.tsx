@@ -10,17 +10,24 @@ function Tabs({
   active,
   onChange,
   className,
+  ariaLabel = "Sections",
 }: {
   tabs: Tab[];
   active: string;
   onChange: (id: string) => void;
   className?: string;
+  ariaLabel?: string;
 }) {
   return (
-    <div className={cn("flex gap-1 border-border border-b", className)}>
+    <div role="tablist" aria-label={ariaLabel} className={cn("flex gap-1 border-border border-b", className)}>
       {tabs.map((tab) => (
         <button
           key={tab.id}
+          type="button"
+          role="tab"
+          aria-selected={active === tab.id}
+          aria-controls={`panel-${tab.id.replace(/-tab$/, "")}`}
+          id={tab.id.endsWith("-tab") ? tab.id : `${tab.id}-tab`}
           onClick={() => onChange(tab.id)}
           className={cn(
             "relative px-4 py-2 text-sm font-medium transition-colors",

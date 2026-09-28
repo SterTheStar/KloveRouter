@@ -9,6 +9,7 @@ import {
   authPlugin,
   providersPlugin,
   modelsPlugin,
+  modelPoolsPlugin,
   keysPlugin,
   settingsPlugin,
   proxyPlugin,
@@ -99,6 +100,7 @@ const protectedApp = new Elysia()
   })
   .use(providersPlugin)
   .use(modelsPlugin)
+  .use(modelPoolsPlugin)
   .use(keysPlugin)
   .use(settingsPlugin)
   .use(statsPlugin)

@@ -1,6 +1,7 @@
 import { authPlugin } from "./auth.plugin";
 import { providersPlugin } from "./providers.plugin";
 import { modelsPlugin } from "./models.plugin";
+import { modelPoolsPlugin } from "./model-pools.plugin";
 import { keysPlugin } from "./keys.plugin";
 import { settingsPlugin } from "./settings.plugin";
 import { proxyPlugin } from "./proxy.plugin";
@@ -23,6 +24,7 @@ export {
   authPlugin,
   providersPlugin,
   modelsPlugin,
+  modelPoolsPlugin,
   keysPlugin,
   settingsPlugin,
   proxyPlugin,

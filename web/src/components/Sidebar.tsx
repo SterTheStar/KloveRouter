@@ -9,6 +9,7 @@ import {
   RiFileList3Line as FileListLine,
   RiSettings4Line as Settings4Line,
   RiCupLine as CupLine,
+  RiGitMergeLine as MergeLine,
 } from "@remixicon/react";
 import { Button } from "@/components/ui/button";
 import DisplayAvatar from "./DisplayAvatar";
@@ -19,6 +20,7 @@ const items = [
   { page: "dashboard" as Page, label: "Providers", icon: DashboardLine },
   { page: "chat" as Page, label: "Chat", icon: ChatAiLine },
   { page: "models" as Page, label: "Models", icon: BubbleChartLine },
+  { page: "model-pools" as Page, label: "Compound models", icon: MergeLine },
   { page: "stats" as Page, label: "Stats", icon: BarChartBoxLine },
   { page: "request-logs" as Page, label: "Request Logs", icon: FileListLine },
   { page: "usage" as Page, label: "Usage limits", icon: PulseLine },

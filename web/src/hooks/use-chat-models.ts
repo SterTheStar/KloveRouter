@@ -21,9 +21,9 @@ export function useChatModels() {
       .then((list) => {
         if (cancelled) return;
         validModelIdsRef.current = new Set(
-          list.map((model) =>
-            modelApiId(model.provider_name, model.model_id, model.pretty_id),
-          ),
+          list.map((model) => model.model_pool
+            ? `pool/${model.pretty_id || model.model_id}`
+            : modelApiId(model.provider_name, model.model_id, model.pretty_id)),
         );
         setModelList(list);
         setModelsError(null);

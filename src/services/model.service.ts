@@ -633,11 +633,34 @@ export const modelService = {
       }));
   },
 
+  findAllWithProvider(): ModelWithProvider[] {
+    const db = getDb();
+    const models = db.query(
+      `SELECT m.*, p.name as provider_name, p.avatar as provider_avatar,
+              p.base_url as provider_base_url, p.protocol as provider_protocol
+       FROM models m JOIN providers p ON p.id = m.provider_id
+       ORDER BY p.name COLLATE NOCASE ASC, m.model_id COLLATE NOCASE ASC`,
+    ).all() as (ModelWithProvider & { provider_base_url: string; provider_protocol: ProviderProtocol })[];
+    return models
+      .filter((model) => !(model.provider_protocol === "antigravity" && isBlockedAntigravityModel(model.model_id)))
+      .map(({ provider_base_url, provider_protocol, ...model }) => ({
+        ...model,
+        ...hydrate(model),
+        provider_avatar: resolveProviderAvatar(model.provider_avatar, provider_protocol, provider_base_url),
+        provider_avatar_sources: providerAvatarSources(model.provider_avatar, provider_protocol, provider_base_url),
+      }));
+  },
+
   findById(id: string): Model | null {
     const db = getDb();
     return hydrate(
       db.query("SELECT * FROM models WHERE id = ?").get(id) as Model | null,
     );
+  },
+
+  findProviderProtocol(providerId: string): ProviderProtocol | null {
+    const row = getDb().query("SELECT protocol FROM providers WHERE id = ?").get(providerId) as { protocol: ProviderProtocol } | null;
+    return row?.protocol ?? null;
   },
 
   upsert(input: CreateModelInput): Model {

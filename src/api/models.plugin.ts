@@ -34,6 +34,8 @@ import { assertSafeRemoteUrl } from "../services/ssrf";
 import { anthropicEndpoint } from "../clients/anthropic";
 import { healthService } from "../services/health.service";
 import { serializeModel, serializeModelWithProvider } from "./serializers";
+import { modelPoolService } from "../services/model-pool.service";
+import { getDb } from "../db/connection";
 
 const nullableBoolean = t.Union([t.Boolean(), t.Null()]);
 const capabilitiesSchema = t.Object({
@@ -57,6 +59,7 @@ const reasoningEffortsSchema = t.Array(
 export const parseGenericModelMetadata = parseRawModelMetadata;
 
 function publicModel(model: any) {
+  if (model.model_pool) return model;
   return "provider_name" in model
     ? serializeModelWithProvider(model)
     : serializeModel(model);
@@ -118,7 +121,13 @@ async function qwenTest(
 export const modelsPlugin = (app: Elysia) =>
   app
     .get("/api/models", () => {
-      return modelService.findAllActiveWithProvider().map(publicModel);
+      const hiddenMembers = modelPoolService.memberModelIdsHiddenFromCatalog();
+      return [
+        ...modelService.findAllActiveWithProvider()
+          .filter((model) => !hiddenMembers.has(model.id))
+          .map(publicModel),
+        ...modelPoolService.publicModels(),
+      ];
     })
     .get("/api/providers/:id/models", ({ params: { id }, set }) => {
       const provider = providerService.findById(id);
@@ -726,7 +735,11 @@ export const modelsPlugin = (app: Elysia) =>
       },
     )
     .delete("/api/models/:id", ({ params: { id }, set }) => {
-      const removed = modelService.remove(id);
+      const transaction = getDb().transaction(() => {
+        modelPoolService.deleteMembersForModel(id);
+        return modelService.remove(id);
+      });
+      const removed = transaction();
       if (!removed) {
         set.status = 404;
         return { error: "Model not found" };
@@ -739,6 +752,10 @@ export const modelsPlugin = (app: Elysia) =>
         set.status = 404;
         return { error: "Provider not found" };
       }
-      const count = modelService.removeByProvider(id);
+      const transaction = getDb().transaction(() => {
+        for (const model of modelService.findByProvider(id)) modelPoolService.deleteMembersForModel(model.id);
+        return modelService.removeByProvider(id);
+      });
+      const count = transaction();
       return { success: true, removed: count };
     });

@@ -94,6 +94,39 @@ export interface ModelWithProvider extends Model {
   provider_name: string;
   provider_avatar: string | null;
   provider_avatar_sources: string[];
+  model_pool?: boolean;
+  pool_id?: string;
+  strategy?: ModelPoolStrategy;
+  members?: Array<{ id: string; display_name: string | null; provider_name: string; priority: number; fallback?: boolean }>;
+  pool_member_of?: string[];
+}
+
+export type ModelPoolStrategy = "priority" | "random";
+
+export interface ModelPoolMember extends ModelWithProvider {
+  priority: number;
+  fallback: boolean;
+}
+
+export interface ModelPool {
+  id: string;
+  name: string;
+  slug: string;
+  public_id: string;
+  strategy: ModelPoolStrategy;
+  hide_members: boolean;
+  is_active: boolean;
+  max_input_tokens: number | null;
+  max_output_tokens: number | null;
+  member_input_limit: number | null;
+  member_output_limit: number | null;
+  input_limiter_ids: string[];
+  output_limiter_ids: string[];
+  effective_input_limit: number | null;
+  effective_output_limit: number | null;
+  created_at: string;
+  updated_at: string;
+  members: ModelPoolMember[];
 }
 
 export interface ApiKey {
@@ -263,6 +296,7 @@ export type Page =
   | "dashboard"
   | "chat"
   | "models"
+  | "model-pools"
   | "stats"
   | "usage"
   | "request-logs"

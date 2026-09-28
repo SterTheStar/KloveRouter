@@ -112,8 +112,7 @@ export function useModelSelection({
     }
     const model = modelList.find(
       (candidate) =>
-        modelApiId(candidate.provider_name, candidate.model_id, candidate.pretty_id) ===
-        selectedModel,
+        (candidate.model_pool ? `pool/${candidate.pretty_id || candidate.model_id}` : modelApiId(candidate.provider_name, candidate.model_id, candidate.pretty_id)) === selectedModel,
     );
     const options = effortOptions(model);
     const chatStored = chatId && persistModelPerChat

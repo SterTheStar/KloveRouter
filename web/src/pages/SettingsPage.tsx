@@ -397,8 +397,8 @@ export default function SettingsPage({
               <select id="chat-title-model" value={chatTitleModel} onChange={(event) => setChatTitleModel(event.target.value)} className="h-9 w-full rounded-md border border-border bg-popover px-3 text-sm text-popover-foreground">
                 <option value="auto">Auto (active model)</option>
                 {chatTitleModels.map((model) => {
-                  const id = modelPublicId(model);
-                  return <option key={id} value={id}>{model.display_name || modelDisplayId(model)} ({model.provider_name})</option>;
+                  const id = model.model_pool ? `pool/${model.pretty_id || model.model_id}` : modelPublicId(model);
+                  return <option key={id} value={id}>{model.display_name || modelDisplayId(model)} ({model.model_pool ? "Compound model" : model.provider_name})</option>;
                 })}
               </select>
               <p className="text-xs text-muted-foreground">Titles are generated after the first message and never replace a custom title.</p>
