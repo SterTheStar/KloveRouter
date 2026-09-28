@@ -90,6 +90,8 @@ export const queryKeys = {
   provider: (id: string) => `providers:${id}`,
   models: "models",
   modelsByProvider: (id: string) => `models:provider:${id}`,
+  modelPools: "model-pools",
+  modelPoolModels: "model-pool-models",
   chats: "chats",
   chat: (id: string) => `chats:${id}`,
 };
@@ -101,6 +103,12 @@ export const invalidateProviders = (id?: string) => {
 export const invalidateModels = (providerId?: string) => {
   queryCache.invalidate(queryKeys.models);
   if (providerId) queryCache.invalidate(queryKeys.modelsByProvider(providerId));
+  queryCache.invalidate(queryKeys.modelPoolModels);
+};
+export const invalidateModelPools = () => {
+  queryCache.invalidate(queryKeys.modelPools);
+  queryCache.invalidate(queryKeys.modelPoolModels);
+  queryCache.invalidate(queryKeys.models);
 };
 export const invalidateChats = (id?: string) => {
   queryCache.invalidate(queryKeys.chats);

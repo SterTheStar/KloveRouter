@@ -18,6 +18,7 @@ import { useToast } from "../components/ui/toast";
 import ProviderIcon from "../components/ProviderIcon";
 import { CompoundModelEditor } from "../components/model-pools/CompoundModelEditor";
 import { emptyCompoundModelDraft, type CompoundModelDraft } from "../components/model-pools/types";
+import { invalidateModelPools } from "../lib/query-cache";
 
 export default function ModelPoolsPage() {
   const { success, error: notifyError } = useToast();
@@ -100,6 +101,7 @@ export default function ModelPoolsPage() {
       };
       if (draft.id) await modelPools.update(draft.id, payload);
       else await modelPools.create(payload);
+      invalidateModelPools();
       success(draft.id ? "Compound model updated" : "Compound model created", `Public ID: pool/${payload.slug}`);
       closeEditor();
       await reload();
@@ -114,6 +116,7 @@ export default function ModelPoolsPage() {
     if (!window.confirm(`Delete compound model “${pool.name}”? This does not delete its provider models.`)) return;
     try {
       await modelPools.remove(pool.id);
+      invalidateModelPools();
       success("Compound model deleted");
       await reload();
     } catch (cause: any) {
@@ -141,7 +144,7 @@ export default function ModelPoolsPage() {
     <header className="flex flex-wrap items-end justify-between gap-4">
       <div className="max-w-2xl">
         <h1 className="text-2xl font-semibold tracking-tight">Compound models</h1>
-        <p className="mt-1 text-sm text-muted-foreground">Combine configured provider models behind one stable public model ID, with automatic fallback or randomized selection.</p>
+        <p className="mt-1 text-sm text-muted-foreground">Combine provider models with fallback or random routing.</p>
       </div>
       <div className="flex gap-2">
         <Button variant="outline" onClick={() => void reload()} disabled={loading}><RefreshLine className={`mr-2 size-4 ${loading ? "animate-spin" : ""}`} />Refresh</Button>

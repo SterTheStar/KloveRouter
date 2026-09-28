@@ -38,11 +38,10 @@ export function useQuery<T>(key: QueryKey, loader: () => Promise<T>, ttl: number
       if (cancelled) return;
       const next = read();
       setState((current) => ({ ...current, data: next.value, stale: next.stale, loading: next.value === undefined }));
+      if (next.value === undefined || next.stale) void refresh().catch(() => undefined);
     };
     const unsubscribe = queryCache.subscribe(key, update);
-    const cached = read();
-    if (cached.value === undefined || cached.stale) void refresh().catch(() => undefined);
-    else update();
+    update();
     return () => { cancelled = true; unsubscribe(); };
   }, [key, refresh, ttl]);
 

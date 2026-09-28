@@ -120,7 +120,7 @@ export default function EditModelModal({
         pricing_tiers: pricingTiers,
         ...metadata,
       });
-      invalidateModels();
+      invalidateModels(model.provider_id);
       success("Model updated");
       onSuccess();
       onClose();
