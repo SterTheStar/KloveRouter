@@ -66,8 +66,7 @@ export const chatsPlugin = (app: Elysia) =>
     )
     .get(
       "/api/chats/:id",
-      async ({ params, set }) => {
-        await waitForChatGeneration(params.id);
+      ({ params, set }) => {
         const chat = chatService.get(params.id);
         if (!chat) {
           set.status = 404;
