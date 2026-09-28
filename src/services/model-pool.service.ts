@@ -557,11 +557,13 @@ export const modelPoolService = {
     if (duplicate) throw new InvalidModelPoolError("This public ID is already in use");
     const db = getDb();
     const transaction = db.transaction(() => {
-      db.query("UPDATE model_pools SET name = ?, slug = ?, strategy = ?, hide_members = ?, is_active = ?, max_input_tokens = ?, max_output_tokens = ?, updated_at = datetime('now') WHERE id = ?")
-        .run(normalized.name, normalized.slug, input.strategy, Number(input.hide_members), Number(input.is_active), normalized.max_input_tokens, normalized.max_output_tokens, id);
       db.query("DELETE FROM model_pool_members WHERE pool_id = ?").run(id);
       const insert = db.query("INSERT INTO model_pool_members (pool_id, model_id, priority, fallback) VALUES (?, ?, ?, ?)");
       normalized.members.forEach((member) => insert.run(id, member.model_id, member.priority, Number(member.fallback)));
+      // Deleting members may fire the underfilled-pool trigger; apply the requested
+      // active state after the replacement members have been inserted.
+      db.query("UPDATE model_pools SET name = ?, slug = ?, strategy = ?, hide_members = ?, is_active = ?, max_input_tokens = ?, max_output_tokens = ?, updated_at = datetime('now') WHERE id = ?")
+        .run(normalized.name, normalized.slug, input.strategy, Number(input.hide_members), Number(input.is_active), normalized.max_input_tokens, normalized.max_output_tokens, id);
     });
     transaction();
     return hydratePool(id);

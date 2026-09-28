@@ -162,6 +162,13 @@ describe("modelPoolService", () => {
     expect(db.query("SELECT COUNT(*) AS count FROM models").get()).toEqual({ count: 3 });
   });
 
+  test("keeps an enabled pool enabled when saving its members", () => {
+    const pool = modelPoolService.create(input({ is_active: false }));
+    const updated = modelPoolService.update(pool.id, input({ is_active: true }));
+    expect(updated?.is_active).toBe(true);
+    expect(modelPoolService.findById(pool.id)?.is_active).toBe(true);
+  });
+
   test("deactivates an underfilled compound model when a member is deleted", () => {
     const pool = modelPoolService.create(input());
     db.query("DELETE FROM model_pool_members WHERE pool_id = ? AND model_id = ?").run(pool.id, "m2");
