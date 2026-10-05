@@ -1,6 +1,8 @@
 import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
 
+const allowInsecure = /^(1|true|yes)$/i.test(process.env.ALLOW_INSECURE_URLS?.trim() ?? "");
+
 function blockedIpv4(address: string): boolean {
   const octets = address.split(".").map(Number);
   const [a, b] = octets;
@@ -25,6 +27,10 @@ function blockedAddress(address: string): boolean {
   return false;
 }
 
+export function insecureUrlsAllowed(): boolean {
+  return allowInsecure;
+}
+
 export async function assertSafeRemoteUrl(value: string): Promise<URL> {
   let url: URL;
   try {
@@ -32,15 +38,19 @@ export async function assertSafeRemoteUrl(value: string): Promise<URL> {
   } catch {
     throw new Error("Remote URL is invalid");
   }
-  if (url.protocol !== "https:") throw new Error("Remote URL must use HTTPS");
-  if (url.username || url.password) throw new Error("Remote URL cannot contain credentials");
+  if (!allowInsecure) {
+    if (url.protocol !== "https:") throw new Error("Remote URL must use HTTPS");
+    if (url.username || url.password) throw new Error("Remote URL cannot contain credentials");
+  }
   const hostname = url.hostname.replace(/^\[|\]$/g, "").toLowerCase();
-  if (hostname === "localhost" || hostname.endsWith(".localhost") || blockedAddress(hostname)) {
+  if (!allowInsecure && (hostname === "localhost" || hostname.endsWith(".localhost") || blockedAddress(hostname))) {
     throw new Error("Remote URL points to a private or local address");
   }
-  const addresses = await lookup(hostname, { all: true, verbatim: true });
-  if (!addresses.length || addresses.some(({ address }) => blockedAddress(address))) {
-    throw new Error("Remote URL resolves to a private or local address");
+  if (!allowInsecure) {
+    const addresses = await lookup(hostname, { all: true, verbatim: true });
+    if (!addresses.length || addresses.some(({ address }) => blockedAddress(address))) {
+      throw new Error("Remote URL resolves to a private or local address");
+    }
   }
   return url;
 }

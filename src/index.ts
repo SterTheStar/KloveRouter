@@ -28,6 +28,7 @@ import {
   avatarMediaPlugin,
 } from "./api";
 import { getSecuritySecrets } from "./services/security.service";
+import { insecureUrlsAllowed } from "./services/ssrf";
 import { initRtkOnStartup, rtkPublicPlugin } from "./plugins/rtk";
 import { cavemanPublicPlugin, cavemanPlugin } from "./plugins/caveman";
 import { customSkillsPlugin } from "./plugins/custom-skills";
@@ -186,3 +187,9 @@ logger.success("Server running", {
 logger.info("Codex callback listener", {
   address: "http://0.0.0.0:1455/auth/callback",
 });
+
+if (insecureUrlsAllowed()) {
+  logger.warn(
+    "ALLOW_INSECURE_URLS is enabled — SSRF protection is disabled. HTTP and localhost/private URLs are accepted. Only use this on trusted networks.",
+  );
+}
