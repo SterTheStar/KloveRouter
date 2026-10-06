@@ -111,7 +111,7 @@ export const providers = {
       is_active?: number;
     },
   ) =>
-    request<import("../types").Provider>(`/api/providers/${id}`, {
+    request<import("../types").ProviderDetail>(`/api/providers/${id}`, {
       method: "PUT",
       body: JSON.stringify(data),
     }),

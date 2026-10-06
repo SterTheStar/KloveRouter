@@ -29,6 +29,19 @@ describe("provider custom headers", () => {
   test("explicit incoming session ID overrides a generated OpenCode session ID", () => {
     const headers = upstreamProviderHeaders({ name: "OpenCode Zen" }, {}, undefined, "incoming-session");
     expect(headers["x-opencode-session"]).toBe("incoming-session");
+    expect(headers["X-Session-ID"]).toBe("incoming-session");
+  });
+
+  test("sends X-Session-ID with the same value as x-opencode-session for OpenCode only", () => {
+    const open = upstreamProviderHeaders({ name: "OpenCode Zen" }, {}, "session-123");
+    expect(open["X-Session-ID"]).toBe(open["x-opencode-session"]);
+    const plain = upstreamProviderHeaders({ name: "Other", base_url: "https://example.com/v1" }, {});
+    expect(plain["x-opencode-session"]).toBeUndefined();
+    expect(plain["X-Session-ID"]).toBeUndefined();
+  });
+
+  test("rejects manual X-Session-ID overrides like x-opencode-session", () => {
+    expect(() => validateCustomHeaders({ "X-Session-ID": "manual" })).toThrow("managed by Klove");
   });
 
   test("generates a UUID as the OpenCode session ID by default", () => {

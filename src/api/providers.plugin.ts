@@ -1,5 +1,5 @@
 import { Elysia, t } from "elysia";
-import { providerService, validateCustomHeaders, withDecryptedProviderHeaders } from "../services/provider.service";
+import { providerService, validateCustomHeaders } from "../services/provider.service";
 import { upstreamProviderHeaders } from "../services/provider-headers";
 import { credentialService } from "../services/credential.service";
 import { codexAuthService } from "../integrations/codex";
@@ -94,7 +94,7 @@ export const providersPlugin = (app: Elysia) =>
       });
       return {
         ...pub,
-        custom_headers: withDecryptedProviderHeaders(provider)?.custom_headers ?? {},
+        custom_headers: (provider.custom_headers as Record<string, string>) ?? {},
         api_key: provider.api_key
           ? provider.api_key.slice(0, 6) + "..." + provider.api_key.slice(-4)
           : null,
@@ -187,7 +187,7 @@ export const providersPlugin = (app: Elysia) =>
           const customHeaders = body.custom_headers === undefined ? undefined : validateCustomHeaders(body.custom_headers);
           const updated = providerService.update(id, { ...body, custom_headers: customHeaders, api_key: body.api_key ?? body.auth_code });
           if (!updated) return updated;
-          return { ...serializeProvider(updated, { includeAvatarOverride: true }), custom_headers: withDecryptedProviderHeaders(providerService.findById(id))?.custom_headers ?? {} };
+          return { ...serializeProvider(updated, { includeAvatarOverride: true }), custom_headers: (providerService.findById(id)?.custom_headers as Record<string, string>) ?? {} };
         } catch (error: any) {
           set.status = 400;
           return { error: error.message };

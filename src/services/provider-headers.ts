@@ -60,7 +60,9 @@ export function upstreamProviderHeaders(
       return false;
     }
   })();
-  if (forceOpenCodeSession || (provider.name ? isOpenCodeProvider(provider.name) : false) || openCodeEndpoint)
-    merge({ "x-opencode-session": explicitSessionId ?? sessionId ?? crypto.randomUUID() });
+  if (forceOpenCodeSession || (provider.name ? isOpenCodeProvider(provider.name) : false) || openCodeEndpoint) {
+    const resolved = explicitSessionId ?? sessionId ?? crypto.randomUUID();
+    merge({ "x-opencode-session": resolved, "X-Session-ID": resolved });
+  }
   return Object.fromEntries([...result.values()].map(({ name, value }) => [name, value]));
 }

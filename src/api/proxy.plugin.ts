@@ -660,7 +660,7 @@ export const proxyPlugin = (app: Elysia) =>
               requesterName: apiKey.name,
               requestDetails: { method: request.method, url: "/v1/responses", headers, payload: body, stream: Boolean(body.stream) },
             });
-            const incomingSession = headers["x-opencode-session"];
+            const incomingSession = (headers["x-opencode-session"] ?? headers["x-session-id"]);
             const sessionKey = incomingSession || String((body as any).metadata?.conversation_id ?? (body as any).conversation_id ?? (body as any).metadata?.session_id ?? crypto.randomUUID());
             const outgoingHeaders = upstreamProviderHeaders(
               provider,
@@ -1063,7 +1063,7 @@ export const proxyPlugin = (app: Elysia) =>
                   Authorization: `Bearer ${credential.secret ?? ""}`,
                   "Content-Type": "application/json",
                   Accept: body.stream ? "text/event-stream" : "application/json",
-                }, opencodeSessionId(provider.id, String(body.metadata?.conversation_id ?? body.conversation_id ?? body.metadata?.session_id ?? crypto.randomUUID())), headers["x-opencode-session"], true),
+                }, opencodeSessionId(provider.id, String(body.metadata?.conversation_id ?? body.conversation_id ?? body.metadata?.session_id ?? crypto.randomUUID())), (headers["x-opencode-session"] ?? headers["x-session-id"]), true),
                 body: JSON.stringify(responsesBody),
                 signal: request.signal,
               });
@@ -1119,7 +1119,7 @@ export const proxyPlugin = (app: Elysia) =>
             const credentialId = credential.id;
             const start = performance.now();
             try {
-              const client = createOpenAIClient({ ...provider, api_key: credential.secret ?? "" }, credential.secret ?? "", headers["x-opencode-session"]);
+              const client = createOpenAIClient({ ...provider, api_key: credential.secret ?? "" }, credential.secret ?? "", (headers["x-opencode-session"] ?? headers["x-session-id"]));
               const stream = (await client.chat.completions.create({ ...payload, stream: true, stream_options: { include_usage: true } }, { signal: request.signal })) as any;
               return openAIStreamResponse(fixThinkTagAsyncIterable(stream, modelRecord.think_opening_tag_mode), {
                 start,
@@ -1164,7 +1164,7 @@ export const proxyPlugin = (app: Elysia) =>
             const credentialId = credential.id;
             const start = performance.now();
             try {
-              const completion = await createOpenAIClient({ ...provider, api_key: credential.secret ?? "" }, credential.secret ?? "", headers["x-opencode-session"]).chat.completions.create(payload, { signal: request.signal });
+              const completion = await createOpenAIClient({ ...provider, api_key: credential.secret ?? "" }, credential.secret ?? "", (headers["x-opencode-session"] ?? headers["x-session-id"])).chat.completions.create(payload, { signal: request.signal });
               const durationMs = Math.round(performance.now() - start);
               const details = tokenDetails(completion.usage);
               const usage = usageService.record(provider.id, modelRecord.id, parsed.modelId, completion.usage?.prompt_tokens ?? 0, completion.usage?.completion_tokens ?? 0, durationMs, durationMs, details);
@@ -1955,7 +1955,7 @@ export const proxyPlugin = (app: Elysia) =>
               attempted.add(credential.id);
               const credentialId = credential.id;
               const start = performance.now();
-              const client = createOpenAIClient({ ...provider, api_key: credential.secret ?? "" }, credential.secret ?? "", headers["x-opencode-session"]);
+              const client = createOpenAIClient({ ...provider, api_key: credential.secret ?? "" }, credential.secret ?? "", (headers["x-opencode-session"] ?? headers["x-session-id"]));
               const stream = (await client!.chat.completions.create(
                 { ...payload, stream: true, stream_options: { include_usage: true } },
                 { signal: request.signal },
@@ -2071,7 +2071,7 @@ export const proxyPlugin = (app: Elysia) =>
               const completion = await createOpenAIClient({
                 ...provider,
                 api_key: credential.secret ?? "",
-              }, credential.secret ?? "", headers["x-opencode-session"]).chat.completions.create(payload, { signal: request.signal });
+              }, credential.secret ?? "", (headers["x-opencode-session"] ?? headers["x-session-id"])).chat.completions.create(payload, { signal: request.signal });
               const durationMs = Math.round(performance.now() - start);
 
               // Record token usage

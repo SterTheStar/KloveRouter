@@ -73,6 +73,7 @@ const forbiddenHeaderNames = new Set([
   "x-api-key",
   "anthropic-version",
   "x-opencode-session",
+  "x-session-id",
   "content-type",
 ]);
 
@@ -122,6 +123,19 @@ function withDecryptedApiKey(provider: Provider | null): Provider | null {
 
 export function withDecryptedProviderHeaders(provider: Provider | null): Provider | null {
   if (!provider) return null;
+  // Idempotent: findById/findByName already return decrypted objects.
+  // Calling this twice must not wipe headers.
+  if (
+    provider.custom_headers &&
+    typeof provider.custom_headers === "object" &&
+    !Array.isArray(provider.custom_headers)
+  ) {
+    try {
+      return { ...provider, custom_headers: validateCustomHeaders(provider.custom_headers) };
+    } catch {
+      return { ...provider, custom_headers: {} };
+    }
+  }
   let customHeaders: Record<string, string> = {};
   const encryptedHeaders = provider.custom_headers as unknown as string;
   try {
