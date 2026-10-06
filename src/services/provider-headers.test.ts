@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { isOpenCodeProvider } from "./provider-appearance";
-import { upstreamProviderHeaders } from "./provider-headers";
+import { OPENCODE_SESSION_RE, OPENCODE_USER_AGENT, coerceOpencodeSessionId, mintOpencodeSessionId, upstreamProviderHeaders } from "./provider-headers";
 import { validateCustomHeaders } from "./provider.service";
 import { createOpenAIClient } from "../clients/openai";
 import { createAnthropicMessage } from "../clients/anthropic";
@@ -27,9 +27,20 @@ describe("provider custom headers", () => {
   });
 
   test("explicit incoming session ID overrides a generated OpenCode session ID", () => {
+    const valid = "ses_abcdef123456AbCdEfGhIjKlMn";
+    const headers = upstreamProviderHeaders({ name: "OpenCode Zen" }, {}, undefined, valid);
+    expect(headers["x-opencode-session"]).toBe(valid);
+    expect(headers["X-Session-ID"]).toBe(valid);
+  });
+
+  test("coerces non-conforming session IDs into the ses_ shape deterministically", () => {
+    expect(mintOpencodeSessionId()).toMatch(OPENCODE_SESSION_RE);
+    const coerced = coerceOpencodeSessionId("incoming-session");
+    expect(coerced).toMatch(OPENCODE_SESSION_RE);
+    expect(coerceOpencodeSessionId("incoming-session")).toBe(coerced);
+    expect(coerceOpencodeSessionId("ses_abcdef123456AbCdEfGhIjKlMn")).toBe("ses_abcdef123456AbCdEfGhIjKlMn");
     const headers = upstreamProviderHeaders({ name: "OpenCode Zen" }, {}, undefined, "incoming-session");
-    expect(headers["x-opencode-session"]).toBe("incoming-session");
-    expect(headers["X-Session-ID"]).toBe("incoming-session");
+    expect(headers["x-opencode-session"]).toMatch(OPENCODE_SESSION_RE);
   });
 
   test("sends X-Session-ID with the same value as x-opencode-session for OpenCode only", () => {
@@ -44,9 +55,22 @@ describe("provider custom headers", () => {
     expect(() => validateCustomHeaders({ "X-Session-ID": "manual" })).toThrow("managed by Klove");
   });
 
-  test("generates a UUID as the OpenCode session ID by default", () => {
+  test("generates a ses_-shaped OpenCode session ID by default", () => {
     const headers = upstreamProviderHeaders({ name: "OpenCode Zen Go" });
-    expect(headers["x-opencode-session"]).toMatch(/^[0-9a-f-]{36}$/i);
+    expect(headers["x-opencode-session"]).toMatch(OPENCODE_SESSION_RE);
+    expect(headers["X-Session-ID"]).toBe(headers["x-opencode-session"]);
+  });
+
+  test("sends the OpenCode User-Agent for OpenCode providers unless customized", () => {
+    const headers = upstreamProviderHeaders({ name: "OpenCode Zen" }, {});
+    expect(headers["User-Agent"]).toBe(OPENCODE_USER_AGENT);
+    const custom = upstreamProviderHeaders(
+      { name: "OpenCode Zen", custom_headers: { "User-Agent": "my-client/1.0" } },
+      {},
+    );
+    expect(custom["User-Agent"]).toBe("my-client/1.0");
+    const plain = upstreamProviderHeaders({ name: "Other", base_url: "https://example.com/v1" }, {});
+    expect(plain["User-Agent"]).toBeUndefined();
   });
 
   test("reuses a session ID for repeated requests in the same provider conversation", () => {
@@ -70,7 +94,8 @@ describe("provider custom headers", () => {
       custom_headers: { "X-Test": "yes" },
     } as any);
     const headers = (client as any)._options.defaultHeaders as Record<string, string>;
-    expect(headers["x-opencode-session"]).toMatch(/^[0-9a-f-]{36}$/i);
+    expect(headers["x-opencode-session"]).toMatch(OPENCODE_SESSION_RE);
+    expect(headers["User-Agent"]).toBe(OPENCODE_USER_AGENT);
     expect(headers["X-Test"]).toBe("yes");
   });
 
@@ -83,7 +108,7 @@ describe("provider custom headers", () => {
       const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
       const headers = init.headers as Record<string, string>;
       expect(headers["X-Workspace"]).toBe("team");
-      expect(headers["x-opencode-session"]).toMatch(/^[0-9a-f-]{36}$/i);
+      expect(headers["x-opencode-session"]).toMatch(OPENCODE_SESSION_RE);
       expect(headers["x-api-key"]).toBe("secret");
     } finally {
       globalThis.fetch = originalFetch;
