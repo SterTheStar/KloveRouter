@@ -331,6 +331,8 @@ export interface RequestLog {
   error_message: string | null;
   created_at: string;
   completed_at: string | null;
+  streaming: boolean;
+  streamed_chars: number;
 }
 
 export interface RequestLogDetails extends RequestLog {

@@ -24,6 +24,8 @@ export interface RequestLog {
   error_message: string | null;
   created_at: string;
   completed_at: string | null;
+  streaming: boolean;
+  streamed_chars: number;
 }
 
 export interface RequestLogDetails extends RequestLog {
@@ -99,11 +101,12 @@ export const requestLogService = {
     clientIp?: string | null;
     requesterName?: string | null;
     requestDetails?: unknown;
+    streaming?: boolean;
   }) {
     const id = requestId();
     getDb()
       .query(
-        "INSERT INTO request_logs (id, provider_id, provider_name, model_name, client_ip, requester_name, request_details) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO request_logs (id, provider_id, provider_name, model_name, client_ip, requester_name, request_details, streaming) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
       )
       .run(
         id,
@@ -113,8 +116,15 @@ export const requestLogService = {
         input.clientIp ?? null,
         input.requesterName ?? null,
         serializeDetail(input.requestDetails),
+        input.streaming ? 1 : 0,
       );
     return id;
+  },
+
+  progress(id: string, streamedChars: number) {
+    try {
+      getDb().query("UPDATE request_logs SET streamed_chars = ? WHERE id = ? AND status = 'pending'").run(Math.max(0, Math.floor(streamedChars)), id);
+    } catch { /* Logging must never affect the request. */ }
   },
 
   setCredential(
@@ -186,7 +196,7 @@ export const requestLogService = {
         : 0;
     }
     db.query(
-      "UPDATE request_logs SET status = ?, status_code = ?, tokens_prompt = ?, tokens_completion = ?, tokens_cache_read = ?, tokens_cache_write = ?, tokens_total = ?, estimated_cost_usd = ?, duration_ms = ?, tps = ?, error_message = ?, response_details = COALESCE(?, response_details), error_details = COALESCE(?, error_details), completed_at = datetime('now') WHERE id = ? AND status = 'pending'",
+      "UPDATE request_logs SET status = ?, status_code = ?, tokens_prompt = ?, tokens_completion = ?, tokens_cache_read = ?, tokens_cache_write = ?, tokens_total = ?, estimated_cost_usd = ?, duration_ms = ?, tps = ?, error_message = ?, streaming = 0, response_details = COALESCE(?, response_details), error_details = COALESCE(?, error_details), completed_at = datetime('now') WHERE id = ? AND status = 'pending'",
     ).run(
       input.status ?? "success",
       input.statusCode ?? 200,
@@ -267,9 +277,10 @@ export const requestLogService = {
     const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
     const rows = db
       .query(
-        `SELECT id, provider_id, provider_name, model_name, client_ip, requester_name, credential_label, credential_identity, status, status_code, tokens_prompt, tokens_completion, tokens_cache_read, tokens_cache_write, tokens_total, estimated_cost_usd, tps, duration_ms, error_message, created_at, completed_at FROM request_logs ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`,
+        `SELECT id, provider_id, provider_name, model_name, client_ip, requester_name, credential_label, credential_identity, status, status_code, tokens_prompt, tokens_completion, tokens_cache_read, tokens_cache_write, tokens_total, estimated_cost_usd, tps, duration_ms, error_message, created_at, completed_at, streaming, streamed_chars FROM request_logs ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`,
       )
       .all(...values, limit, offset) as RequestLog[];
+    for (const row of rows) row.streaming = Boolean(row.streaming);
     const total = (
       db
         .query(`SELECT COUNT(*) as count FROM request_logs ${where}`)

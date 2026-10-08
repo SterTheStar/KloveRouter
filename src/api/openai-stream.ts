@@ -17,6 +17,7 @@ type OpenAIStreamOptions = {
   onCancel: (stats: OpenAIStreamStats) => void;
   signal?: AbortSignal;
   now?: () => number;
+  onProgress?: (streamedChars: number) => void;
 };
 
 function hasSemanticDelta(chunk: any) {
@@ -123,6 +124,7 @@ export function openAIStreamResponse(
                 if (typeof delta?.reasoning_content === "string")
                   streamedChars += delta.reasoning_content.length;
               }
+              try { options.onProgress?.(streamedChars); } catch { /* Logging must not affect delivery. */ }
               for (const choice of chunk.choices ?? []) {
                 const delta = choice?.delta;
                 for (const call of delta?.tool_calls ?? []) {

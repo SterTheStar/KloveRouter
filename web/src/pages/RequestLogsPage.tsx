@@ -92,7 +92,7 @@ function StatusBadge({ log }: { log: RequestLog }) {
             : "outline"
       }
     >
-      {log.status}
+      {log.status === "pending" && log.streaming ? "streaming" : log.status}
       {log.status_code ? ` ${log.status_code}` : ""}
     </Badge>
   );
@@ -147,9 +147,9 @@ export default function RequestLogsPage() {
   }, [load]);
 
   useEffect(() => {
-    const interval = window.setInterval(load, 5000);
+    const interval = window.setInterval(load, logs.some((log) => log.status === "pending" && log.streaming) ? 1000 : 5000);
     return () => window.clearInterval(interval);
-  }, [load]);
+  }, [load, logs]);
 
   // Debounce the search input so each keystroke does not hit the API.
   useEffect(() => {
@@ -398,6 +398,11 @@ export default function RequestLogsPage() {
                         >
                           Not supported
                         </Badge>
+                      ) : log.status === "pending" && log.streaming ? (
+                        <>
+                          <div className="font-medium">{formatNumber(log.streamed_chars)} characters</div>
+                          <div className="mt-1 text-xs text-muted-foreground">Delivered so far · {formatDuration(Date.now() - new Date(`${log.created_at}Z`).getTime())}</div>
+                        </>
                       ) : (
                         <>
                           <div>{formatNumber(log.tokens_total)} tokens</div>

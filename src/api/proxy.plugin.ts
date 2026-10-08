@@ -351,7 +351,7 @@ export function recordSseUsageResponse(
   ) => void,
   start: number,
   onError?: (error: Error) => void,
-  estimate?: { messages?: unknown; model?: string; provider?: string },
+  estimate?: { messages?: unknown; model?: string; provider?: string; onProgress?: (streamedChars: number) => void },
 ) {
   const reader = response.body?.getReader();
   if (!reader) return response;
@@ -362,6 +362,8 @@ export function recordSseUsageResponse(
   let cacheRead = 0;
   let cacheWrite = 0;
   let completionText = "";
+  let streamedChars = 0;
+  let lastProgressAt = 0;
   let recorded = false;
   let firstTokenAt: number | null = null;
   let streamError: Error | null = null;
@@ -371,6 +373,7 @@ export function recordSseUsageResponse(
   const record = () => {
     if (recorded) return;
     recorded = true;
+    estimate?.onProgress?.(streamedChars);
     if (!promptTokens && estimate?.messages) promptTokens = countMessages(estimate.messages, estimate);
     if (!completionTokens && completionText) completionTokens = countCompletion(completionText, estimate);
     onUsage(
@@ -407,11 +410,13 @@ export function recordSseUsageResponse(
             }
             for (const choice of data.choices ?? []) {
               const delta = choice?.delta;
-              if (typeof delta?.content === "string") completionText += delta.content;
-              if (typeof delta?.reasoning_content === "string") completionText += delta.reasoning_content;
+              if (typeof delta?.content === "string") { completionText += delta.content; streamedChars += delta.content.length; }
+              if (typeof delta?.reasoning_content === "string") { completionText += delta.reasoning_content; streamedChars += delta.reasoning_content.length; }
             }
-            if (typeof data.delta?.content === "string") completionText += data.delta.content;
-            if (typeof data.delta?.reasoning_content === "string") completionText += data.delta.reasoning_content;
+            if (typeof data.delta?.content === "string") { completionText += data.delta.content; streamedChars += data.delta.content.length; }
+            if (typeof data.delta?.reasoning_content === "string") { completionText += data.delta.reasoning_content; streamedChars += data.delta.reasoning_content.length; }
+            const now = Date.now();
+            if (now - lastProgressAt >= 500) { lastProgressAt = now; estimate?.onProgress?.(streamedChars); }
             const semanticDelta = (data.choices ?? []).some((choice: any) => {
               const delta = choice?.delta;
               return Boolean(delta && (delta.content || delta.reasoning_content || delta.reasoning || delta.tool_calls?.length || delta.function_call?.arguments));
@@ -659,6 +664,7 @@ export const proxyPlugin = (app: Elysia) =>
               clientIp: clientIp(request, headers),
               requesterName: apiKey.name,
               requestDetails: { method: request.method, url: "/v1/responses", headers, payload: body, stream: Boolean(body.stream) },
+              streaming: Boolean(body.stream),
             });
             const incomingSession = (headers["x-opencode-session"] ?? headers["x-session-id"]);
             const sessionKey = incomingSession || String((body as any).metadata?.conversation_id ?? (body as any).conversation_id ?? (body as any).metadata?.session_id ?? crypto.randomUUID());
@@ -692,7 +698,7 @@ export const proxyPlugin = (app: Elysia) =>
             }, started, (error) => {
               credentialService.markError(providerCredential.id, error.message);
               requestLogService.complete(requestLogId, { status: "error", statusCode: 502, error: error.message });
-            }, { messages: canonicalBody.messages, model: requestModel, provider: provider.name });
+            }, { messages: canonicalBody.messages, model: requestModel, provider: provider.name, onProgress: (chars) => requestLogService.progress(requestLogId, chars) });
             const result = await upstream.json();
             const inputTokens = Number(result.usage?.input_tokens ?? 0);
             const outputTokens = Number(result.usage?.output_tokens ?? 0);
@@ -983,6 +989,7 @@ export const proxyPlugin = (app: Elysia) =>
             payload: body,
             stream: Boolean(body.stream),
           },
+          streaming: Boolean(body.stream),
         });
 
         const requestSequence =
@@ -1136,6 +1143,7 @@ export const proxyPlugin = (app: Elysia) =>
                   requestLogService.complete(requestLogId, { status: "error", statusCode: 502, promptTokens: stats.promptTokens, completionTokens: stats.completionTokens, cacheRead: stats.cacheRead, cacheWrite: stats.cacheWrite, durationMs: stats.durationMs, error: error.message });
                 },
                 onCancel: (stats) => requestLogService.complete(requestLogId, { status: "error", statusCode: 499, promptTokens: stats.promptTokens, completionTokens: stats.completionTokens, cacheRead: stats.cacheRead, cacheWrite: stats.cacheWrite, durationMs: stats.durationMs, error: "Client disconnected" }),
+                onProgress: (chars) => requestLogService.progress(requestLogId, chars),
               });
             } catch (error: any) {
               failures.push(error);
@@ -1404,6 +1412,7 @@ export const proxyPlugin = (app: Elysia) =>
                      error: error.message,
                    });
                  },
+                 { onProgress: (chars) => requestLogService.progress(requestLogId, chars) },
                );
             } catch (error: any) {
               failures.push(error);
@@ -1530,6 +1539,7 @@ export const proxyPlugin = (app: Elysia) =>
                      error: error.message,
                    });
                  },
+                 { onProgress: (chars) => requestLogService.progress(requestLogId, chars) },
                );
             } catch (error: any) {
               if (isModelNotFoundError(error)) {
@@ -1643,7 +1653,7 @@ export const proxyPlugin = (app: Elysia) =>
                return recordSseUsageResponse(fixThinkTagStream(response), (promptTokens, completionTokens, durationMs, generationDurationMs, details) => {
                 const usage = usageService.record(provider.id, modelRecord?.id ?? parsed.modelId, parsed.modelId, promptTokens, completionTokens, durationMs, generationDurationMs, details);
                 requestLogService.complete(requestLogId, { promptTokens, completionTokens, cacheRead: details?.cacheRead, cacheWrite: details?.cacheWrite, cost: usage.estimated_cost_usd, durationMs });
-              }, start);
+              }, start, undefined, { onProgress: (chars) => requestLogService.progress(requestLogId, chars) });
             } catch (error: any) {
               failures.push(error);
               requestLogService.captureError(requestLogId, error);
@@ -1719,7 +1729,7 @@ export const proxyPlugin = (app: Elysia) =>
               return recordSseUsageResponse(fixThinkTagStream(cleanQwenStream(response)), (promptTokens, completionTokens, durationMs, generationDurationMs, details) => {
                 const usage = usageService.record(provider.id, modelRecord?.id ?? parsed.modelId, parsed.modelId, promptTokens, completionTokens, durationMs, generationDurationMs, details);
                 requestLogService.complete(requestLogId, { promptTokens, completionTokens, cacheRead: details?.cacheRead, cacheWrite: details?.cacheWrite, cost: usage.estimated_cost_usd, durationMs });
-              }, start, undefined, { messages: body.messages, model: parsed.modelId, provider: provider.name });
+              }, start, undefined, { messages: body.messages, model: parsed.modelId, provider: provider.name, onProgress: (chars) => requestLogService.progress(requestLogId, chars) });
             } catch (error: any) {
               failures.push(error);
               requestLogService.captureError(requestLogId, error);
@@ -1768,7 +1778,7 @@ export const proxyPlugin = (app: Elysia) =>
               }, start, (error) => {
                 credentialService.markError(credentialId, error.message);
                 requestLogService.complete(requestLogId, { status: "error", statusCode: 502, error: error.message });
-              }, { messages: body.messages, model: parsed.modelId, provider: provider.name });
+              }, { messages: body.messages, model: parsed.modelId, provider: provider.name, onProgress: (chars) => requestLogService.progress(requestLogId, chars) });
             } catch (error: any) {
               failures.push(error);
               requestLogService.captureError(requestLogId, error);
@@ -1913,6 +1923,8 @@ export const proxyPlugin = (app: Elysia) =>
                   credentialService.clearCooldown(credentialId);
                 },
                 start,
+                undefined,
+                { onProgress: (chars) => requestLogService.progress(requestLogId, chars) },
               );
             } catch (error: any) {
               failures.push(error);
@@ -2024,6 +2036,7 @@ export const proxyPlugin = (app: Elysia) =>
                     error: "Client disconnected",
                   });
                 },
+                onProgress: (chars) => requestLogService.progress(requestLogId, chars),
               });
             } catch (error: any) {
               failures.push(error);

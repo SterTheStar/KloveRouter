@@ -284,6 +284,8 @@ export function initSchema(db: Database): void {
       error_details TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       completed_at TEXT,
+      streaming INTEGER NOT NULL DEFAULT 0,
+      streamed_chars INTEGER NOT NULL DEFAULT 0,
       FOREIGN KEY (provider_id) REFERENCES providers(id) ON DELETE SET NULL
     );
   `);
@@ -300,6 +302,8 @@ export function initSchema(db: Database): void {
     ["request_details", "ALTER TABLE request_logs ADD COLUMN request_details TEXT"],
     ["response_details", "ALTER TABLE request_logs ADD COLUMN response_details TEXT"],
     ["error_details", "ALTER TABLE request_logs ADD COLUMN error_details TEXT"],
+    ["streaming", "ALTER TABLE request_logs ADD COLUMN streaming INTEGER NOT NULL DEFAULT 0"],
+    ["streamed_chars", "ALTER TABLE request_logs ADD COLUMN streamed_chars INTEGER NOT NULL DEFAULT 0"],
   ] as const) {
     if (!requestLogCols.find((column) => column.name === name)) db.exec(sql);
   }
