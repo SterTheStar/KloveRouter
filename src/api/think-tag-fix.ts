@@ -65,12 +65,13 @@ type StreamChoiceState = {
 };
 
 function partialOpeningSuffix(text: string): string {
-  const lower = text.toLowerCase();
-  const tag = "<think>";
-  for (let length = Math.min(tag.length - 1, text.length); length > 0; length--) {
-    if (lower.endsWith(tag.slice(0, length))) return text.slice(-length);
-  }
-  return "";
+  const start = text.lastIndexOf("<");
+  if (start < 0) return "";
+  const suffix = text.slice(start);
+  const lower = suffix.toLowerCase();
+  return "<think".startsWith(lower) || /^<think\s*$/i.test(suffix)
+    ? suffix
+    : "";
 }
 
 export class ThinkTagChunkFixer {
@@ -180,26 +181,43 @@ export class ThinkTagChunkFixer {
   }
 
   private processDetect(state: StreamChoiceState, content: string): { channel: "content" | "reasoning_content"; value: string }[] {
-    state.buffer += content;
-    if (!closingTag.test(state.buffer)) return [];
-    const text = state.buffer;
-    state.buffer = "";
     const results: { channel: "content" | "reasoning_content"; value: string }[] = [];
-    let cursor = 0;
-    thinkBlockRegex.lastIndex = 0;
-    let match: RegExpExecArray | null;
-    while ((match = thinkBlockRegex.exec(text)) !== null) {
-      if (match.index > cursor) results.push({ channel: "content", value: text.slice(cursor, match.index) });
-      results.push({ channel: "reasoning_content", value: match[0] });
-      cursor = match.index + match[0].length;
+    let text = state.buffer + content;
+    state.buffer = "";
+
+    while (text) {
+      if (state.phase === "reasoning") {
+        const pending = state.buffer + text;
+        const closing = closingTag.exec(pending);
+        if (!closing) {
+          state.buffer = pending;
+          break;
+        }
+        const end = closing.index + closing[0].length;
+        results.push({ channel: "reasoning_content", value: pending.slice(0, end) });
+        state.phase = "answer";
+        state.buffer = "";
+        text = pending.slice(end);
+        continue;
+      }
+
+      const opening = openingTag.exec(text);
+      if (opening) {
+        if (opening.index) results.push({ channel: "content", value: text.slice(0, opening.index) });
+        state.phase = "reasoning";
+        state.buffer = "";
+        text = text.slice(opening.index);
+        continue;
+      }
+
+      // Keep only a possible fragmented opening tag. Plain text, including
+      // code fences, can pass through without waiting for the response to end.
+      const suffix = partialOpeningSuffix(text);
+      const ready = suffix ? text.slice(0, -suffix.length) : text;
+      if (ready) results.push({ channel: "content", value: ready });
+      state.buffer = suffix;
+      break;
     }
-    if (cursor === 0) {
-      const closing = closingTag.exec(text);
-      const end = closing ? closing.index + closing[0].length : text.length;
-      results.push({ channel: "reasoning_content", value: `<think>${text.slice(0, end)}` });
-      cursor = end;
-    }
-    if (cursor < text.length) results.push({ channel: "content", value: text.slice(cursor) });
     return results;
   }
 
