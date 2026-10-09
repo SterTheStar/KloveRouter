@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   RiAddLine as AddLine,
   RiArrowDownSLine as DownLine,
@@ -15,6 +15,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
 import { Switch } from "../ui/switch";
+import { Tabs } from "../ui/tabs";
+import { Popover as PopoverPrimitive } from "@base-ui/react/popover";
 import ProviderIcon from "../ProviderIcon";
 import type { ModelPool, ModelWithProvider } from "../../types";
 import type { CompoundModelDraft } from "./types";
@@ -47,6 +49,17 @@ const modelLabel = (model: ModelWithProvider) => model.display_name || model.mod
 export function CompoundModelEditor({ draft, models, pools, saving, onDraftChange, onSave, onClose }: Props) {
   const [query, setQuery] = useState("");
   const [providerFilter, setProviderFilter] = useState("all");
+  const [activeTab, setActiveTab] = useState("identity");
+  const [pickerOpen, setPickerOpen] = useState(false);
+
+  useEffect(() => {
+    if (draft) {
+      setActiveTab("identity");
+      setQuery("");
+      setProviderFilter("all");
+      setPickerOpen(false);
+    }
+  }, [Boolean(draft), draft?.id]);
 
   const update = (patch: Partial<CompoundModelDraft>) =>
     onDraftChange((current) => ({ ...current, ...patch }));
@@ -115,21 +128,45 @@ export function CompoundModelEditor({ draft, models, pools, saving, onDraftChang
 
   const effectiveInput = draft.max_input_tokens ?? memberInputLimit;
   const effectiveOutput = draft.max_output_tokens ?? memberOutputLimit;
+  const firstInvalidTab = errors.name || errors.slug ? "identity"
+    : errors.members ? "members"
+      : errors.input || errors.output ? "limits"
+        : errors.enabled ? "availability" : "identity";
+  const save = () => {
+    if (hasErrors) {
+      setActiveTab(firstInvalidTab);
+      return;
+    }
+    onSave();
+  };
+
+  const tabs = [
+    { id: "identity", label: "Identity" },
+    { id: "members", label: `Members${draft.members.length ? ` (${draft.members.length})` : ""}` },
+    { id: "routing", label: "Routing" },
+    { id: "limits", label: "Limits" },
+    { id: "availability", label: "Availability" },
+  ];
 
   return <Dialog open onOpenChange={(open) => { if (!open && !saving) onClose(); }}>
     <DialogContent
       showCloseButton={!saving}
-      className="flex max-h-[min(52rem,calc(100dvh-2rem))] w-[min(72rem,calc(100vw-2rem))] max-w-none flex-col gap-0 overflow-hidden p-0 sm:max-w-none"
+      className="flex h-[min(46rem,calc(100dvh-2rem))] w-[min(72rem,calc(100vw-2rem))] max-w-none flex-col gap-0 overflow-hidden p-0 sm:max-w-none"
     >
-      <DialogHeader className="shrink-0 border-b px-6 py-4 pr-14">
-        <DialogTitle>{isEditing ? "Edit compound model" : "New compound model"}</DialogTitle>
-        <DialogDescription>One stable API model that routes requests across several provider models.</DialogDescription>
+      <DialogHeader className="shrink-0 gap-0 border-b">
+        <div className="px-6 py-4 pr-14">
+          <DialogTitle>{isEditing ? "Edit compound model" : "New compound model"}</DialogTitle>
+          <DialogDescription className="mt-1">One stable API model that routes requests across several provider models.</DialogDescription>
+        </div>
+        <div className="overflow-x-auto px-6">
+          <Tabs tabs={tabs} active={activeTab} onChange={setActiveTab} ariaLabel="Compound model settings" className="min-w-max" />
+        </div>
       </DialogHeader>
 
       <div className="grid min-h-0 flex-1 lg:grid-cols-[minmax(0,1fr)_20rem]">
         <div className="min-h-0 overflow-y-auto px-6 py-6">
-          <div className="space-y-8">
-            {/* Identity */}
+          <div id={`panel-${activeTab}`} role="tabpanel" aria-labelledby={`${activeTab}-tab`} className="min-w-0">
+            {activeTab === "identity" && <>
             <Section title="Identity" description="How the model appears in catalogs and what API clients request.">
               <div className="grid gap-4 sm:grid-cols-2">
                 <Field id="pool-name" label="Display name" error={errors.name} hint="Shown in the model picker.">
@@ -146,9 +183,60 @@ export function CompoundModelEditor({ draft, models, pools, saving, onDraftChang
                 </Field>
               </div>
             </Section>
+            </>}
 
-            {/* Members (ordered list = priority) */}
-            <Section title="Members" description="Order is priority. With fallback on, a failing member hands the request to the next one.">
+            {activeTab === "members" && <>
+            <Section title="Members" description="Order is priority. With fallback on, a failing member hands the request to the next one."
+              action={<PopoverPrimitive.Root open={pickerOpen} onOpenChange={(open) => {
+                setPickerOpen(open);
+                if (open) {
+                  setQuery("");
+                  setProviderFilter("all");
+                }
+              }}>
+                <PopoverPrimitive.Trigger
+                  aria-label="Add member model"
+                  render={<Button type="button" variant="outline" className="gap-2"><AddLine className="size-4" />Add model</Button>}
+                />
+                <PopoverPrimitive.Portal>
+                  <PopoverPrimitive.Positioner side="bottom" align="end" sideOffset={6} className="z-[60] outline-none">
+                    <PopoverPrimitive.Popup className="w-[min(34rem,calc(100vw-3rem))] overflow-hidden rounded-xl border bg-popover text-popover-foreground shadow-xl ring-1 ring-foreground/10">
+                      <div className="space-y-3 border-b p-3">
+                        <div>
+                          <p className="text-sm font-medium">Add member models</p>
+                          <p className="mt-0.5 text-xs text-muted-foreground">Search the catalog and select models to add.</p>
+                        </div>
+                        <div className="flex flex-col gap-2 sm:flex-row">
+                          <div className="relative min-w-0 flex-1">
+                            <SearchLine className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                            <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search models" aria-label="Search models" className="h-9 bg-background pl-9" />
+                          </div>
+                          <select aria-label="Filter by provider" value={providerFilter} onChange={(event) => setProviderFilter(event.target.value)}
+                            className="h-9 rounded-lg border border-input bg-background px-3 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring dark:[color-scheme:dark] sm:w-48">
+                            <option value="all">All providers</option>
+                            {providers.map((provider) => <option key={provider} value={provider}>{provider}</option>)}
+                          </select>
+                        </div>
+                      </div>
+                      <div className="max-h-72 overflow-y-auto p-1">
+                        {candidates.length ? candidates.map((model) => {
+                          const off = !model.is_active || !model.provider_is_active;
+                          return <button key={model.id} type="button" onClick={() => addMember(model.id)}
+                            className={`flex w-full items-center gap-3 rounded-md px-2.5 py-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring ${off ? "bg-muted/40 hover:bg-muted/70" : "hover:bg-muted/60"}`}>
+                            <ProviderIcon name={model.provider_name} src={model.provider_avatar} sources={model.provider_avatar_sources} className="size-6 shrink-0" />
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate text-sm font-medium">{modelLabel(model)}</span>
+                              <span className="block truncate text-xs text-muted-foreground">{model.provider_name} · {model.pretty_id || model.model_id}</span>
+                            </span>
+                            {off && <span className="shrink-0 text-[11px] text-muted-foreground">Disabled</span>}
+                            <AddLine className="size-4 shrink-0 text-muted-foreground" />
+                          </button>;
+                        }) : <p className="px-3 py-8 text-center text-xs text-muted-foreground">No models match.</p>}
+                      </div>
+                    </PopoverPrimitive.Popup>
+                  </PopoverPrimitive.Positioner>
+                </PopoverPrimitive.Portal>
+              </PopoverPrimitive.Root>}>
               {draft.members.length === 0 ? (
                 <div className="rounded-lg border border-dashed px-4 py-8 text-center">
                   <p className="text-sm font-medium">No members yet</p>
@@ -184,38 +272,10 @@ export function CompoundModelEditor({ draft, models, pools, saving, onDraftChang
               )}
               {errors.members && <p className="text-xs text-destructive">{errors.members}</p>}
 
-              {/* Member picker */}
-              <div className="space-y-3 rounded-lg border bg-muted/20 p-3">
-                <div className="flex flex-col gap-2 sm:flex-row">
-                  <div className="relative min-w-0 flex-1">
-                    <SearchLine className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                    <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search models" aria-label="Search models" className="h-9 bg-background pl-9" />
-                  </div>
-                  <select aria-label="Filter by provider" value={providerFilter} onChange={(event) => setProviderFilter(event.target.value)}
-                    className="h-9 rounded-lg border border-input bg-input/30 px-3 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring dark:[color-scheme:dark] sm:w-52">
-                    <option value="all">All providers</option>
-                    {providers.map((provider) => <option key={provider} value={provider}>{provider}</option>)}
-                  </select>
-                </div>
-                <div className="max-h-64 overflow-y-auto rounded-md border bg-background">
-                  {candidates.length ? candidates.map((model) => {
-                    const off = !model.is_active || !model.provider_is_active;
-                    return <button key={model.id} type="button" onClick={() => addMember(model.id)}
-                      className={`flex w-full items-center gap-3 border-b px-3 py-2 text-left last:border-b-0 focus-visible:outline-none ${off ? "bg-muted/70 hover:bg-muted" : "bg-card hover:bg-muted/60"}`}>
-                      <ProviderIcon name={model.provider_name} src={model.provider_avatar} sources={model.provider_avatar_sources} className="size-6 shrink-0" />
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-sm font-medium">{modelLabel(model)}</span>
-                        <span className="block truncate text-xs text-muted-foreground">{model.provider_name} · {model.pretty_id || model.model_id}</span>
-                      </span>
-                      {off && <span className="shrink-0 text-[11px] text-muted-foreground">Disabled</span>}
-                      <AddLine className="size-4 shrink-0 text-muted-foreground" />
-                    </button>;
-                  }) : <p className="px-3 py-8 text-center text-xs text-muted-foreground">No models match.</p>}
-                </div>
-              </div>
             </Section>
+            </>}
 
-            {/* Routing */}
+            {activeTab === "routing" && <>
             <Section title="Routing" description="How a member is chosen for each request.">
               <div role="radiogroup" aria-label="Routing strategy" className="grid gap-3 sm:grid-cols-2">
                 <StrategyCard selected={draft.strategy === "priority"} onSelect={() => update({ strategy: "priority" })}
@@ -224,8 +284,9 @@ export function CompoundModelEditor({ draft, models, pools, saving, onDraftChang
                   icon={<ShuffleLine className="size-4" />} title="Random" description="Pick a member at random per request. Failures continue through the rest." />
               </div>
             </Section>
+            </>}
 
-            {/* Limits */}
+            {activeTab === "limits" && <>
             <Section title="Token limits" description="Leave empty to inherit the strictest member limit.">
               <div className="grid gap-4 sm:grid-cols-2">
                 <LimitField id="pool-max-input" label="Input (context)" value={draft.max_input_tokens} onChange={(value) => update({ max_input_tokens: value })}
@@ -234,8 +295,9 @@ export function CompoundModelEditor({ draft, models, pools, saving, onDraftChang
                   memberLimit={memberOutputLimit} limiters={outputLimiters} error={errors.output} />
               </div>
             </Section>
+            </>}
 
-            {/* Visibility & status */}
+            {activeTab === "availability" && <>
             <Section title="Availability" description="Control visibility and whether requests are accepted.">
               <ToggleRow title="Enabled" description={draft.is_active ? "Accepts requests and appears in catalogs." : "Hidden from catalogs and rejects requests."}
                 checked={draft.is_active} onCheckedChange={(checked) => update({ is_active: checked })} />
@@ -243,6 +305,7 @@ export function CompoundModelEditor({ draft, models, pools, saving, onDraftChang
               <ToggleRow title="Hide member models" description="Remove members from catalogs while this compound model is enabled."
                 checked={draft.hide_members} onCheckedChange={(checked) => update({ hide_members: checked })} />
             </Section>
+            </>}
           </div>
         </div>
 
@@ -277,7 +340,7 @@ export function CompoundModelEditor({ draft, models, pools, saving, onDraftChang
         </p>
         <div className="flex shrink-0 items-center gap-2">
           <Button variant="ghost" onClick={onClose} disabled={saving}>Cancel</Button>
-          <Button onClick={onSave} disabled={saving || hasErrors}>
+          <Button onClick={save} disabled={saving}>
             {saving && <LoaderLine className="mr-2 size-4 animate-spin" />}
             {isEditing ? "Save changes" : "Create compound model"}
           </Button>
@@ -287,11 +350,14 @@ export function CompoundModelEditor({ draft, models, pools, saving, onDraftChang
   </Dialog>;
 }
 
-function Section({ title, description, children }: { title: string; description: string; children: React.ReactNode }) {
+function Section({ title, description, action, children }: { title: string; description: string; action?: React.ReactNode; children: React.ReactNode }) {
   return <section className="space-y-4">
-    <div>
-      <h3 className="text-sm font-semibold">{title}</h3>
-      <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>
+    <div className="flex items-start justify-between gap-4">
+      <div className="min-w-0">
+        <h3 className="text-sm font-semibold">{title}</h3>
+        <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>
+      </div>
+      {action}
     </div>
     {children}
   </section>;
