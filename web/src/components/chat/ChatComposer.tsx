@@ -155,7 +155,7 @@ export default function ChatComposer({
                   variant="destructive"
                   size="icon"
                   className="chat-send-button rounded-full"
-                  onClick={onStop}
+                  onClick={() => onStop()}
                   title="Stop generating"
                   aria-label="Stop generating"
                 >
