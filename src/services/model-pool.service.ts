@@ -449,6 +449,9 @@ function validateInput(input: ModelPoolInput) {
     if (value !== null && (!Number.isSafeInteger(value) || value < 1)) throw new InvalidModelPoolError(`${field} must be a positive safe integer or empty`);
   }
   const members = modelService.findAllWithProvider().filter((model) => modelIds.includes(model.id));
+  if (input.is_active && members.some((model) => !model.is_active || !model.provider_is_active)) {
+    throw new InvalidModelPoolError("Enable every member model and its provider before enabling this compound model");
+  }
   const contextLimit = minimumKnown(members.map((model) => model.context_window));
   const outputLimit = minimumKnown(members.map((model) => model.max_output_tokens));
   if (contextLimit === null && maxInput === null) throw new InvalidModelPoolError("At least one selected model must have a configured context window, or set a compound maximum input token limit");

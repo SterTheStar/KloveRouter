@@ -96,6 +96,7 @@ export interface PricingTier {
 
 export interface ModelWithProvider extends Model {
   provider_name: string;
+  provider_is_active?: number;
   provider_avatar: string | null;
   provider_avatar_sources: string[];
   model_pool?: boolean;

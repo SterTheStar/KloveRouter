@@ -229,6 +229,38 @@ export function initSchema(db: Database): void {
       WHERE id = OLD.pool_id
         AND (SELECT COUNT(*) FROM model_pool_members WHERE pool_id = OLD.pool_id) < 2;
     END;
+    CREATE TRIGGER IF NOT EXISTS model_disable_pools_when_inactive
+    AFTER UPDATE OF is_active ON models
+    WHEN NEW.is_active = 0 AND OLD.is_active != 0
+    BEGIN
+      UPDATE model_pools
+      SET is_active = 0, updated_at = datetime('now')
+      WHERE is_active = 1
+        AND id IN (SELECT pool_id FROM model_pool_members WHERE model_id = NEW.id);
+    END;
+    CREATE TRIGGER IF NOT EXISTS provider_disable_pools_when_inactive
+    AFTER UPDATE OF is_active ON providers
+    WHEN NEW.is_active = 0 AND OLD.is_active != 0
+    BEGIN
+      UPDATE model_pools
+      SET is_active = 0, updated_at = datetime('now')
+      WHERE is_active = 1
+        AND id IN (
+          SELECT pm.pool_id FROM model_pool_members pm
+          JOIN models m ON m.id = pm.model_id
+          WHERE m.provider_id = NEW.id
+      );
+    END;
+    UPDATE model_pools
+    SET is_active = 0, updated_at = datetime('now')
+    WHERE is_active = 1
+      AND EXISTS (
+        SELECT 1 FROM model_pool_members pm
+        JOIN models m ON m.id = pm.model_id
+        JOIN providers p ON p.id = m.provider_id
+        WHERE pm.pool_id = model_pools.id
+          AND (m.is_active = 0 OR p.is_active = 0)
+      );
 
     CREATE TABLE IF NOT EXISTS chat_sessions (
       id TEXT PRIMARY KEY,

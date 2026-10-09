@@ -176,6 +176,34 @@ describe("modelPoolService", () => {
   });
 });
 
+describe("compound model availability follows members", () => {
+  test("disables compound models when a member model is disabled and keeps them disabled until re-enabled", () => {
+    const pool = modelPoolService.create(input());
+    db.query("UPDATE models SET is_active = 0 WHERE id = ?").run("m1");
+    expect(modelPoolService.findById(pool.id)?.is_active).toBe(false);
+    expect(() => modelPoolService.update(pool.id, input({ is_active: true }))).toThrow("Enable every member model");
+    db.query("UPDATE models SET is_active = 1 WHERE id = ?").run("m1");
+    expect(modelPoolService.findById(pool.id)?.is_active).toBe(false);
+    expect(modelPoolService.update(pool.id, input({ is_active: true }))?.is_active).toBe(true);
+  });
+
+  test("disables compound models when the provider of a member is disabled", () => {
+    const pool = modelPoolService.create(input());
+    db.query("UPDATE providers SET is_active = 0 WHERE id = ?").run("p2");
+    expect(modelPoolService.findById(pool.id)?.is_active).toBe(false);
+    expect(() => modelPoolService.update(pool.id, input({ is_active: true }))).toThrow("Enable every member model");
+  });
+
+  test("leaves unrelated compound models active", () => {
+    const affected = modelPoolService.create(input({ members: [{ model_id: "m1", priority: 0, fallback: true }, { model_id: "m2", priority: 1, fallback: true }] }));
+    db.exec("INSERT INTO models (id, provider_id, model_id, display_name, is_active, context_window, max_output_tokens, max_output_tokens_source, think_opening_tag_mode) VALUES ('m4', 'p1', 'four', 'Four', 1, 32000, 8192, 'api', 'off')");
+    const unrelated = modelPoolService.create(input({ name: "Only Provider One", slug: "solo", members: [{ model_id: "m1", priority: 0, fallback: true }, { model_id: "m4", priority: 1, fallback: true }] }));
+    db.query("UPDATE providers SET is_active = 0 WHERE id = ?").run("p2");
+    expect(modelPoolService.findById(affected.id)?.is_active).toBe(false);
+    expect(modelPoolService.findById(unrelated.id)?.is_active).toBe(true);
+  });
+});
+
 describe("model pool routing", () => {
   test("reports compatibility errors only if no member can satisfy request features", () => {
     const pool = modelPoolService.create(input());

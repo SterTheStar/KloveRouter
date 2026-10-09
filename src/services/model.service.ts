@@ -78,6 +78,7 @@ export interface PricingTier {
 
 export interface ModelWithProvider extends Model {
   provider_name: string;
+  provider_is_active: number;
   provider_avatar: string | null;
   provider_avatar_sources: string[];
 }
@@ -602,7 +603,7 @@ export const modelService = {
     const db = getDb();
     const models = db
       .query(
-        `SELECT m.*, p.name as provider_name, p.avatar as provider_avatar, p.base_url as provider_base_url, p.protocol as provider_protocol FROM models m
+        `SELECT m.*, p.name as provider_name, p.avatar as provider_avatar, p.base_url as provider_base_url, p.protocol as provider_protocol, p.is_active as provider_is_active FROM models m
          JOIN providers p ON p.id = m.provider_id
          WHERE m.is_active = 1 AND p.is_active = 1
          ORDER BY p.name ASC, m.model_id ASC`,
@@ -640,7 +641,8 @@ export const modelService = {
     const db = getDb();
     const models = db.query(
       `SELECT m.*, p.name as provider_name, p.avatar as provider_avatar,
-              p.base_url as provider_base_url, p.protocol as provider_protocol
+              p.base_url as provider_base_url, p.protocol as provider_protocol,
+              p.is_active as provider_is_active
        FROM models m JOIN providers p ON p.id = m.provider_id
        ORDER BY p.name COLLATE NOCASE ASC, m.model_id COLLATE NOCASE ASC`,
     ).all() as (ModelWithProvider & { provider_base_url: string; provider_protocol: ProviderProtocol })[];

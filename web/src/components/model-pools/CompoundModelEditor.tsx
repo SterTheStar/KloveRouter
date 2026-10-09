@@ -1,184 +1,362 @@
-import type { ReactNode } from "react";
+import { useMemo, useState } from "react";
 import {
+  RiAddLine as AddLine,
+  RiArrowDownSLine as DownLine,
+  RiArrowUpSLine as UpLine,
+  RiCloseLine as CloseLine,
+  RiErrorWarningLine as WarningLine,
   RiGitMergeLine as MergeLine,
   RiLoader4Line as LoaderLine,
+  RiSearchLine as SearchLine,
   RiShuffleLine as ShuffleLine,
 } from "@remixicon/react";
 import { Button } from "../ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "../ui/dialog";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
-import { Separator } from "../ui/separator";
 import { Switch } from "../ui/switch";
-import { Tabs, type Tab } from "../ui/tabs";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "../ui/dialog";
+import ProviderIcon from "../ProviderIcon";
 import type { ModelPool, ModelWithProvider } from "../../types";
 import type { CompoundModelDraft } from "./types";
-import { ModelPicker } from "./ModelPicker";
 
-const editorTabs: Tab[] = [
-  { id: "general", label: "General" },
-  { id: "members", label: "Members" },
-  { id: "limits", label: "Token limits" },
-];
+type Props = {
+  draft: CompoundModelDraft | null;
+  models: ModelWithProvider[];
+  pools: ModelPool[];
+  saving: boolean;
+  onDraftChange: (update: (current: CompoundModelDraft) => CompoundModelDraft) => void;
+  onSave: () => void;
+  onClose: () => void;
+};
+
+const slugify = (value: string) => value
+  .normalize("NFKD")
+  .replace(/[\u0300-\u036f]/g, "")
+  .toLowerCase()
+  .replace(/[^a-z0-9_-]+/g, "-")
+  .replace(/^-+|-+$/g, "")
+  .slice(0, 80);
 
 const minKnown = (values: Array<number | null | undefined>) => {
   const known = values.filter((value): value is number => value != null);
   return known.length ? Math.min(...known) : null;
 };
 
-const slugify = (value: string) => value.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 80);
+const modelLabel = (model: ModelWithProvider) => model.display_name || model.model_id;
 
-export function CompoundModelEditor({
-  draft,
-  models,
-  pools,
-  tab,
-  saving,
-  onDraftChange,
-  onTabChange,
-  onToggleMember,
-  onMoveMember,
-  onSave,
-  onClose,
-}: {
-  draft: CompoundModelDraft | null;
-  models: ModelWithProvider[];
-  pools: ModelPool[];
-  tab: string;
-  saving: boolean;
-  onDraftChange: (update: (current: CompoundModelDraft) => CompoundModelDraft) => void;
-  onTabChange: (tab: string) => void;
-  onToggleMember: (id: string) => void;
-  onMoveMember: (index: number, offset: -1 | 1) => void;
-  onSave: () => void;
-  onClose: () => void;
-}) {
-  const selectedModels = draft ? draft.members.flatMap(({ id }) => {
-    const model = models.find((item) => item.id === id);
-    if (model) return [model];
-    const fromPool = pools.flatMap((pool) => pool.members).find((item) => item.id === id);
-    return fromPool ? [fromPool] : [];
-  }) : [];
-  const memberInputLimit = minKnown(selectedModels.map((model) => model.context_window));
-  const memberOutputLimit = minKnown(selectedModels.map((model) => model.max_output_tokens));
-  const inputLimiters = selectedModels.filter((model) => memberInputLimit != null && model.context_window === memberInputLimit);
-  const outputLimiters = selectedModels.filter((model) => memberOutputLimit != null && model.max_output_tokens === memberOutputLimit);
-  const inputLimitError = draft?.max_input_tokens != null && memberInputLimit != null && draft.max_input_tokens > memberInputLimit
-    ? `Cannot exceed the lowest member context window (${memberInputLimit.toLocaleString()}).`
-    : null;
-  const outputLimitError = draft?.max_output_tokens != null && memberOutputLimit != null && draft.max_output_tokens > memberOutputLimit
-    ? `Cannot exceed the lowest member output maximum (${memberOutputLimit.toLocaleString()}).`
-    : null;
-  const update = (patch: Partial<CompoundModelDraft>) => onDraftChange((current) => ({ ...current, ...patch }));
-  const canContinue = tab === "general"
-    ? Boolean(draft?.name.trim() && draft?.slug.trim())
-    : tab === "members" ? Boolean(draft && draft.members.length >= 2) : true;
-  const index = editorTabs.findIndex((item) => item.id === tab);
-  const goNext = () => onTabChange(editorTabs[Math.min(editorTabs.length - 1, index + 1)].id);
+export function CompoundModelEditor({ draft, models, pools, saving, onDraftChange, onSave, onClose }: Props) {
+  const [query, setQuery] = useState("");
+  const [providerFilter, setProviderFilter] = useState("all");
 
-  return <Dialog open={draft !== null} onOpenChange={(open) => { if (!open && !saving) onClose(); }}>
-    {draft && <DialogContent className="flex h-[min(42rem,calc(100dvh-2rem))] w-[min(68rem,calc(100vw-1rem))] max-w-none flex-col gap-0 overflow-hidden p-0 sm:w-[min(68rem,calc(100vw-3rem))] sm:max-w-6xl" showCloseButton={!saving}>
-      <DialogHeader className="min-h-20 shrink-0 border-b px-5 py-4 pr-12 sm:px-7 sm:py-5">
-        <DialogTitle>{draft.id ? "Edit compound model" : "Create compound model"}</DialogTitle>
-        <DialogDescription>Configure its public identity, providers, routing behavior, and token limits.</DialogDescription>
+  const update = (patch: Partial<CompoundModelDraft>) =>
+    onDraftChange((current) => ({ ...current, ...patch }));
+
+  // Resolve every selected member, including ones that are disabled or no longer in the catalog.
+  const members = useMemo(() => {
+    if (!draft) return [];
+    const known = new Map<string, ModelWithProvider>(models.map((model) => [model.id, model]));
+    for (const pool of pools) for (const member of pool.members) if (!known.has(member.id)) known.set(member.id, member);
+    return draft.members.flatMap((selection) => {
+      const model = known.get(selection.id);
+      return model ? [{ selection, model }] : [];
+    });
+  }, [draft, models, pools]);
+
+  const selectedIds = useMemo(() => new Set(draft?.members.map((member) => member.id) ?? []), [draft]);
+  const providers = useMemo(() => [...new Set(models.map((model) => model.provider_name))].sort((a, b) => a.localeCompare(b)), [models]);
+  const candidates = useMemo(() => {
+    const term = query.trim().toLocaleLowerCase();
+    return models.filter((model) => {
+      if (selectedIds.has(model.id)) return false;
+      if (providerFilter !== "all" && model.provider_name !== providerFilter) return false;
+      if (!term) return true;
+      return [model.display_name ?? "", model.model_id, model.pretty_id ?? "", model.provider_name]
+        .some((value) => value.toLocaleLowerCase().includes(term));
+    });
+  }, [models, query, providerFilter, selectedIds]);
+
+  if (!draft) return <Dialog open={false} onOpenChange={() => {}}><DialogContent /></Dialog>;
+
+  const isEditing = Boolean(draft.id);
+  const memberInputLimit = minKnown(members.map(({ model }) => model.context_window));
+  const memberOutputLimit = minKnown(members.map(({ model }) => model.max_output_tokens));
+  const inputLimiters = members.filter(({ model }) => memberInputLimit != null && model.context_window === memberInputLimit).map(({ model }) => modelLabel(model));
+  const outputLimiters = members.filter(({ model }) => memberOutputLimit != null && model.max_output_tokens === memberOutputLimit).map(({ model }) => modelLabel(model));
+  const unavailable = members.filter(({ model }) => !model.is_active || !model.provider_is_active);
+  const slugTaken = pools.some((pool) => pool.slug === draft.slug.trim().toLowerCase() && pool.id !== draft.id);
+
+  const errors: Record<string, string> = {};
+  if (!draft.name.trim()) errors.name = "Enter a display name.";
+  if (!draft.slug.trim()) errors.slug = "Enter a public ID.";
+  else if (slugTaken) errors.slug = "This public ID is already used by another compound model.";
+  if (draft.members.length < 2) errors.members = "Choose at least two member models.";
+  if (draft.max_input_tokens != null && memberInputLimit != null && draft.max_input_tokens > memberInputLimit) {
+    errors.input = `Cannot exceed ${memberInputLimit.toLocaleString()}, the lowest member context window.`;
+  }
+  if (draft.max_output_tokens != null && memberOutputLimit != null && draft.max_output_tokens > memberOutputLimit) {
+    errors.output = `Cannot exceed ${memberOutputLimit.toLocaleString()}, the lowest member output limit.`;
+  }
+  if (draft.is_active && unavailable.length) {
+    errors.enabled = "Enable every member model and its provider, or disable this compound model.";
+  }
+  const hasErrors = Object.keys(errors).length > 0;
+
+  const addMember = (id: string) => update({ members: [...draft.members, { id, fallback: true }] });
+  const removeMember = (id: string) => update({ members: draft.members.filter((member) => member.id !== id) });
+  const moveMember = (index: number, offset: -1 | 1) => {
+    const next = index + offset;
+    if (next < 0 || next >= draft.members.length) return;
+    const list = [...draft.members];
+    [list[index], list[next]] = [list[next], list[index]];
+    update({ members: list });
+  };
+  const setFallback = (id: string, fallback: boolean) =>
+    update({ members: draft.members.map((member) => member.id === id ? { ...member, fallback } : member) });
+
+  const effectiveInput = draft.max_input_tokens ?? memberInputLimit;
+  const effectiveOutput = draft.max_output_tokens ?? memberOutputLimit;
+
+  return <Dialog open onOpenChange={(open) => { if (!open && !saving) onClose(); }}>
+    <DialogContent
+      showCloseButton={!saving}
+      className="flex max-h-[min(52rem,calc(100dvh-2rem))] w-[min(72rem,calc(100vw-2rem))] max-w-none flex-col gap-0 overflow-hidden p-0 sm:max-w-none"
+    >
+      <DialogHeader className="shrink-0 border-b px-6 py-4 pr-14">
+        <DialogTitle>{isEditing ? "Edit compound model" : "New compound model"}</DialogTitle>
+        <DialogDescription>One stable API model that routes requests across several provider models.</DialogDescription>
       </DialogHeader>
-      <Tabs tabs={editorTabs.map((item) => ({ ...item, id: `${item.id}-tab` }))} active={`${tab}-tab`} onChange={(id) => onTabChange(id.replace(/-tab$/, ""))} ariaLabel="Compound model settings" className="min-h-11 shrink-0 overflow-x-auto px-2 sm:px-6" />
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-7 sm:py-6">
-        {tab === "general" && <section id="panel-general" role="tabpanel" aria-labelledby="general-tab" className="w-full space-y-7">
-          <section className="space-y-4">
-            <SectionHeading title="Identity" description="Name this model and choose the stable ID clients will request." />
-            <div className="grid gap-5 sm:grid-cols-2">
-              <div className="space-y-2"><div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1"><Label htmlFor="pool-name">Display name</Label><p className="text-right text-xs leading-relaxed text-muted-foreground">Shown in model catalogs and the chat model selector.</p></div><Input id="pool-name" value={draft.name} maxLength={120} placeholder="Reliable coding model" onChange={(event) => update({ name: event.target.value, ...(!draft.id ? { slug: slugify(event.target.value) } : {}) })} /></div>
-              <div className="space-y-2"><div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1"><Label htmlFor="pool-slug">Public ID</Label><p className="text-right text-xs leading-relaxed text-muted-foreground">Stable across API clients and the chat model selector.</p></div><div className="flex items-center gap-2"><span className="shrink-0 text-sm text-muted-foreground">pool/</span><Input id="pool-slug" value={draft.slug} maxLength={80} placeholder="reliable-coding" onChange={(event) => update({ slug: slugify(event.target.value) })} /></div></div>
-            </div>
-          </section>
 
-          <Separator />
+      <div className="grid min-h-0 flex-1 lg:grid-cols-[minmax(0,1fr)_20rem]">
+        <div className="min-h-0 overflow-y-auto px-6 py-6">
+          <div className="space-y-8">
+            {/* Identity */}
+            <Section title="Identity" description="How the model appears in catalogs and what API clients request.">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field id="pool-name" label="Display name" error={errors.name} hint="Shown in the model picker.">
+                  <Input id="pool-name" value={draft.name} maxLength={120} placeholder="Reliable coding model" aria-invalid={Boolean(errors.name)} className="h-9"
+                    onChange={(event) => update({ name: event.target.value, ...(!isEditing ? { slug: slugify(event.target.value) } : {}) })} />
+                </Field>
+                <Field id="pool-slug" label="Public ID" error={errors.slug} hint={isEditing ? "Changing it breaks clients using the old ID." : "Used in API requests."}>
+                  <div className="flex h-9 items-center rounded-lg bg-input/30 focus-within:ring-2 focus-within:ring-ring">
+                    <span className="select-none px-3 text-sm font-medium text-foreground/70">pool/</span>
+                    <input id="pool-slug" value={draft.slug} maxLength={80} placeholder="reliable-coding" aria-invalid={Boolean(errors.slug)}
+                      onChange={(event) => update({ slug: slugify(event.target.value) })}
+                      className="h-full min-w-0 flex-1 bg-transparent px-3 font-mono text-sm text-foreground outline-none placeholder:text-muted-foreground" />
+                  </div>
+                </Field>
+              </div>
+            </Section>
 
-          <section className="space-y-4">
-            <SectionHeading title="Routing strategy" description="Choose which selected member receives each request." />
-            <div role="group" aria-label="Routing strategy" className="grid gap-3 sm:grid-cols-2">
-              <StrategyOption selected={draft.strategy === "priority"} onClick={() => update({ strategy: "priority" })} icon={<MergeLine className="size-4" />} title="Priority with fallback" description="Try members in the order shown. Move to the next when a provider is unavailable or returns a retryable error." />
-              <StrategyOption selected={draft.strategy === "random"} onClick={() => update({ strategy: "random" })} icon={<ShuffleLine className="size-4" />} title="Random member" description="Choose a member at random for each request. Retryable failures continue through the remaining members." />
-            </div>
-          </section>
+            {/* Members (ordered list = priority) */}
+            <Section title="Members" description="Order is priority. With fallback on, a failing member hands the request to the next one.">
+              {draft.members.length === 0 ? (
+                <div className="rounded-lg border border-dashed px-4 py-8 text-center">
+                  <p className="text-sm font-medium">No members yet</p>
+                  <p className="mt-1 text-xs text-muted-foreground">Add at least two models from the list below.</p>
+                </div>
+              ) : (
+                <ol className="divide-y overflow-hidden rounded-lg border" aria-label="Members in priority order">
+                  {members.map(({ selection, model }, index) => {
+                    const isUnavailable = !model.is_active || !model.provider_is_active;
+                    const reason = !model.provider_is_active ? "Provider disabled" : !model.is_active ? "Model disabled" : null;
+                    return <li key={selection.id} className={`flex items-center gap-3 px-3 py-2.5 ${isUnavailable ? "bg-destructive/5" : "bg-card"}`}>
+                      <span className="w-5 shrink-0 text-center font-mono text-xs tabular-nums text-muted-foreground">{index + 1}</span>
+                      <ProviderIcon name={model.provider_name} src={model.provider_avatar} sources={model.provider_avatar_sources} className="size-7 shrink-0" />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium">{modelLabel(model)}</p>
+                        <p className="truncate text-xs text-muted-foreground">
+                          {model.provider_name}
+                          {reason ? <span className="ml-2 inline-flex items-center gap-1 text-destructive"><WarningLine className="size-3" />{reason}</span> : null}
+                        </p>
+                      </div>
+                      <label className="hidden items-center gap-2 text-xs text-muted-foreground sm:flex">
+                        Fallback
+                        <Switch size="sm" checked={selection.fallback} onCheckedChange={(checked) => setFallback(selection.id, checked)} aria-label={`Fallback for ${modelLabel(model)}`} />
+                      </label>
+                      <div className="flex shrink-0 items-center">
+                        <Button variant="ghost" size="icon-sm" disabled={index === 0} onClick={() => moveMember(index, -1)} aria-label={`Move ${modelLabel(model)} up`}><UpLine className="size-4" /></Button>
+                        <Button variant="ghost" size="icon-sm" disabled={index === members.length - 1} onClick={() => moveMember(index, 1)} aria-label={`Move ${modelLabel(model)} down`}><DownLine className="size-4" /></Button>
+                        <Button variant="ghost" size="icon-sm" onClick={() => removeMember(selection.id)} aria-label={`Remove ${modelLabel(model)}`}><CloseLine className="size-4" /></Button>
+                      </div>
+                    </li>;
+                  })}
+                </ol>
+              )}
+              {errors.members && <p className="text-xs text-destructive">{errors.members}</p>}
 
-          <Separator />
+              {/* Member picker */}
+              <div className="space-y-3 rounded-lg border bg-muted/20 p-3">
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <div className="relative min-w-0 flex-1">
+                    <SearchLine className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search models" aria-label="Search models" className="h-9 bg-background pl-9" />
+                  </div>
+                  <select aria-label="Filter by provider" value={providerFilter} onChange={(event) => setProviderFilter(event.target.value)}
+                    className="h-9 rounded-lg border border-input bg-input/30 px-3 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring dark:[color-scheme:dark] sm:w-52">
+                    <option value="all">All providers</option>
+                    {providers.map((provider) => <option key={provider} value={provider}>{provider}</option>)}
+                  </select>
+                </div>
+                <div className="max-h-64 overflow-y-auto rounded-md border bg-background">
+                  {candidates.length ? candidates.map((model) => {
+                    const off = !model.is_active || !model.provider_is_active;
+                    return <button key={model.id} type="button" onClick={() => addMember(model.id)}
+                      className={`flex w-full items-center gap-3 border-b px-3 py-2 text-left last:border-b-0 focus-visible:outline-none ${off ? "bg-muted/70 hover:bg-muted" : "bg-card hover:bg-muted/60"}`}>
+                      <ProviderIcon name={model.provider_name} src={model.provider_avatar} sources={model.provider_avatar_sources} className="size-6 shrink-0" />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-medium">{modelLabel(model)}</span>
+                        <span className="block truncate text-xs text-muted-foreground">{model.provider_name} · {model.pretty_id || model.model_id}</span>
+                      </span>
+                      {off && <span className="shrink-0 text-[11px] text-muted-foreground">Disabled</span>}
+                      <AddLine className="size-4 shrink-0 text-muted-foreground" />
+                    </button>;
+                  }) : <p className="px-3 py-8 text-center text-xs text-muted-foreground">No models match.</p>}
+                </div>
+              </div>
+            </Section>
 
-          <section className="space-y-1">
-            <SectionHeading title="Availability" description="Control how this compound model appears and accepts requests." />
-            <SettingRow title="Enabled" description="Available in model catalogs and ready to receive requests." checked={draft.is_active} onCheckedChange={(checked) => update({ is_active: checked })} />
-            <SettingRow title="Hide member models" description="Remove these members from catalogs and the chat selector while this compound model is active." checked={draft.hide_members} onCheckedChange={(checked) => update({ hide_members: checked })} />
-          </section>
-        </section>}
+            {/* Routing */}
+            <Section title="Routing" description="How a member is chosen for each request.">
+              <div role="radiogroup" aria-label="Routing strategy" className="grid gap-3 sm:grid-cols-2">
+                <StrategyCard selected={draft.strategy === "priority"} onSelect={() => update({ strategy: "priority" })}
+                  icon={<MergeLine className="size-4" />} title="Priority fallback" description="Use members in the order above. Move to the next on retryable errors." />
+                <StrategyCard selected={draft.strategy === "random"} onSelect={() => update({ strategy: "random" })}
+                  icon={<ShuffleLine className="size-4" />} title="Random" description="Pick a member at random per request. Failures continue through the rest." />
+              </div>
+            </Section>
 
-        {tab === "members" && <div id="panel-members" role="tabpanel" aria-labelledby="members-tab" className="w-full"><ModelPicker models={models} pools={pools} selected={draft.members} hideMembers={draft.hide_members} onToggle={onToggleMember} onMove={onMoveMember} onFallbackChange={(id, fallback) => onDraftChange((current) => ({ ...current, members: current.members.map((member) => member.id === id ? { ...member, fallback } : member) }))} /></div>}
+            {/* Limits */}
+            <Section title="Token limits" description="Leave empty to inherit the strictest member limit.">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <LimitField id="pool-max-input" label="Input (context)" value={draft.max_input_tokens} onChange={(value) => update({ max_input_tokens: value })}
+                  memberLimit={memberInputLimit} limiters={inputLimiters} error={errors.input} />
+                <LimitField id="pool-max-output" label="Output" value={draft.max_output_tokens} onChange={(value) => update({ max_output_tokens: value })}
+                  memberLimit={memberOutputLimit} limiters={outputLimiters} error={errors.output} />
+              </div>
+            </Section>
 
-        {tab === "limits" && <section id="panel-limits" role="tabpanel" aria-labelledby="limits-tab" className="w-full space-y-6">
-          <div className="flex flex-wrap items-end justify-between gap-3"><div><h2 className="text-base font-semibold">Token limits</h2><p className="mt-1 max-w-2xl text-xs leading-relaxed text-muted-foreground">Use the tightest member limit automatically, or set a lower cap for this public model.</p></div><span className="rounded-full bg-muted px-2.5 py-1 text-xs tabular-nums text-muted-foreground">{draft.members.length} {draft.members.length === 1 ? "member" : "members"}</span></div>
-          <div className="grid gap-4 md:grid-cols-2">
-            <TokenLimitField id="pool-max-input" title="Context window" description="Maximum input tokens available to the prompt." value={draft.max_input_tokens} memberLimit={memberInputLimit} memberLimitLabel="Lowest member context window" limiters={inputLimiters.map((model) => `${model.display_name || model.model_id} (${model.provider_name})`)} error={inputLimitError} onChange={(value) => update({ max_input_tokens: value })} />
-            <TokenLimitField id="pool-max-output" title="Maximum output" description="Maximum generated response tokens." value={draft.max_output_tokens} memberLimit={memberOutputLimit} memberLimitLabel="Lowest member output limit" limiters={outputLimiters.map((model) => `${model.display_name || model.model_id} (${model.provider_name})`)} error={outputLimitError} onChange={(value) => update({ max_output_tokens: value })} />
+            {/* Visibility & status */}
+            <Section title="Availability" description="Control visibility and whether requests are accepted.">
+              <ToggleRow title="Enabled" description={draft.is_active ? "Accepts requests and appears in catalogs." : "Hidden from catalogs and rejects requests."}
+                checked={draft.is_active} onCheckedChange={(checked) => update({ is_active: checked })} />
+              {errors.enabled && <p className="px-3 text-xs text-destructive">{errors.enabled}</p>}
+              <ToggleRow title="Hide member models" description="Remove members from catalogs while this compound model is enabled."
+                checked={draft.hide_members} onCheckedChange={(checked) => update({ hide_members: checked })} />
+            </Section>
           </div>
-          <div className="rounded-lg border bg-card px-4 py-3"><p className="text-xs leading-relaxed text-muted-foreground"><span className="font-medium text-foreground">How limits apply:</span> empty fields use the lowest known member limit. Requests exceeding the input limit are rejected; requested output is capped before forwarding.</p></div>
-        </section>}
+        </div>
+
+        {/* Live summary */}
+        <aside className="hidden min-h-0 flex-col gap-5 overflow-y-auto border-l bg-muted/20 px-5 py-6 lg:flex" aria-label="Summary">
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Preview</p>
+            <p className="mt-2 truncate text-base font-semibold">{draft.name.trim() || "Untitled"}</p>
+            <p className="mt-0.5 truncate font-mono text-xs text-muted-foreground">pool/{draft.slug || "…"}</p>
+          </div>
+          <dl className="space-y-3 text-sm">
+            <SummaryRow label="Status"><StatusPill active={draft.is_active} /></SummaryRow>
+            <SummaryRow label="Routing">{draft.strategy === "priority" ? "Priority fallback" : "Random"}</SummaryRow>
+            <SummaryRow label="Members">{draft.members.length}</SummaryRow>
+            <SummaryRow label="Context">{effectiveInput != null ? effectiveInput.toLocaleString() : "Not reported"}</SummaryRow>
+            <SummaryRow label="Output">{effectiveOutput != null ? effectiveOutput.toLocaleString() : "Not reported"}</SummaryRow>
+          </dl>
+          {unavailable.length > 0 && (
+            <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-xs">
+              <p className="flex items-center gap-1.5 font-medium text-destructive"><WarningLine className="size-3.5" />Unavailable members</p>
+              <ul className="mt-2 space-y-1 text-muted-foreground">
+                {unavailable.map(({ model }) => <li key={model.id} className="truncate">{modelLabel(model)}</li>)}
+              </ul>
+            </div>
+          )}
+        </aside>
       </div>
-      <DialogFooter className="mx-0 mb-0 min-h-16 shrink-0 flex-row items-center justify-between gap-3 rounded-b-xl border-t bg-muted/30 px-4 py-3 sm:px-7">
-        <Button variant="ghost" onClick={onClose} disabled={saving}>Cancel</Button>
-        <div className="flex items-center gap-2">
-          {tab !== "limits" ? <Button onClick={goNext} disabled={saving || !canContinue}>Continue</Button> : <Button onClick={onSave} disabled={saving || draft.members.length < 2 || Boolean(inputLimitError || outputLimitError)}>{saving && <LoaderLine className="mr-2 size-4 animate-spin" />}{draft.id ? "Save changes" : "Create compound model"}</Button>}
+
+      <DialogFooter className="mx-0 mb-0 shrink-0 flex-row items-center justify-between gap-3 rounded-b-xl border-t bg-popover px-6 py-3">
+        <p className="min-w-0 truncate text-xs text-muted-foreground">
+          {hasErrors ? "Fix the highlighted fields to save." : isEditing ? "All changes valid." : "Ready to create."}
+        </p>
+        <div className="flex shrink-0 items-center gap-2">
+          <Button variant="ghost" onClick={onClose} disabled={saving}>Cancel</Button>
+          <Button onClick={onSave} disabled={saving || hasErrors}>
+            {saving && <LoaderLine className="mr-2 size-4 animate-spin" />}
+            {isEditing ? "Save changes" : "Create compound model"}
+          </Button>
         </div>
       </DialogFooter>
-    </DialogContent>}
+    </DialogContent>
   </Dialog>;
 }
 
-function TokenLimitField({ id, title, description, value, memberLimit, memberLimitLabel, limiters, error, onChange }: {
-  id: string;
-  title: string;
-  description: string;
-  value: number | null;
-  memberLimit: number | null;
-  memberLimitLabel: string;
-  limiters: string[];
-  error: string | null;
-  onChange: (value: number | null) => void;
-}) {
-  const effectiveLimit = value != null ? value : memberLimit;
-  return <div className="flex min-h-56 flex-col rounded-xl border bg-card p-4 sm:p-5">
-    <div className="flex items-start justify-between gap-3">
-      <div><Label htmlFor={id} className="text-sm font-semibold">{title}</Label><p className="mt-1 text-xs text-muted-foreground">{description}</p></div>
+function Section({ title, description, children }: { title: string; description: string; children: React.ReactNode }) {
+  return <section className="space-y-4">
+    <div>
+      <h3 className="text-sm font-semibold">{title}</h3>
+      <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>
     </div>
-    <div className="mt-5">
-      <Input id={id} className="h-11 bg-background font-mono text-base tabular-nums dark:bg-background" type="number" inputMode="numeric" min={1} max={memberLimit ?? undefined} value={value ?? ""} placeholder="Member limit" onChange={(event) => onChange(event.target.value ? Number(event.target.value) : null)} />
-      {error && <p className="mt-2 text-xs text-destructive">{error}</p>}
-    </div>
-    <div className="mt-auto space-y-2 pt-5">
-      <div className="flex items-center justify-between gap-3 border-t pt-3 text-xs">
-        <span className="text-muted-foreground">Effective maximum</span>
-        <span className="font-mono font-medium tabular-nums text-foreground">{effectiveLimit != null ? effectiveLimit.toLocaleString() : "Not reported"}</span>
-      </div>
-      <p className="min-h-8 text-[11px] leading-relaxed text-muted-foreground">
-        {memberLimit != null ? `${memberLimitLabel}: ${memberLimit.toLocaleString()}${limiters.length ? ` · ${limiters.join(", ")}` : ""}` : `No member ${title === "Context window" ? "context window" : "output limit"} has been reported.`}
-      </p>
-    </div>
+    {children}
+  </section>;
+}
+
+function Field({ id, label, hint, error, children }: { id: string; label: string; hint?: string; error?: string; children: React.ReactNode }) {
+  return <div className="space-y-1.5">
+    <Label htmlFor={id}>{label}</Label>
+    {children}
+    {error ? <p className="text-xs text-destructive">{error}</p> : hint ? <p className="text-xs text-muted-foreground">{hint}</p> : null}
   </div>;
 }
 
-function SectionHeading({ title, description }: { title: string; description: string }) {
-  return <div><h2 className="text-sm font-semibold">{title}</h2><p className="mt-1 text-xs leading-relaxed text-muted-foreground">{description}</p></div>;
+function LimitField({ id, label, value, onChange, memberLimit, limiters, error }: {
+  id: string;
+  label: string;
+  value: number | null;
+  onChange: (value: number | null) => void;
+  memberLimit: number | null;
+  limiters: string[];
+  error?: string;
+}) {
+  return <div className="space-y-1.5">
+    <div className="flex items-baseline justify-between gap-2">
+      <Label htmlFor={id}>{label}</Label>
+      <span className="text-xs text-muted-foreground">
+        {memberLimit != null ? <>Member max <span className="font-mono tabular-nums text-foreground">{memberLimit.toLocaleString()}</span></> : "No member limit reported"}
+      </span>
+    </div>
+    <Input id={id} type="number" inputMode="numeric" min={1} max={memberLimit ?? undefined} value={value ?? ""} placeholder={memberLimit != null ? memberLimit.toLocaleString() : "Unlimited"}
+      aria-invalid={Boolean(error)} className="font-mono tabular-nums"
+      onChange={(event) => onChange(event.target.value ? Number(event.target.value) : null)} />
+    {error ? <p className="text-xs text-destructive">{error}</p>
+      : limiters.length ? <p className="text-xs text-muted-foreground">Set by {limiters.join(", ")}</p> : null}
+  </div>;
 }
 
-function StrategyOption({ selected, onClick, icon, title, description }: { selected: boolean; onClick: () => void; icon: ReactNode; title: string; description: string }) {
-  return <button type="button" aria-pressed={selected} onClick={onClick} className={`flex min-h-28 flex-col rounded-lg border p-4 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${selected ? "border-primary/50 bg-primary/[0.06]" : "hover:bg-muted/60"}`}>
-    <span className="flex items-center gap-2 text-sm font-medium">{icon}{title}{selected && <span className="ml-auto text-[10px] font-medium text-primary">Selected</span>}</span>
-    <span className="mt-2 text-xs leading-relaxed text-muted-foreground">{description}</span>
+function StrategyCard({ selected, onSelect, icon, title, description }: { selected: boolean; onSelect: () => void; icon: React.ReactNode; title: string; description: string }) {
+  return <button type="button" role="radio" aria-checked={selected} onClick={onSelect}
+    className={`flex flex-col gap-2 rounded-lg border p-4 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${selected ? "border-primary bg-primary/[0.05] ring-1 ring-primary/30" : "hover:bg-muted/50"}`}>
+    <span className="flex items-center gap-2 text-sm font-medium">{icon}{title}</span>
+    <span className="text-xs leading-relaxed text-muted-foreground">{description}</span>
   </button>;
 }
 
-function SettingRow({ title, description, checked, onCheckedChange }: { title: string; description: string; checked: boolean; onCheckedChange: (checked: boolean) => void }) {
-  return <label className="flex cursor-pointer items-center justify-between gap-4 rounded-lg px-3 py-3 transition-colors hover:bg-muted/50">
-    <span className="min-w-0"><span className="block text-sm font-medium">{title}</span><span className="mt-1 block text-xs leading-relaxed text-muted-foreground">{description}</span></span>
+function ToggleRow({ title, description, checked, onCheckedChange }: { title: string; description: string; checked: boolean; onCheckedChange: (checked: boolean) => void }) {
+  return <label className="flex cursor-pointer items-center justify-between gap-4 rounded-lg border px-4 py-3 hover:bg-muted/40">
+    <span className="min-w-0">
+      <span className="block text-sm font-medium">{title}</span>
+      <span className="mt-0.5 block text-xs text-muted-foreground">{description}</span>
+    </span>
     <Switch checked={checked} onCheckedChange={onCheckedChange} />
   </label>;
+}
+
+function SummaryRow({ label, children }: { label: string; children: React.ReactNode }) {
+  return <div className="flex items-center justify-between gap-3">
+    <dt className="text-muted-foreground">{label}</dt>
+    <dd className="text-right font-medium">{children}</dd>
+  </div>;
+}
+
+function StatusPill({ active }: { active: boolean }) {
+  return <span className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium ${active ? "bg-success/10 text-success" : "bg-muted text-muted-foreground"}`}>
+    <span className={`size-1.5 rounded-full ${active ? "bg-success" : "bg-muted-foreground/50"}`} />
+    {active ? "Enabled" : "Disabled"}
+  </span>;
 }
