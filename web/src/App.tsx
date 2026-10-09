@@ -19,6 +19,7 @@ import ChatPage from "./pages/ChatPage";
 import StatsPage from "./pages/StatsPage";
 import UsageLimitsPage from "./pages/UsageLimitsPage";
 import RequestLogsPage from "./pages/RequestLogsPage";
+import DocsPage from "./pages/DocsPage";
 import type { Page } from "./types";
 import { ToastProvider } from "./components/ui/toast";
 import { settings } from "./api/client";
@@ -251,8 +252,8 @@ export default function App() {
   return (
     <ToastProvider>
       <TooltipProvider>
-        <div className="flex min-h-svh bg-background text-foreground">
-          {currentPage === "chat" ? (
+        <div className="flex h-svh min-h-0 overflow-hidden bg-background text-foreground">
+          {currentPage !== "docs" && (currentPage === "chat" ? (
             <ChatSidebar
               chats={chatSessions}
               activeChatId={activeChatId}
@@ -275,8 +276,8 @@ export default function App() {
               profile={profile}
               mobileOpen={mobileSidebarOpen}
             />
-          )}
-          {mobileSidebarOpen && (
+          ))}
+          {mobileSidebarOpen && currentPage !== "docs" && (
             <button
               type="button"
               aria-label="Close sidebar"
@@ -284,7 +285,7 @@ export default function App() {
               onClick={() => setMobileSidebarOpen(false)}
             />
           )}
-          <main className="min-w-0 flex-1 overflow-auto">
+          <main className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-y-contain">
             {currentPage === "dashboard" && (
               <DashboardPage onNavigate={handleNavigate} />
             )}
@@ -339,6 +340,7 @@ export default function App() {
             {currentPage === "stats" && <StatsPage />}
             {currentPage === "usage" && <UsageLimitsPage />}
             {currentPage === "request-logs" && <RequestLogsPage />}
+            {currentPage === "docs" && <DocsPage />}
             {currentPage === "keys" && <ApiKeysPage />}
             {currentPage === "settings" && (
               <SettingsPage

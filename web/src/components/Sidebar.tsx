@@ -10,6 +10,7 @@ import {
   RiSettings4Line as Settings4Line,
   RiCupLine as CupLine,
   RiGitMergeLine as MergeLine,
+  RiBookOpenLine as BookOpenLine,
 } from "@remixicon/react";
 import { Button } from "@/components/ui/button";
 import DisplayAvatar from "./DisplayAvatar";
@@ -24,6 +25,7 @@ const items = [
   { page: "model-pools" as Page, label: "Compound models", icon: MergeLine },
   { page: "stats" as Page, label: "Stats", icon: BarChartBoxLine },
   { page: "request-logs" as Page, label: "Request Logs", icon: FileListLine },
+  { page: "docs" as Page, label: "Docs", icon: BookOpenLine },
   { page: "usage" as Page, label: "Usage limits", icon: PulseLine },
   { page: "keys" as Page, label: "API Keys", icon: Key2Line },
   { page: "settings" as Page, label: "Settings", icon: Settings4Line },

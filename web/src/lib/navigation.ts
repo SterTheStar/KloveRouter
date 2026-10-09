@@ -16,6 +16,7 @@ const pagePaths: Partial<Record<Page, string>> = {
   "request-logs": "/request-logs",
   keys: "/api-keys",
   settings: "/settings",
+  docs: "/docs",
   login: "/login",
 };
 
@@ -64,6 +65,7 @@ export function routeFromPath(pathname: string): AppRoute {
     "/request-logs": "request-logs",
     "/api-keys": "keys",
     "/settings": "settings",
+    "/docs": "docs",
     "/login": "login",
   };
   const page = staticRoutes[path];

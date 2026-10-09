@@ -22,6 +22,7 @@ Compound models expose a stable `pool/<id>` model that routes across selected pr
 | Integration | Credentials | API support |
 | --- | --- | --- |
 | OpenAI-compatible providers | API key | Chat Completions and Responses, including streaming |
+| OpenAI-compatible media providers | API key | Image generation, edits and variations; text-to-speech; asynchronous video generation |
 | Anthropic | API key | Messages API, tools, thinking, and streaming |
 | Codex | OAuth | Responses-compatible requests and account rotation |
 | Antigravity | Google OAuth | Gemini, Claude, and supported GPT-family models |
@@ -122,12 +123,14 @@ curl --no-buffer http://localhost:6999/v1/chat/completions \
 
 Klove also accepts the OpenAI Responses API at `/v1/responses` and Anthropic Messages requests at `/v1/messages`. Responses from reasoning-capable models may include `reasoning_content` in streamed Chat Completions deltas when the provider supplies it.
 
+OpenAI-compatible image endpoints are available at `/v1/images/generations`, `/v1/images/edits`, and `/v1/images/variations`. Text-to-speech is available at `/v1/audio/speech`. Video generation uses `/v1/videos` with the compatible list, retrieve, content, cancel, and delete operations. Set `model` to `provider/model` (or a compound model ID where supported), and mark each model's generation capabilities in the Models panel. Binary media responses are streamed through the gateway and their delivered byte count appears in Request Logs.
+
 ## Data and privacy
 
 - Application data is stored in SQLite at `DB_PATH`.
 - Provider secrets and OAuth tokens are encrypted before they are stored.
 - Public API responses do not expose provider credentials.
-- Request logs include operational metadata, token counts, account labels, and client IP addresses. Prompt and completion bodies are not stored in request logs.
+- Request logs include operational metadata, token counts, account labels, and client IP addresses. Prompt and completion bodies are not stored in request logs; media prompt/input values are redacted and only their character count is retained.
 - `.env` files and the `data/` directory are excluded from Git.
 
 Back up the SQLite database and its encryption key together.
