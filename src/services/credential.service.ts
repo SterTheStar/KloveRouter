@@ -292,26 +292,26 @@ export const credentialService = {
     const provider = db
       .query("SELECT protocol FROM providers WHERE id = ?")
       .get(providerId) as { protocol: string } | null;
-    const eligible =
+    const credentialEligibility = (alias: string) =>
       provider?.protocol === "codex"
-        ? "kind = 'codex' AND access_token IS NOT NULL"
+        ? `${alias}.kind = 'codex' AND ${alias}.access_token IS NOT NULL`
           : provider?.protocol === "chatgpt"
-            ? "kind = 'chatgpt' AND (secret IS NOT NULL OR access_token IS NOT NULL)"
+            ? `${alias}.kind = 'chatgpt' AND (${alias}.secret IS NOT NULL OR ${alias}.access_token IS NOT NULL)`
           : provider?.protocol === "antigravity"
-            ? "kind = 'antigravity' AND refresh_token IS NOT NULL"
+            ? `${alias}.kind = 'antigravity' AND ${alias}.refresh_token IS NOT NULL`
             : provider?.protocol === "freebuff"
-              ? "kind = 'freebuff' AND secret IS NOT NULL"
+              ? `${alias}.kind = 'freebuff' AND ${alias}.secret IS NOT NULL`
              : provider?.protocol === "qwen"
-                 ? "kind = 'qwen' AND secret IS NOT NULL"
+                 ? `${alias}.kind = 'qwen' AND ${alias}.secret IS NOT NULL`
                : provider?.protocol === "atomesus"
-                 ? "kind = 'atomesus' AND secret IS NOT NULL"
+                 ? `${alias}.kind = 'atomesus' AND ${alias}.secret IS NOT NULL`
                : provider?.protocol === "conol"
-                 ? "kind = 'conol' AND secret IS NOT NULL AND account_id IS NOT NULL"
-               : "kind = 'api_key' AND secret IS NOT NULL";
+                 ? `${alias}.kind = 'conol' AND ${alias}.secret IS NOT NULL AND ${alias}.account_id IS NOT NULL`
+               : `${alias}.kind = 'api_key' AND (${alias}.secret IS NOT NULL OR NOT EXISTS (SELECT 1 FROM provider_credentials configured WHERE configured.provider_id = ${alias}.provider_id AND configured.kind = 'api_key' AND configured.is_active = 1 AND configured.secret IS NOT NULL))`;
     if (mode === "fixed" && fixedId) {
       const raw = db
         .query(
-          `SELECT id FROM provider_credentials WHERE id = ? AND provider_id = ? AND is_active = 1 AND ${eligible}`,
+          `SELECT id FROM provider_credentials c WHERE c.id = ? AND c.provider_id = ? AND c.is_active = 1 AND ${credentialEligibility("c")}`,
         )
         .get(fixedId, providerId) as { id: string } | null;
       const row = raw ? this.findById(raw.id) : null;
@@ -335,13 +335,13 @@ export const credentialService = {
         0;
       const candidates = db
         .query(
-          `SELECT c.id FROM provider_credentials c LEFT JOIN provider_credential_cooldown cooldown ON cooldown.credential_id = c.id AND cooldown.cooldown_until_sequence >= ? WHERE c.provider_id = ? AND c.is_active = 1 AND ${eligible.replaceAll("kind", "c.kind").replaceAll("access_token", "c.access_token").replaceAll("refresh_token", "c.refresh_token").replaceAll("secret", "c.secret")} AND cooldown.credential_id IS NULL ORDER BY c.created_at ASC, c.id ASC`,
+          `SELECT c.id FROM provider_credentials c LEFT JOIN provider_credential_cooldown cooldown ON cooldown.credential_id = c.id AND cooldown.cooldown_until_sequence >= ? WHERE c.provider_id = ? AND c.is_active = 1 AND ${credentialEligibility("c")} AND cooldown.credential_id IS NULL ORDER BY c.secret IS NULL ASC, c.created_at ASC, c.id ASC`,
         )
         .all(sequence, providerId) as { id: string }[];
       if (!candidates.length) {
         const fallback = db
           .query(
-            `SELECT id FROM provider_credentials WHERE provider_id = ? AND is_active = 1 AND ${eligible} ORDER BY created_at ASC, id ASC LIMIT 1`,
+            `SELECT c.id FROM provider_credentials c WHERE c.provider_id = ? AND c.is_active = 1 AND ${credentialEligibility("c")} ORDER BY c.secret IS NULL ASC, c.created_at ASC, c.id ASC LIMIT 1`,
           )
           .get(providerId) as { id: string } | null;
         if (!fallback) {
