@@ -23,8 +23,14 @@ const CALENDAR_DATE_FORMATTER = new Intl.DateTimeFormat("en-US", {
   year: "numeric",
 });
 
+function parseChatTimestamp(value: string): Date {
+  const normalized = value.trim().replace(" ", "T");
+  const hasTimezone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(normalized);
+  return new Date(hasTimezone ? normalized : `${normalized}Z`);
+}
+
 function chatDateGroup(value: string, now: Date): string {
-  const date = new Date(value);
+  const date = parseChatTimestamp(value);
   if (Number.isNaN(date.getTime())) return "Earlier";
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const chatDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
@@ -36,7 +42,12 @@ function chatDateGroup(value: string, now: Date): string {
 
 function groupChatsByDate(chats: ChatSession[], now = new Date()) {
   const groups = new Map<string, ChatSession[]>();
-  for (const chat of chats) {
+  const sortedChats = [...chats].sort((a, b) => {
+    const aTime = parseChatTimestamp(a.updated_at || a.created_at).getTime();
+    const bTime = parseChatTimestamp(b.updated_at || b.created_at).getTime();
+    return (Number.isNaN(bTime) ? 0 : bTime) - (Number.isNaN(aTime) ? 0 : aTime);
+  });
+  for (const chat of sortedChats) {
     const group = chatDateGroup(chat.updated_at || chat.created_at, now);
     const entries = groups.get(group) ?? [];
     entries.push(chat);

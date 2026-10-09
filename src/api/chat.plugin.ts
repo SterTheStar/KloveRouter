@@ -456,7 +456,7 @@ export const chatPlugin = (app: Elysia) =>
       if (chatId) {
         getDb()
           .query(
-            `UPDATE chat_sessions SET model = ?, updated_at = datetime('now')
+            `UPDATE chat_sessions SET model = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
              WHERE id = ? AND EXISTS (
                SELECT 1 FROM settings
                WHERE key = 'persist_model_per_chat' AND value = 'true'

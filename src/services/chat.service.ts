@@ -65,7 +65,7 @@ function rowToMessage(row: any): ChatMessage {
 export const chatService = {
   list(): ChatSession[] {
     return getDb()
-      .query("SELECT * FROM chat_sessions ORDER BY updated_at DESC, created_at DESC, id ASC")
+      .query("SELECT * FROM chat_sessions ORDER BY julianday(updated_at) DESC, julianday(created_at) DESC, id ASC")
       .all() as ChatSession[];
   },
 
@@ -117,7 +117,7 @@ export const chatService = {
     db.query("DELETE FROM chat_messages_fts WHERE message_id = ?").run(id);
     const deleted = db.query("DELETE FROM chat_messages WHERE id = ?").run(id).changes > 0;
     if (deleted)
-      db.query("UPDATE chat_sessions SET updated_at = datetime('now') WHERE id = ?").run(row.chat_id);
+      db.query("UPDATE chat_sessions SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?").run(row.chat_id);
     return deleted;
   },
 
@@ -167,7 +167,7 @@ export const chatService = {
         current.sequence,
       );
     }
-    db.query("UPDATE chat_sessions SET updated_at = datetime('now') WHERE id = ?").run(current.chat_id);
+    db.query("UPDATE chat_sessions SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?").run(current.chat_id);
     const updated = rowToMessage(db.query("SELECT * FROM chat_messages WHERE id = ?").get(id));
     this.indexMessage(updated);
     return updated;
@@ -198,7 +198,7 @@ export const chatService = {
         JOIN chat_messages m ON m.id = chat_messages_fts.message_id
         JOIN chat_sessions s ON s.id = m.chat_id
         WHERE chat_messages_fts MATCH ?
-        ORDER BY s.updated_at DESC, m.sequence ASC
+        ORDER BY julianday(s.updated_at) DESC, m.sequence ASC
         LIMIT ?
         `,
       )
@@ -245,7 +245,7 @@ export const chatService = {
       input.error ?? null,
       next.sequence,
     );
-    db.query("UPDATE chat_sessions SET updated_at = datetime('now') WHERE id = ?").run(input.chatId);
+    db.query("UPDATE chat_sessions SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?").run(input.chatId);
     const created = rowToMessage(db.query("SELECT * FROM chat_messages WHERE id = ?").get(id));
     if (created) this.indexMessage(created);
     return created;
@@ -268,7 +268,7 @@ export const chatService = {
       input.error === undefined ? current.error : input.error,
       id,
     );
-    db.query("UPDATE chat_sessions SET updated_at = datetime('now') WHERE id = ?").run(current.chat_id);
+    db.query("UPDATE chat_sessions SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?").run(current.chat_id);
     const updated = rowToMessage(db.query("SELECT * FROM chat_messages WHERE id = ?").get(id));
     if (updated && options.index !== false) this.indexMessage(updated);
     return updated;
@@ -283,7 +283,7 @@ export const chatService = {
   setGeneratedTitle(id: string, title: string): ChatSession | null {
     const db = getDb();
     const result = db.query(
-      "UPDATE chat_sessions SET title = ?, updated_at = datetime('now') WHERE id = ? AND title = 'New chat'",
+      "UPDATE chat_sessions SET title = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ? AND title = 'New chat'",
     ).run(normalizeTitle(title), id);
     return result.changes > 0 ? this.findById(id) : null;
   },
