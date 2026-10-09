@@ -542,6 +542,9 @@ export default function ChatPage({
           messages.map((message, index) => {
               const isLast = index === messages.length - 1;
               const isStreamingMessage = streaming && isLast;
+              const previousStats = message.role === "assistant"
+                ? [...messages.slice(0, index)].reverse().find((candidate) => candidate.role === "assistant" && candidate.stats)?.stats ?? undefined
+                : undefined;
               const statsModel = message.stats?.model
                 ? modelList.find(
                     (candidate) =>
@@ -552,6 +555,7 @@ export default function ChatPage({
                 <ChatMessageView
                   key={message.id}
                   message={message}
+                  previousStats={previousStats}
                   model={statsModel}
                   modelName={statsModel?.display_name ?? undefined}
                   streaming={isStreamingMessage}
