@@ -565,7 +565,7 @@ export const proxyPlugin = (app: Elysia) =>
             set.status = 503;
             return { type: "error", error: { type: "api_error", message: `Compound model "${poolSlug}" is unavailable` } };
           }
-          const response = await routeModelPool(poolSlug, chatBody, headers.authorization ?? `Bearer ${headers["x-api-key"]}`, request.signal, async (_input, init) => fetch(`http://127.0.0.1:${config.port}/v1/chat/completions`, { ...init, headers: { ...(init?.headers as Record<string, string>), "X-Klove-Model-Pool-Attempt": "true" } }));
+          const response = await routeModelPool(poolSlug, chatBody, headers.authorization ?? `Bearer ${headers["x-api-key"]}`, request.signal, async (input, init) => fetch(input, { ...init, headers: { ...(init?.headers as Record<string, string>), "X-Klove-Model-Pool-Attempt": "true" } }));
           if (!response.ok) { set.status = response.status; const error = await response.json().catch(() => null) as any; return { type: "error", error: { type: error?.error?.type ?? "api_error", message: error?.error?.message ?? error?.message ?? "Provider request failed" } }; }
           if (body.stream) return convertStream("chat_completions", "anthropic", response, model);
           try {
@@ -748,7 +748,7 @@ export const proxyPlugin = (app: Elysia) =>
             set.status = 400;
             return { error: { message: tokenLimitError, type: "invalid_request_error", code: "compound_input_limit_exceeded" } };
           }
-          const poolResponse = await routeModelPool(poolSlug, chatBody, headers.authorization!, request.signal, async (_input, init) => fetch(`http://127.0.0.1:${config.port}/v1/chat/completions`, {
+          const poolResponse = await routeModelPool(poolSlug, chatBody, headers.authorization!, request.signal, async (input, init) => fetch(input, {
             ...init,
             headers: { ...(init?.headers as Record<string, string>), "X-Klove-Model-Pool-Attempt": "true" },
           }));
@@ -887,7 +887,7 @@ export const proxyPlugin = (app: Elysia) =>
             set.status = 400;
             return { error: "Compound model input token limit exceeded", message: tokenLimitError };
           }
-          const response = await routeModelPool(poolSlug, body, headers.authorization!, request.signal, async (_input, init) => fetch(`http://127.0.0.1:${config.port}/v1/chat/completions`, {
+          const response = await routeModelPool(poolSlug, body, headers.authorization!, request.signal, async (input, init) => fetch(input, {
             ...init,
             headers: { ...(init?.headers as Record<string, string>), "X-Klove-Model-Pool-Attempt": "true" },
           }));

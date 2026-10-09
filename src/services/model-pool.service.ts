@@ -6,6 +6,7 @@ import { createSseSplitter, extractSseData, SSE_DONE } from "./sse";
 import { chatGenerationService } from "./chat-generation.service";
 import { openAICompletionFromSse } from "../api/openai-completion";
 import { estimateRequestTextTokens } from "./request-validation";
+import { convertResponse, convertStream, requestFromChat } from "../sdk/protocol-converter";
 
 export type ModelPoolStrategy = "priority" | "random";
 
@@ -135,18 +136,7 @@ export async function routeModelPool(
   authorization: string,
   signal?: AbortSignal,
   fetcher: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response> = (input, init) => {
-    const effectivePool = modelPoolService.findBySlug(slug);
-    const supplied = [body.max_output_tokens, body.max_completion_tokens, body.max_tokens].find((value) => typeof value === "number") as number | undefined;
-    const capped = effectivePool ? poolEffectiveLimits(effectivePool).outputLimit : null;
-    const outputLimit = supplied === undefined ? capped : capped === null ? supplied : Math.min(supplied, capped);
-    const nextBody = { ...body };
-    if (outputLimit !== null) {
-      for (const field of ["max_output_tokens", "max_completion_tokens", "max_tokens"] as const) {
-        if (nextBody[field] !== undefined) nextBody[field] = Math.min(Number(nextBody[field]), outputLimit);
-      }
-      if (supplied === undefined) nextBody.max_tokens = outputLimit;
-    }
-    return fetch(input, { ...init, signal, body: JSON.stringify(nextBody) });
+    return fetch(input, { ...init, signal });
   },
 ): Promise<Response> {
   const pool = modelPoolService.findForRouting(slug);
@@ -203,7 +193,11 @@ export async function routeModelPool(
         if (presentFields.length) presentFields.forEach((field) => { forwardedBody[field] = Math.min(Number(body[field]), memberCappedOutput); });
         else forwardedBody.max_tokens = memberCappedOutput;
       }
-      const response = await fetcher(`http://127.0.0.1:${config.port}/v1/chat/completions`, {
+      const protocol = (model as ModelWithProvider & { provider_protocol?: string }).provider_protocol === "openai-responses" ? "responses" : "chat_completions";
+      const requestBody = protocol === "responses"
+        ? requestFromChat("responses", { ...forwardedBody, model: modelName })
+        : { ...forwardedBody, model: modelName };
+      const response = await fetcher(`http://127.0.0.1:${config.port}/v1/${protocol === "responses" ? "responses" : "chat/completions"}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -211,25 +205,74 @@ export async function routeModelPool(
           Accept: body.stream === true ? "text/event-stream" : "application/json",
         },
         signal,
-        body: JSON.stringify({ ...forwardedBody, model: modelName }),
+        body: JSON.stringify(requestBody),
       });
       if (response.ok) {
         const requestedStream = body.stream === true;
         const upstreamStream = response.headers.get("content-type")?.includes("text/event-stream") === true;
         if (upstreamStream) {
-          const checked = await retryableStreamError(response);
+          const canonicalStream = protocol === "responses" ? convertStream("responses", "chat_completions", response, modelName) : response;
+          const checked = await retryableStreamError(canonicalStream);
           if (!checked.ok) {
             lastResponse = checked;
             const payload = await checked.clone().text().catch(() => "stream ended before output");
             failures.push(`${modelName}: ${payload.slice(0, 400)}`);
-            if (!memberConfig.fallback || checked.status === 401 || checked.status === 403) return checked;
+            if (!memberConfig.fallback) return checked;
             continue;
           }
           if (requestedStream) return identifyPoolStream(checked, slug);
           const completion = await openAICompletionFromSse(checked, modelName);
           return responseFromCompletion({ ...completion.completion, model: `pool/${slug}` });
         }
-        const raw = await response.json().catch(() => null) as any;
+        let raw: any;
+        try {
+          raw = await response.json();
+        } catch {
+          const invalid = Response.json({ error: "Invalid upstream response", message: "The provider returned a successful response with invalid JSON" }, { status: 502 });
+          lastResponse = invalid;
+          failures.push(`${modelName}: provider returned invalid JSON`);
+          if (!memberConfig.fallback) return invalid;
+          continue;
+        }
+        if (raw?.error) {
+          const detail = typeof raw.error === "string" ? raw.error : raw.error.message ?? "The provider returned an error payload with HTTP 200";
+          const invalid = Response.json({ error: "Invalid upstream response", message: detail }, { status: 502 });
+          lastResponse = invalid;
+          failures.push(`${modelName}: ${detail}`);
+          if (!memberConfig.fallback) return invalid;
+          continue;
+        }
+        if (protocol === "responses") {
+          try { raw = convertResponse("responses", "chat_completions", raw); }
+          catch (error) {
+            const invalid = Response.json({ error: "Invalid upstream response", message: error instanceof Error ? error.message : "Could not convert Responses API output" }, { status: 502 });
+            lastResponse = invalid;
+            failures.push(`${modelName}: invalid Responses API output`);
+            if (!memberConfig.fallback) return invalid;
+            continue;
+          }
+        }
+        const firstChoice = raw?.choices?.[0];
+        const message = firstChoice?.message;
+        const hasChoiceOutput = Boolean(message && (
+          (typeof message.content === "string" && message.content.length > 0) ||
+          message.refusal || message.reasoning_content || message.reasoning || message.audio ||
+          message.tool_calls?.length || message.function_call
+        ));
+        const hasResponseOutput = Array.isArray(raw?.output) && raw.output.some((item: any) =>
+          item?.type === "function_call" || item?.type === "reasoning" || item?.type === "message" &&
+          Array.isArray(item.content) && item.content.some((part: any) => part?.text || part?.refusal || part?.data),
+        );
+        if (!raw || typeof raw !== "object" ||
+          (!Array.isArray(raw.choices) && !hasResponseOutput && !(typeof raw.output_text === "string" && raw.output_text.length > 0)) ||
+          (Array.isArray(raw.choices) && (!firstChoice || !hasChoiceOutput))) {
+          const detail = typeof raw?.error === "string" ? raw.error : raw?.error?.message ?? "The provider returned no completion output";
+          const invalid = Response.json({ error: "Invalid upstream response", message: detail }, { status: 502 });
+          lastResponse = invalid;
+          failures.push(`${modelName}: ${detail}`);
+          if (!memberConfig.fallback) return invalid;
+          continue;
+        }
         const responseText = raw?.output?.map?.((item: any) => item?.content?.map?.((part: any) => part?.text ?? "").join("")).join("");
         const completion = raw?.choices?.[0]?.message?.content ?? raw?.choices?.[0]?.message ?? raw?.output_text ?? responseText ?? "";
         const usage = raw?.usage ?? {};
@@ -248,9 +291,8 @@ export async function routeModelPool(
         return new Response(streamBody, { headers: { "Content-Type": "text/event-stream; charset=utf-8", "Cache-Control": "no-cache, no-transform" } });
       }
       lastResponse = response;
-      if (response.status === 499 || response.status === 401 || response.status === 403) return response;
-      const recoverable = memberConfig.fallback && (response.status === 408 || response.status === 409 || response.status === 429 ||
-        (response.status >= 400 && response.status < 500) || response.status >= 500);
+      if (response.status === 499) return response;
+      const recoverable = memberConfig.fallback && ([401, 403, 404, 408, 409, 425, 429].includes(response.status) || response.status >= 500);
       if (!recoverable) return response;
       const payload = await response.clone().text().catch(() => response.statusText);
       failures.push(`${modelName} (${response.status}): ${payload.slice(0, 400)}`);
