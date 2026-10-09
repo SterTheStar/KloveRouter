@@ -98,6 +98,13 @@ function StatusBadge({ log }: { log: RequestLog }) {
   );
 }
 
+function requestKindLabel(kind?: string | null) {
+  if (kind === "image-generation" || kind === "image-edit" || kind === "image-variation") return "Image generation";
+  if (kind === "text-to-speech") return "Text to speech";
+  if (kind?.startsWith("video-")) return "Video generation";
+  return kind ?? "";
+}
+
 export default function RequestLogsPage() {
   const [logs, setLogs] = useState<RequestLog[]>([]);
   const [total, setTotal] = useState(0);
@@ -348,6 +355,7 @@ export default function RequestLogsPage() {
                         </Button>
                       </div>
                       <StatusBadge log={log} />
+                      {log.request_kind && <div className="mt-1"><Badge variant="outline" className="text-[10px]">{requestKindLabel(log.request_kind)}</Badge></div>}
                       {log.error_message && (
                         <div
                           className="mt-1 max-w-[220px] truncate text-xs text-destructive"
@@ -391,7 +399,12 @@ export default function RequestLogsPage() {
                       </div>
                     </td>
                     <td className="p-3 align-middle">
-                      {log.tokens_total === 0 && log.status === "success" ? (
+                      {log.request_kind ? (
+                        <>
+                          <div>{log.output_bytes != null ? `${formatNumber(log.output_bytes)} bytes` : log.status === "pending" && log.streaming ? "Streaming media" : "Media request"}</div>
+                          <div className="mt-1 text-xs text-muted-foreground">{log.status === "pending" && log.streaming ? "Delivered so far" : log.output_bytes != null ? "Response delivered" : "Token usage not reported"}</div>
+                        </>
+                      ) : log.tokens_total === 0 && log.status === "success" ? (
                         <Badge
                           variant="outline"
                           className="text-muted-foreground"

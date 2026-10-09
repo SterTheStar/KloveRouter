@@ -17,8 +17,9 @@ import type { Model, ModelMetadataInput } from "../types";
 import { useToast } from "./ui/toast";
 import {
   emptyModelMetadata,
+  MediaSettingsEditor,
   ModelMetadataEditor,
-  modelFormTabs,
+  modelFormTabsFor,
   PricingEditor,
   ThinkTagModeEditor,
 } from "./AddModelModal";
@@ -27,6 +28,7 @@ import { generateDisplayName } from "../lib/model-name";
 import { invalidateModels } from "../lib/query-cache";
 import { Switch } from "@/components/ui/switch";
 import type { CatalogPricing } from "../types";
+import { modelCategories } from "../lib/model-modality";
 
 const formatUsd = (value: number) => new Intl.NumberFormat(undefined, {
   style: "currency", currency: "USD", maximumFractionDigits: 6,
@@ -63,6 +65,11 @@ export default function EditModelModal({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState("general");
+  const showOutputFixes = modelCategories({ model_id: modelId || model?.model_id, display_name: displayName || model?.display_name, capabilities: metadata.capabilities }).includes("chat");
+  const tabs = modelFormTabsFor(showOutputFixes);
+  useEffect(() => {
+    if (!showOutputFixes && activeTab === "output-fixes") setActiveTab("generation");
+  }, [showOutputFixes, activeTab]);
   useEffect(() => {
     if (model) {
       const defaultEffortIndex = Math.max(
@@ -92,6 +99,7 @@ export default function EditModelModal({
             is_default: index === defaultEffortIndex,
           }),
         ),
+        media_settings: model.media_settings ?? {},
       });
       setPricingTiers(
         model.pricing_tiers?.length
@@ -156,7 +164,7 @@ export default function EditModelModal({
           </DialogDescription>
         </DialogHeader>
         <Tabs
-          tabs={modelFormTabs}
+          tabs={tabs}
           active={activeTab}
           onChange={setActiveTab}
           className="-mx-1 overflow-x-auto px-1"
@@ -206,6 +214,9 @@ export default function EditModelModal({
           )}
           {activeTab === "capabilities" && (
             <ModelMetadataEditor value={metadata} onChange={setMetadata} />
+          )}
+          {activeTab === "generation" && (
+            <MediaSettingsEditor value={metadata} onChange={setMetadata} />
           )}
           {activeTab === "output-fixes" && (
             <ThinkTagModeEditor

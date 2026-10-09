@@ -84,6 +84,7 @@ import { useToast } from "../components/ui/toast";
 import { modelDisplayId, modelPublicId } from "../lib/model-id";
 import { queryCache, queryKeys, invalidateModels, invalidateProviders } from "../lib/query-cache";
 import { isOpenCodeProvider } from "../../../src/services/provider-appearance";
+import { modelCategories, modelCategoryLabel, type ModelCategory } from "../lib/model-modality";
 
 const metadataCapabilityLabels: Record<keyof ModelCapabilities, string> = {
   reasoning: "Reasoning",
@@ -92,6 +93,9 @@ const metadataCapabilityLabels: Record<keyof ModelCapabilities, string> = {
   audio_input: "Audio input",
   audio_output: "Audio output",
   video: "Video",
+  image_generation: "Image generation",
+  text_to_speech: "Text to speech",
+  video_generation: "Video generation",
   attachments: "Files",
   streaming: "Streaming",
   non_streaming: "Non-streaming",
@@ -106,8 +110,9 @@ function formatTokenLimit(value: number): string {
 function ModelMetadataBadges({ model }: { model: Model }) {
   const supported = (
     Object.keys(metadataCapabilityLabels) as (keyof ModelCapabilities)[]
-  ).filter((key) => model.capabilities?.[key] === true);
-  if (model.context_window == null && !supported.length) return null;
+  ).filter((key) => !["image_generation", "text_to_speech", "video_generation"].includes(key) && model.capabilities?.[key] === true);
+  const modalities = modelCategories(model).filter((category) => category !== "chat");
+  if (model.context_window == null && !supported.length && !modalities.length) return null;
   return (
     <div className="mt-1 flex flex-wrap gap-1">
       {model.context_window != null && (
@@ -120,6 +125,7 @@ function ModelMetadataBadges({ model }: { model: Model }) {
           {metadataCapabilityLabels[key]}
         </Badge>
       ))}
+      {modalities.map((category) => <Badge key={category} variant="secondary" className="text-[10px]">{modelCategoryLabel(category)}</Badge>)}
     </div>
   );
 }
@@ -150,6 +156,7 @@ export default function ProviderDetailPage({
     synced: false,
     capabilities: false,
   });
+  const [modelCategory, setModelCategory] = useState<ModelCategory | "all">("all");
   const contextBounds = useMemo(() => {
     const values = list
       .map((model) => model.context_window)
@@ -182,10 +189,12 @@ export default function ProviderDetailPage({
     if (modelFilters.manual) result = result.filter((m) => m.is_manual === 1);
     if (modelFilters.synced) result = result.filter((m) => m.is_manual === 0);
     if (modelFilters.capabilities) result = result.filter((m) => Object.values(m.capabilities ?? {}).some(Boolean));
+    if (modelCategory !== "all") result = result.filter((model) => modelCategories(model).includes(modelCategory));
     if (minContext !== null) result = result.filter((m) => (m.context_window ?? 0) >= minContext);
     if (maxContext !== null) result = result.filter((m) => (m.context_window ?? Number.POSITIVE_INFINITY) <= maxContext);
     return result;
-  }, [list, searchQuery, modelFilters, minContext, maxContext]);
+  }, [list, searchQuery, modelFilters, minContext, maxContext, modelCategory]);
+  const modelCategoryCounts = useMemo(() => Object.fromEntries((["all", "chat", "image", "tts", "video"] as const).map((category) => [category, category === "all" ? list.length : list.filter((model) => modelCategories(model).includes(category)).length])), [list]);
   const activeFilterCount = Object.values(modelFilters).filter(Boolean).length + (minContext !== null ? 1 : 0) + (maxContext !== null ? 1 : 0);
   const clearFilters = () => {
     setModelFilters({ free: false, active: false, manual: false, synced: false, capabilities: false });
@@ -1247,6 +1256,13 @@ export default function ProviderDetailPage({
             <Button variant="default" size="sm" onClick={() => setAddOpen(true)}>Add model</Button>
           </div>
         </CardHeader>
+        <Tabs
+          tabs={([ ["all", "All"], ["chat", "Chat"], ["image", "Image"], ["tts", "Text to speech"], ["video", "Video"] ] as const).map(([id, label]) => ({ id, label: `${label} (${modelCategoryCounts[id] ?? 0})` }))}
+          active={modelCategory}
+          onChange={(value) => setModelCategory(value as ModelCategory | "all")}
+          ariaLabel="Filter provider models by type"
+          className="overflow-x-auto px-3"
+        />
         <Separator />
         {filteredList.length === 0 ? (
           <div className="p-10 text-center text-sm text-muted-foreground">

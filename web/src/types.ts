@@ -71,6 +71,7 @@ export interface Model {
   pricing_tiers?: PricingTier[];
   pricing_source?: "custom" | "litellm" | null;
   catalog_pricing?: CatalogPricing | null;
+  media_settings?: MediaModelSettings;
 }
 
 export interface ModelCapabilities {
@@ -80,6 +81,9 @@ export interface ModelCapabilities {
   audio_input: boolean | null;
   audio_output: boolean | null;
   video: boolean | null;
+  image_generation?: boolean | null;
+  text_to_speech?: boolean | null;
+  video_generation?: boolean | null;
   attachments: boolean | null;
   streaming: boolean | null;
   non_streaming: boolean | null;
@@ -100,6 +104,13 @@ export interface ModelMetadataInput {
   think_opening_tag_mode?: ThinkOpeningTagMode;
   capabilities: ModelCapabilities;
   reasoning_efforts: ReasoningEffort[];
+  media_settings?: MediaModelSettings;
+}
+
+export interface MediaModelSettings {
+  image?: { size?: string; quality?: string; output_format?: string };
+  text_to_speech?: { voice?: string; response_format?: string; speed?: number };
+  video?: { size?: string; seconds?: number };
 }
 
 export interface PricingTier {
@@ -324,6 +335,7 @@ export type Page =
   | "request-logs"
   | "keys"
   | "settings"
+  | "docs"
   | "login"
   | "provider-detail";
 
@@ -351,6 +363,9 @@ export interface RequestLog {
   completed_at: string | null;
   streaming: boolean;
   streamed_chars: number;
+  streamed_bytes?: number;
+  request_kind?: string | null;
+  output_bytes?: number | null;
 }
 
 export interface RequestLogDetails extends RequestLog {

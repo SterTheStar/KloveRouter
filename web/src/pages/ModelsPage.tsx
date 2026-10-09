@@ -38,8 +38,11 @@ import ProviderIcon from "../components/ProviderIcon";
 import { modelDisplayId, modelPublicId } from "../lib/model-id";
 import { useQuery } from "../hooks/useQuery";
 import { invalidateModels, queryKeys } from "../lib/query-cache";
+import { Tabs } from "@/components/ui/tabs";
+import { modelCategories, modelCategoryBadge, type ModelCategory } from "../lib/model-modality";
 
 type SourceFilter = "all" | "manual" | "synced";
+type ModalityFilter = "all" | ModelCategory;
 
 const metadataCapabilityLabels: Record<keyof ModelCapabilities, string> = {
   reasoning: "Reasoning",
@@ -48,6 +51,9 @@ const metadataCapabilityLabels: Record<keyof ModelCapabilities, string> = {
   audio_input: "Audio input",
   audio_output: "Audio output",
   video: "Video",
+  image_generation: "Image generation",
+  text_to_speech: "Text to speech",
+  video_generation: "Video generation",
   attachments: "Files",
   streaming: "Streaming",
   non_streaming: "Non-streaming",
@@ -62,8 +68,9 @@ function formatTokenLimit(value: number): string {
 function ModelMetadataBadges({ model }: { model: ModelWithProvider }) {
   const supported = (
     Object.keys(metadataCapabilityLabels) as (keyof ModelCapabilities)[]
-  ).filter((key) => model.capabilities?.[key] === true);
-  if (model.context_window == null && !supported.length) return null;
+  ).filter((key) => !["image_generation", "text_to_speech", "video_generation"].includes(key) && model.capabilities?.[key] === true);
+  const modalities = modelCategories(model).filter((category) => category !== "chat");
+  if (model.context_window == null && !supported.length && !modalities.length) return null;
   return (
     <div className="mt-1 flex flex-wrap gap-1">
       {model.context_window != null && (
@@ -76,6 +83,7 @@ function ModelMetadataBadges({ model }: { model: ModelWithProvider }) {
           {metadataCapabilityLabels[key]}
         </Badge>
       ))}
+      {modalities.map((category) => <Badge key={category} variant="secondary" className="text-[10px]">{modelCategoryBadge(category)}</Badge>)}
     </div>
   );
 }
@@ -91,6 +99,7 @@ export default function ModelsPage() {
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>("all");
+  const [modalityFilter, setModalityFilter] = useState<ModalityFilter>("all");
   const [selectedProviders, setSelectedProviders] = useState<Set<string>>(
     new Set(),
   );
@@ -138,12 +147,14 @@ export default function ModelsPage() {
       result = result.filter((m) => m.is_manual === 0);
     }
 
+    if (modalityFilter !== "all") result = result.filter((model) => modelCategories(model).includes(modalityFilter));
+
        if (selectedProviders.size > 0) {
        result = result.filter((m) => selectedProviders.has(m.model_pool ? "Compound models" : m.provider_name));
     }
 
     return result;
-  }, [list, searchQuery, sourceFilter, selectedProviders]);
+  }, [list, searchQuery, sourceFilter, modalityFilter, selectedProviders]);
 
   const grouped = useMemo(() => {
     const groups: Record<string, ModelWithProvider[]> = {};
@@ -156,6 +167,7 @@ export default function ModelsPage() {
     }
     return groups;
   }, [filteredList]);
+  const modalityCounts = useMemo(() => Object.fromEntries((["all", "chat", "image", "tts", "video"] as const).map((category) => [category, category === "all" ? list.length : list.filter((model) => modelCategories(model).includes(category)).length])), [list]);
 
   const toggleCollapse = (name: string) => {
     setCollapsedProviders((prev) => {
@@ -282,6 +294,14 @@ export default function ModelsPage() {
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
+
+      <Tabs
+        tabs={([ ["all", "All"], ["chat", "Chat"], ["image", "Image"], ["tts", "Text to speech"], ["video", "Video"] ] as const).map(([id, label]) => ({ id, label: `${label} (${modalityCounts[id] ?? 0})` }))}
+        active={modalityFilter}
+        onChange={(value) => setModalityFilter(value as ModalityFilter)}
+        ariaLabel="Filter models by type"
+        className="overflow-x-auto"
+      />
 
       {list.length === 0 ? (
         <div className="rounded-xl border border-dashed p-12 text-center">
