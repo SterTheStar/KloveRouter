@@ -20,7 +20,9 @@ export default function ContextUsageIndicator({
   cacheReadTokens,
   cacheWriteTokens,
 }: ContextUsageIndicatorProps) {
-  const totalTokens = Math.max(0, promptTokens - cacheReadTokens) + completionTokens;
+  // Cached input still occupies the model's context window. Cache counts are
+  // informational and must not be subtracted from context usage.
+  const totalTokens = Math.max(0, promptTokens) + completionTokens;
   const hasContextLimit = Boolean(contextWindow && contextWindow > 0);
   const percentage = hasContextLimit
     ? Math.min(100, (totalTokens / contextWindow!) * 100)
@@ -43,8 +45,11 @@ export default function ContextUsageIndicator({
         <div className="space-y-0.5">
           <div>
             {hasContextLimit
-              ? `${formatTokens(totalTokens)} / ${formatTokens(contextWindow!)} context tokens (${Math.round(percentage)}%)`
+              ? `${formatTokens(totalTokens)} / ${formatTokens(contextWindow!)} context tokens (${percentage.toFixed(1)}%)`
               : `${formatTokens(totalTokens)} context tokens used (limit not configured)`}
+          </div>
+          <div className="text-muted-foreground">
+            Input: {formatTokens(promptTokens)} · Output: {formatTokens(completionTokens)}
           </div>
           {(cacheReadTokens > 0 || cacheWriteTokens > 0) && (
             <div className="text-muted-foreground">

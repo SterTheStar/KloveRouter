@@ -97,19 +97,13 @@ function UserAttachments({
 
 function ChatStatsFooter({
   stats,
-  previousStats,
   modelName,
   model,
 }: {
   stats: NonNullable<ChatMessage["stats"]>;
-  previousStats?: ChatMessage["stats"];
   modelName?: string;
   model?: ModelWithProvider;
 }) {
-  const previousContext = previousStats
-    ? previousStats.prompt_tokens + previousStats.completion_tokens
-    : 0;
-  const newInputEstimate = Math.max(0, stats.prompt_tokens - previousContext);
   return (
     <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
       {stats.model && (
@@ -123,19 +117,7 @@ function ChatStatsFooter({
         </Tooltip>
       )}
       <span className="font-mono">
-        {formatTokens(stats.completion_tokens)} out ·{" "}
-        <Tooltip>
-          <TooltipTrigger className="cursor-help underline decoration-dotted underline-offset-2">
-            ~{formatTokens(newInputEstimate)} new in
-          </TooltipTrigger>
-          <TooltipContent className="flex flex-col items-start gap-0.5">
-            <span>New input estimate: {formatTokens(newInputEstimate)}</span>
-            <span>Context sent for this reply: {formatTokens(stats.prompt_tokens)}</span>
-            {previousStats && <span>Previous context and answer: {formatTokens(previousContext)}</span>}
-            <span>Cache read: {formatTokens(stats.cache_read_tokens ?? 0)}</span>
-            {!previousStats && <span className="max-w-64 text-muted-foreground">First reply includes system instructions and other context.</span>}
-          </TooltipContent>
-        </Tooltip>
+        {formatTokens(stats.completion_tokens)} out
       </span>
       <span className="font-mono">{formatDuration(stats.duration_ms)}</span>
       {stats.tps > 0 && (
@@ -214,7 +196,6 @@ function messageRawText(content: ChatMessage["content"]): string {
 
 export default function ChatMessageView({
   message,
-  previousStats,
   streaming,
   modelName,
   model,
@@ -224,7 +205,6 @@ export default function ChatMessageView({
   onDelete,
 }: {
   message: ChatMessage;
-  previousStats?: ChatMessage["stats"];
   streaming?: boolean;
   modelName?: string;
   model?: ModelWithProvider;
@@ -367,7 +347,7 @@ export default function ChatMessageView({
         </div>
       ) : null}
       {message.stats && typeof message.content === "string" ? (
-        <ChatStatsFooter stats={message.stats} previousStats={previousStats} modelName={modelName} model={model} />
+        <ChatStatsFooter stats={message.stats} modelName={modelName} model={model} />
       ) : null}
       {!streaming && (onRegenerate || onDelete) && (
         <div className="mt-1.5 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
