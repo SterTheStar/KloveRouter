@@ -287,8 +287,10 @@ function tokenDetails(usage: any) {
         0,
     ),
     cacheWrite: Number(
-      usage?.cache_creation_input_tokens ??
+        usage?.cache_creation_input_tokens ??
         usage?.cache_creation_input_tokens_details?.cached_tokens ??
+        usage?.prompt_tokens_details?.cache_write_tokens ??
+        usage?.input_tokens_details?.cache_write_tokens ??
         usage?.cache_write_tokens ??
         usage?.cache_write_input_tokens ??
         0,

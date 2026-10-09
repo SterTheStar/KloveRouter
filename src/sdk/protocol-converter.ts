@@ -451,9 +451,12 @@ export function convertRequest(from: Protocol, to: Protocol, body: unknown): Any
 }
 
 function usageFromAnthropic(usage: any) {
-  const prompt = Number(usage?.input_tokens ?? 0);
+  const input = Number(usage?.input_tokens ?? 0);
   const completion = Number(usage?.output_tokens ?? 0);
-  return { prompt_tokens: prompt, completion_tokens: completion, total_tokens: prompt + completion, prompt_tokens_details: { cached_tokens: Number(usage?.cache_read_input_tokens ?? 0) }, cache_creation_input_tokens: Number(usage?.cache_creation_input_tokens ?? 0) };
+  const cacheRead = Number(usage?.cache_read_input_tokens ?? 0);
+  const cacheWrite = Number(usage?.cache_creation_input_tokens ?? 0);
+  const prompt = input + cacheRead + cacheWrite;
+  return { prompt_tokens: prompt, completion_tokens: completion, total_tokens: prompt + completion, prompt_tokens_details: { cached_tokens: cacheRead, cache_write_tokens: cacheWrite }, cache_creation_input_tokens: cacheWrite };
 }
 
 /** Convert a non-streaming Anthropic message into a canonical Chat Completion. */
@@ -503,14 +506,15 @@ export function chatCompletionToAnthropic(completion: AnyRecord) {
   const stopReason = choice.finish_reason === "length" ? "max_tokens" : stopReasonToAnthropic(choice.finish_reason);
   const outputTokens = Number(usage.completion_tokens ?? usage.output_tokens ?? 0);
   const inputTokens = Number(usage.prompt_tokens ?? usage.input_tokens ?? 0);
-  const cacheRead = Number(usage.prompt_tokens_details?.cached_tokens ?? usage.cache_read_input_tokens ?? 0);
+  const cacheRead = Number(usage.prompt_tokens_details?.cached_tokens ?? usage.input_tokens_details?.cached_tokens ?? usage.cache_read_input_tokens ?? usage.cache_read_tokens ?? usage.cached_input_tokens ?? usage.cachedContentTokenCount ?? usage.cached_content_token_count ?? usage.cached_tokens ?? 0);
+  const cacheWrite = Number(usage.prompt_tokens_details?.cache_write_tokens ?? usage.input_tokens_details?.cache_write_tokens ?? usage.cache_creation_input_tokens ?? usage.cache_creation_input_tokens_details?.cached_tokens ?? usage.cache_write_tokens ?? usage.cache_write_input_tokens ?? 0);
   return {
     id: completion.id?.startsWith("msg_") ? completion.id : `msg_${String(completion.id ?? crypto.randomUUID()).replace(/[^a-zA-Z0-9_-]/g, "_")}`,
     type: "message", role: "assistant", model: completion.model,
     content,
     stop_reason: stopReason,
     stop_sequence: null,
-    usage: { input_tokens: Math.max(0, inputTokens - cacheRead), output_tokens: outputTokens, cache_read_input_tokens: cacheRead, cache_creation_input_tokens: Number(usage.cache_creation_input_tokens ?? 0) },
+    usage: { input_tokens: Math.max(0, inputTokens - cacheRead - cacheWrite), output_tokens: outputTokens, cache_read_input_tokens: cacheRead, cache_creation_input_tokens: cacheWrite },
   };
 }
 
@@ -544,7 +548,7 @@ export function chatCompletionToResponse(completion: AnyRecord) {
   const usage = completion.usage;
   const input = Number(usage?.prompt_tokens ?? usage?.input_tokens ?? 0);
   const outputTokens = Number(usage?.completion_tokens ?? usage?.output_tokens ?? 0);
-  const response: AnyRecord = { id, object: "response", created_at: completion.created ?? Math.floor(Date.now() / 1000), status: choice.finish_reason === "length" ? "incomplete" : "completed", error: null, incomplete_details: choice.finish_reason === "length" ? { reason: "max_output_tokens" } : null, instructions: null, model: completion.model, output, parallel_tool_calls: true, tool_choice: "auto", tools: [], usage: usage ? { input_tokens: input, input_tokens_details: { cached_tokens: usage.prompt_tokens_details?.cached_tokens ?? 0 }, output_tokens: outputTokens, output_tokens_details: { reasoning_tokens: 0 }, total_tokens: Number(usage.total_tokens ?? input + outputTokens) } : null };
+  const response: AnyRecord = { id, object: "response", created_at: completion.created ?? Math.floor(Date.now() / 1000), status: choice.finish_reason === "length" ? "incomplete" : "completed", error: null, incomplete_details: choice.finish_reason === "length" ? { reason: "max_output_tokens" } : null, instructions: null, model: completion.model, output, parallel_tool_calls: true, tool_choice: "auto", tools: [], usage: usage ? { input_tokens: input, input_tokens_details: { cached_tokens: usage.prompt_tokens_details?.cached_tokens ?? 0, cache_write_tokens: usage.prompt_tokens_details?.cache_write_tokens ?? usage.cache_creation_input_tokens ?? 0 }, output_tokens: outputTokens, output_tokens_details: { reasoning_tokens: 0 }, total_tokens: Number(usage.total_tokens ?? input + outputTokens) } : null };
   return response;
 }
 
@@ -966,7 +970,7 @@ export function anthropicSseToChat(response: Response, model: string, onCancel?:
       const finish = () => {
         if (ended) return; ended = true;
         emit({ choices: [{ index: 0, delta: {}, finish_reason: finishReason }] });
-        if (!usageSent) emit({ choices: [], usage: { prompt_tokens: inputTokens, completion_tokens: outputTokens, total_tokens: inputTokens + outputTokens, prompt_tokens_details: { cached_tokens: cacheRead }, cache_creation_input_tokens: cacheWrite } });
+        if (!usageSent) emit({ choices: [], usage: { prompt_tokens: promptTokens, completion_tokens: outputTokens, total_tokens: promptTokens + outputTokens, prompt_tokens_details: { cached_tokens: cacheRead, cache_write_tokens: cacheWrite }, cache_creation_input_tokens: cacheWrite } });
         controller.enqueue(encoder.encode("data: [DONE]\n\n"));
       };
       const process = (eventBlock: string) => {
@@ -975,7 +979,7 @@ export function anthropicSseToChat(response: Response, model: string, onCancel?:
         let payload: AnyRecord; try { payload = JSON.parse(data); } catch { return; }
         if (event === "message_start" || payload.type === "message_start") {
           if (payload.message?.id) id = `chatcmpl-${String(payload.message.id).replace(/^msg_/, "")}`;
-          inputTokens = Number(payload.message?.usage?.input_tokens ?? 0); cacheRead = Number(payload.message?.usage?.cache_read_input_tokens ?? 0); cacheWrite = Number(payload.message?.usage?.cache_creation_input_tokens ?? 0); promptTokens = inputTokens + cacheRead; created = Math.floor(Date.now() / 1000);
+          inputTokens = Number(payload.message?.usage?.input_tokens ?? 0); cacheRead = Number(payload.message?.usage?.cache_read_input_tokens ?? 0); cacheWrite = Number(payload.message?.usage?.cache_creation_input_tokens ?? 0); promptTokens = inputTokens + cacheRead + cacheWrite; created = Math.floor(Date.now() / 1000);
           emit({ choices: [{ index: 0, delta: { role: "assistant" }, finish_reason: null }] }); return;
         }
         if (event === "content_block_start" || payload.type === "content_block_start") {
@@ -999,7 +1003,7 @@ export function anthropicSseToChat(response: Response, model: string, onCancel?:
           outputTokens = Number(payload.usage?.output_tokens ?? outputTokens);
           const stop = payload.delta?.stop_reason;
           finishReason = stop === "max_tokens" ? "length" : stop === "tool_use" ? "tool_calls" : "stop";
-          emit({ choices: [], usage: { prompt_tokens: promptTokens, completion_tokens: outputTokens, total_tokens: promptTokens + outputTokens, prompt_tokens_details: { cached_tokens: cacheRead }, cache_creation_input_tokens: cacheWrite } }); usageSent = true; return;
+          emit({ choices: [], usage: { prompt_tokens: promptTokens, completion_tokens: outputTokens, total_tokens: promptTokens + outputTokens, prompt_tokens_details: { cached_tokens: cacheRead, cache_write_tokens: cacheWrite }, cache_creation_input_tokens: cacheWrite } }); usageSent = true; return;
         }
         if (event === "error" || payload.type === "error") {
           emit({ error: { message: payload.error?.message ?? "Anthropic stream failed", type: payload.error?.type ?? "api_error" } }); finish();
