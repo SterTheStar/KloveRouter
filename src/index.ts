@@ -13,6 +13,7 @@ import {
   keysPlugin,
   settingsPlugin,
   proxyPlugin,
+  mediaProxyPlugin,
   statsPlugin,
   codexPlugin,
   codexPublicPlugin,
@@ -80,6 +81,7 @@ const app = new Elysia()
   .use(antigravityPublicPlugin)
   .use(avatarMediaPlugin)
   .use(proxyPlugin);
+app.use(mediaProxyPlugin);
 
 // RTK public routes
 app.use(rtkPublicPlugin);

@@ -48,6 +48,9 @@ const capabilitiesSchema = t.Object({
   audio_input: nullableBoolean,
   audio_output: nullableBoolean,
   video: nullableBoolean,
+  image_generation: nullableBoolean,
+  text_to_speech: nullableBoolean,
+  video_generation: nullableBoolean,
   attachments: nullableBoolean,
   streaming: nullableBoolean,
   non_streaming: nullableBoolean,
@@ -61,6 +64,11 @@ const reasoningEffortsSchema = t.Array(
     is_default: t.Boolean(),
   }),
 );
+const mediaSettingsSchema = t.Object({
+  image: t.Optional(t.Object({ size: t.Optional(t.String({ maxLength: 100 })), quality: t.Optional(t.String({ maxLength: 100 })), output_format: t.Optional(t.String({ maxLength: 100 })) })),
+  text_to_speech: t.Optional(t.Object({ voice: t.Optional(t.String({ maxLength: 100 })), response_format: t.Optional(t.String({ maxLength: 100 })), speed: t.Optional(t.Number({ exclusiveMinimum: 0 })) })),
+  video: t.Optional(t.Object({ size: t.Optional(t.String({ maxLength: 100 })), seconds: t.Optional(t.Number({ exclusiveMinimum: 0 })) })),
+});
 
 export const parseGenericModelMetadata = parseRawModelMetadata;
 
@@ -172,6 +180,7 @@ export const modelsPlugin = (app: Elysia) =>
             think_opening_tag_mode: body.think_opening_tag_mode,
             capabilities: body.capabilities,
             reasoning_efforts: body.reasoning_efforts,
+            media_settings: body.media_settings,
             is_manual: 1,
           });
           return publicModel(model);
@@ -203,6 +212,7 @@ export const modelsPlugin = (app: Elysia) =>
           fix_missing_think_opening_tag: t.Optional(t.Boolean()),
           capabilities: t.Optional(capabilitiesSchema),
           reasoning_efforts: t.Optional(reasoningEffortsSchema),
+          media_settings: t.Optional(mediaSettingsSchema),
           pricing_tiers: t.Optional(
             t.Array(
               t.Object({
@@ -260,6 +270,7 @@ export const modelsPlugin = (app: Elysia) =>
           const items = selected.map((model) => ({
             id: model.id,
             display_name: model.display_name || generateDisplayName(model.id),
+            capabilities: parseRawModelMetadata(model).capabilities,
             is_free: isFreeModel(model),
             is_existing: existingIds.has(model.id),
             pricing: useLiteLLMPricing ? getLiteLLMPricing(provider.protocol, model.id, `${provider.name} ${provider.base_url}`) : null,
@@ -752,6 +763,7 @@ export const modelsPlugin = (app: Elysia) =>
           fix_missing_think_opening_tag: t.Optional(t.Boolean()),
           capabilities: t.Optional(capabilitiesSchema),
           reasoning_efforts: t.Optional(reasoningEffortsSchema),
+          media_settings: t.Optional(mediaSettingsSchema),
           pricing_tiers: t.Optional(
             t.Array(
               t.Object({

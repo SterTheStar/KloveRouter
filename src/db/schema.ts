@@ -42,6 +42,7 @@ export function initSchema(db: Database): void {
       context_window INTEGER,
       max_output_tokens INTEGER,
       max_output_tokens_source TEXT NOT NULL DEFAULT 'auto',
+      media_settings TEXT,
       fix_missing_think_opening_tag INTEGER NOT NULL DEFAULT 0,
       think_opening_tag_mode TEXT NOT NULL DEFAULT 'off',
       is_manual     INTEGER NOT NULL DEFAULT 0,
@@ -61,6 +62,9 @@ export function initSchema(db: Database): void {
       audio_input INTEGER,
       audio_output INTEGER,
       video INTEGER,
+      image_generation INTEGER,
+      text_to_speech INTEGER,
+      video_generation INTEGER,
       attachments INTEGER,
       streaming INTEGER,
       non_streaming INTEGER,
@@ -78,6 +82,21 @@ export function initSchema(db: Database): void {
       FOREIGN KEY (model_id) REFERENCES models(id) ON DELETE CASCADE,
       UNIQUE(model_id, effort)
     );
+
+    CREATE TABLE IF NOT EXISTS media_video_jobs (
+      id TEXT PRIMARY KEY,
+      upstream_id TEXT NOT NULL,
+      provider_id TEXT NOT NULL,
+      model_id TEXT NOT NULL,
+      model_name TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'queued',
+      response_json TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (provider_id) REFERENCES providers(id) ON DELETE CASCADE,
+      FOREIGN KEY (model_id) REFERENCES models(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_media_video_jobs_created_at ON media_video_jobs(created_at DESC);
 
     CREATE TABLE IF NOT EXISTS provider_credentials (
       id TEXT PRIMARY KEY,
@@ -319,6 +338,7 @@ export function initSchema(db: Database): void {
       completed_at TEXT,
       streaming INTEGER NOT NULL DEFAULT 0,
       streamed_chars INTEGER NOT NULL DEFAULT 0,
+      streamed_bytes INTEGER NOT NULL DEFAULT 0,
       FOREIGN KEY (provider_id) REFERENCES providers(id) ON DELETE SET NULL
     );
   `);
@@ -337,6 +357,7 @@ export function initSchema(db: Database): void {
     ["error_details", "ALTER TABLE request_logs ADD COLUMN error_details TEXT"],
     ["streaming", "ALTER TABLE request_logs ADD COLUMN streaming INTEGER NOT NULL DEFAULT 0"],
     ["streamed_chars", "ALTER TABLE request_logs ADD COLUMN streamed_chars INTEGER NOT NULL DEFAULT 0"],
+    ["streamed_bytes", "ALTER TABLE request_logs ADD COLUMN streamed_bytes INTEGER NOT NULL DEFAULT 0"],
   ] as const) {
     if (!requestLogCols.find((column) => column.name === name)) db.exec(sql);
   }
@@ -401,13 +422,15 @@ export function initSchema(db: Database): void {
   }
   if (!modelCols.find((c) => c.name === "use_litellm_pricing"))
     db.exec("ALTER TABLE models ADD COLUMN use_litellm_pricing INTEGER NOT NULL DEFAULT 0");
+  if (!modelCols.find((c) => c.name === "media_settings"))
+    db.exec("ALTER TABLE models ADD COLUMN media_settings TEXT");
   if (!modelCols.find((c) => c.name === "updated_at")) {
     db.exec("ALTER TABLE models ADD COLUMN updated_at TEXT NOT NULL DEFAULT ''");
     db.exec("UPDATE models SET updated_at = created_at WHERE updated_at = ''");
   }
 
   const capabilityCols = db.query("PRAGMA table_info(model_capabilities)").all() as { name: string }[];
-  for (const [name, type] of [["audio_input", "INTEGER"], ["audio_output", "INTEGER"], ["video", "INTEGER"]] as const) {
+  for (const [name, type] of [["audio_input", "INTEGER"], ["audio_output", "INTEGER"], ["video", "INTEGER"], ["image_generation", "INTEGER"], ["text_to_speech", "INTEGER"], ["video_generation", "INTEGER"]] as const) {
     if (!capabilityCols.some((column) => column.name === name))
       db.exec(`ALTER TABLE model_capabilities ADD COLUMN ${name} ${type}`);
   }

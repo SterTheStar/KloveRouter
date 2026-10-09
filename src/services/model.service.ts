@@ -39,6 +39,13 @@ export interface Model {
   pricing_tiers?: PricingTier[];
   pricing_source?: "custom" | "litellm" | null;
   catalog_pricing?: LiteLLMPricing | null;
+  media_settings?: MediaModelSettings;
+}
+
+export interface MediaModelSettings {
+  image?: { size?: string; quality?: string; output_format?: string };
+  text_to_speech?: { voice?: string; response_format?: string; speed?: number };
+  video?: { size?: string; seconds?: number };
 }
 
 export const capabilityKeys = [
@@ -48,12 +55,16 @@ export const capabilityKeys = [
   "audio_input",
   "audio_output",
   "video",
+  "image_generation",
+  "text_to_speech",
+  "video_generation",
   "attachments",
   "streaming",
   "non_streaming",
 ] as const;
 
-export type ModelCapabilities = Record<(typeof capabilityKeys)[number], boolean | null>;
+export type ModelCapabilities = Record<Exclude<(typeof capabilityKeys)[number], "image_generation" | "text_to_speech" | "video_generation">, boolean | null>
+  & Partial<Record<"image_generation" | "text_to_speech" | "video_generation", boolean | null>>;
 
 export interface ReasoningEffort {
   effort: string;
@@ -72,6 +83,7 @@ export interface ModelMetadataInput {
   fix_missing_think_opening_tag?: boolean;
   capabilities?: Partial<ModelCapabilities>;
   reasoning_efforts?: ReasoningEffort[];
+  media_settings?: MediaModelSettings;
 }
 
 export interface PricingTier {
@@ -171,6 +183,14 @@ function savePricing(modelId: string, tiers?: PricingTier[]) {
 }
 
 function validateMetadata(input: ModelMetadataInput): void {
+  for (const [kind, settings] of Object.entries(input.media_settings ?? {})) {
+    if (!["image", "text_to_speech", "video"].includes(kind) || !settings || typeof settings !== "object")
+      throw new InvalidModelMetadataError(`Invalid media settings: ${kind}`);
+    for (const [key, value] of Object.entries(settings)) {
+      if (typeof value === "string" && value.length > 100) throw new InvalidModelMetadataError(`${kind}.${key} is too long`);
+      if (typeof value === "number" && (!Number.isFinite(value) || value <= 0)) throw new InvalidModelMetadataError(`${kind}.${key} must be a positive number`);
+    }
+  }
   if (
     input.think_opening_tag_mode !== undefined &&
     !thinkOpeningTagModes.includes(input.think_opening_tag_mode)
@@ -230,6 +250,10 @@ function saveMetadata(modelId: string, input: ModelMetadataInput): void {
     scalarUpdates.push("max_output_tokens_source = ?");
     scalarValues.push(input.max_output_tokens == null ? "auto" : input.max_output_tokens_source ?? "manual");
   }
+  if (input.media_settings !== undefined) {
+    scalarUpdates.push("media_settings = ?");
+    scalarValues.push(JSON.stringify(input.media_settings));
+  }
   if (scalarUpdates.length)
     db.query(`UPDATE models SET ${scalarUpdates.join(", ")} WHERE id = ?`).run(...scalarValues, modelId);
 
@@ -261,7 +285,7 @@ function seedMissingMetadata(modelId: string, input: ModelMetadataInput): void {
     .query("SELECT context_window, max_output_tokens FROM models WHERE id = ?")
     .get(modelId) as { context_window: number | null; max_output_tokens: number | null };
   const capabilities = db
-    .query("SELECT reasoning, tools, vision, audio_input, audio_output, video, attachments, streaming, non_streaming FROM model_capabilities WHERE model_id = ?")
+    .query("SELECT reasoning, tools, vision, audio_input, audio_output, video, image_generation, text_to_speech, video_generation, attachments, streaming, non_streaming FROM model_capabilities WHERE model_id = ?")
     .get(modelId) as Record<(typeof capabilityKeys)[number], number | null> | null;
   const seededCapabilities = input.capabilities
     ? Object.fromEntries(
@@ -348,12 +372,13 @@ function hydrate(model: Model | null): Model | null {
     .get(model.provider_id) as { protocol: ProviderProtocol; name: string; base_url: string } | null;
   const externalPricing = model.use_litellm_pricing && provider ? getLiteLLMPricing(provider.protocol, model.model_id, `${provider.name} ${provider.base_url}`) : null;
   const capabilities = db
-    .query("SELECT reasoning, tools, vision, audio_input, audio_output, video, attachments, streaming, non_streaming FROM model_capabilities WHERE model_id = ?")
+    .query("SELECT reasoning, tools, vision, audio_input, audio_output, video, image_generation, text_to_speech, video_generation, attachments, streaming, non_streaming FROM model_capabilities WHERE model_id = ?")
     .get(model.id) as Record<(typeof capabilityKeys)[number], number | null> | null;
   const source = model.max_output_tokens_source ?? (model.is_manual ? "manual" : "api");
   const maxOutput = model.max_output_tokens ?? automaticMaxOutputTokens(model.context_window);
   return {
     ...model,
+    media_settings: (() => { try { return model.media_settings ? JSON.parse(model.media_settings as unknown as string) : {}; } catch { return {}; } })(),
     context_window: model.context_window ?? null,
     max_output_tokens: maxOutput,
     max_output_tokens_source: source,
@@ -564,7 +589,7 @@ export const modelService = {
     const pricingTiers = input.pricing_tiers;
     db.transaction(() => {
       db.query(
-        "UPDATE models SET pretty_id = ?, display_name = ?, is_manual = 0, is_active = ?, use_litellm_pricing = ?, context_window = NULL, max_output_tokens = NULL, max_output_tokens_source = 'auto', updated_at = datetime('now') WHERE id = ?",
+        "UPDATE models SET pretty_id = ?, display_name = ?, is_manual = 0, is_active = ?, use_litellm_pricing = ?, context_window = NULL, max_output_tokens = NULL, max_output_tokens_source = 'auto', media_settings = NULL, updated_at = datetime('now') WHERE id = ?",
       ).run(
         requestedPrettyId ?? existing.pretty_id,
         input.display_name?.trim() || generateDisplayName(input.model_id),
@@ -582,6 +607,7 @@ export const modelService = {
           capabilityKeys.map((key) => [key, input.capabilities?.[key] ?? null]),
         ) as ModelCapabilities,
         reasoning_efforts: input.reasoning_efforts ?? [],
+        media_settings: input.media_settings ?? {},
       });
     })();
     return this.findById(existing.id);

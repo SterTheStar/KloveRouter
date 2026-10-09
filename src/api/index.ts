@@ -5,6 +5,7 @@ import { modelPoolsPlugin } from "./model-pools.plugin";
 import { keysPlugin } from "./keys.plugin";
 import { settingsPlugin } from "./settings.plugin";
 import { proxyPlugin } from "./proxy.plugin";
+import { mediaProxyPlugin } from "./media-proxy.plugin";
 import { statsPlugin } from "./stats.plugin";
 import { chatPlugin, chatControlPlugin } from "./chat.plugin";
 import { chatsPlugin } from "./chats.plugin";
@@ -28,6 +29,7 @@ export {
   keysPlugin,
   settingsPlugin,
   proxyPlugin,
+  mediaProxyPlugin,
   statsPlugin,
   codexPlugin,
   codexPublicPlugin,

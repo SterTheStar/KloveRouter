@@ -27,6 +27,9 @@ export interface RequestLog {
   completed_at: string | null;
   streaming: boolean;
   streamed_chars: number;
+  streamed_bytes?: number;
+  request_kind?: string | null;
+  output_bytes?: number | null;
 }
 
 export interface RequestLogDetails extends RequestLog {
@@ -96,7 +99,7 @@ export const requestLogService = {
   },
 
   start(input: {
-    providerId: string;
+    providerId: string | null;
     providerName: string;
     modelName: string;
     clientIp?: string | null;
@@ -125,6 +128,12 @@ export const requestLogService = {
   progress(id: string, streamedChars: number) {
     try {
       getDb().query("UPDATE request_logs SET streamed_chars = ? WHERE id = ? AND status = 'pending'").run(Math.max(0, Math.floor(streamedChars)), id);
+    } catch { /* Logging must never affect the request. */ }
+  },
+
+  progressBytes(id: string, streamedBytes: number) {
+    try {
+      getDb().query("UPDATE request_logs SET streamed_bytes = ? WHERE id = ? AND status = 'pending'").run(Math.max(0, Math.floor(streamedBytes)), id);
     } catch { /* Logging must never affect the request. */ }
   },
 
@@ -272,18 +281,27 @@ export const requestLogService = {
     }
     if (input.search) {
       clauses.push(
-        "(id LIKE ? OR model_name LIKE ? OR credential_label LIKE ? OR credential_identity LIKE ?)",
+        "(id LIKE ? OR model_name LIKE ? OR credential_label LIKE ? OR credential_identity LIKE ? OR request_details LIKE ?)",
       );
       const search = `%${input.search}%`;
-      values.push(search, search, search, search);
+      values.push(search, search, search, search, search);
     }
     const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
     const rows = db
       .query(
-        `SELECT id, provider_id, provider_name, model_name, client_ip, requester_name, credential_label, credential_identity, status, status_code, tokens_prompt, tokens_completion, tokens_cache_read, tokens_cache_write, tokens_total, estimated_cost_usd, tps, duration_ms, error_message, created_at, completed_at, streaming, streamed_chars FROM request_logs ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`,
+        `SELECT id, provider_id, provider_name, model_name, client_ip, requester_name, credential_label, credential_identity, status, status_code, tokens_prompt, tokens_completion, tokens_cache_read, tokens_cache_write, tokens_total, estimated_cost_usd, tps, duration_ms, error_message, created_at, completed_at, streaming, streamed_chars, streamed_bytes, request_details, response_details FROM request_logs ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`,
       )
-      .all(...values, limit, offset) as RequestLog[];
-    for (const row of rows) row.streaming = Boolean(row.streaming);
+      .all(...values, limit, offset) as (RequestLog & { request_details: string | null; response_details: string | null })[];
+    for (const row of rows) {
+      row.streaming = Boolean(row.streaming);
+      const requestDetails = parseDetail(row.request_details) as any;
+      const responseDetails = parseDetail(row.response_details) as any;
+      row.request_kind = typeof requestDetails?.klove?.media_type === "string" ? requestDetails.klove.media_type : null;
+      row.output_bytes = Number.isFinite(Number(responseDetails?.output_bytes)) ? Number(responseDetails.output_bytes) : null;
+      if (row.output_bytes == null && row.streamed_bytes) row.output_bytes = row.streamed_bytes;
+      delete (row as any).request_details;
+      delete (row as any).response_details;
+    }
     const total = (
       db
         .query(`SELECT COUNT(*) as count FROM request_logs ${where}`)

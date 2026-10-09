@@ -49,6 +49,7 @@ export function serializeModel(model: Model) {
     think_opening_tag_mode: model.think_opening_tag_mode,
     fix_missing_think_opening_tag: model.fix_missing_think_opening_tag,
     capabilities: model.capabilities,
+    media_settings: model.media_settings ?? {},
     reasoning_efforts: model.reasoning_efforts,
     pricing_tiers: model.pricing_tiers,
     pricing_source: model.pricing_source,

@@ -108,6 +108,9 @@ export function parseRawModelMetadata(raw: any): ModelMetadataInput {
       audio_input: capability("audio_input", boolean(raw?.supportsAudioInput) ?? (inputModalities.length ? inputModalities.some((item) => item.includes("audio") || item.includes("speech")) : undefined)),
       audio_output: capability("audio_output", boolean(raw?.supportsAudioOutput) ?? (outputModalities.length ? outputModalities.some((item) => item.includes("audio") || item.includes("speech")) : undefined)),
       video: capability("video", boolean(raw?.supportsVideo) ?? (inputModalities.length ? inputModalities.some((item) => item.includes("video")) : undefined)),
+      image_generation: capability("image_generation", boolean(raw?.supportsImageGeneration) ?? (outputModalities.length ? outputModalities.some((item) => item.includes("image")) : undefined)),
+      text_to_speech: capability("text_to_speech", boolean(raw?.supportsTextToSpeech) ?? (outputModalities.length ? outputModalities.some((item) => item.includes("audio") || item.includes("speech")) : undefined)),
+      video_generation: capability("video_generation", boolean(raw?.supportsVideoGeneration) ?? (outputModalities.length ? outputModalities.some((item) => item.includes("video")) : undefined)),
       attachments: capability("attachments", boolean(raw?.supportsAttachments) ?? boolean(raw?.attachment) ?? (supportedMimeTypes.length ? supportedMimeTypes.some((item: string) => !item.startsWith("image/") && !item.startsWith("audio/") && !item.startsWith("video/") && item !== "text/plain") : (inputModalities.length ? inputModalities.some((item) => item.includes("file")) : undefined))),
       streaming: capability("streaming", boolean(raw?.supportsStreaming) ?? boolean(raw?.streaming) ?? boolean(raw?.supports_streaming)),
       non_streaming: capability("non_streaming", boolean(raw?.supportsNonStreaming) ?? boolean(raw?.non_streaming) ?? boolean(raw?.supports_non_streaming)),
@@ -137,7 +140,7 @@ export function mergeMetadata(...sources: ModelMetadataInput[]): ModelMetadataIn
   const scalar = (key: "context_window" | "max_output_tokens") =>
     sources.find((source) => source[key] != null)?.[key];
   const capabilities = Object.fromEntries(
-    ["reasoning", "tools", "vision", "audio_input", "audio_output", "video", "attachments", "streaming", "non_streaming"].map((key) => [
+    ["reasoning", "tools", "vision", "audio_input", "audio_output", "video", "image_generation", "text_to_speech", "video_generation", "attachments", "streaming", "non_streaming"].map((key) => [
       key,
       sources.find((source) => source.capabilities?.[key as keyof ModelCapabilities] !== undefined)
         ?.capabilities?.[key as keyof ModelCapabilities],
