@@ -5,13 +5,28 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import ConfirmDialog from "./ConfirmDialog";
+import { Switch } from "@/components/ui/switch";
+import type { CatalogPricing } from "../types";
 
 export type SyncModelItem = {
   id: string;
   display_name: string;
   is_free: boolean;
   is_existing: boolean;
+  pricing?: CatalogPricing | null;
 };
+
+const formatUsd = (value: number) => new Intl.NumberFormat(undefined, {
+  style: "currency", currency: "USD", maximumFractionDigits: 6,
+}).format(value);
+
+function priceLabel(pricing: CatalogPricing): string {
+  const input = pricing.rates.filter((rate) => rate.field.startsWith("input_cost"));
+  const output = pricing.rates.filter((rate) => rate.field.startsWith("output_cost"));
+  const selected = [...input.slice(0, 1), ...output.slice(0, 1)];
+  const rates = selected.length ? selected : pricing.rates.slice(0, 2);
+  return rates.map((rate) => `${rate.label}: ${formatUsd(rate.display_usd)} / ${rate.display_unit}`).join(" · ");
+}
 
 function ModelSourceDetails({ model }: { model: SyncModelItem }) {
   return (
@@ -20,6 +35,7 @@ function ModelSourceDetails({ model }: { model: SyncModelItem }) {
       <p className="text-muted-foreground">{model.id}</p>
       {model.is_free && <p>Free model</p>}
       {model.is_existing && <p>Already configured</p>}
+      {model.pricing ? <>{model.pricing.rates.map((rate) => <p key={rate.field}>{rate.label}: {formatUsd(rate.display_usd)} / {rate.display_unit}</p>)}</> : <p>No LiteLLM catalog price found</p>}
     </div>
   );
 }
@@ -35,11 +51,12 @@ export default function SyncModelsModal({
   items: SyncModelItem[];
   loading: boolean;
   onOpenChange: (open: boolean) => void;
-  onSync: (modelIds: string[], freeOnly: boolean, resetExisting: boolean) => void;
+  onSync: (modelIds: string[], freeOnly: boolean, resetExisting: boolean, useLiteLLMPricing: boolean) => void;
 }) {
   const [query, setQuery] = useState("");
   const [freeOnly, setFreeOnly] = useState(false);
   const [resetExisting, setResetExisting] = useState(false);
+  const [useLiteLLMPricing, setUseLiteLLMPricing] = useState(true);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [hoveredModel, setHoveredModel] = useState<SyncModelItem | null>(null);
   const [pointer, setPointer] = useState({ x: 0, y: 0 });
@@ -91,11 +108,11 @@ export default function SyncModelsModal({
   const setExistingFilter = (enabled: boolean) => applyFilters(freeOnly, enabled);
   const submit = () => {
     if (resetExisting) setConfirmOpen(true);
-    else onSync([...selected], freeOnly, false);
+    else onSync([...selected], freeOnly, false, useLiteLLMPricing);
   };
   const confirm = () => {
     setConfirmOpen(false);
-    onSync([...selected], freeOnly, true);
+    onSync([...selected], freeOnly, true, useLiteLLMPricing);
   };
 
   return (
@@ -180,7 +197,7 @@ export default function SyncModelsModal({
                   <span className={`flex size-4 shrink-0 items-center justify-center rounded-sm border transition-colors ${checked ? "border-primary bg-primary text-primary-foreground" : "border-input bg-background"} ${disabled ? "border-muted-foreground/30 bg-muted" : ""}`}>
                     {checked && <Check className="size-3" />}
                   </span>
-                  <span className="min-w-0 flex-1"><span className="block truncate">{model.display_name}</span><span className="block truncate font-mono text-xs text-muted-foreground">{model.id}</span></span>
+                  <span className="min-w-0 flex-1"><span className="block truncate">{model.display_name}</span><span className="block truncate font-mono text-xs text-muted-foreground">{model.id}</span><span className="block truncate text-xs text-muted-foreground">{model.pricing ? priceLabel(model.pricing) : "No LiteLLM price found"}</span></span>
                   {model.is_free && <Badge variant="secondary" className="text-green-700 dark:text-green-400">Free</Badge>}
                   {model.is_existing && <Badge variant="outline">Existing</Badge>}
                 </div>
@@ -193,9 +210,15 @@ export default function SyncModelsModal({
               Reset replaces provider metadata on selected existing models. Custom metadata can be lost.
             </div>
           )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-            <Button onClick={submit} disabled={loading || !selected.size}>{loading ? "Synchronizing..." : `Sync ${selected.size} models`}</Button>
+          <DialogFooter className="sm:items-center sm:justify-between">
+            <label className="mr-auto flex items-center gap-3 rounded-md border px-3 py-2 sm:max-w-[70%]">
+              <Switch checked={useLiteLLMPricing} onCheckedChange={setUseLiteLLMPricing} />
+              <span className="text-sm font-medium">Use LiteLLM pricing</span>
+            </label>
+            <div className="flex shrink-0 items-center justify-end gap-2">
+              <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+              <Button onClick={submit} disabled={loading || !selected.size}>{loading ? "Synchronizing..." : `Sync ${selected.size} models`}</Button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>

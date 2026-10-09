@@ -360,10 +360,10 @@ export default function ProviderDetailPage({
     }
   };
 
-  const sync = async (modelIds: string[], freeOnly: boolean, resetExisting: boolean) => {
+  const sync = async (modelIds: string[], freeOnly: boolean, resetExisting: boolean, useLiteLLMPricing: boolean) => {
     setSyncing(true);
     try {
-      const result = await modelsApi.sync(providerId, { modelIds, freeOnly, resetExisting });
+      const result = await modelsApi.sync(providerId, { modelIds, freeOnly, resetExisting, useLiteLLMPricing });
       invalidateModels(providerId);
       invalidateProviders(providerId);
       await load();

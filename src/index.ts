@@ -32,10 +32,17 @@ import { insecureUrlsAllowed } from "./services/ssrf";
 import { initRtkOnStartup, rtkPublicPlugin } from "./plugins/rtk";
 import { cavemanPublicPlugin, cavemanPlugin } from "./plugins/caveman";
 import { customSkillsPlugin } from "./plugins/custom-skills";
+import { refreshLiteLLMPricing } from "./services/litellm-pricing";
 
 // Initialize database and resolve effective security secrets.
 const db = getDb();
 const { jwtSecret } = getSecuritySecrets(db);
+
+// The public LiteLLM catalog needs no credentials. Refresh in the background so
+// startup and proxy traffic do not depend on GitHub availability.
+void refreshLiteLLMPricing();
+const pricingRefreshTimer = setInterval(() => void refreshLiteLLMPricing(), 6 * 60 * 60 * 1000);
+pricingRefreshTimer.unref?.();
 
 // Auto-start RTK if enabled in settings
 initRtkOnStartup();

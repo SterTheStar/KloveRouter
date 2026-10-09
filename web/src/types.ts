@@ -37,6 +37,19 @@ export interface ProviderCredential {
 export type ThinkOpeningTagMode = "off" | "detect" | "force";
 export type MaxOutputTokensSource = "auto" | "api" | "manual";
 
+export interface CatalogPricingRate {
+  field: string;
+  label: string;
+  unit: string;
+  usd_per_unit: number;
+  display_usd: number;
+  display_unit: string;
+}
+
+export type CatalogPricing =
+  | { billing_unit: "token"; input_per_million: number; output_per_million: number; cache_read_per_million: number; cache_write_per_million: number; rates: CatalogPricingRate[] }
+  | { billing_unit: "second" | "character" | "other" | "mixed"; input_per_unit: number | null; output_per_unit: number | null; rates: CatalogPricingRate[] };
+
 export interface Model {
   id: string;
   provider_id: string;
@@ -45,6 +58,7 @@ export interface Model {
   display_name: string | null;
   is_manual: number;
   is_active: number;
+  use_litellm_pricing: number;
   created_at: string;
   context_window: number | null;
   max_output_tokens: number | null;
@@ -55,6 +69,8 @@ export interface Model {
   capabilities: ModelCapabilities;
   reasoning_efforts: ReasoningEffort[];
   pricing_tiers?: PricingTier[];
+  pricing_source?: "custom" | "litellm" | null;
+  catalog_pricing?: CatalogPricing | null;
 }
 
 export interface ModelCapabilities {
@@ -78,6 +94,7 @@ export interface ReasoningEffort {
 }
 
 export interface ModelMetadataInput {
+  use_litellm_pricing?: boolean;
   context_window: number | null;
   max_output_tokens: number | null;
   think_opening_tag_mode?: ThinkOpeningTagMode;

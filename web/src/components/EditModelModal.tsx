@@ -25,6 +25,16 @@ import {
 import type { PricingTier } from "../types";
 import { generateDisplayName } from "../lib/model-name";
 import { invalidateModels } from "../lib/query-cache";
+import { Switch } from "@/components/ui/switch";
+import type { CatalogPricing } from "../types";
+
+const formatUsd = (value: number) => new Intl.NumberFormat(undefined, {
+  style: "currency", currency: "USD", maximumFractionDigits: 6,
+}).format(value);
+
+function catalogPriceDescription(price: CatalogPricing): string {
+  return price.rates.map((rate) => `${rate.label}: ${formatUsd(rate.display_usd)} / ${rate.display_unit}`).join(" · ");
+}
 
 export default function EditModelModal({
   isOpen,
@@ -45,6 +55,8 @@ export default function EditModelModal({
   const [thinkOpeningTagMode, setThinkOpeningTagMode] =
     useState<import("../types").ThinkOpeningTagMode>("off");
   const [pricingTiers, setPricingTiers] = useState<PricingTier[]>([]);
+  const [pricingEdited, setPricingEdited] = useState(false);
+  const [useLiteLLMPricing, setUseLiteLLMPricing] = useState(false);
   const [metadata, setMetadata] = useState<ModelMetadataInput>(() =>
     emptyModelMetadata(),
   );
@@ -58,6 +70,8 @@ export default function EditModelModal({
         (model.reasoning_efforts ?? []).findIndex((effort) => effort.is_default),
       );
       setModelId(model.model_id);
+      setPricingEdited(false);
+      setUseLiteLLMPricing(model.use_litellm_pricing === 1);
       setPrettyId(model.pretty_id ?? "");
       setDisplayName(model.display_name ?? generateDisplayName(model.model_id));
       setDisplayEdited(Boolean(model.display_name));
@@ -97,11 +111,11 @@ export default function EditModelModal({
     }
   }, [model]);
   const updateTier = (index: number, field: keyof PricingTier, value: string) =>
-    setPricingTiers((tiers) =>
+    (setPricingEdited(true), setPricingTiers((tiers) =>
       tiers.map((tier, i) =>
         i === index ? { ...tier, [field]: Number(value) || 0 } : tier,
       ),
-    );
+    ));
   const submit = async () => {
     if (!model || !modelId.trim()) return setError("Model ID is required.");
     if (
@@ -117,7 +131,8 @@ export default function EditModelModal({
         pretty_id: prettyId.trim() || null,
         display_name: displayName || null,
         think_opening_tag_mode: thinkOpeningTagMode,
-        pricing_tiers: pricingTiers,
+        pricing_tiers: model.pricing_source === "litellm" && !pricingEdited ? undefined : pricingTiers,
+        use_litellm_pricing: useLiteLLMPricing,
         ...metadata,
       });
       invalidateModels(model.provider_id);
@@ -199,11 +214,22 @@ export default function EditModelModal({
             />
           )}
           {activeTab === "pricing" && (
-            <PricingEditor
-              tiers={pricingTiers}
-              updateTier={updateTier}
-              setTiers={setPricingTiers}
-            />
+            <div className="space-y-4">
+              <label className="flex items-center justify-between gap-4 rounded-lg border p-3">
+                <span className="space-y-1">
+                  <span className="block text-sm font-medium">Use LiteLLM catalog pricing</span>
+                  <span className="block text-xs text-muted-foreground">Use the public catalog when no custom price is set for this model.</span>
+                </span>
+                <Switch checked={useLiteLLMPricing} onCheckedChange={setUseLiteLLMPricing} />
+              </label>
+              {model.catalog_pricing && model.catalog_pricing.billing_unit !== "token" && (
+                <div className="rounded-lg border px-3 py-2 text-sm">
+                  <span className="font-medium">LiteLLM catalog rate: </span>
+                  <span className="text-muted-foreground">{catalogPriceDescription(model.catalog_pricing)}</span>
+                </div>
+              )}
+              <PricingEditor tiers={pricingTiers} updateTier={updateTier} setTiers={(update) => { setPricingEdited(true); setPricingTiers(update); }} />
+            </div>
           )}
           {error && (
             <Alert variant="destructive" className="mt-5">

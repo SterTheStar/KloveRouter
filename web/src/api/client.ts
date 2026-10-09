@@ -300,13 +300,14 @@ export const models = {
       modelIds?: string[];
       freeOnly?: boolean;
       resetExisting?: boolean;
+      useLiteLLMPricing?: boolean;
     } = {},
   ) =>
     request<{
       preview?: boolean;
       success?: boolean;
-      models?: { id: string; display_name: string; is_free: boolean; is_existing: boolean }[];
-      items?: { id: string; display_name: string; is_free: boolean; is_existing: boolean }[];
+      models?: { id: string; display_name: string; is_free: boolean; is_existing: boolean; pricing?: import("../types").CatalogPricing | null }[];
+      items?: { id: string; display_name: string; is_free: boolean; is_existing: boolean; pricing?: import("../types").CatalogPricing | null }[];
       models_found: number;
       existing_models?: number;
       models_to_add?: number;
@@ -320,6 +321,7 @@ export const models = {
         ...(options.modelIds ? { model_ids: options.modelIds } : {}),
         ...(options.freeOnly ? { free_only: true } : {}),
         ...(options.resetExisting ? { reset_existing: true } : {}),
+        ...(options.useLiteLLMPricing === false ? { use_litellm_pricing: false } : {}),
       }),
     }),
   toggle: (id: string) =>

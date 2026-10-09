@@ -2,6 +2,8 @@ import { getDb } from "../db/connection";
 import { isBlockedAntigravityModel } from "../integrations/antigravity/antigravity.models";
 import { generateDisplayName } from "./model-name";
 import { providerAvatarSources, resolveProviderAvatar, type ProviderProtocol } from "./provider-appearance";
+import { getLiteLLMPricing } from "./litellm-pricing";
+import type { LiteLLMPricing } from "./litellm-pricing";
 
 export type ThinkOpeningTagMode = "off" | "detect" | "force";
 export type MaxOutputTokensSource = "auto" | "api" | "manual";
@@ -22,6 +24,7 @@ export interface Model {
   display_name: string | null;
   is_manual: number;
   is_active: number;
+  use_litellm_pricing: number;
   created_at: string;
   updated_at: string;
   context_window: number | null;
@@ -33,6 +36,8 @@ export interface Model {
   capabilities: ModelCapabilities;
   reasoning_efforts: ReasoningEffort[];
   pricing_tiers?: PricingTier[];
+  pricing_source?: "custom" | "litellm" | null;
+  catalog_pricing?: LiteLLMPricing | null;
 }
 
 export const capabilityKeys = [
@@ -58,6 +63,7 @@ export interface ReasoningEffort {
 }
 
 export interface ModelMetadataInput {
+  use_litellm_pricing?: boolean;
   context_window?: number | null;
   max_output_tokens?: number | null;
   max_output_tokens_source?: MaxOutputTokensSource;
@@ -134,243 +140,6 @@ export function generatePrettyId(source: string): string {
     .normalize("NFKD").replace(/[\u0300-\u036f]/g, "")
     .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
   return (value || "model").slice(0, 80).replace(/-+$/g, "") || "model";
-}
-
-const codexPricingDefaults: Record<string, PricingTier> = {
-  "gpt-5.4": {
-    threshold_tokens: 0,
-    input_per_million: 2.5,
-    output_per_million: 15,
-    cache_read_per_million: 0.25,
-    cache_write_per_million: 0,
-  },
-  "gpt-5.4-mini": {
-    threshold_tokens: 0,
-    input_per_million: 0.75,
-    output_per_million: 4.5,
-    cache_read_per_million: 0.075,
-    cache_write_per_million: 0,
-  },
-  "gpt-5.3-codex": {
-    threshold_tokens: 0,
-    input_per_million: 1.75,
-    output_per_million: 14,
-    cache_read_per_million: 0.175,
-    cache_write_per_million: 0,
-  },
-  "gpt-5.5": {
-    threshold_tokens: 0,
-    input_per_million: 5,
-    output_per_million: 30,
-    cache_read_per_million: 0.5,
-    cache_write_per_million: 0,
-  },
-  "gpt-5.6-luna": {
-    threshold_tokens: 0,
-    input_per_million: 0.2,
-    output_per_million: 1.2,
-    cache_read_per_million: 0.02,
-    cache_write_per_million: 0.25,
-  },
-  "gpt-5.6-sol": {
-    threshold_tokens: 0,
-    input_per_million: 4,
-    output_per_million: 20,
-    cache_read_per_million: 0.4,
-    cache_write_per_million: 5,
-  },
-  "gpt-5.6-terra": {
-    threshold_tokens: 0,
-    input_per_million: 2,
-    output_per_million: 12,
-    cache_read_per_million: 0.2,
-    cache_write_per_million: 2.5,
-  },
-  "gpt-5.6-cyber": {
-    threshold_tokens: 0,
-    input_per_million: 12.5,
-    output_per_million: 75,
-    cache_read_per_million: 1.25,
-    cache_write_per_million: 15.625,
-  },
-  "gpt-6-astra": {
-    threshold_tokens: 0,
-    input_per_million: 10,
-    output_per_million: 50,
-    cache_read_per_million: 1,
-    cache_write_per_million: 12.5,
-  },
-  "gpt-6.1-sol": {
-    threshold_tokens: 0,
-    input_per_million: 2,
-    output_per_million: 10,
-    cache_read_per_million: 0.1,
-    cache_write_per_million: 2.5,
-  },
-  "gpt-6-luna": {
-    threshold_tokens: 0,
-    input_per_million: 0.1,
-    output_per_million: 0.5,
-    cache_read_per_million: 0.01,
-    cache_write_per_million: 0.125,
-  },
-};
-
-const antigravityPricingDefaults: Record<string, PricingTier> = {
-  "claude-opus-4-6-thinking": {
-    threshold_tokens: 0,
-    input_per_million: 15,
-    output_per_million: 75,
-    cache_read_per_million: 1.5,
-    cache_write_per_million: 0,
-  },
-  "claude-sonnet-4-6": {
-    threshold_tokens: 0,
-    input_per_million: 3,
-    output_per_million: 15,
-    cache_read_per_million: 0.3,
-    cache_write_per_million: 0,
-  },
-  "gemini-2.5-flash": {
-    threshold_tokens: 0,
-    input_per_million: 0.3,
-    output_per_million: 2.5,
-    cache_read_per_million: 0.03,
-    cache_write_per_million: 0,
-  },
-  "gemini-2.5-flash-lite": {
-    threshold_tokens: 0,
-    input_per_million: 0.1,
-    output_per_million: 0.4,
-    cache_read_per_million: 0.01,
-    cache_write_per_million: 0,
-  },
-  "gemini-2.5-flash-thinking": {
-    threshold_tokens: 0,
-    input_per_million: 0.3,
-    output_per_million: 2.5,
-    cache_read_per_million: 0.03,
-    cache_write_per_million: 0,
-  },
-  "gemini-2.5-pro": {
-    threshold_tokens: 0,
-    input_per_million: 1.25,
-    output_per_million: 10,
-    cache_read_per_million: 0.125,
-    cache_write_per_million: 0,
-  },
-  "gemini-3-flash": {
-    threshold_tokens: 0,
-    input_per_million: 0.9,
-    output_per_million: 5.4,
-    cache_read_per_million: 0.09,
-    cache_write_per_million: 0,
-  },
-  "gemini-3-flash-agent": {
-    threshold_tokens: 0,
-    input_per_million: 0.9,
-    output_per_million: 5.4,
-    cache_read_per_million: 0.09,
-    cache_write_per_million: 0,
-  },
-  "gemini-3.1-flash-image": {
-    threshold_tokens: 0,
-    input_per_million: 0.3,
-    output_per_million: 2.5,
-    cache_read_per_million: 0.03,
-    cache_write_per_million: 0,
-  },
-  "gemini-3.1-flash-lite": {
-    threshold_tokens: 0,
-    input_per_million: 0.1,
-    output_per_million: 0.4,
-    cache_read_per_million: 0.01,
-    cache_write_per_million: 0,
-  },
-  "gemini-3.1-pro-high": {
-    threshold_tokens: 0,
-    input_per_million: 2,
-    output_per_million: 12,
-    cache_read_per_million: 0.2,
-    cache_write_per_million: 0,
-  },
-  "gemini-3.1-pro-low": {
-    threshold_tokens: 0,
-    input_per_million: 2,
-    output_per_million: 12,
-    cache_read_per_million: 0.2,
-    cache_write_per_million: 0,
-  },
-  "gemini-pro-agent": {
-    threshold_tokens: 0,
-    input_per_million: 2,
-    output_per_million: 12,
-    cache_read_per_million: 0.2,
-    cache_write_per_million: 0,
-  },
-  "gemini-3.5-flash-extra-low": {
-    threshold_tokens: 0,
-    input_per_million: 1.5,
-    output_per_million: 9,
-    cache_read_per_million: 0.15,
-    cache_write_per_million: 0,
-  },
-  "gemini-3.5-flash-low": {
-    threshold_tokens: 0,
-    input_per_million: 1.5,
-    output_per_million: 9,
-    cache_read_per_million: 0.15,
-    cache_write_per_million: 0,
-  },
-  "gemini-3.6-flash-high": {
-    threshold_tokens: 0,
-    input_per_million: 1.5,
-    output_per_million: 7.5,
-    cache_read_per_million: 0.15,
-    cache_write_per_million: 0,
-  },
-  "gemini-3.6-flash-medium": {
-    threshold_tokens: 0,
-    input_per_million: 1.5,
-    output_per_million: 7.5,
-    cache_read_per_million: 0.15,
-    cache_write_per_million: 0,
-  },
-  "gemini-3.6-flash-low": {
-    threshold_tokens: 0,
-    input_per_million: 1.5,
-    output_per_million: 7.5,
-    cache_read_per_million: 0.15,
-    cache_write_per_million: 0,
-  },
-  "gpt-oss-120b-medium": {
-    threshold_tokens: 0,
-    input_per_million: 0.09,
-    output_per_million: 0.36,
-    cache_read_per_million: 0,
-    cache_write_per_million: 0,
-  },
-};
-
-function defaultPricing(
-  providerId: string,
-  modelId: string,
-): PricingTier[] | undefined {
-  const db = getDb();
-  const provider = db
-    .query("SELECT protocol FROM providers WHERE id = ?")
-    .get(providerId) as { protocol: string } | null;
-  if (provider?.protocol !== "codex" && provider?.protocol !== "antigravity")
-    return undefined;
-  const normalizedModelId = modelId
-    .trim()
-    .toLowerCase()
-    .replace(/^googleantigravity\//, "");
-  const tier =
-    provider.protocol === "codex"
-      ? codexPricingDefaults[normalizedModelId]
-      : antigravityPricingDefaults[normalizedModelId];
-  return tier ? [{ ...tier }] : undefined;
 }
 
 function savePricing(modelId: string, tiers?: PricingTier[]) {
@@ -542,6 +311,13 @@ function resolveThinkOpeningTagMode(
 function hydrate(model: Model | null): Model | null {
   if (!model) return null;
   const db = getDb();
+  const storedPricing = db
+    .query("SELECT id, threshold_tokens, input_per_million, output_per_million, cache_read_per_million, cache_write_per_million FROM model_pricing_tiers WHERE model_id = ? ORDER BY threshold_tokens ASC")
+    .all(model.id) as PricingTier[];
+  const provider = storedPricing.length ? null : db
+    .query("SELECT protocol, name, base_url FROM providers WHERE id = ?")
+    .get(model.provider_id) as { protocol: ProviderProtocol; name: string; base_url: string } | null;
+  const externalPricing = model.use_litellm_pricing && provider ? getLiteLLMPricing(provider.protocol, model.model_id, `${provider.name} ${provider.base_url}`) : null;
   const capabilities = db
     .query("SELECT reasoning, tools, vision, audio_input, audio_output, video, attachments, streaming, non_streaming FROM model_capabilities WHERE model_id = ?")
     .get(model.id) as Record<(typeof capabilityKeys)[number], number | null> | null;
@@ -562,11 +338,11 @@ function hydrate(model: Model | null): Model | null {
       }),
     ) as ModelCapabilities,
     reasoning_efforts: (db.query("SELECT effort, display_name, upstream_value, sort_order, is_default FROM model_reasoning_efforts WHERE model_id = ? ORDER BY sort_order ASC, effort ASC").all(model.id) as Array<Omit<ReasoningEffort, "is_default"> & { is_default: number }>).map((effort) => ({ ...effort, is_default: Boolean(effort.is_default) })),
-    pricing_tiers: db
-      .query(
-        "SELECT id, threshold_tokens, input_per_million, output_per_million, cache_read_per_million, cache_write_per_million FROM model_pricing_tiers WHERE model_id = ? ORDER BY threshold_tokens ASC",
-      )
-      .all(model.id) as PricingTier[],
+    pricing_tiers: storedPricing.length
+      ? storedPricing
+      : externalPricing?.billing_unit === "token" ? [{ threshold_tokens: 0, ...externalPricing }] : [],
+    pricing_source: storedPricing.length ? "custom" : externalPricing ? "litellm" : null,
+    catalog_pricing: externalPricing,
   };
 }
 
@@ -700,8 +476,7 @@ export const modelService = {
     const db = getDb();
     validateMetadata(input);
     const requestedPrettyId = validatePrettyId(input.pretty_id);
-    const pricingTiers =
-      input.pricing_tiers ?? defaultPricing(input.provider_id, input.model_id);
+    const pricingTiers = input.pricing_tiers;
     const metadataInput: ModelMetadataInput = {
       ...input,
       ...(input.max_output_tokens != null
@@ -728,12 +503,13 @@ export const modelService = {
           input,
           existing.think_opening_tag_mode,
         );
-         db.query("UPDATE models SET pretty_id = ?, display_name = ?, is_active = ?, think_opening_tag_mode = ?, fix_missing_think_opening_tag = ?, updated_at = datetime('now') WHERE id = ?").run(
+        db.query("UPDATE models SET pretty_id = ?, display_name = ?, is_active = ?, think_opening_tag_mode = ?, fix_missing_think_opening_tag = ?, use_litellm_pricing = COALESCE(?, use_litellm_pricing), updated_at = datetime('now') WHERE id = ?").run(
           prettyId,
           displayName,
           syncingManualModel ? existing.is_active : input.is_active ?? existing.is_active,
           resolvedMode,
           resolvedMode !== "off" ? 1 : 0,
+          input.use_litellm_pricing === undefined ? null : input.use_litellm_pricing ? 1 : 0,
           existing.id,
         );
         const hasPricing = Boolean(
@@ -751,7 +527,7 @@ export const modelService = {
     db.transaction(() => {
       const resolvedMode = resolveThinkOpeningTagMode(input);
       db.query(
-        "INSERT INTO models (id, provider_id, model_id, pretty_id, display_name, fix_missing_think_opening_tag, think_opening_tag_mode, is_manual, is_active, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))",
+        "INSERT INTO models (id, provider_id, model_id, pretty_id, display_name, fix_missing_think_opening_tag, think_opening_tag_mode, is_manual, is_active, use_litellm_pricing, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))",
       ).run(
         id,
         input.provider_id,
@@ -762,6 +538,7 @@ export const modelService = {
         resolvedMode,
         input.is_manual ?? 0,
         input.is_active ?? 1,
+        input.use_litellm_pricing ? 1 : 0,
       );
       savePricing(id, pricingTiers);
       saveMetadata(id, metadataInput);
@@ -781,20 +558,20 @@ export const modelService = {
       const duplicate = db.query("SELECT id FROM models WHERE provider_id = ? AND pretty_id = ? AND id != ?").get(input.provider_id, requestedPrettyId, existing.id) as { id: string } | null;
       if (duplicate) throw new DuplicatePrettyModelIdError(requestedPrettyId);
     }
-    const pricingTiers =
-      input.pricing_tiers ?? defaultPricing(input.provider_id, input.model_id);
+    const pricingTiers = input.pricing_tiers;
     db.transaction(() => {
       db.query(
-        "UPDATE models SET pretty_id = ?, display_name = ?, is_manual = 0, is_active = ?, context_window = NULL, max_output_tokens = NULL, max_output_tokens_source = 'auto', updated_at = datetime('now') WHERE id = ?",
+        "UPDATE models SET pretty_id = ?, display_name = ?, is_manual = 0, is_active = ?, use_litellm_pricing = ?, context_window = NULL, max_output_tokens = NULL, max_output_tokens_source = 'auto', updated_at = datetime('now') WHERE id = ?",
       ).run(
         requestedPrettyId ?? existing.pretty_id,
         input.display_name?.trim() || generateDisplayName(input.model_id),
         input.is_active ?? existing.is_active,
+        input.use_litellm_pricing ? 1 : 0,
         existing.id,
       );
       db.query("DELETE FROM model_capabilities WHERE model_id = ?").run(existing.id);
       db.query("DELETE FROM model_reasoning_efforts WHERE model_id = ?").run(existing.id);
-      if (pricingTiers !== undefined) savePricing(existing.id, pricingTiers);
+      savePricing(existing.id, pricingTiers ?? []);
       saveMetadata(existing.id, {
         context_window: input.context_window ?? null,
         max_output_tokens: input.max_output_tokens ?? null,
@@ -866,6 +643,10 @@ export const modelService = {
         input.display_name?.trim() ||
           generateDisplayName(input.model_id ?? existing.model_id),
       );
+    }
+    if (input.use_litellm_pricing !== undefined) {
+      updates.push("use_litellm_pricing = ?");
+      values.push(input.use_litellm_pricing ? 1 : 0);
     }
     if (input.fix_missing_think_opening_tag !== undefined) {
       updates.push("fix_missing_think_opening_tag = ?");

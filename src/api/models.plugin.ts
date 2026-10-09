@@ -38,6 +38,7 @@ import { modelPoolService } from "../services/model-pool.service";
 import { getDb } from "../db/connection";
 import { convertResponse } from "../sdk/protocol-converter";
 import { upstreamProviderHeaders } from "../services/provider-headers";
+import { getLiteLLMPricing, refreshLiteLLMPricing } from "../services/litellm-pricing";
 
 const nullableBoolean = t.Union([t.Boolean(), t.Null()]);
 const capabilitiesSchema = t.Object({
@@ -163,7 +164,8 @@ export const modelsPlugin = (app: Elysia) =>
             model_id: body.model_id,
             pretty_id: body.pretty_id,
             display_name: body.display_name || generateDisplayName(body.model_id),
-            pricing_tiers: body.pricing_tiers,
+          pricing_tiers: body.pricing_tiers,
+            use_litellm_pricing: body.use_litellm_pricing,
             context_window: body.context_window,
             max_output_tokens: body.max_output_tokens,
             fix_missing_think_opening_tag: body.fix_missing_think_opening_tag,
@@ -212,6 +214,7 @@ export const modelsPlugin = (app: Elysia) =>
               }),
             ),
           ),
+          use_litellm_pricing: t.Optional(t.Boolean()),
         }),
       },
     )
@@ -228,11 +231,15 @@ export const modelsPlugin = (app: Elysia) =>
         const freeOnly = body?.free_only === true || query.free_only === true;
         const existingOnly = query.existing_only === true;
         const resetExisting = body?.reset_existing === true || query.reset_existing === true;
+        const useLiteLLMPricing = body?.use_litellm_pricing !== false;
+        if (useLiteLLMPricing) await refreshLiteLLMPricing();
         const existingIds = new Set(
           modelService.findByProvider(id).map((model) => model.model_id),
         );
-        const saveSyncedModel = (input: Parameters<typeof modelService.upsert>[0]) =>
-          resetExisting ? modelService.resetExisting(input) : modelService.upsert(input);
+        const saveSyncedModel = (input: Parameters<typeof modelService.upsert>[0]) => {
+          const withPricingOption = { ...input, use_litellm_pricing: useLiteLLMPricing };
+          return resetExisting ? modelService.resetExisting(withPricingOption) : modelService.upsert(withPricingOption);
+        };
         const isFreeModel = (model: { id: string; is_free?: boolean }) =>
           model.is_free === true || /(?:^|[:-])free(?:$|\b)/i.test(model.id);
         const selectModels = <T extends { id: string; is_free?: boolean }>(available: T[]) => {
@@ -255,6 +262,7 @@ export const modelsPlugin = (app: Elysia) =>
             display_name: model.display_name || generateDisplayName(model.id),
             is_free: isFreeModel(model),
             is_existing: existingIds.has(model.id),
+            pricing: useLiteLLMPricing ? getLiteLLMPricing(provider.protocol, model.id, `${provider.name} ${provider.base_url}`) : null,
           }));
           const existingModels = items.filter((model) => model.is_existing).length;
           return {
@@ -528,6 +536,7 @@ export const modelsPlugin = (app: Elysia) =>
           model_ids: t.Optional(t.Array(t.String({ minLength: 1 }))),
           free_only: t.Optional(t.Boolean()),
           reset_existing: t.Optional(t.Boolean()),
+          use_litellm_pricing: t.Optional(t.Boolean()),
         })),
         query: t.Object({
           preview: t.Optional(t.Boolean()),
@@ -754,6 +763,7 @@ export const modelsPlugin = (app: Elysia) =>
               }),
             ),
           ),
+          use_litellm_pricing: t.Optional(t.Boolean()),
         }),
       },
     )

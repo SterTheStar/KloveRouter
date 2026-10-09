@@ -1,4 +1,5 @@
 import { getDb } from "../db/connection";
+import { getLiteLLMPricing } from "./litellm-pricing";
 
 export type RequestLogStatus = "pending" | "success" | "error";
 
@@ -173,8 +174,8 @@ export const requestLogService = {
     let cost = input.cost;
     if (cost === undefined && prompt + completion > 0) {
       const request = db
-        .query("SELECT provider_id, model_name FROM request_logs WHERE id = ?")
-        .get(id) as { provider_id: string | null; model_name: string } | null;
+        .query("SELECT r.provider_id, r.model_name, p.protocol, p.name AS provider_name, p.base_url, m.use_litellm_pricing FROM request_logs r LEFT JOIN providers p ON p.id = r.provider_id LEFT JOIN models m ON m.provider_id = r.provider_id AND m.model_id = r.model_name WHERE r.id = ?")
+        .get(id) as { provider_id: string | null; model_name: string; protocol: string | null; provider_name: string | null; base_url: string | null; use_litellm_pricing: number | null } | null;
       const tier = request?.provider_id
         ? (db
             .query(
@@ -187,11 +188,13 @@ export const requestLogService = {
             cache_write_per_million: number;
           } | null)
         : null;
-      cost = tier
-        ? (Math.max(0, prompt - cacheRead) * tier.input_per_million +
-            completion * tier.output_per_million +
-            cacheRead * tier.cache_read_per_million +
-            cacheWrite * tier.cache_write_per_million) /
+      const catalogPrices = request?.protocol && request.use_litellm_pricing ? getLiteLLMPricing(request.protocol, request.model_name, `${request.provider_name ?? ""} ${request.base_url ?? ""}`) : null;
+      const prices = tier ?? (catalogPrices?.billing_unit === "token" ? catalogPrices : null);
+      cost = prices
+        ? (Math.max(0, prompt - cacheRead) * prices.input_per_million +
+            completion * prices.output_per_million +
+            cacheRead * prices.cache_read_per_million +
+            cacheWrite * prices.cache_write_per_million) /
           1_000_000
         : 0;
     }

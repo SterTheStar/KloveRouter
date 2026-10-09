@@ -1,4 +1,5 @@
 import { getDb } from "../db/connection";
+import { getLiteLLMPricing } from "./litellm-pricing";
 
 export interface UsageLog {
   id: string;
@@ -82,13 +83,16 @@ export const usageService = {
       output_per_million: number;
       cache_read_per_million: number;
       cache_write_per_million: number;
-    } | null;
+      } | null;
+    const provider = tier ? null : db.query("SELECT p.protocol, p.name, p.base_url, m.use_litellm_pricing FROM providers p JOIN models m ON m.provider_id = p.id WHERE p.id = ? AND m.id = ?").get(providerId, modelId) as { protocol: string; name: string; base_url: string; use_litellm_pricing: number } | null;
+    const catalogPrices = provider?.use_litellm_pricing ? getLiteLLMPricing(provider.protocol, modelName, `${provider.name} ${provider.base_url}`) : null;
+    const prices = tier ?? (catalogPrices?.billing_unit === "token" ? catalogPrices : null);
     const uncachedPrompt = Math.max(0, tokensPrompt - cacheRead);
-    const estimatedCost = tier
-      ? (uncachedPrompt * tier.input_per_million +
-          tokensCompletion * tier.output_per_million +
-          cacheRead * tier.cache_read_per_million +
-          cacheWrite * tier.cache_write_per_million) /
+    const estimatedCost = prices
+      ? (uncachedPrompt * prices.input_per_million +
+          tokensCompletion * prices.output_per_million +
+          cacheRead * prices.cache_read_per_million +
+          cacheWrite * prices.cache_write_per_million) /
         1_000_000
       : 0;
     db.query(

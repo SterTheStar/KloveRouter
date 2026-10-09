@@ -46,6 +46,7 @@ export function initSchema(db: Database): void {
       think_opening_tag_mode TEXT NOT NULL DEFAULT 'off',
       is_manual     INTEGER NOT NULL DEFAULT 0,
       is_active     INTEGER NOT NULL DEFAULT 1,
+      use_litellm_pricing INTEGER NOT NULL DEFAULT 0,
       created_at    TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at    TEXT NOT NULL DEFAULT (datetime('now')),
       FOREIGN KEY (provider_id) REFERENCES providers(id) ON DELETE CASCADE,
@@ -398,6 +399,8 @@ export function initSchema(db: Database): void {
       "UPDATE models SET think_opening_tag_mode = CASE WHEN fix_missing_think_opening_tag != 0 THEN 'detect' ELSE 'off' END",
     );
   }
+  if (!modelCols.find((c) => c.name === "use_litellm_pricing"))
+    db.exec("ALTER TABLE models ADD COLUMN use_litellm_pricing INTEGER NOT NULL DEFAULT 0");
   if (!modelCols.find((c) => c.name === "updated_at")) {
     db.exec("ALTER TABLE models ADD COLUMN updated_at TEXT NOT NULL DEFAULT ''");
     db.exec("UPDATE models SET updated_at = created_at WHERE updated_at = ''");
@@ -542,94 +545,6 @@ export function initSchema(db: Database): void {
   ];
   for (const [name, sql] of usageMigrations)
     if (!usageCols.find((c) => c.name === name)) db.exec(sql);
-
-  // Seed editable pricing for the built-in Codex OAuth models once.
-  const codexPricingDefaults = [
-    ["gpt-5.3-codex", 1.75, 14, 0.175, 0],
-    ["gpt-5.4", 2.5, 15, 0.25, 0],
-    ["gpt-5.4-mini", 0.75, 4.5, 0.075, 0],
-    ["gpt-5.5", 5, 30, 0.5, 0],
-    ["gpt-5.6-luna", 0.2, 1.2, 0.02, 0.25],
-    ["gpt-5.6-sol", 4, 20, 0.4, 5],
-    ["gpt-5.6-terra", 2, 12, 0.2, 2.5],
-    ["gpt-5.6-cyber", 12.5, 75, 1.25, 15.625],
-    ["gpt-6-astra", 10, 50, 1, 12.5],
-    ["gpt-6.1-sol", 2, 10, 0.1, 2.5],
-    ["gpt-6-luna", 0.1, 0.5, 0.01, 0.125],
-  ] as const;
-  for (const [
-    modelName,
-    inputPrice,
-    outputPrice,
-    cachePrice,
-    cacheWritePrice,
-  ] of codexPricingDefaults) {
-    const models = db
-      .query(
-        `SELECT m.id FROM models m JOIN providers p ON p.id = m.provider_id
-       WHERE p.protocol = 'codex' AND lower(m.model_id) = ?
-         AND NOT EXISTS (SELECT 1 FROM model_pricing_tiers t WHERE t.model_id = m.id)`,
-      )
-      .all(modelName) as { id: string }[];
-    for (const model of models)
-      db.query(
-        "INSERT INTO model_pricing_tiers (id, model_id, threshold_tokens, input_per_million, output_per_million, cache_read_per_million, cache_write_per_million) VALUES (?, ?, 0, ?, ?, ?, ?)",
-      ).run(crypto.randomUUID(), model.id, inputPrice, outputPrice, cachePrice, cacheWritePrice);
-  }
-
-  // Update the previous built-in Codex prices without overwriting custom tiers.
-  const codexPricingUpdates = [
-    ["gpt-5.6-luna", 1, 6, 0.1, 0.2, 1.2, 0.02, 0.25],
-    ["gpt-5.6-sol", 5, 30, 0.5, 4, 20, 0.4, 5],
-    ["gpt-5.6-terra", 2.5, 15, 0.25, 2, 12, 0.2, 2.5],
-  ] as const;
-  for (const [modelName, oldInput, oldOutput, oldCache, inputPrice, outputPrice, cachePrice, cacheWritePrice] of codexPricingUpdates) {
-    db.query(
-      `UPDATE model_pricing_tiers SET input_per_million = ?, output_per_million = ?, cache_read_per_million = ?, cache_write_per_million = ?
-       WHERE threshold_tokens = 0 AND input_per_million = ? AND output_per_million = ? AND cache_read_per_million = ? AND cache_write_per_million = 0
-         AND model_id IN (SELECT m.id FROM models m JOIN providers p ON p.id = m.provider_id WHERE p.protocol = 'codex' AND lower(m.model_id) = ?)`,
-    ).run(inputPrice, outputPrice, cachePrice, cacheWritePrice, oldInput, oldOutput, oldCache, modelName);
-  }
-
-  const antigravityPricingDefaults = [
-    ["claude-opus-4-6-thinking", 15, 75, 1.5],
-    ["claude-sonnet-4-6", 3, 15, 0.3],
-    ["gemini-2.5-flash", 0.3, 2.5, 0.03],
-    ["gemini-2.5-flash-lite", 0.1, 0.4, 0.01],
-    ["gemini-2.5-flash-thinking", 0.3, 2.5, 0.03],
-    ["gemini-2.5-pro", 1.25, 10, 0.125],
-    ["gemini-3-flash", 0.9, 5.4, 0.09],
-    ["gemini-3-flash-agent", 0.9, 5.4, 0.09],
-    ["gemini-3.1-flash-image", 0.3, 2.5, 0.03],
-    ["gemini-3.1-flash-lite", 0.1, 0.4, 0.01],
-    ["gemini-3.1-pro-high", 2, 12, 0.2],
-    ["gemini-3.1-pro-low", 2, 12, 0.2],
-    ["gemini-pro-agent", 2, 12, 0.2],
-    ["gemini-3.5-flash-extra-low", 1.5, 9, 0.15],
-    ["gemini-3.5-flash-low", 1.5, 9, 0.15],
-    ["gemini-3.6-flash-high", 1.5, 7.5, 0.15],
-    ["gemini-3.6-flash-medium", 1.5, 7.5, 0.15],
-    ["gemini-3.6-flash-low", 1.5, 7.5, 0.15],
-    ["gpt-oss-120b-medium", 0.09, 0.36, 0],
-  ] as const;
-  for (const [
-    modelName,
-    inputPrice,
-    outputPrice,
-    cachePrice,
-  ] of antigravityPricingDefaults) {
-    const models = db
-      .query(
-        `SELECT m.id FROM models m JOIN providers p ON p.id = m.provider_id
-       WHERE p.protocol = 'antigravity' AND replace(lower(m.model_id), 'googleantigravity/', '') = ?
-         AND NOT EXISTS (SELECT 1 FROM model_pricing_tiers t WHERE t.model_id = m.id)`,
-      )
-      .all(modelName) as { id: string }[];
-    for (const model of models)
-      db.query(
-        "INSERT INTO model_pricing_tiers (id, model_id, threshold_tokens, input_per_million, output_per_million, cache_read_per_million, cache_write_per_million) VALUES (?, ?, 0, ?, ?, ?, 0)",
-      ).run(crypto.randomUUID(), model.id, inputPrice, outputPrice, cachePrice);
-  }
 
   // Fill costs for request logs created before cost calculation was wired in.
   db.exec(`

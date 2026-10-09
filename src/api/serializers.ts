@@ -45,6 +45,7 @@ export function serializeModel(model: Model) {
     display_name: model.display_name,
     is_manual: model.is_manual,
     is_active: model.is_active,
+    use_litellm_pricing: model.use_litellm_pricing,
     created_at: model.created_at,
     updated_at: model.updated_at,
     context_window: model.context_window,
@@ -56,6 +57,8 @@ export function serializeModel(model: Model) {
     capabilities: model.capabilities,
     reasoning_efforts: model.reasoning_efforts,
     pricing_tiers: model.pricing_tiers,
+    pricing_source: model.pricing_source,
+    catalog_pricing: model.catalog_pricing,
   };
 }
 
