@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import type { Provider } from "../types";
+import { pathForPage, shouldHandleLinkClick } from "../lib/navigation";
 
 interface Props {
   provider: Provider;
@@ -27,21 +28,20 @@ export default function ProviderCard({
   return (
     <Card
       size="sm"
-      role="button"
-      tabIndex={0}
-      className={`animate-in fade-in slide-in-from-bottom-2 cursor-pointer transition-[opacity,transform,border-color] duration-300 hover:border-primary/50 ${!provider.is_active ? "opacity-60" : ""} ${isToggling ? "scale-[0.98] opacity-70" : ""}`}
-      onClick={() => {
-        if (!isToggling) onEdit(provider.id);
-      }}
-      onKeyDown={(event) => {
-        if (!isToggling && (event.key === "Enter" || event.key === " ")) {
-          event.preventDefault();
-          onEdit(provider.id);
-        }
-      }}
+      className={`relative animate-in fade-in slide-in-from-bottom-2 transition-[opacity,transform,border-color] duration-300 hover:border-primary/50 ${!provider.is_active ? "opacity-60" : ""} ${isToggling ? "scale-[0.98] opacity-70" : ""}`}
       aria-busy={isToggling}
     >
-      <CardContent>
+      <a
+        href={pathForPage("provider-detail", provider.id)}
+        aria-label={`Open ${provider.name}`}
+        className="absolute inset-0 z-0 rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        onClick={(event) => {
+          if (!shouldHandleLinkClick(event)) return;
+          event.preventDefault();
+          if (!isToggling) onEdit(provider.id);
+        }}
+      />
+      <CardContent className="pointer-events-none relative z-10">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <ProviderIcon name={provider.name} src={provider.avatar} sources={provider.avatar_sources} className="size-12" />
@@ -53,7 +53,7 @@ export default function ProviderCard({
             </div>
           </div>
           <div
-            className="flex items-center gap-1"
+            className="pointer-events-auto flex items-center gap-1"
             onClick={(event) => event.stopPropagation()}
           >
             <Switch

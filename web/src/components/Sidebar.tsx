@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import DisplayAvatar from "./DisplayAvatar";
 import type { Page } from "../types";
 import type { UserProfile } from "../types";
+import { pathForPage, shouldHandleLinkClick } from "../lib/navigation";
 
 const items = [
   { page: "dashboard" as Page, label: "Providers", icon: DashboardLine },
@@ -117,7 +118,12 @@ export default function Sidebar({
             size="lg"
             variant={currentPage === page ? "secondary" : "ghost"}
             className="w-full justify-start gap-3"
-            onClick={() => onNavigate(page)}
+            render={<a href={pathForPage(page)} />}
+            onClick={(event) => {
+              if (!shouldHandleLinkClick(event)) return;
+              event.preventDefault();
+              onNavigate(page);
+            }}
           >
             <Icon className="size-5" />
             {label}

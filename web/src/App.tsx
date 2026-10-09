@@ -24,6 +24,7 @@ import { ToastProvider } from "./components/ui/toast";
 import { settings } from "./api/client";
 import type { UserProfile } from "./types";
 import { queryCache, queryKeys, invalidateChats } from "./lib/query-cache";
+import { navigateToRoute, pathForRoute, routeFromPath, type AppRoute } from "./lib/navigation";
 
 function sortChats(chats: ChatSession[]): ChatSession[] {
   return chats
@@ -38,16 +39,15 @@ function sortChats(chats: ChatSession[]): ChatSession[] {
 
 export default function App() {
   const { isAuth, loading, error, needsSetup, completeSetup, login, logout } = useAuth();
-  const [currentPage, setCurrentPage] = useState<Page>("dashboard");
+  const [route, setRoute] = useState<AppRoute>(() => routeFromPath(window.location.pathname));
+  const currentPage = route.page;
   const [chatSessions, setChatSessions] = useState<ChatSession[]>([]);
-  const [activeChatId, setActiveChatId] = useState<string | null>(null);
+  const activeChatId = route.chatId ?? null;
   const [generatingChats, setGeneratingChats] = useState<Record<string, boolean>>({});
   const manualTitlesRef = useRef(new Set<string>());
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const touchStart = useRef<{ x: number; y: number } | null>(null);
-  const [selectedProviderId, setSelectedProviderId] = useState<string | null>(
-    null,
-  );
+  const selectedProviderId = route.providerId ?? null;
   const [profile, setProfile] = useState<UserProfile>({
     name: "User",
     avatar: null,
@@ -55,6 +55,20 @@ export default function App() {
   const [darkMode, setDarkMode] = useState(() => {
     return localStorage.getItem("klove_theme") !== "light";
   });
+
+  useEffect(() => {
+    const syncRoute = () => {
+      const next = routeFromPath(window.location.pathname);
+      setRoute(next);
+      const canonicalPath = pathForRoute(next);
+      if (canonicalPath !== window.location.pathname) {
+        window.history.replaceState(null, "", canonicalPath);
+      }
+    };
+    syncRoute();
+    window.addEventListener("popstate", syncRoute);
+    return () => window.removeEventListener("popstate", syncRoute);
+  }, []);
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", darkMode);
@@ -114,7 +128,13 @@ export default function App() {
     queryCache.getOrFetch(queryKeys.chats, 5_000, chatsApi.list).then((list) => {
       const sorted = sortChats(list);
       setChatSessions(sorted);
-      setActiveChatId((current) => current && sorted.some((chat) => chat.id === current) ? current : sorted[0]?.id ?? null);
+      const requestedChat = route.chatId;
+      if (requestedChat && sorted.some((chat) => chat.id === requestedChat)) return;
+      if (requestedChat) {
+        navigateToRoute({ page: "chat", chatId: sorted[0]?.id }, true);
+      } else if (sorted[0]) {
+        navigateToRoute({ page: "chat", chatId: sorted[0].id }, true);
+      }
     }).catch(() => setChatSessions([]));
   }, [isAuth, currentPage]);
 
@@ -163,15 +183,18 @@ export default function App() {
     };
   }, [isAuth, currentPage, generatingChats]);
 
-  const handleNavigate = (page: Page, providerId?: string) => {
-    if (page === "provider-detail" && providerId) {
-      setSelectedProviderId(providerId);
-      setCurrentPage(page);
-    } else {
-      setSelectedProviderId(null);
-      setCurrentPage(page);
-    }
+  const handleNavigate = (page: Page, id?: string) => {
+    const next: AppRoute = page === "provider-detail"
+      ? { page, providerId: id }
+      : page === "chat" && id
+        ? { page, chatId: id }
+        : { page };
+    navigateToRoute(next);
   };
+
+  useEffect(() => {
+    if (isAuth && currentPage === "login") navigateToRoute({ page: "dashboard" }, true);
+  }, [isAuth, currentPage]);
 
   if (loading) {
     return (
@@ -190,8 +213,7 @@ export default function App() {
     const chat = await chatsApi.create();
     invalidateChats(chat.id);
     setChatSessions((current) => sortChats([chat, ...current]));
-    setActiveChatId(chat.id);
-    handleNavigate("chat");
+    handleNavigate("chat", chat.id);
   };
   const renameChat = async (id: string, title: string) => {
     manualTitlesRef.current.add(id);
@@ -215,7 +237,7 @@ export default function App() {
     invalidateChats(id);
     const remaining = chatSessions.filter((chat) => chat.id !== id);
     setChatSessions(remaining);
-    if (activeChatId === id) setActiveChatId(remaining[0]?.id ?? null);
+    if (activeChatId === id) handleNavigate("chat", remaining[0]?.id);
   };
   const exportChat = async (chat: ChatSession) => {
     try {
@@ -236,7 +258,7 @@ export default function App() {
               activeChatId={activeChatId}
               profile={profile}
               onNew={createChat}
-              onSelect={setActiveChatId}
+              onSelect={(id) => handleNavigate("chat", id)}
               onRename={renameChat}
               onDelete={deleteChat}
               onExport={(chat) => void exportChat(chat)}
@@ -247,7 +269,7 @@ export default function App() {
             />
           ) : (
             <Sidebar
-              currentPage={currentPage}
+              currentPage={currentPage === "provider-detail" ? "dashboard" : currentPage}
               onNavigate={(page) => handleNavigate(page)}
               onLogout={logout}
               profile={profile}
@@ -296,7 +318,7 @@ export default function App() {
                 }}
                 onChatActivity={onChatActivity}
                 onChatCreated={(id) => {
-                  setActiveChatId(id);
+                  handleNavigate("chat", id);
                   invalidateChats(id);
                   queryCache.getOrFetch(queryKeys.chats, 5_000, chatsApi.list).then((list) => {
                     const created = list.find((chat) => chat.id === id);

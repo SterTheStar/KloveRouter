@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import type { ChatSession, UserProfile } from "../types";
 import DisplayAvatar from "./DisplayAvatar";
 import ChatCommandPalette from "./ChatCommandPalette";
+import { pathForPage, shouldHandleLinkClick } from "../lib/navigation";
 
 const CALENDAR_DATE_FORMATTER = new Intl.DateTimeFormat("en-US", {
   month: "long",
@@ -131,7 +132,11 @@ export default function ChatSidebar({
   return (
     <aside className={`fixed inset-y-0 left-0 z-40 flex h-svh w-72 shrink-0 flex-col border-r bg-sidebar text-sidebar-foreground shadow-2xl transition-transform duration-200 md:sticky md:z-auto md:shadow-none ${mobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"}`}>
       <div className="flex h-14 items-center justify-between px-3">
-        <button type="button" onClick={onBack} className="flex min-w-0 items-center gap-2 px-1">
+        <a href={pathForPage("dashboard")} onClick={(event) => {
+          if (!shouldHandleLinkClick(event)) return;
+          event.preventDefault();
+          onBack();
+        }} className="flex min-w-0 items-center gap-2 px-1">
           <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" className="size-6 text-foreground" aria-hidden="true">
             <path d="M5.6906 6 3.1651 1.6258A8 8 0 0 1 9.1106.0765L5.6906 6Z" fill="currentColor" />
             <path d="M5.1133 9 1.6936 3.077A8 8 0 0 0 .0619 9h5.0514Z" fill="currentColor" />
@@ -141,9 +146,13 @@ export default function ChatSidebar({
             <path d="M11.1036.6243A8 8 0 0 1 15.4185 5H8.5774l2.5262-4.3757Z" fill="currentColor" />
           </svg>
           <span className="truncate text-lg" style={{ fontFamily: "'Playwrite NZ Basic', cursive" }}>Klove</span>
-        </button>
+        </a>
         <div className="flex items-center gap-1">
-          <Button size="icon-sm" variant="ghost" onClick={onBack} title="Return to Home" aria-label="Return to Home"><HomeLine className="size-4" /></Button>
+          <Button size="icon-sm" variant="ghost" render={<a href={pathForPage("dashboard")} />} onClick={(event) => {
+            if (!shouldHandleLinkClick(event)) return;
+            event.preventDefault();
+            onBack();
+          }} title="Return to Home" aria-label="Return to Home"><HomeLine className="size-4" /></Button>
           <Button size="icon-sm" variant="ghost" onClick={() => setCommandOpen(true)} title="Search conversations" aria-label="Search conversations"><SearchLine className="size-4" /></Button>
           <Button size="icon-sm" variant="ghost" onClick={toggleCollapsed} title="Collapse sidebar" aria-label="Collapse sidebar"><CollapseLine className="size-4" /></Button>
         </div>
@@ -179,11 +188,15 @@ export default function ChatSidebar({
                       </div>
                     ) : (
                       <div className="flex items-center gap-1 px-2 py-1">
-                        <button type="button" onClick={() => onSelect(chat.id)} className="flex min-w-0 flex-1 items-center py-1.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60">
+                        <a href={pathForPage("chat", chat.id)} onClick={(event) => {
+                          if (!shouldHandleLinkClick(event)) return;
+                          event.preventDefault();
+                          onSelect(chat.id);
+                        }} className="flex min-w-0 flex-1 items-center py-1.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60">
                           <span className={`truncate text-sm ${generatingChats[chat.id] ? "chat-title-generating" : ""}`}>
                             {generatingChats[chat.id] ? "Generating title" : chat.title}
                           </span>
-                        </button>
+                        </a>
                         <div className="chat-sidebar-actions flex items-center gap-0.5">
                           <Button size="icon-xs" variant="ghost" onClick={() => onExport(chat)} title="Export as Markdown"><DownloadLine className="size-3.5" /></Button>
                           <Button size="icon-xs" variant="ghost" onClick={() => startRename(chat)} title="Rename"><EditLine className="size-3.5" /></Button>
