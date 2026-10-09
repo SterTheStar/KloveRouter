@@ -578,7 +578,7 @@ export default function StatsPage() {
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
             {activeTab === "status"
-              ? "Availability, latency and routing health across your providers."
+              ? "Request outcomes for the selected period."
               : "Token usage, cost and performance across your providers."}
           </p>
         </div>
