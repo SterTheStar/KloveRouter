@@ -200,14 +200,14 @@ function DonutLegend({
         return (
           <li
             key={item.name}
-            className="flex items-center gap-2 text-xs"
+            className="flex items-start gap-2 text-xs"
             title={item.name}
           >
             <span
               className="size-2.5 shrink-0 rounded-sm"
               style={{ background: item.color }}
             />
-            <span className="min-w-0 flex-1 truncate text-muted-foreground">
+            <span className="min-w-0 flex-1 break-words text-muted-foreground">
               {item.name}
             </span>
             <span className="font-mono tabular-nums">{format(item.value)}</span>
@@ -416,6 +416,10 @@ export default function StatsPage() {
   const [sortKey, setSortKey] = useState<ModelSortKey>("tokens_total");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const loadingRef = useRef(false);
+  const providerAxisWidth = Math.max(
+    96,
+    ...byProvider.map((provider) => Math.ceil(provider.provider_name.length * 7.5 + 16)),
+  );
 
   const load = useCallback(async (background = false) => {
     if (loadingRef.current) return;
@@ -792,7 +796,8 @@ export default function StatsPage() {
                   title="By provider"
                   description="Token volume grouped by provider"
                 >
-                  <div className="h-72">
+                  <div className="h-72 overflow-x-auto">
+                    <div className="h-full" style={{ minWidth: `${providerAxisWidth + 220}px` }}>
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart
                         data={byProvider}
@@ -817,18 +822,7 @@ export default function StatsPage() {
                           tick={AXIS}
                           axisLine={false}
                           tickLine={false}
-                          width={Math.min(
-                            150,
-                            Math.max(
-                              72,
-                              ...byProvider.map(
-                                (p) => p.provider_name.length * 7.5,
-                              ),
-                            ),
-                          )}
-                          tickFormatter={(value: string) =>
-                            value.length > 18 ? `${value.slice(0, 17)}…` : value
-                          }
+                          width={providerAxisWidth}
                         />
                         <ChartTooltip
                           content={
@@ -853,6 +847,7 @@ export default function StatsPage() {
                         </Bar>
                       </BarChart>
                     </ResponsiveContainer>
+                    </div>
                   </div>
                 </ChartPanel>
               )}
