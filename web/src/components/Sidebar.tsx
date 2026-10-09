@@ -144,7 +144,7 @@ export default function Sidebar({
               name={profile.name}
               src={profile.avatar}
               fallback="user"
-              className="size-8"
+              className="size-8 rounded-full object-cover"
             />
             <span className="truncate text-sm">{profile.name}</span>
           </button>
