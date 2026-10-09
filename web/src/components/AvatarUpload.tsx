@@ -1,5 +1,5 @@
 import { useRef } from "react";
-import { RiImageAddLine, RiRefreshLine, RiUpload2Line } from "@remixicon/react";
+import { RiDeleteBinLine, RiImageAddLine, RiRefreshLine, RiUpload2Line } from "@remixicon/react";
 import { Button } from "@/components/ui/button";
 import DisplayAvatar from "./DisplayAvatar";
 
@@ -49,7 +49,7 @@ export default function AvatarUpload({
     reader.readAsDataURL(file);
   };
   return (
-    <div className="flex flex-col gap-4 rounded-xl border border-border/70 bg-muted/20 p-4 sm:flex-row sm:items-center sm:gap-5">
+    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:gap-4">
       <input
         ref={inputRef}
         className="hidden"
@@ -57,17 +57,17 @@ export default function AvatarUpload({
         accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml,image/x-icon"
         onChange={select}
       />
-      <div className="flex size-[4.5rem] shrink-0 items-center justify-center overflow-hidden rounded-xl border border-border/70 bg-background shadow-sm">
+      <div className={`flex size-16 shrink-0 items-center justify-center overflow-hidden bg-muted/70 ${fallback === "user" ? "rounded-full" : "rounded-xl"}`}>
         {value || hasDetected ? (
           <DisplayAvatar
             name={name || "Avatar"}
             src={value ?? detected[0]}
             sources={value ? detected : detected.slice(1)}
             fallback={fallback}
-            className="size-16 object-contain"
+            className={`size-16 object-contain ${fallback === "user" ? "rounded-full" : "rounded-xl"}`}
           />
         ) : (
-          <RiImageAddLine className="size-7 text-muted-foreground" />
+            <RiImageAddLine className="size-6 text-muted-foreground" />
         )}
       </div>
       <div className="min-w-0 flex-1 space-y-2">
@@ -82,21 +82,21 @@ export default function AvatarUpload({
           <Button
             type="button"
             size="sm"
-            variant="outline"
+            variant="secondary"
             onClick={() => inputRef.current?.click()}
           >
             <RiUpload2Line className="size-4" />
             {value ? "Change image" : "Upload image"}
           </Button>
-          {value && (
+          {value && (hasDetected || fallback === "user") && (
             <Button
               type="button"
               size="sm"
-              variant="outline"
+              variant="secondary"
               onClick={() => onChange(null)}
             >
-              <RiRefreshLine className="size-4" />
-              Use detected icon
+              {hasDetected ? <RiRefreshLine className="size-4" /> : <RiDeleteBinLine className="size-4" />}
+              {hasDetected ? "Use detected icon" : "Remove image"}
             </Button>
           )}
         </div>
