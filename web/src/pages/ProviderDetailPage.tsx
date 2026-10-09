@@ -918,7 +918,7 @@ export default function ProviderDetailPage({
       <Card>
         <CardHeader><CardTitle>Provider</CardTitle></CardHeader>
         <CardContent className="space-y-5">
-          <AvatarUpload value={avatar} previewSrc={provider.avatar} sources={provider.avatar_sources} name={name} onChange={setAvatar} label="Provider avatar" onError={(message) => notifyError("Invalid avatar", message)} />
+          <AvatarUpload value={avatar} sources={provider.avatar_sources} name={name} onChange={setAvatar} label="Provider avatar" onError={(message) => notifyError("Invalid avatar", message)} />
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2"><Label htmlFor="provider-name">Provider name</Label><Input id="provider-name" value={name} onChange={(e) => setName(e.target.value)} /></div>
             <div className="space-y-2"><Label htmlFor="provider-url">Base URL</Label><Input id="provider-url" value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} /></div>

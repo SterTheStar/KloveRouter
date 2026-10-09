@@ -26,6 +26,7 @@ import {
   type ProviderTemplate,
 } from "../lib/provider-templates";
 import ProviderIcon from "./ProviderIcon";
+import { faviconForEndpoint, isEndpointFavicon, isPersistableAvatar, logoToDataUrl } from "@/lib/provider-icons";
 import { invalidateProviders } from "../lib/query-cache";
 
 export default function AddProviderModal({
@@ -224,12 +225,19 @@ export default function AddProviderModal({
     setSelectedType(type);
     setName(type.name);
     setBaseUrl(type.placeholder);
-    setAvatar(type.logo);
+    setAvatar(null);
     setAvatarManuallySet(false);
     setStep("form");
   };
 
-  const avatarPayload = avatar && (/^data:image\//i.test(avatar) || /^https?:\/\//i.test(avatar)) ? avatar : undefined;
+  // Only a user-chosen avatar, or a static template logo, is persisted. The favicon
+  // derived from the typed endpoint is not persisted so it keeps following URL edits.
+  const resolveAvatarPayload = async (): Promise<string | undefined> => {
+    if (avatarManuallySet) return isPersistableAvatar(avatar) ? avatar : undefined;
+    const logo = selectedType?.logo;
+    if (!logo || isEndpointFavicon(logo)) return undefined;
+    return (await logoToDataUrl(logo)) ?? undefined;
+  };
 
   const submit = async (skipVerification = false) => {
     if (
@@ -279,7 +287,7 @@ export default function AddProviderModal({
               ? { secret: authCode, account_id: conolParsedAccountId }
               : { api_key: apiKey }),
         protocol: selectedType?.protocol,
-        avatar: avatarPayload,
+        avatar: await resolveAvatarPayload(),
       });
       if (selectedType?.protocol === "chatgpt" && cookieFile)
         await providers.uploadCookies(created.id, cookieFile);
@@ -315,7 +323,7 @@ export default function AddProviderModal({
         name: name.trim() || "antigravity",
         base_url: baseUrl || "https://cloudcode-pa.googleapis.com",
         protocol: "antigravity",
-        avatar: avatarPayload,
+        avatar: await resolveAvatarPayload(),
       });
       createdProviderId = provider.id;
       const credential = (await providers.credentials(provider.id))[0];
@@ -348,7 +356,7 @@ export default function AddProviderModal({
         base_url: baseUrl || "https://chatgpt.com/backend-api/codex",
         api_key: "codex-session",
         protocol: "codex",
-        avatar: avatarPayload,
+        avatar: await resolveAvatarPayload(),
       });
       createdProviderId = provider.id;
       const credentials = await providers.credentials(provider.id);
@@ -467,7 +475,15 @@ export default function AddProviderModal({
                   </AlertDescription>
                 </Alert>
               )}
-              <AvatarUpload value={avatar} previewSrc={selectedType?.logo} name={name} onChange={(value) => { setAvatar(value); setAvatarManuallySet(true); }} label="Provider avatar" onError={(message) => notifyError("Invalid avatar", message)} />
+              <AvatarUpload
+                value={avatarManuallySet ? avatar : null}
+                previewSrc={selectedType?.logo}
+                previewFallbackUrl={faviconForEndpoint(baseUrl)}
+                name={name}
+                onChange={(value) => { setAvatar(value); setAvatarManuallySet(value !== null); }}
+                label="Provider avatar"
+                onError={(message) => notifyError("Invalid avatar", message)}
+              />
               <div className="space-y-2">
                 <Label htmlFor="provider-name">Provider name</Label>
                 <Input
@@ -485,14 +501,6 @@ export default function AddProviderModal({
                   onChange={(e) => {
                     const value = e.target.value;
                     setBaseUrl(value);
-                    if ((selectedType?.protocol === "openai" || selectedType?.protocol === "openai-responses") && !avatarManuallySet) {
-                      try {
-                        const hostname = new URL(value).hostname;
-                        if (hostname) setAvatar(`https://www.google.com/s2/favicons?domain=${encodeURIComponent(hostname)}&sz=64`);
-                      } catch {
-                        /* Keep the selected template avatar until the URL is valid. */
-                      }
-                    }
                   }}
                   placeholder={selectedType?.placeholder}
                 />

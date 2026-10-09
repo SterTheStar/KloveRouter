@@ -1,7 +1,7 @@
 import { Elysia, t } from "elysia";
 import { userInfo } from "node:os";
 import { getDb } from "../db/connection";
-import { isValidAvatar } from "../services/provider-appearance";
+import { isValidAvatar } from "../services/avatar.service";
 import { modelService, providerModelPublicId } from "../services/model.service";
 import { modelPoolService } from "../services/model-pool.service";
 

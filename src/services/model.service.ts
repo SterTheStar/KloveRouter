@@ -1,7 +1,8 @@
 import { getDb } from "../db/connection";
 import { isBlockedAntigravityModel } from "../integrations/antigravity/antigravity.models";
 import { generateDisplayName } from "./model-name";
-import { providerAvatarSources, resolveProviderAvatar, type ProviderProtocol } from "./provider-appearance";
+import type { ProviderProtocol } from "./provider-appearance";
+import { publicAvatar } from "./avatar.service";
 import { getLiteLLMPricing } from "./litellm-pricing";
 import type { LiteLLMPricing } from "./litellm-pricing";
 
@@ -308,6 +309,34 @@ function resolveThinkOpeningTagMode(
   return existingMode;
 }
 
+type ProviderJoinedModelRow = Model & {
+  provider_name: string;
+  provider_avatar: string | null;
+  provider_base_url: string;
+  provider_protocol: ProviderProtocol;
+  provider_is_active: number;
+};
+
+/** Drops provider-only columns, hydrates the model, and attaches the resolved provider avatar. */
+function mapModelsWithProvider(rows: ProviderJoinedModelRow[]): ModelWithProvider[] {
+  return rows
+    .filter((row) => !(row.provider_protocol === "antigravity" && isBlockedAntigravityModel(row.model_id)))
+    .map(({ provider_base_url, provider_protocol, provider_avatar, provider_is_active, ...model }) => {
+      const avatar = publicAvatar({
+        id: model.provider_id ?? "",
+        avatar: provider_avatar,
+        protocol: provider_protocol,
+        baseUrl: provider_base_url,
+      });
+      return {
+        ...hydrate(model as Model)!,
+        provider_is_active,
+        provider_avatar: avatar.avatar,
+        provider_avatar_sources: avatar.sources,
+      } as ModelWithProvider;
+    });
+}
+
 function hydrate(model: Model | null): Model | null {
   if (!model) return null;
   const db = getDb();
@@ -405,59 +434,33 @@ export const modelService = {
 
   findAllActiveWithProvider(): ModelWithProvider[] {
     const db = getDb();
-    const models = db
-      .query(
-        `SELECT m.*, p.name as provider_name, p.avatar as provider_avatar, p.base_url as provider_base_url, p.protocol as provider_protocol, p.is_active as provider_is_active FROM models m
-         JOIN providers p ON p.id = m.provider_id
-         WHERE m.is_active = 1 AND p.is_active = 1
-         ORDER BY p.name ASC, m.model_id ASC`,
-      )
-      .all() as (ModelWithProvider & {
-      provider_base_url: string;
-       provider_protocol: ProviderProtocol;
-    })[];
-
-    return models
-      .filter(
-        (model) =>
-          !(
-            model.provider_protocol === "antigravity" &&
-            isBlockedAntigravityModel(model.model_id)
-          ),
-      )
-      .map(({ provider_base_url, provider_protocol, ...model }) => ({
-        ...model,
-         ...hydrate(model),
-        provider_avatar: resolveProviderAvatar(
-          model.provider_avatar,
-          provider_protocol,
-          provider_base_url,
-        ),
-        provider_avatar_sources: providerAvatarSources(
-          model.provider_avatar,
-          provider_protocol,
-          provider_base_url,
-        ),
-      }));
+    return mapModelsWithProvider(
+      db
+        .query(
+          `SELECT m.*, p.name as provider_name, p.avatar as provider_avatar,
+                  p.base_url as provider_base_url, p.protocol as provider_protocol,
+                  p.is_active as provider_is_active
+           FROM models m JOIN providers p ON p.id = m.provider_id
+           WHERE m.is_active = 1 AND p.is_active = 1
+           ORDER BY p.name ASC, m.model_id ASC`,
+        )
+        .all() as ProviderJoinedModelRow[],
+    );
   },
 
   findAllWithProvider(): ModelWithProvider[] {
     const db = getDb();
-    const models = db.query(
-      `SELECT m.*, p.name as provider_name, p.avatar as provider_avatar,
-              p.base_url as provider_base_url, p.protocol as provider_protocol,
-              p.is_active as provider_is_active
-       FROM models m JOIN providers p ON p.id = m.provider_id
-       ORDER BY p.name COLLATE NOCASE ASC, m.model_id COLLATE NOCASE ASC`,
-    ).all() as (ModelWithProvider & { provider_base_url: string; provider_protocol: ProviderProtocol })[];
-    return models
-      .filter((model) => !(model.provider_protocol === "antigravity" && isBlockedAntigravityModel(model.model_id)))
-      .map(({ provider_base_url, provider_protocol, ...model }) => ({
-        ...model,
-        ...hydrate(model),
-        provider_avatar: resolveProviderAvatar(model.provider_avatar, provider_protocol, provider_base_url),
-        provider_avatar_sources: providerAvatarSources(model.provider_avatar, provider_protocol, provider_base_url),
-      }));
+    return mapModelsWithProvider(
+      db
+        .query(
+          `SELECT m.*, p.name as provider_name, p.avatar as provider_avatar,
+                  p.base_url as provider_base_url, p.protocol as provider_protocol,
+                  p.is_active as provider_is_active
+           FROM models m JOIN providers p ON p.id = m.provider_id
+           ORDER BY p.name COLLATE NOCASE ASC, m.model_id COLLATE NOCASE ASC`,
+        )
+        .all() as ProviderJoinedModelRow[],
+    );
   },
 
   findById(id: string): Model | null {

@@ -1,6 +1,7 @@
 import { getDb } from "../db/connection";
 import type { CredentialKind, CredentialMode } from "./credential.service";
-import { providerAvatarSources, resolveProviderAvatar, type ProviderProtocol } from "./provider-appearance";
+import type { ProviderProtocol } from "./provider-appearance";
+import { publicAvatar } from "./avatar.service";
 import { decryptSecret, encryptSecret } from "./secret.service";
 import { credentialKindForProtocol, validateCredential } from "./credential-validation";
 
@@ -23,8 +24,11 @@ export interface ProviderPublic {
   id: string;
   name: string;
   base_url: string;
+  /** Resolved display avatar (media URL, external URL, or null). */
   avatar: string | null;
+  /** Fallback icon URLs, in order. */
   avatar_sources: string[];
+  /** Raw custom avatar persisted by the user (data URL, URL, or null). */
   avatar_override: string | null;
   protocol: ProviderProtocol;
   credential_mode: CredentialMode;
@@ -97,12 +101,18 @@ export function validateCustomHeaders(value: unknown): Record<string, string> {
 }
 
 function toPublic(p: Provider): ProviderPublic {
+  const { avatar, sources } = publicAvatar({
+    id: p.id,
+    avatar: p.avatar,
+    protocol: p.protocol ?? "openai",
+    baseUrl: p.base_url,
+  });
   return {
     id: p.id,
     name: p.name,
     base_url: p.base_url,
-    avatar: resolveProviderAvatar(p.avatar, p.protocol, p.base_url),
-    avatar_sources: providerAvatarSources(p.avatar, p.protocol, p.base_url),
+    avatar,
+    avatar_sources: sources,
     avatar_override: p.avatar,
     protocol: p.protocol ?? "openai",
     credential_mode: p.credential_mode ?? "fixed",

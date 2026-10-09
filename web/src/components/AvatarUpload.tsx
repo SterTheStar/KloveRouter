@@ -3,9 +3,15 @@ import { RiImageAddLine, RiRefreshLine, RiUpload2Line } from "@remixicon/react";
 import { Button } from "@/components/ui/button";
 import DisplayAvatar from "./DisplayAvatar";
 
+/**
+ * Edits an avatar. `value` is the custom image (null when none). When null,
+ * the preview shows the detected icon: `sources` if given, else `previewSrc`,
+ * else `previewFallbackUrl`. Detected icons are never written through onChange.
+ */
 export default function AvatarUpload({
   value,
   previewSrc,
+  previewFallbackUrl,
   name,
   onChange,
   sources,
@@ -15,6 +21,7 @@ export default function AvatarUpload({
 }: {
   value: string | null;
   previewSrc?: string | null;
+  previewFallbackUrl?: string | null;
   name: string;
   onChange: (value: string | null) => void;
   sources?: string[];
@@ -22,6 +29,8 @@ export default function AvatarUpload({
   onError?: (message: string) => void;
   fallback?: "initial" | "user";
 }) {
+  const detected = sources?.length ? sources : [previewSrc, previewFallbackUrl].filter((v): v is string => Boolean(v));
+  const hasDetected = detected.length > 0;
   const inputRef = useRef<HTMLInputElement>(null);
   const select = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -49,11 +58,11 @@ export default function AvatarUpload({
         onChange={select}
       />
       <div className="flex size-[4.5rem] shrink-0 items-center justify-center overflow-hidden rounded-xl border border-border/70 bg-background shadow-sm">
-        {value || previewSrc || sources?.length ? (
+        {value || hasDetected ? (
           <DisplayAvatar
             name={name || "Avatar"}
-            src={value ?? previewSrc}
-            sources={sources}
+            src={value ?? detected[0]}
+            sources={value ? detected : detected.slice(1)}
             fallback={fallback}
             className="size-16 object-contain"
           />
@@ -65,7 +74,7 @@ export default function AvatarUpload({
         <div>
           <div className="text-sm font-medium">{label}</div>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            {value ? "Custom image" : previewSrc || sources?.length ? "Using detected provider icon" : "Choose an image or use the provider initials"}
+            {value ? "Custom image" : hasDetected ? "Using detected provider icon" : "Choose an image or use the provider initials"}
             <span className="block">PNG, JPEG, WebP, GIF, SVG or ICO · up to 25 MB</span>
           </p>
         </div>

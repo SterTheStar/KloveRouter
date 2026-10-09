@@ -48,7 +48,7 @@ import hcnsecLogo from "../assets/providers/hcnsec.ico";
 import inferxLogo from "../assets/providers/inferx.ico";
 import xkiroLogo from "../assets/providers/xkiro.ico";
 
-const chatgptLogo = "https://chatgpt.com/favicon.ico";
+import { faviconForEndpoint, protocolIcon } from "./provider-icons";
 
 export type ProviderTemplate = {
   id: string;
@@ -60,12 +60,9 @@ export type ProviderTemplate = {
   preset: boolean;
 };
 
-function endpointFavicon(endpoint: string) {
-  try {
-    return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(new URL(endpoint).hostname)}&sz=64`;
-  } catch {
-    return openAiLogo;
-  }
+/** Static logo for a template: bundled asset, brand icon, or endpoint favicon. */
+function templateLogo(protocol: string, endpoint: string, bundled?: string): string {
+  return bundled || protocolIcon(protocol) || faviconForEndpoint(endpoint) || openAiLogo;
 }
 
 const openAiCompatiblePresets = [
@@ -175,7 +172,7 @@ const presetLogos: Record<string, string> = {
   requesty: requestyLogo,
   portkey: portkeyLogo,
   opencode: opencodeLogo,
-  "qwen-cloud": "https://assets.alicdn.com/g/qwenweb/qwen-webui-fe/0.0.201/favicon.png",
+  "qwen-cloud": protocolIcon("qwen")!,
 };
 
 const providerDescriptions: Record<string, string> = {
@@ -343,7 +340,7 @@ export const PROVIDER_TEMPLATES: readonly ProviderTemplate[] = [
     protocol: "chatgpt",
     name: "ChatGPT",
     description: providerDescriptions.chatgpt,
-    logo: chatgptLogo,
+    logo: templateLogo("chatgpt", "https://chatgpt.com/backend-api"),
     placeholder: "https://chatgpt.com/backend-api",
     preset: false,
   },
@@ -361,7 +358,7 @@ export const PROVIDER_TEMPLATES: readonly ProviderTemplate[] = [
     protocol: "qwen",
     name: "Qwen Chat",
     description: providerDescriptions.qwen,
-    logo: "https://assets.alicdn.com/g/qwenweb/qwen-webui-fe/0.0.201/favicon.png",
+    logo: templateLogo("qwen", "https://qwen.aikit.club"),
     placeholder: "https://qwen.aikit.club",
     preset: false,
   },
@@ -370,7 +367,7 @@ export const PROVIDER_TEMPLATES: readonly ProviderTemplate[] = [
     protocol: "atomesus",
     name: "Atomesus",
     description: providerDescriptions.atomesus,
-    logo: "https://atomesus.com/favicon.ico",
+    logo: templateLogo("atomesus", "https://api.atomesus.com"),
     placeholder: "https://api.atomesus.com",
     preset: false,
   },
@@ -388,7 +385,7 @@ export const PROVIDER_TEMPLATES: readonly ProviderTemplate[] = [
     protocol: "openai" as const,
     name,
     description: providerDescriptions[id],
-    logo: presetLogos[id] || endpointFavicon(placeholder),
+    logo: templateLogo("openai", placeholder, presetLogos[id]),
     placeholder,
     preset: true,
   })),

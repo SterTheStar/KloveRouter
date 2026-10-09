@@ -2,30 +2,24 @@ import type { Model, ModelWithProvider } from "../services/model.service";
 import type { ProviderPublic } from "../services/provider.service";
 import { avatarMediaUrl, isDataAvatar } from "../services/avatar.service";
 
-export function serializedAvatar(value: string | null, ownerId: string): string | null {
-  return isDataAvatar(value) ? avatarMediaUrl(ownerId, value!) : value;
-}
-
-function compactAvatarSources(
-  avatar: string | null,
-  sources: string[],
-): string[] {
-  return sources.filter((source) => source !== avatar && !isDataAvatar(source));
+/** Maps a persisted custom avatar to its public URL: data URLs become media URLs. */
+function publicCustomAvatar(value: string | null, ownerId: string): string | null {
+  if (value == null || value === "") return null;
+  return isDataAvatar(value) ? avatarMediaUrl(ownerId, value) : value;
 }
 
 export function serializeProvider(
   provider: ProviderPublic,
   options: { includeAvatarOverride?: boolean } = {},
 ) {
-  const avatar = serializedAvatar(provider.avatar, provider.id);
   return {
     id: provider.id,
     name: provider.name,
     base_url: provider.base_url,
-    avatar,
-    avatar_sources: compactAvatarSources(avatar, provider.avatar_sources),
+    avatar: provider.avatar,
+    avatar_sources: provider.avatar_sources,
     ...(options.includeAvatarOverride
-      ? { avatar_override: serializedAvatar(provider.avatar_override, provider.id) }
+      ? { avatar_override: publicCustomAvatar(provider.avatar_override, provider.id) }
       : {}),
     protocol: provider.protocol,
     credential_mode: provider.credential_mode,
@@ -63,14 +57,10 @@ export function serializeModel(model: Model) {
 }
 
 export function serializeModelWithProvider(model: ModelWithProvider) {
-  const providerAvatar = serializedAvatar(model.provider_avatar, model.provider_id);
   return {
     ...serializeModel(model),
     provider_name: model.provider_name,
-    provider_avatar: providerAvatar,
-    provider_avatar_sources: compactAvatarSources(
-      providerAvatar,
-      model.provider_avatar_sources,
-    ),
+    provider_avatar: model.provider_avatar,
+    provider_avatar_sources: model.provider_avatar_sources,
   };
 }
