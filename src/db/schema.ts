@@ -161,6 +161,7 @@ export function initSchema(db: Database): void {
       is_active   INTEGER NOT NULL DEFAULT 1,
       created_at  TEXT NOT NULL DEFAULT (datetime('now'))
     );
+    CREATE INDEX IF NOT EXISTS idx_api_keys_active_prefix ON api_keys(is_active, prefix);
 
     CREATE TABLE IF NOT EXISTS provider_credential_rotation (
       provider_id        TEXT PRIMARY KEY,

@@ -69,6 +69,13 @@ export const keyService = {
       .get(prefix) as ApiKey | null;
   },
 
+  findActiveByPrefix(prefix: string): ApiKey[] {
+    const db = getDb();
+    return db
+      .query("SELECT * FROM api_keys WHERE is_active = 1 AND prefix = ?")
+      .all(prefix) as ApiKey[];
+  },
+
   create(name: string): { key: string; record: ApiKeyPublic } {
     const db = getDb();
     const id = crypto.randomUUID();
@@ -98,7 +105,7 @@ export const keyService = {
     return result.changes > 0;
   },
 
-  verify(key: string): ApiKey | null {
+  async verify(key: string): Promise<ApiKey | null> {
     if (internalKeyValue && key === internalKeyValue) {
       return {
         id: "internal",
@@ -110,12 +117,10 @@ export const keyService = {
         created_at: new Date().toISOString(),
       };
     }
-    const db = getDb();
-    const keys = db
-      .query("SELECT * FROM api_keys WHERE is_active = 1")
-      .all() as ApiKey[];
+    const prefix = `${key.slice(0, 12)}...`;
+    const keys = this.findActiveByPrefix(prefix);
     for (const k of keys) {
-      if (Bun.password.verifySync(key, k.key_hash)) {
+      if (await Bun.password.verify(key, k.key_hash)) {
         return k;
       }
     }
