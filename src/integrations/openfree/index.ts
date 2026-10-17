@@ -1,7 +1,8 @@
 /* Adapted from opencode-compat-shim by ArcticWinter (Copyright 2026), MIT licensed. */
-import { accessSync, constants, mkdtempSync, readdirSync, rmSync, statSync } from "node:fs";
-import { join, resolve } from "node:path";
-import { homedir, tmpdir } from "node:os";
+import { mkdtempSync, rmSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { getOpenfreeCliStatus } from "../../services/openfree-cli.service";
 
 const MODELS_ENDPOINT = "https://opencode.ai/zen/v1/models";
 const MODELS_CACHE_TTL_MS = 5 * 60_000;
@@ -63,86 +64,6 @@ type ToolCall = {
   type: "function";
   function: { name: string; arguments: string };
 };
-
-function isExecutableFile(path: string): boolean {
-  try {
-    if (!statSync(path).isFile()) return false;
-    if (process.platform !== "win32") accessSync(path, constants.X_OK);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function desktopCliPath(): string | null {
-  const home = homedir();
-  const dataRoot = process.platform === "win32"
-    ? process.env.APPDATA || join(home, "AppData", "Roaming")
-    : process.platform === "darwin"
-      ? join(home, "Library", "Application Support")
-      : process.env.XDG_CONFIG_HOME || join(home, ".config");
-  const cliDirectory = join(dataRoot, "ai.opencode.desktop", "cli");
-  const executableNames = process.platform === "win32"
-    ? ["opencode-cli.exe"]
-    : ["opencode-cli"];
-
-  try {
-    const versions = readdirSync(cliDirectory, { withFileTypes: true })
-      .filter((entry) => entry.isDirectory())
-      .map((entry) => entry.name)
-      .sort((left, right) => right.localeCompare(left, undefined, { numeric: true, sensitivity: "base" }));
-    for (const version of versions) {
-      for (const executableName of executableNames) {
-        const candidate = join(cliDirectory, version, executableName);
-        if (isExecutableFile(candidate)) return candidate;
-      }
-    }
-  } catch {
-    // The bundled desktop CLI is optional; continue with standard CLI locations.
-  }
-  return null;
-}
-
-function cliPath(): string | null {
-  const configured = process.env.OPENFREE_CLI_PATH?.trim() || process.env.OPENCODE_CLI_PATH?.trim();
-  if (configured) {
-    const absolutePath = resolve(configured);
-    return isExecutableFile(absolutePath) ? absolutePath : null;
-  }
-
-  for (const command of ["opencode-cli", "opencode"]) {
-    const found = Bun.which(command);
-    if (found) return resolve(found);
-  }
-
-  const home = homedir();
-  const standardBinDirectories = [
-    process.env.OPENCODE_INSTALL_DIR,
-    process.env.XDG_BIN_DIR,
-    join(home, "bin"),
-    join(home, ".opencode", "bin"),
-    join(home, ".local", "bin"),
-    process.env.LOCALAPPDATA ? join(process.env.LOCALAPPDATA, "Programs", "OpenCode") : undefined,
-    process.env.APPDATA ? join(process.env.APPDATA, "npm") : undefined,
-    "/usr/local/bin",
-    "/usr/bin",
-    "/opt/homebrew/bin",
-    "/home/linuxbrew/.linuxbrew/bin",
-    "/snap/bin",
-  ].filter((directory): directory is string => Boolean(directory));
-  const executableNames = process.platform === "win32"
-    ? ["opencode.exe", "opencode.cmd", "opencode"]
-    : ["opencode"];
-
-  for (const directory of standardBinDirectories) {
-    for (const executableName of executableNames) {
-      const candidate = resolve(directory, executableName);
-      if (isExecutableFile(candidate)) return candidate;
-    }
-  }
-
-  return desktopCliPath();
-}
 
 export async function openfreeModels(): Promise<OpenFreeModel[]> {
   const now = Date.now();
@@ -400,9 +321,12 @@ async function runOpenCode(
   signal: AbortSignal | undefined,
   onText: (value: string) => Promise<void> | void,
 ): Promise<string[]> {
-  const executable = cliPath();
+  const cliStatus = getOpenfreeCliStatus();
+  const executable = cliStatus.path;
   if (!executable) {
-    throw new Error("OpenFREE could not find an authenticated OpenCode CLI. Install and sign in to OpenCode, or set OPENFREE_CLI_PATH to its executable path.");
+    throw new Error(cliStatus.warning
+      ? `OpenFREE could not find an OpenCode CLI. ${cliStatus.warning} Set its path in the OpenFREE provider settings.`
+      : "OpenFREE could not find an OpenCode CLI. Install and sign in to OpenCode, or set its executable path in the OpenFREE provider settings.");
   }
   const workDir = mkdtempSync(join(tmpdir(), "klove-openfree-"));
   const child = Bun.spawn(

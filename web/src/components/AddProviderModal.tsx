@@ -18,7 +18,13 @@ import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Textarea } from "@/components/ui/textarea";
 import AvatarUpload from "./AvatarUpload";
-import { antigravity, codex, providers } from "../api/client";
+import {
+  antigravity,
+  codex,
+  openfreeCli,
+  providers,
+  type OpenFreeCliStatus,
+} from "../api/client";
 import { useToast } from "./ui/toast";
 import { copyToClipboard } from "../lib/clipboard";
 import {
@@ -51,6 +57,10 @@ export default function AddProviderModal({
   const [avatar, setAvatar] = useState<string | null>(null);
   const [avatarManuallySet, setAvatarManuallySet] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [openfreeCliStatus, setOpenfreeCliStatus] = useState<OpenFreeCliStatus | null>(null);
+  const [openfreeCliPath, setOpenfreeCliPath] = useState("");
+  const [checkingOpenfreeCli, setCheckingOpenfreeCli] = useState(false);
+  const [savingOpenfreeCliPath, setSavingOpenfreeCliPath] = useState(false);
   const [verifying, setVerifying] = useState(false);
   const [verificationWarning, setVerificationWarning] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -73,6 +83,27 @@ export default function AddProviderModal({
   };
   useEffect(() => () => clearPoll(), []);
 
+  useEffect(() => {
+    if (!isOpen || selectedType?.protocol !== "openfree") return;
+    let current = true;
+    setCheckingOpenfreeCli(true);
+    setOpenfreeCliStatus(null);
+    setOpenfreeCliPath("");
+    openfreeCli.status()
+      .then((status) => {
+        if (!current) return;
+        setOpenfreeCliStatus(status);
+        setOpenfreeCliPath(status.saved_path ?? "");
+      })
+      .catch((cause: unknown) => {
+        if (current) setError(cause instanceof Error ? cause.message : String(cause));
+      })
+      .finally(() => {
+        if (current) setCheckingOpenfreeCli(false);
+      });
+    return () => { current = false; };
+  }, [isOpen, selectedType?.protocol]);
+
   const reset = () => {
     clearPoll();
     setName("");
@@ -83,6 +114,10 @@ export default function AddProviderModal({
     setConolAccountId("");
     setAvatar(null);
     setAvatarManuallySet(false);
+    setOpenfreeCliStatus(null);
+    setOpenfreeCliPath("");
+    setCheckingOpenfreeCli(false);
+    setSavingOpenfreeCliPath(false);
     setError(null);
     setVerificationWarning(null);
     setStep("select");
@@ -227,7 +262,28 @@ export default function AddProviderModal({
     setBaseUrl(type.placeholder);
     setAvatar(null);
     setAvatarManuallySet(false);
+    setError(null);
     setStep("form");
+  };
+
+  const saveOpenfreeCli = async (path: string) => {
+    setSavingOpenfreeCliPath(true);
+    setError(null);
+    try {
+      const status = await openfreeCli.savePath(path);
+      setOpenfreeCliStatus(status);
+      setOpenfreeCliPath(status.saved_path ?? "");
+      success(
+        status.saved_path ? "OpenCode CLI path saved" : "OpenCode CLI path cleared",
+        status.path ? `Using ${status.path}` : "Automatic detection did not find an OpenCode CLI.",
+      );
+    } catch (cause: unknown) {
+      const message = cause instanceof Error ? cause.message : String(cause);
+      setError(message);
+      notifyError("Could not save OpenCode CLI path", message);
+    } finally {
+      setSavingOpenfreeCliPath(false);
+    }
   };
 
   // Only a user-chosen avatar, or a static template logo, is persisted. The favicon
@@ -494,11 +550,62 @@ export default function AddProviderModal({
                 />
               </div>
               {selectedType?.protocol === "openfree" && (
-                <Alert>
-                  <AlertDescription>
-                    OpenFREE uses the authenticated OpenCode CLI installed on the KloveRouter host. No API key or base URL is needed. Set <code>OPENFREE_CLI_PATH</code> if the CLI is not on PATH.
-                  </AlertDescription>
-                </Alert>
+                <div className="space-y-3 rounded-lg border p-3">
+                  <Alert
+                    variant={openfreeCliStatus?.warning && !openfreeCliStatus.path ? "destructive" : "default"}
+                  >
+                    <AlertDescription>
+                      {checkingOpenfreeCli
+                        ? "Checking for OpenCode CLI on the KloveRouter host..."
+                        : openfreeCliStatus?.path
+                          ? <>
+                              {`OpenCode CLI found${openfreeCliStatus.source ? ` (${openfreeCliStatus.source})` : ""}:`}
+                              <br />
+                              <code className="break-all">{openfreeCliStatus.path}</code>
+                            </>
+                          : openfreeCliStatus
+                            ? "No OpenCode CLI was found on the KloveRouter host. Enter its executable path below."
+                            : "Could not check for the OpenCode CLI."}
+                      {openfreeCliStatus?.warning && <><br />{openfreeCliStatus.warning}</>}
+                    </AlertDescription>
+                  </Alert>
+                  <p className="text-xs text-muted-foreground">
+                    OpenFREE runs this CLI on the KloveRouter host. The CLI must be signed in to OpenCode. No API key or base URL is needed.
+                  </p>
+                  <div className="space-y-2">
+                    <Label htmlFor="openfree-cli-path">OpenCode CLI executable path</Label>
+                    <Input
+                      id="openfree-cli-path"
+                      value={openfreeCliPath}
+                      onChange={(event) => setOpenfreeCliPath(event.target.value)}
+                      placeholder={openfreeCliStatus?.path ?? "/absolute/path/to/opencode"}
+                      autoComplete="off"
+                      spellCheck={false}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Leave blank to use automatic detection. Saving a path applies it to the KloveRouter host.
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => void saveOpenfreeCli(openfreeCliPath)}
+                      disabled={checkingOpenfreeCli || savingOpenfreeCliPath || !openfreeCliPath.trim()}
+                    >
+                      {savingOpenfreeCliPath ? "Saving..." : "Save CLI path"}
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => void saveOpenfreeCli("")}
+                      disabled={checkingOpenfreeCli || savingOpenfreeCliPath || !openfreeCliStatus?.saved_path}
+                    >
+                      Use automatic detection
+                    </Button>
+                  </div>
+                </div>
               )}
               {selectedType?.protocol !== "openfree" && <div className="space-y-2">
                 <Label htmlFor="provider-url">Base URL</Label>
