@@ -27,6 +27,7 @@ Compound models expose a stable `pool/<id>` model that routes across selected pr
 | Codex | OAuth | Responses-compatible requests and account rotation |
 | Antigravity | Google OAuth | Gemini, Claude, and supported GPT-family models |
 | ChatGPT | Session credentials | ChatGPT-backed models, depending on account access |
+| OpenFREE | Authenticated OpenCode CLI | Live free OpenCode Zen models, including Big Pickle, streaming, and bridged tool calls |
 
 ## Quick start
 
@@ -35,6 +36,7 @@ Compound models expose a stable `pool/<id>` model that routes across selected pr
 - [Bun](https://bun.sh/) 1.x
 - A modern browser
 - Credentials or an OAuth account for the providers you want to connect
+- For OpenFREE, an authenticated OpenCode CLI on the KloveRouter host. KloveRouter detects standard CLI and desktop installs; `OPENFREE_CLI_PATH` overrides detection when needed.
 
 ### Install and start
 
@@ -60,6 +62,7 @@ On first launch, complete the setup in the web panel. You can optionally set boo
 | `PROFILE_NAME` | Set during setup | Optional first-run profile name. |
 | `JWT_SECRET` | Generated during setup unless supplied | Signs panel sessions. |
 | `KLOVE_ENCRYPTION_KEY` | Generated during setup unless supplied | Encrypts stored provider credentials. |
+| `OPENFREE_CLI_PATH` | Auto-detected | Optional override for the authenticated OpenCode CLI used by OpenFREE. Free models are loaded from the public OpenCode Zen catalog without an API token. |
 | `LOG_LEVEL` | `info` | Set to `debug` for additional diagnostics. |
 | `NODE_ENV` | Development | Set to `production` to serve the built frontend from Bun. |
 

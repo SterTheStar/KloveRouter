@@ -1115,7 +1115,11 @@ export default function ProviderDetailPage({
       {provider.protocol !== "codex" && provider.protocol !== "antigravity" && <Card id="provider-credentials">
         <CardHeader><CardTitle>Credentials</CardTitle><p className="text-sm text-muted-foreground">Manage encrypted credentials and access tokens.</p></CardHeader>
         <CardContent className="space-y-3">
-          {provider.protocol === "chatgpt" ? (
+          {provider.protocol === "openfree" ? (
+            <div className="rounded-md border bg-muted/30 p-3 text-sm text-muted-foreground">
+              OpenFREE uses the authenticated OpenCode CLI on the KloveRouter host. Keep the CLI logged in there, or set <code>OPENFREE_CLI_PATH</code> in the KloveRouter environment. There is no API key to store here.
+            </div>
+          ) : provider.protocol === "chatgpt" ? (
             <div className="space-y-3">
               <div className="flex items-center justify-between gap-3">
                 <div>

@@ -279,7 +279,7 @@ export default function AddProviderModal({
       const created = await providers.create({
         name,
         base_url: baseUrl,
-        ...(selectedType?.protocol === "chatgpt"
+        ...(selectedType?.protocol === "chatgpt" || selectedType?.protocol === "openfree"
           ? {}
           : selectedType?.protocol === "freebuff" || selectedType?.protocol === "qwen" || selectedType?.protocol === "atomesus"
             ? { auth_code: authCode }
@@ -493,7 +493,14 @@ export default function AddProviderModal({
                   placeholder={selectedType?.id}
                 />
               </div>
-              <div className="space-y-2">
+              {selectedType?.protocol === "openfree" && (
+                <Alert>
+                  <AlertDescription>
+                    OpenFREE uses the authenticated OpenCode CLI installed on the KloveRouter host. No API key or base URL is needed. Set <code>OPENFREE_CLI_PATH</code> if the CLI is not on PATH.
+                  </AlertDescription>
+                </Alert>
+              )}
+              {selectedType?.protocol !== "openfree" && <div className="space-y-2">
                 <Label htmlFor="provider-url">Base URL</Label>
                 <Input
                   id="provider-url"
@@ -504,8 +511,8 @@ export default function AddProviderModal({
                   }}
                   placeholder={selectedType?.placeholder}
                 />
-              </div>
-              {selectedType?.protocol !== "codex" &&
+              </div>}
+              {selectedType?.protocol !== "openfree" && selectedType?.protocol !== "codex" &&
                 selectedType?.protocol !== "antigravity" && (
                   <div className="space-y-2">
                     {selectedType?.protocol === "conol" ? (

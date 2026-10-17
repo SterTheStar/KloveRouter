@@ -52,7 +52,7 @@ import { faviconForEndpoint, protocolIcon } from "./provider-icons";
 
 export type ProviderTemplate = {
   id: string;
-  protocol: "openai" | "openai-responses" | "antigravity" | "anthropic" | "codex" | "chatgpt" | "freebuff" | "qwen" | "atomesus" | "conol";
+  protocol: "openai" | "openai-responses" | "antigravity" | "anthropic" | "codex" | "chatgpt" | "freebuff" | "qwen" | "atomesus" | "conol" | "openfree";
   name: string;
   description: string;
   logo: string;
@@ -188,6 +188,8 @@ const providerDescriptions: Record<string, string> = {
     "Authorized ChatGPT session access through the ChatGPT backend API. Use only credentials you are permitted to use.",
   freebuff:
     "Free Codebuff/Freebuff models through a token-authenticated OpenAI-compatible gateway.",
+  openfree:
+    "OpenCode's free models through the authenticated OpenCode CLI on the KloveRouter host. No API key is required.",
   qwen:
     "Qwen AI models through an OpenAI-compatible gateway. Uses a Bearer token extracted from chat.qwen.ai.",
   atomesus:
@@ -351,6 +353,15 @@ export const PROVIDER_TEMPLATES: readonly ProviderTemplate[] = [
     description: providerDescriptions.freebuff,
     logo: freebuffLogo,
     placeholder: "https://www.codebuff.com",
+    preset: false,
+  },
+  {
+    id: "openfree",
+    protocol: "openfree",
+    name: "OpenFREE",
+    description: providerDescriptions.openfree,
+    logo: opencodeLogo,
+    placeholder: "https://opencode.ai",
     preset: false,
   },
   {

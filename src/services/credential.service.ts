@@ -4,7 +4,7 @@ import { logger } from "../logger";
 import { validateCredential } from "./credential-validation";
 import type { ProviderProtocol } from "./provider-appearance";
 
-export type CredentialKind = "api_key" | "codex" | "chatgpt" | "antigravity" | "freebuff" | "qwen" | "atomesus" | "conol";
+export type CredentialKind = "api_key" | "codex" | "chatgpt" | "antigravity" | "freebuff" | "qwen" | "atomesus" | "conol" | "openfree";
 export type CredentialMode = "fixed" | "round_robin";
 
 export interface ProviderCredential {
@@ -307,6 +307,8 @@ export const credentialService = {
                  ? `${alias}.kind = 'atomesus' AND ${alias}.secret IS NOT NULL`
                : provider?.protocol === "conol"
                  ? `${alias}.kind = 'conol' AND ${alias}.secret IS NOT NULL AND ${alias}.account_id IS NOT NULL`
+               : provider?.protocol === "openfree"
+                 ? `${alias}.kind = 'openfree'`
                : `${alias}.kind = 'api_key' AND (${alias}.secret IS NOT NULL OR NOT EXISTS (SELECT 1 FROM provider_credentials configured WHERE configured.provider_id = ${alias}.provider_id AND configured.kind = 'api_key' AND configured.is_active = 1 AND configured.secret IS NOT NULL))`;
     if (mode === "fixed" && fixedId) {
       const raw = db

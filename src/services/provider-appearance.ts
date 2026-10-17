@@ -8,7 +8,8 @@ export type ProviderProtocol =
   | "freebuff"
   | "qwen"
   | "atomesus"
-  | "conol";
+  | "conol"
+  | "openfree";
 
 export function isOpenAICompatibleProtocol(protocol: ProviderProtocol): boolean {
   return protocol === "openai" || protocol === "openai-responses";

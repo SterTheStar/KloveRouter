@@ -10,6 +10,7 @@ const protocolIcons: Partial<Record<string, string>> = {
   freebuff: "https://freebuff.com/favicon.ico",
   qwen: "https://assets.alicdn.com/g/qwenweb/qwen-webui-fe/0.0.201/favicon.png",
   atomesus: "https://atomesus.com/favicon.ico",
+  openfree: "https://opencode.ai/favicon.ico",
 };
 
 /** Google favicon service URL for the host of an endpoint, or null when it cannot be parsed. */
