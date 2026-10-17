@@ -186,7 +186,7 @@ export default function AddModelModal({
             <ModelMetadataEditor value={metadata} onChange={setMetadata} />
           )}
           {activeTab === "generation" && (
-            <MediaSettingsEditor value={metadata} onChange={setMetadata} />
+            <MediaSettingsEditor value={metadata} onChange={setMetadata} modelIdentity={`${modelId} ${displayName}`} />
           )}
           {activeTab === "output-fixes" && (
             <ThinkTagModeEditor
@@ -223,7 +223,7 @@ export default function AddModelModal({
 export function modelFormTabsFor(includeOutputFixes = true) {
   return [
   { id: "general", label: "General" },
-  { id: "generation", label: "Generation" },
+  { id: "generation", label: "Model type" },
   { id: "capabilities", label: "Capabilities" },
   ...(includeOutputFixes ? [{ id: "output-fixes", label: "Output fixes" }] : []),
   { id: "pricing", label: "Pricing" },
@@ -403,11 +403,24 @@ export function ModelMetadataEditor({
   );
 }
 
-export function MediaSettingsEditor({ value, onChange }: { value: ModelMetadataInput; onChange: (value: ModelMetadataInput) => void }) {
-  const updateCapability = (key: "image_generation" | "text_to_speech" | "video_generation") => {
+export function MediaSettingsEditor({ value, onChange, modelIdentity = "" }: { value: ModelMetadataInput; onChange: (value: ModelMetadataInput) => void; modelIdentity?: string }) {
+  const generationKeys = ["image_generation", "text_to_speech", "video_generation"] as const;
+  const detectedTypes = modelCategories({ model_id: modelIdentity, capabilities: value.capabilities });
+  const updateCapability = (key: (typeof generationKeys)[number]) => {
     const current = value.capabilities[key] ?? null;
-    onChange({ ...value, capabilities: { ...value.capabilities, [key]: current === null ? true : current ? false : null } });
+    const category = key === "image_generation" ? "image" : key === "text_to_speech" ? "tts" : "video";
+    const detected = current === null && detectedTypes.includes(category);
+    onChange({ ...value, capabilities: { ...value.capabilities, [key]: current === true || detected ? false : true } });
   };
+  const selectChat = () => onChange({
+    ...value,
+    capabilities: {
+      ...value.capabilities,
+      image_generation: false,
+      text_to_speech: false,
+      video_generation: false,
+    },
+  });
   const updateSetting = (section: "image" | "text_to_speech" | "video", key: string, raw: string) => {
     const numeric = key === "speed" || key === "seconds";
     const previous = value.media_settings ?? {};
@@ -422,11 +435,12 @@ export function MediaSettingsEditor({ value, onChange }: { value: ModelMetadataI
     return <div key={key} className="space-y-1.5"><Label>{label}</Label><Input type={type} min={min} max={max} step={step} value={current ?? ""} placeholder={placeholder} onChange={(event) => updateSetting(section, key, event.target.value)} /></div>;
   };
   const modalityChoices = [
-    { title: "Image generation", key: "image_generation", hint: "Image generation, edits, and variations" },
-    { title: "Text to speech", key: "text_to_speech", hint: "Speech output and audio format" },
-    { title: "Video generation", key: "video_generation", hint: "Video jobs, frame size, and duration" },
+    { title: "Image", key: "image_generation", category: "image", hint: "Image generation, edits, and variations" },
+    { title: "Text to speech", key: "text_to_speech", category: "tts", hint: "Speech output and audio format" },
+    { title: "Video", key: "video_generation", category: "video", hint: "Video generation jobs" },
   ] as const;
-  const activeModalities = modalityChoices.filter(({ key }) => value.capabilities[key] === true);
+  const activeModalities = modalityChoices.filter(({ key, category }) => value.capabilities[key] === true || (value.capabilities[key] == null && detectedTypes.includes(category)));
+  const chatSelected = activeModalities.length === 0 && detectedTypes.includes("chat");
   const configSection = (title: string, description: string, fields: React.ReactNode) => <section key={title} className="space-y-3 rounded-lg border p-4">
     <div><h3 className="text-sm font-medium">{title}</h3><p className="mt-1 text-xs text-muted-foreground">{description}</p></div>
     <div className="grid gap-3 sm:grid-cols-2">{fields}</div>

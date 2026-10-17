@@ -67,6 +67,9 @@ export default function EditModelModal({
   const [activeTab, setActiveTab] = useState("general");
   const showOutputFixes = modelCategories({ model_id: modelId || model?.model_id, display_name: displayName || model?.display_name, capabilities: metadata.capabilities }).includes("chat");
   const tabs = modelFormTabsFor(showOutputFixes);
+  const customPricingWillBeReplaced = Boolean(
+    model?.pricing_source === "custom" && pricingEdited && pricingTiers.length === 0,
+  );
   useEffect(() => {
     if (!showOutputFixes && activeTab === "output-fixes") setActiveTab("generation");
   }, [showOutputFixes, activeTab]);
@@ -139,7 +142,7 @@ export default function EditModelModal({
         pretty_id: prettyId.trim() || null,
         display_name: displayName || null,
         think_opening_tag_mode: thinkOpeningTagMode,
-        pricing_tiers: model.pricing_source === "litellm" && !pricingEdited ? undefined : pricingTiers,
+        pricing_tiers: pricingEdited ? pricingTiers : undefined,
         use_litellm_pricing: useLiteLLMPricing,
         ...metadata,
       });
@@ -226,20 +229,60 @@ export default function EditModelModal({
           )}
           {activeTab === "pricing" && (
             <div className="space-y-4">
-              <label className="flex items-center justify-between gap-4 rounded-lg border p-3">
-                <span className="space-y-1">
-                  <span className="block text-sm font-medium">Use LiteLLM catalog pricing</span>
-                  <span className="block text-xs text-muted-foreground">Use the public catalog when no custom price is set for this model.</span>
-                </span>
-                <Switch checked={useLiteLLMPricing} onCheckedChange={setUseLiteLLMPricing} />
-              </label>
-              {model.catalog_pricing && model.catalog_pricing.billing_unit !== "token" && (
-                <div className="rounded-lg border px-3 py-2 text-sm">
-                  <span className="font-medium">LiteLLM catalog rate: </span>
+              <div className="flex items-start justify-between gap-6 border-b pb-3">
+                <div className="min-w-0 space-y-1">
+                  <div className="text-sm font-medium">Use LiteLLM catalog pricing</div>
+                  <p className="text-xs text-muted-foreground">Use public catalog rates when available. Custom pricing tiers take precedence.</p>
+                </div>
+                <Switch
+                  checked={useLiteLLMPricing}
+                  onCheckedChange={setUseLiteLLMPricing}
+                  aria-label="Use LiteLLM catalog pricing"
+                />
+              </div>
+              {useLiteLLMPricing && model.pricing_source === "custom" && !customPricingWillBeReplaced && (
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border/70 bg-muted/20 px-3 py-2">
+                  <p className="min-w-0 flex-1 text-xs text-muted-foreground">
+                    Custom tiers are currently used instead of the catalog rates.
+                  </p>
+                  {model.catalog_pricing && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        setPricingEdited(true);
+                        setPricingTiers([]);
+                      }}
+                    >
+                      Replace with catalog
+                    </Button>
+                  )}
+                </div>
+              )}
+              {useLiteLLMPricing && model.catalog_pricing && (model.pricing_source !== "custom" || customPricingWillBeReplaced) && (
+                <div className="rounded-lg border border-border/70 bg-muted/20 px-3 py-2 text-sm">
+                  <span className="font-medium">Catalog rate: </span>
                   <span className="text-muted-foreground">{catalogPriceDescription(model.catalog_pricing)}</span>
                 </div>
               )}
-              <PricingEditor tiers={pricingTiers} updateTier={updateTier} setTiers={(update) => { setPricingEdited(true); setPricingTiers(update); }} />
+              {useLiteLLMPricing && !model.catalog_pricing && model.use_litellm_pricing === 1 && (
+                <p className="text-xs text-muted-foreground">No matching rate was found in the public catalog for this model.</p>
+              )}
+              {useLiteLLMPricing && !model.catalog_pricing && model.use_litellm_pricing !== 1 && (
+                <p className="text-xs text-muted-foreground">Save changes to look up this model in the public catalog.</p>
+              )}
+              {pricingTiers.length > 0 ? (
+                <PricingEditor
+                  tiers={pricingTiers}
+                  updateTier={updateTier}
+                  setTiers={(update) => { setPricingEdited(true); setPricingTiers(update); }}
+                />
+              ) : (
+                <p className="py-3 text-sm text-muted-foreground">
+                  {useLiteLLMPricing && model.catalog_pricing ? "Catalog pricing will be used." : "No custom pricing tiers."}
+                </p>
+              )}
             </div>
           )}
           {error && (

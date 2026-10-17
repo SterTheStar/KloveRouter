@@ -369,6 +369,7 @@ export default function ModelsPage() {
                       models.map((model) => {
                         const tps = tpsMap[model.id];
                         const result = testResult[model.id];
+                        const canTest = !model.model_pool && modelCategories(model).includes("chat");
                         const fullModelId = model.model_pool ? `pool/${model.pretty_id || model.model_id}` : modelPublicId(model);
                         return (
                           <TableRow key={model.id}>
@@ -400,7 +401,7 @@ export default function ModelsPage() {
                             </TableCell>
                             <TableCell>
                               <div className="flex h-7 items-center justify-center">
-                                {result === "success" ? (
+                                {!canTest ? null : result === "success" ? (
                                   <CheckLine className="block size-4 text-green-500" />
                                 ) : result === "error" ? (
                                   <CloseLine className="block size-4 text-destructive" />
