@@ -267,7 +267,7 @@ export default function ProviderDetailPage({
         if (!credential.is_active) return false;
         if (credential.kind === "api_key" || credential.kind === "chatgpt" || credential.kind === "freebuff" || credential.kind === "qwen" || credential.kind === "atomesus" || credential.kind === "conol")
           return Boolean(credential.masked_secret);
-        if (credential.kind === "openfree") return true;
+        if (credential.kind === "openfree") return Boolean(credential.masked_secret);
         return Boolean(
           credential.account_id || credential.email || credential.project_id,
         );
@@ -1150,11 +1150,11 @@ export default function ProviderDetailPage({
           {provider.protocol === "openfree" ? (
             <div className="space-y-3 rounded-md border bg-muted/30 p-3">
               <div>
-                <Label htmlFor="openfree-detail-api-key">OpenCode Zen API key</Label>
+                <Label htmlFor="openfree-detail-api-key">OpenCode Zen API key (required)</Label>
                 <p className="mt-1 text-xs text-muted-foreground">
                   {credentials.find((credential) => credential.kind === "openfree")?.masked_secret
                     ? `Saved encrypted (${credentials.find((credential) => credential.kind === "openfree")?.masked_secret}). Enter a new key to replace it.`
-                    : "No key is saved. You can use an existing OpenCode CLI login or add a Zen API key."}
+                    : "No OpenCode Zen API key is saved. Add one before using this provider."}
                 </p>
               </div>
               <div className="flex flex-col gap-2 sm:flex-row">
@@ -1166,6 +1166,7 @@ export default function ProviderDetailPage({
                   onChange={(event) => setOpenfreeApiKey(event.target.value)}
                   placeholder="Paste your OpenCode Zen API key"
                   className="sm:max-w-lg"
+                  required
                 />
                 <Button onClick={saveOpenfreeApiKey} disabled={savingOpenfreeApiKey || !openfreeApiKey.trim()}>
                   {savingOpenfreeApiKey ? <LoaderCircle className="size-4 animate-spin" /> : <LoginIcon className="size-4" />}
@@ -1173,7 +1174,7 @@ export default function ProviderDetailPage({
                 </Button>
               </div>
               <p className="text-xs text-muted-foreground">
-                KloveRouter stores this key encrypted and passes it to the OpenCode CLI for requests. If <code>expect</code> is installed on the KloveRouter host, the button also runs <code>opencode auth login opencode --method key</code> and saves the login in an app-managed OpenCode profile.
+                KloveRouter stores this required key encrypted and passes it to the OpenCode CLI for requests. If <code>expect</code> is installed on the KloveRouter host, the button also runs <code>opencode auth login opencode --method key</code> and saves the login in an app-managed OpenCode profile.
               </p>
             </div>
           ) : provider.protocol === "chatgpt" ? (

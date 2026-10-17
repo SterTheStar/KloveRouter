@@ -198,7 +198,7 @@ export const providerService = {
     validateCredential(protocol, kind, protocol === "codex" || protocol === "antigravity" ? undefined : input.api_key, {
       accountId: input.account_id,
       allowIncompleteOAuth: protocol === "codex" || protocol === "antigravity" || protocol === "chatgpt",
-      allowEmptySecret: true,
+      allowEmptySecret: protocol !== "openfree",
     });
     const id = crypto.randomUUID();
     const encryptedApiKey = input.api_key
@@ -277,12 +277,21 @@ export const providerService = {
     if (input.api_key !== undefined && (protocol === "codex" || protocol === "antigravity")) {
       throw new Error(`Provider protocol '${protocol}' does not accept api_key credentials`);
     }
-    if (input.protocol !== undefined || input.api_key !== undefined) {
+    if (input.protocol !== undefined || input.api_key !== undefined || protocol === "openfree") {
       const automatic = db.query("SELECT kind, secret FROM provider_credentials WHERE provider_id = ? AND id = COALESCE(?, id) LIMIT 1").get(id, existing.fixed_credential_id) as { kind: CredentialKind; secret: string | null } | null;
+      const expectedKind = credentialKindForProtocol(protocol);
+      const secret = input.api_key !== undefined
+        ? input.api_key
+        : automatic?.kind === expectedKind
+          ? decryptSecret(automatic.secret)
+          : existing.api_key;
+      if (protocol === "openfree" && !secret?.trim()) {
+        throw new Error("OpenCode Zen API key is required for OpenFREE.");
+      }
       if (automatic && input.protocol !== undefined) {
-        validateCredential(protocol, automatic.kind, input.api_key !== undefined ? input.api_key : decryptSecret(automatic.secret));
+        validateCredential(protocol, automatic.kind, secret);
       } else {
-        validateCredential(protocol, credentialKindForProtocol(protocol), input.api_key !== undefined ? input.api_key : existing.api_key);
+        validateCredential(protocol, expectedKind, secret);
       }
     }
 
