@@ -1636,7 +1636,7 @@ export const proxyPlugin = (app: Elysia) =>
         if (provider.protocol === "openfree") {
           const start = performance.now();
           try {
-            const response = await openfreeResponses(body, parsed.modelId, request.signal);
+            const response = await openfreeResponses(body, parsed.modelId, request.signal, credential);
             const modelRecord = modelService.findByProviderAndModel(provider.id, parsed.modelId);
             requestLogService.captureResponse(requestLogId, { status: response.status, headers: response.headers, contentType: response.headers.get("content-type"), streaming: Boolean(body.stream) });
             if (!body.stream) {

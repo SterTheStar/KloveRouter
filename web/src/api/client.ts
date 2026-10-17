@@ -75,6 +75,12 @@ export type OpenFreeCliStatus = {
   managed_version: string | null;
 };
 
+export type OpenFreeCliLoginResult = {
+  logged_in: boolean;
+  path: string;
+  warning: string | null;
+};
+
 export const openfreeCli = {
   status: () => request<OpenFreeCliStatus>("/api/settings/openfree-cli"),
   savePath: (path: string) =>
@@ -85,6 +91,11 @@ export const openfreeCli = {
   install: () =>
     request<OpenFreeCliStatus>("/api/settings/openfree-cli/install", {
       method: "POST",
+    }),
+  login: (api_key: string) =>
+    request<OpenFreeCliLoginResult>("/api/settings/openfree-cli/login", {
+      method: "POST",
+      body: JSON.stringify({ api_key }),
     }),
 };
 

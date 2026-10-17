@@ -2,12 +2,13 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { getOpenfreeCliStatus } from "../../services/openfree-cli.service";
+import { getOpenfreeCliStatus, openfreeAuthDatabasePath } from "../../services/openfree-cli.service";
 
 const MODELS_ENDPOINT = "https://opencode.ai/zen/v1/models";
 const MODELS_CACHE_TTL_MS = 5 * 60_000;
 const MODELS_RETRY_DELAY_MS = 30_000;
 const FREE_MODEL_IDS_WITHOUT_MARKER = new Set(["big-pickle"]);
+const FREE_MODELS_WITHOUT_CHAT_ROUTE = new Set(["jev-1.13-free"]);
 const OPEN_FENCE = "<hermes_tool_call>";
 const CLOSE_FENCE = "</hermes_tool_call>";
 const READ_TIMEOUT_MS = 5 * 60_000;
@@ -88,7 +89,7 @@ export async function openfreeModels(): Promise<OpenFreeModel[]> {
         if (!row || typeof row !== "object") return [];
         const id = typeof row.id === "string" ? row.id.trim() : "";
         const hasFreeMarker = /free/i.test(`${id} ${typeof row.name === "string" ? row.name : ""}`);
-        if (!id || (!hasFreeMarker && !FREE_MODEL_IDS_WITHOUT_MARKER.has(id.toLowerCase()))) return [];
+        if (!id || FREE_MODELS_WITHOUT_CHAT_ROUTE.has(id.toLowerCase()) || (!hasFreeMarker && !FREE_MODEL_IDS_WITHOUT_MARKER.has(id.toLowerCase()))) return [];
         const key = id.toLowerCase();
         if (seen.has(key)) return [];
         seen.add(key);
@@ -308,18 +309,21 @@ function cliConfigContent(): string {
   } catch {
     // The runtime override must remain valid JSON even if the inherited value is malformed.
   }
-  const disabledTools = ["*", "bash", "edit", "write", "read", "grep", "glob", "list", "task", "todowrite", "webfetch", "websearch", "skill", "lsp"];
-  const deniedTools = Object.fromEntries(disabledTools.filter((tool) => tool !== "*").map((tool) => [tool, "deny"]));
+  // Zen's free-tier admission checks the tool schema. Keep OpenCode's built-in
+  // tools in the request, but require approval for every action. runOpenCode
+  // terminates the CLI when it asks for permission, so no local tool runs.
+  const builtinTools = ["bash", "edit", "write", "read", "grep", "glob", "list", "task", "todowrite", "todoread", "webfetch", "websearch", "skill", "lsp"];
   return JSON.stringify({
     ...existing,
-    tools: { ...(existing.tools || {}), ...Object.fromEntries(disabledTools.map((tool) => [tool, false])) },
-    permission: { ...(existing.permission || {}), "*": "deny", ...deniedTools },
+    tools: { ...(existing.tools || {}), "*": false, ...Object.fromEntries(builtinTools.map((tool) => [tool, true])) },
+    permissions: [{ action: "*", resource: "*", effect: "ask" }],
   });
 }
 
 async function runOpenCode(
   model: string,
   prompt: string,
+  apiKey: string | null,
   signal: AbortSignal | undefined,
   onText: (value: string) => Promise<void> | void,
 ): Promise<string[]> {
@@ -339,6 +343,10 @@ async function runOpenCode(
         ...process.env,
         PWD: workDir,
         OPENCODE_CONFIG_CONTENT: cliConfigContent(),
+        ...(apiKey ? {
+          OPENCODE_API_KEY: apiKey,
+          OPENCODE_DB: openfreeAuthDatabasePath(apiKey),
+        } : {}),
       },
       stdin: "pipe",
       stdout: "pipe",
@@ -445,6 +453,7 @@ async function runOpenCode(
 async function collect(
   model: string,
   prompt: string,
+  apiKey: string | null,
   signal?: AbortSignal,
   streamText?: (value: string) => Promise<void> | void,
 ): Promise<{ content: string; toolCalls: ToolCall[] }> {
@@ -466,7 +475,7 @@ async function collect(
     };
     let alienTools: string[];
     try {
-      alienTools = await runOpenCode(model, prompt, signal, onCliText);
+      alienTools = await runOpenCode(model, prompt, apiKey, signal, onCliText);
     } catch (error) {
       if (attempt < 2 && !streamedText && error instanceof Error && TRANSIENT_ERROR.test(error.message)) continue;
       throw error;
@@ -515,7 +524,7 @@ function sseChunk(id: string, model: string, created: number, delta: Record<stri
   })}\n\n`;
 }
 
-function streamResponse(model: string, prompt: string, signal?: AbortSignal): Response {
+function streamResponse(model: string, prompt: string, apiKey: string | null, signal?: AbortSignal): Response {
   const id = `chatcmpl-${crypto.randomUUID().replace(/-/g, "").slice(0, 24)}`;
   const created = Math.floor(Date.now() / 1000);
   const abortController = new AbortController();
@@ -529,7 +538,7 @@ function streamResponse(model: string, prompt: string, signal?: AbortSignal): Re
       const send = (value: string) => { if (!cancelled) controller.enqueue(encoder.encode(value)); };
       try {
         send(sseChunk(id, model, created, { role: "assistant", content: "" }));
-        const result = await collect(model, prompt, abortController.signal, (value) => send(sseChunk(id, model, created, { content: value })));
+        const result = await collect(model, prompt, apiKey, abortController.signal, (value) => send(sseChunk(id, model, created, { content: value })));
         result.toolCalls.forEach((call, index) => {
           send(sseChunk(id, model, created, { tool_calls: [{ index, id: call.id, type: "function", function: { name: call.function.name, arguments: "" } }] }));
           send(sseChunk(id, model, created, { tool_calls: [{ index, function: { arguments: call.function.arguments } }] }));
@@ -563,10 +572,16 @@ function streamResponse(model: string, prompt: string, signal?: AbortSignal): Re
   return response;
 }
 
-export async function openfreeResponses(body: any, requestedModel: string, signal?: AbortSignal): Promise<Response> {
+export async function openfreeResponses(
+  body: any,
+  requestedModel: string,
+  signal?: AbortSignal,
+  credential?: { secret?: string | null },
+): Promise<Response> {
   const model = await resolveModel(requestedModel);
   const prompt = buildPrompt(body);
-  if (body.stream === true) return streamResponse(model, prompt, signal);
-  const result = await collect(model, prompt, signal);
+  const apiKey = credential?.secret?.trim() || null;
+  if (body.stream === true) return streamResponse(model, prompt, apiKey, signal);
+  const result = await collect(model, prompt, apiKey, signal);
   return jsonResponse(model, result.content, result.toolCalls);
 }

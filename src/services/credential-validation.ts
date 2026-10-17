@@ -22,6 +22,7 @@ const secretKinds = new Set<CredentialKind>([
   "qwen",
   "atomesus",
   "conol",
+  "openfree",
 ]);
 
 export class CredentialValidationError extends Error {

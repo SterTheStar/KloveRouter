@@ -1,6 +1,6 @@
-import { accessSync, constants, createReadStream, existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { accessSync, chmodSync, constants, createReadStream, existsSync, mkdirSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { chmod, lstat, mkdir, mkdtemp, rename, rm, writeFile } from "node:fs/promises";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
@@ -24,6 +24,98 @@ export type OpenFreeCliStatus = {
   managed_installed: boolean;
   managed_version: string | null;
 };
+
+export type OpenFreeCliLoginResult = {
+  logged_in: boolean;
+  path: string;
+  warning: string | null;
+};
+
+export function openfreeAuthDatabasePath(apiKey: string): string {
+  const keyProfile = createHash("sha256").update(apiKey).digest("hex").slice(0, 24);
+  const authDirectory = join(managedDirectory(), "auth");
+  mkdirSync(authDirectory, { recursive: true, mode: 0o700 });
+  if (process.platform !== "win32") chmodSync(authDirectory, 0o700);
+  return join(authDirectory, `${keyProfile}.db`);
+}
+
+/**
+ * OpenCode's API-key login is an interactive prompt. Expect supplies the PTY
+ * the CLI requires; the key itself is sent over stdin and is never put in the
+ * script, process arguments, or logs.
+ */
+export async function loginOpenfreeCli(apiKey: string): Promise<OpenFreeCliLoginResult> {
+  const secret = apiKey.trim();
+  if (!secret) throw new Error("Enter an OpenCode Zen API key.");
+  if (/[\r\n\0]/.test(secret)) throw new Error("The OpenCode Zen API key must be a single line.");
+
+  const cliStatus = getOpenfreeCliStatus();
+  if (!cliStatus.path) {
+    throw new Error("OpenFREE could not find an OpenCode CLI. Install it or set its executable path first.");
+  }
+  const expectPath = Bun.which("expect");
+  if (!expectPath) {
+    return {
+      logged_in: false,
+      path: cliStatus.path,
+      warning: "The expect utility is not installed on the KloveRouter host, so OpenCode CLI login could not be opened. The saved API key can still be passed directly to OpenCode when OpenFREE makes requests.",
+    };
+  }
+
+  const script = [
+    "set timeout 60",
+    "log_user 0",
+    "if {[gets stdin api_key] < 0 || $api_key eq \"\"} { exit 2 }",
+    "spawn -noecho $env(OPENFREE_CLI_PATH) auth login opencode --method key",
+    "expect {",
+    "  -re {(?i)api[[:space:]]*key} { send -- \"$api_key\\r\" }",
+    "  eof { exit 3 }",
+    "  timeout { catch {close}; catch {wait}; exit 124 }",
+    "}",
+    "expect {",
+    "  eof {}",
+    "  timeout { catch {close}; catch {wait}; exit 124 }",
+    "}",
+    "set result [wait]",
+    "if {[lindex $result 2] == 0} { exit [lindex $result 3] }",
+    "exit 1",
+  ].join("\n");
+  const authDatabasePath = openfreeAuthDatabasePath(secret);
+
+  const exitCode = await new Promise<number>((resolve, reject) => {
+    const childEnvironment = {
+      ...process.env,
+      OPENFREE_CLI_PATH: cliStatus.path!,
+      OPENCODE_DB: authDatabasePath,
+    };
+    // Force the CLI to show its key prompt even if the server has a global Zen key.
+    delete childEnvironment.OPENCODE_API_KEY;
+    const child = spawn(expectPath, ["-c", script], {
+      env: childEnvironment,
+      stdio: ["pipe", "ignore", "ignore"],
+      windowsHide: true,
+    });
+    const timer = setTimeout(() => {
+      child.kill();
+      resolve(124);
+    }, 70_000);
+    timer.unref?.();
+    child.once("error", (error) => {
+      clearTimeout(timer);
+      reject(error);
+    });
+    child.once("close", (code) => {
+      clearTimeout(timer);
+      resolve(code ?? 1);
+    });
+    child.stdin?.on("error", () => {});
+    child.stdin?.end(`${secret}\n`);
+  });
+
+  if (exitCode === 124) throw new Error("OpenCode CLI API-key login timed out. Check the CLI path and try again.");
+  if (exitCode !== 0) throw new Error("OpenCode CLI API-key login failed. Check the OpenCode Zen API key and try again.");
+  return { logged_in: true, path: cliStatus.path, warning: null };
+}
 
 function managedDirectory(): string {
   return resolve(config.dataDir, "openfree");

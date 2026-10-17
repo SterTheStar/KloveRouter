@@ -101,7 +101,7 @@ export const credentialService = {
     const credential = this.findById(id);
     if (!credential) return null;
     return {
-      authenticated: credential.kind === "chatgpt" || credential.kind === "conol"
+      authenticated: credential.kind === "chatgpt" || credential.kind === "conol" || credential.kind === "openfree"
         ? Boolean(credential.secret)
         : Boolean(credential.access_token),
       account_id: credential.account_id,
