@@ -328,6 +328,8 @@ export default function AddProviderModal({
     }
     if (!name || !baseUrl)
       return setError("Provider name and base URL are required.");
+    if (selectedType?.protocol === "openfree" && !apiKey.trim())
+      return setError("OpenCode Zen API key is required for OpenFREE.");
     const conolParsedAccountId = conolAccountId.trim() || authCode.match(/^account_id\s*=\s*(.+)$/m)?.[1]?.trim() || "";
     if (selectedType?.protocol === "chatgpt" && !cookieFile)
       return setError("Select a cookies.txt file.");
@@ -601,7 +603,7 @@ export default function AddProviderModal({
                     </AlertDescription>
                   </Alert>
                   <p className="text-xs text-muted-foreground">
-                    OpenFREE runs this CLI on the KloveRouter host. Sign in with a Zen API key below, or leave it blank if this CLI already has an OpenCode account.
+                    OpenFREE requires an OpenCode Zen API key. The key is stored encrypted and used for requests; the CLI login is also configured when the CLI and <code>expect</code> are available.
                   </p>
                   <div className="space-y-2">
                     <Label htmlFor="openfree-cli-path">OpenCode CLI executable path</Label>
@@ -666,7 +668,7 @@ export default function AddProviderModal({
                     </p>
                   </div>
                   <div className="space-y-2 border-t pt-3">
-                    <Label htmlFor="openfree-zen-api-key">OpenCode Zen API key (optional)</Label>
+                    <Label htmlFor="openfree-zen-api-key">OpenCode Zen API key (required)</Label>
                     <Input
                       id="openfree-zen-api-key"
                       type="password"
@@ -674,9 +676,10 @@ export default function AddProviderModal({
                       value={apiKey}
                       onChange={(event) => setApiKey(event.target.value)}
                       placeholder="Paste your OpenCode Zen API key"
+                      required
                     />
                     <p className="text-xs text-muted-foreground">
-                      Saving this provider signs the CLI in through its API-key prompt and stores the key encrypted in KloveRouter. Leave it empty if the CLI already has an account.
+                      Saving this provider signs the CLI in through its API-key prompt when available and stores the key encrypted in KloveRouter.
                     </p>
                   </div>
                 </div>
