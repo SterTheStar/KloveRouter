@@ -430,6 +430,20 @@ export function initSchema(db: Database): void {
     db.exec("UPDATE models SET updated_at = created_at WHERE updated_at = ''");
   }
 
+  const openfreeContextMigration = db.query("SELECT value FROM settings WHERE key = ?")
+    .get("migration_openfree_context_window_200k") as { value: string } | undefined;
+  if (!openfreeContextMigration) {
+    db.transaction(() => {
+      db.query(`UPDATE models
+        SET context_window = 200000,
+            max_output_tokens = CASE WHEN max_output_tokens_source = 'auto' THEN 128000 ELSE max_output_tokens END,
+            updated_at = datetime('now')
+        WHERE provider_id IN (SELECT id FROM providers WHERE protocol = 'openfree')`).run();
+      db.query("INSERT INTO settings (key, value) VALUES (?, ?)")
+        .run("migration_openfree_context_window_200k", "true");
+    })();
+  }
+
   const capabilityCols = db.query("PRAGMA table_info(model_capabilities)").all() as { name: string }[];
   for (const [name, type] of [["audio_input", "INTEGER"], ["audio_output", "INTEGER"], ["video", "INTEGER"], ["image_generation", "INTEGER"], ["text_to_speech", "INTEGER"], ["video_generation", "INTEGER"]] as const) {
     if (!capabilityCols.some((column) => column.name === name))

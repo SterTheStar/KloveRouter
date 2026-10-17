@@ -65,6 +65,29 @@ export const auth = {
   verify: () => request<{ valid: boolean; role?: string }>("/api/auth/verify"),
 };
 
+export type OpenFreeCliStatus = {
+  path: string | null;
+  source: string | null;
+  saved_path: string | null;
+  warning: string | null;
+  managed_path: string;
+  managed_installed: boolean;
+  managed_version: string | null;
+};
+
+export const openfreeCli = {
+  status: () => request<OpenFreeCliStatus>("/api/settings/openfree-cli"),
+  savePath: (path: string) =>
+    request<OpenFreeCliStatus>("/api/settings/openfree-cli", {
+      method: "PUT",
+      body: JSON.stringify({ path }),
+    }),
+  install: () =>
+    request<OpenFreeCliStatus>("/api/settings/openfree-cli/install", {
+      method: "POST",
+    }),
+};
+
 // Providers
 export const providers = {
   validateCredential: (data: {

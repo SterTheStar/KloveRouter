@@ -281,6 +281,7 @@ export const modelsPlugin = (app: Elysia) =>
           const items = selected.map((model) => ({
             id: model.id,
             display_name: model.display_name || generateDisplayName(model.id),
+            context_window: parseRawModelMetadata(model).context_window,
             capabilities: parseRawModelMetadata(model).capabilities,
             is_free: isFreeModel(model),
             is_existing: existingIds.has(model.id),

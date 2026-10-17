@@ -4,6 +4,11 @@ import { getDb } from "../db/connection";
 import { isValidAvatar } from "../services/avatar.service";
 import { modelService, providerModelPublicId } from "../services/model.service";
 import { modelPoolService } from "../services/model-pool.service";
+import {
+  getOpenfreeCliStatus,
+  installOpenfreeCli,
+  saveOpenfreeCliPath,
+} from "../services/openfree-cli.service";
 
 function defaultProfileName() {
   try {
@@ -23,6 +28,27 @@ function defaultProfileName() {
 
 export const settingsPlugin = (app: Elysia) =>
   app
+    .get("/api/settings/openfree-cli", () => getOpenfreeCliStatus())
+    .put(
+      "/api/settings/openfree-cli",
+      ({ body, set }) => {
+        try {
+          return saveOpenfreeCliPath(body.path);
+        } catch (error) {
+          set.status = 400;
+          return { error: error instanceof Error ? error.message : String(error) };
+        }
+      },
+      { body: t.Object({ path: t.String() }) },
+    )
+    .post("/api/settings/openfree-cli/install", async ({ set }) => {
+      try {
+        return await installOpenfreeCli();
+      } catch (error) {
+        set.status = 500;
+        return { error: error instanceof Error ? error.message : String(error) };
+      }
+    })
     .get("/api/settings/chat", () => {
       const rows = getDb()
         .query("SELECT key, value FROM settings WHERE key IN (?, ?)")
