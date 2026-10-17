@@ -22,6 +22,7 @@ import {
 import { logger } from "../logger";
 import { generateDisplayName } from "../services/model-name";
 import { freebuffModels, freebuffResponses } from "../integrations/freebuff";
+import { openfreeModels, openfreeResponses } from "../integrations/openfree";
 import { qwenModels, qwenResponses } from "../integrations/qwen";
 import { atomesusModels, atomesusTest } from "../integrations/atomesus";
 import { conolModels, conolResponses } from "../integrations/conol";
@@ -98,6 +99,16 @@ async function freebuffTest(
   if (!response.ok) {
     throw new Error(`Freebuff test failed (${response.status})`);
   }
+  return response.json();
+}
+
+async function openfreeTest(model: string) {
+  const response = await openfreeResponses({
+    model,
+    messages: [{ role: "user", content: "Say 'ok' and nothing else." }],
+    max_tokens: 10,
+    stream: false,
+  }, model);
   return response.json();
 }
 
@@ -242,7 +253,7 @@ export const modelsPlugin = (app: Elysia) =>
         const existingOnly = query.existing_only === true;
         const resetExisting = body?.reset_existing === true || query.reset_existing === true;
         const useLiteLLMPricing = body?.use_litellm_pricing !== false;
-        if (useLiteLLMPricing) await refreshLiteLLMPricing();
+        if (useLiteLLMPricing && provider.protocol !== "openfree") await refreshLiteLLMPricing();
         const existingIds = new Set(
           modelService.findByProvider(id).map((model) => model.model_id),
         );
@@ -348,6 +359,21 @@ export const modelsPlugin = (app: Elysia) =>
               models_found: selected.length,
               message: `Synced ${selected.length} Antigravity models from ${provider.name}`,
             };
+          }
+
+          if (provider.protocol === "openfree") {
+            const available = await openfreeModels();
+            if (query.preview === true) return preview(available);
+            const selected = selectModels(available);
+            for (const model of selected)
+              saveSyncedModel({
+                provider_id: id,
+                model_id: model.id,
+                display_name: model.display_name,
+                is_manual: 0,
+                ...await resolveModelMetadata(provider.protocol, model.id, model),
+              });
+            return { success: true, models_found: selected.length, message: `Synced ${selected.length} OpenFREE models from ${provider.name}` };
           }
 
            if (provider.protocol === "freebuff") {
@@ -639,7 +665,9 @@ export const modelsPlugin = (app: Elysia) =>
                       credential.secret ?? undefined,
                     ),
                   )
-                : provider.protocol === "freebuff"
+              : provider.protocol === "openfree"
+                ? await openfreeTest(model.model_id)
+              : provider.protocol === "freebuff"
                    ? await freebuffTest(model.model_id, credential, provider.base_url)
                  : provider.protocol === "qwen"
                    ? await qwenTest(model.model_id, credential, provider.base_url)

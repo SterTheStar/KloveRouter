@@ -8,10 +8,17 @@ import {
   RiDeleteBinLine as DeleteLine,
   RiEditLine as EditLine,
   RiDownloadLine as DownloadLine,
+  RiMore2Line as MoreLine,
   RiLogoutBoxRLine as LogoutLine,
 } from "@remixicon/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import type { ChatSession, UserProfile } from "../types";
 import DisplayAvatar from "./DisplayAvatar";
 import ChatCommandPalette from "./ChatCommandPalette";
@@ -208,11 +215,39 @@ export default function ChatSidebar({
                             {generatingChats[chat.id] ? "Generating title" : chat.title}
                           </span>
                         </a>
-                        <div className="chat-sidebar-actions flex items-center gap-0.5">
-                          <Button size="icon-xs" variant="ghost" onClick={() => onExport(chat)} title="Export as Markdown"><DownloadLine className="size-3.5" /></Button>
-                          <Button size="icon-xs" variant="ghost" onClick={() => startRename(chat)} title="Rename"><EditLine className="size-3.5" /></Button>
-                          <Button size="icon-xs" variant="ghost" className="hover:text-destructive" onClick={() => { if (window.confirm(`Delete “${chat.title}”?`)) void onDelete(chat.id); }} title="Delete"><DeleteLine className="size-3.5" /></Button>
-                        </div>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger
+                            render={<Button
+                              size="icon-xs"
+                              variant="ghost"
+                              className="chat-sidebar-actions-trigger opacity-100 transition-opacity md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100"
+                              aria-label={`Actions for ${chat.title}`}
+                              title="Conversation actions"
+                            />}
+                          >
+                            <MoreLine className="size-4" />
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-48">
+                            <DropdownMenuItem className="whitespace-nowrap" onClick={() => onExport(chat)}>
+                              <DownloadLine />
+                              Export as Markdown
+                            </DropdownMenuItem>
+                            <DropdownMenuItem className="whitespace-nowrap" onClick={() => startRename(chat)}>
+                              <EditLine />
+                              Rename
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              variant="destructive"
+                              className="whitespace-nowrap"
+                              onClick={() => {
+                                if (window.confirm(`Delete “${chat.title}”?`)) void onDelete(chat.id);
+                              }}
+                            >
+                              <DeleteLine />
+                              Delete
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </div>
                     )}
                   </div>

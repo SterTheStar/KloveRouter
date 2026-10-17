@@ -200,14 +200,29 @@ export default function SyncModelsModal({
                       toggle(model.id);
                     }
                   }}
-                  className={`flex w-full items-center gap-3 border-b p-2 text-left last:border-b-0 ${disabled ? "cursor-not-allowed bg-muted/30 opacity-45" : "cursor-pointer hover:bg-muted/50 focus-visible:bg-muted/50 focus-visible:outline-none"}`}
+                  className={`flex w-full items-center gap-2 border-b px-2 py-1.5 text-left last:border-b-0 ${disabled ? "cursor-not-allowed bg-muted/30 opacity-45" : "cursor-pointer hover:bg-muted/50 focus-visible:bg-muted/50 focus-visible:outline-none"}`}
                 >
                   <span className={`flex size-4 shrink-0 items-center justify-center rounded-sm border transition-colors ${checked ? "border-primary bg-primary text-primary-foreground" : "border-input bg-background"} ${disabled ? "border-muted-foreground/30 bg-muted" : ""}`}>
                     {checked && <Check className="size-3" />}
                   </span>
-                  <span className="min-w-0 flex-1"><span className="block truncate">{model.display_name}</span><span className="block truncate font-mono text-xs text-muted-foreground">{model.id}</span><span className="my-1 flex flex-wrap gap-1">{modelCategories(model).map((item) => <Badge key={item} variant="outline" className="text-[10px]">{modelCategoryBadge(item)}</Badge>)}</span><span className="block truncate text-xs text-muted-foreground">{model.pricing ? priceLabel(model.pricing) : "No LiteLLM price found"}</span></span>
-                  {model.is_free && <Badge variant="secondary" className="text-green-700 dark:text-green-400">Free</Badge>}
-                  {model.is_existing && <Badge variant="outline">Existing</Badge>}
+                  <span className="flex min-w-0 flex-1 flex-col gap-0.5 sm:flex-row sm:items-center sm:gap-3">
+                    <span className="flex min-w-0 flex-1 items-baseline gap-2">
+                      <span className="shrink-0 truncate text-sm">{model.display_name}</span>
+                      <span className="hidden min-w-0 truncate font-mono text-[11px] text-muted-foreground sm:block">{model.id}</span>
+                    </span>
+                    <span className="flex min-w-0 items-center gap-1.5 sm:shrink-0">
+                      <span className="flex shrink-0 items-center gap-1">
+                        {modelCategories(model).map((item) => <Badge key={item} variant="outline" className="px-1.5 py-0 text-[10px]">{modelCategoryBadge(item)}</Badge>)}
+                      </span>
+                      <span className="min-w-0 truncate text-xs text-muted-foreground sm:max-w-40" title={model.pricing ? priceLabel(model.pricing) : "No LiteLLM catalog price found"}>
+                        {model.pricing ? priceLabel(model.pricing) : "No catalog price"}
+                      </span>
+                    </span>
+                  </span>
+                  <span className="flex shrink-0 items-center gap-1">
+                    {model.is_free && <Badge variant="secondary" className="px-1.5 py-0 text-[10px] text-green-700 dark:text-green-400">Free</Badge>}
+                    {model.is_existing && <Badge variant="outline" className="px-1.5 py-0 text-[10px]">Existing</Badge>}
+                  </span>
                 </div>
               );
             })}

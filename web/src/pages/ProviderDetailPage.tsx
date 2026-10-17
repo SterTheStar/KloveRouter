@@ -1115,7 +1115,11 @@ export default function ProviderDetailPage({
       {provider.protocol !== "codex" && provider.protocol !== "antigravity" && <Card id="provider-credentials">
         <CardHeader><CardTitle>Credentials</CardTitle><p className="text-sm text-muted-foreground">Manage encrypted credentials and access tokens.</p></CardHeader>
         <CardContent className="space-y-3">
-          {provider.protocol === "chatgpt" ? (
+          {provider.protocol === "openfree" ? (
+            <div className="rounded-md border bg-muted/30 p-3 text-sm text-muted-foreground">
+              OpenFREE uses the authenticated OpenCode CLI on the KloveRouter host. Keep the CLI logged in there, or set <code>OPENFREE_CLI_PATH</code> in the KloveRouter environment. There is no API key to store here.
+            </div>
+          ) : provider.protocol === "chatgpt" ? (
             <div className="space-y-3">
               <div className="flex items-center justify-between gap-3">
                 <div>
@@ -1277,6 +1281,7 @@ export default function ProviderDetailPage({
             <div className="space-y-3 p-4 md:hidden">
               {filteredList.map((model) => {
                 const fullId = modelPublicId({ ...model, provider_name: provider.name });
+                const canTest = modelCategories(model).includes("chat");
                 return <div key={model.id} className="min-w-0 rounded-lg border border-border/60 p-3">
                   <div className="flex min-w-0 items-start justify-between gap-3">
                     <div className="min-w-0"><p className="break-all font-mono text-xs">{fullId}</p><p className="mt-1 truncate text-sm font-medium">{model.display_name || "Unnamed model"}</p><ModelMetadataBadges model={model} /></div>
@@ -1286,7 +1291,7 @@ export default function ProviderDetailPage({
                     {provider.protocol === "qwen" && model.is_active === 0 && !model.is_manual ? <Badge variant="outline">Not supported</Badge> : <label className="flex items-center gap-2 text-xs text-muted-foreground"><Switch checked={model.is_active === 1} aria-label={`${modelDisplayId(model)} active`} onCheckedChange={async () => { const updated = await modelsApi.toggle(model.id); invalidateModels(providerId); setList((items) => items.map((item) => item.id === model.id ? { ...item, is_active: updated.is_active } : item)); }} />Active</label>}
                     <div className="flex gap-1">
                       <Button size="icon" variant="ghost" aria-label={`Copy ${modelDisplayId(model)}`} onClick={() => copy(fullId)}><Copy className="size-4" /></Button>
-                      <Button size="icon" variant="ghost" aria-label={`Test ${modelDisplayId(model)}`} onClick={() => testModel(model.id)} disabled={testingId === model.id}>{testingId === model.id ? <LoaderCircle className="size-4 animate-spin" /> : <PlayCircleLine className="size-4" />}</Button>
+                      {canTest && <Button size="icon" variant="ghost" aria-label={`Test ${modelDisplayId(model)}`} onClick={() => testModel(model.id)} disabled={testingId === model.id}>{testingId === model.id ? <LoaderCircle className="size-4 animate-spin" /> : <PlayCircleLine className="size-4" />}</Button>}
                       <Button size="icon" variant="ghost" aria-label={`Edit ${modelDisplayId(model)}`} onClick={() => setEditTarget(model)}><Pencil className="size-4" /></Button>
                       <Button size="icon" variant="ghost" className="text-destructive" aria-label={`Delete ${modelDisplayId(model)}`} onClick={() => setDeleteTarget(model)}><Trash2 className="size-4" /></Button>
                     </div>
@@ -1370,7 +1375,7 @@ export default function ProviderDetailPage({
                   </TableCell>
                   <TableCell>
                     <div className="flex justify-center gap-1">
-                      {testResult[model.id] === "success" ? (
+                      {modelCategories(model).includes("chat") && (testResult[model.id] === "success" ? (
                         <span className="flex size-7 items-center justify-center">
                           <Check className="block size-5 text-green-500" />
                         </span>
@@ -1399,7 +1404,7 @@ export default function ProviderDetailPage({
                           </TooltipTrigger>
                           <TooltipContent>Test</TooltipContent>
                         </Tooltip>
-                      )}
+                      ))}
                       <Tooltip>
                         <TooltipTrigger
                           render={

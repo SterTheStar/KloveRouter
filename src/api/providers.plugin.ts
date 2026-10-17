@@ -75,7 +75,7 @@ export const providersPlugin = (app: Elysia) =>
       {
         body: t.Object({
           base_url: t.String({ minLength: 1 }),
-           protocol: t.Optional(t.Union([t.Literal("openai"), t.Literal("openai-responses"), t.Literal("anthropic"), t.Literal("codex"), t.Literal("chatgpt"), t.Literal("antigravity"), t.Literal("freebuff"), t.Literal("qwen"), t.Literal("atomesus"), t.Literal("conol")])),
+           protocol: t.Optional(t.Union([t.Literal("openai"), t.Literal("openai-responses"), t.Literal("anthropic"), t.Literal("codex"), t.Literal("chatgpt"), t.Literal("antigravity"), t.Literal("freebuff"), t.Literal("qwen"), t.Literal("atomesus"), t.Literal("conol"), t.Literal("openfree")])),
           api_key: t.Optional(t.String()),
           auth_code: t.Optional(t.String()),
           secret: t.Optional(t.String()),
@@ -155,6 +155,7 @@ export const providersPlugin = (app: Elysia) =>
               t.Literal("qwen"),
               t.Literal("atomesus"),
               t.Literal("conol"),
+              t.Literal("openfree"),
             ]),
           ),
           credential_mode: t.Optional(
@@ -214,6 +215,7 @@ export const providersPlugin = (app: Elysia) =>
               t.Literal("qwen"),
               t.Literal("atomesus"),
               t.Literal("conol"),
+              t.Literal("openfree"),
             ]),
           ),
           credential_mode: t.Optional(
@@ -324,6 +326,7 @@ export const providersPlugin = (app: Elysia) =>
               t.Literal("qwen"),
               t.Literal("atomesus"),
               t.Literal("conol"),
+              t.Literal("openfree"),
             ]),
           ),
           secret: t.Optional(t.String()),
@@ -367,6 +370,7 @@ export const providersPlugin = (app: Elysia) =>
               t.Literal("qwen"),
               t.Literal("atomesus"),
               t.Literal("conol"),
+              t.Literal("openfree"),
             ]),
           ),
           secret: t.Optional(t.Union([t.String(), t.Null()])),

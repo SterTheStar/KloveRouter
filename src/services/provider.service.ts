@@ -236,6 +236,8 @@ export const providerService = {
                  ? "Atomesus token"
                : protocol === "conol"
                  ? "Conol cookie"
+               : protocol === "openfree"
+                 ? "OpenCode CLI"
                : "Default API key",
       protocol === "codex"
         ? "codex"
@@ -251,6 +253,8 @@ export const providerService = {
                  ? "atomesus"
                : protocol === "conol"
                  ? "conol"
+               : protocol === "openfree"
+                 ? "openfree"
                : "api_key",
       protocol === "antigravity" ? null : encryptedApiKey,
       input.account_id ?? null,
@@ -270,7 +274,7 @@ export const providerService = {
     const updates: string[] = [];
     const values: any[] = [];
     const protocol = input.protocol ?? existing.protocol;
-    if (input.api_key !== undefined && (protocol === "codex" || protocol === "antigravity")) {
+    if (input.api_key !== undefined && (protocol === "codex" || protocol === "antigravity" || protocol === "openfree")) {
       throw new Error(`Provider protocol '${protocol}' does not accept api_key credentials`);
     }
     if (input.protocol !== undefined || input.api_key !== undefined) {
