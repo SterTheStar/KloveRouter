@@ -70,6 +70,9 @@ export type OpenFreeCliStatus = {
   source: string | null;
   saved_path: string | null;
   warning: string | null;
+  managed_path: string;
+  managed_installed: boolean;
+  managed_version: string | null;
 };
 
 export const openfreeCli = {
@@ -78,6 +81,10 @@ export const openfreeCli = {
     request<OpenFreeCliStatus>("/api/settings/openfree-cli", {
       method: "PUT",
       body: JSON.stringify({ path }),
+    }),
+  install: () =>
+    request<OpenFreeCliStatus>("/api/settings/openfree-cli/install", {
+      method: "POST",
     }),
 };
 

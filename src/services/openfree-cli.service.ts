@@ -1,16 +1,45 @@
-import { accessSync, constants, readdirSync, statSync } from "node:fs";
+import { accessSync, constants, createReadStream, existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { chmod, lstat, mkdir, mkdtemp, rename, rm, writeFile } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
+import { createHash, randomUUID } from "node:crypto";
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
+import { config } from "../config";
 import { getDb } from "../db/connection";
 
 const SETTING_KEY = "openfree_cli_path";
+const OPENCODE_LATEST_API = "https://opencode.ai/update/api/latest/cli/npm";
+const NPM_REGISTRY = "https://registry.npmjs.org";
+const DOWNLOAD_TIMEOUT_MS = 5 * 60_000;
+const MAX_PACKAGE_BYTES = 500 * 1024 * 1024;
+const EXECUTABLE_NAME = process.platform === "win32" ? "opencode.exe" : "opencode";
+let installOperation: Promise<OpenFreeCliStatus> | null = null;
 
 export type OpenFreeCliStatus = {
   path: string | null;
   source: string | null;
   saved_path: string | null;
   warning: string | null;
+  managed_path: string;
+  managed_installed: boolean;
+  managed_version: string | null;
 };
+
+function managedDirectory(): string {
+  return resolve(config.dataDir, "openfree");
+}
+
+function managedBinaryPath(): string {
+  return join(managedDirectory(), EXECUTABLE_NAME);
+}
+
+function managedVersion(): string | null {
+  try {
+    return readFileSync(join(managedDirectory(), "version.txt"), "utf8").trim() || null;
+  } catch {
+    return null;
+  }
+}
 
 function isExecutableFile(path: string): boolean {
   try {
@@ -55,6 +84,11 @@ function findDesktopCli(): string | null {
 }
 
 function findInstalledCli(): { path: string; source: string } | null {
+  const managedPath = managedBinaryPath();
+  if (isExecutableFile(managedPath)) {
+    return { path: managedPath, source: "KloveRouter managed install" };
+  }
+
   for (const command of ["opencode-cli", "opencode"]) {
     const found = Bun.which(command);
     if (found && isExecutableFile(found)) return { path: resolve(found), source: "PATH" };
@@ -91,6 +125,8 @@ function findInstalledCli(): { path: string; source: string } | null {
 }
 
 export function getOpenfreeCliStatus(): OpenFreeCliStatus {
+  const managedPath = managedBinaryPath();
+  const managedInstalled = isExecutableFile(managedPath);
   const databasePath = savedPath();
   const environmentOverrides = [
     { path: process.env.OPENFREE_CLI_PATH?.trim(), source: "OPENFREE_CLI_PATH" },
@@ -105,17 +141,40 @@ export function getOpenfreeCliStatus(): OpenFreeCliStatus {
   for (const override of overrides) {
     const candidate = resolve(override.path);
     if (isExecutableFile(candidate)) {
-      return { path: candidate, source: override.source, saved_path: databasePath, warning };
+      return {
+        path: candidate,
+        source: override.source,
+        saved_path: databasePath,
+        warning,
+        managed_path: managedPath,
+        managed_installed: managedInstalled,
+        managed_version: managedInstalled ? managedVersion() : null,
+      };
     }
     warning = `Ignoring ${override.source}: the configured path is not an executable file.`;
   }
 
   const detected = findInstalledCli();
   if (detected) {
-    return { ...detected, saved_path: databasePath, warning };
+    return {
+      ...detected,
+      saved_path: databasePath,
+      warning,
+      managed_path: managedPath,
+      managed_installed: managedInstalled,
+      managed_version: managedInstalled ? managedVersion() : null,
+    };
   }
 
-  return { path: null, source: null, saved_path: databasePath, warning };
+  return {
+    path: null,
+    source: null,
+    saved_path: databasePath,
+    warning,
+    managed_path: managedPath,
+    managed_installed: managedInstalled,
+    managed_version: managedInstalled ? managedVersion() : null,
+  };
 }
 
 export function saveOpenfreeCliPath(value: string): OpenFreeCliStatus {
@@ -130,4 +189,157 @@ export function saveOpenfreeCliPath(value: string): OpenFreeCliStatus {
   if (!isExecutableFile(absolutePath)) throw new Error("That path is not an executable file on the KloveRouter host.");
   db.query("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)").run(SETTING_KEY, absolutePath);
   return getOpenfreeCliStatus();
+}
+
+function openCodeTarget(): string {
+  const platform = process.platform === "win32"
+    ? "windows"
+    : process.platform === "darwin"
+      ? "darwin"
+      : process.platform === "linux"
+        ? "linux"
+        : null;
+  if (!platform) throw new Error(`OpenCode CLI installation is not supported on ${process.platform}.`);
+
+  const arch = process.arch === "x64"
+    ? "x64"
+    : process.arch === "arm64"
+      ? "arm64"
+      : null;
+  if (!arch) throw new Error(`OpenCode CLI installation is not supported on ${process.arch}.`);
+
+  // The baseline build runs on all x64 CPUs; arm64 has no separate baseline variant.
+  let target = `${platform}-${arch}${arch === "x64" ? "-baseline" : ""}`;
+  if (platform === "linux") {
+    let isMusl = existsSync("/etc/alpine-release");
+    if (!isMusl && Bun.which("ldd")) {
+      try {
+        const result = Bun.spawnSync(["ldd", "--version"]);
+        const output = `${result.stdout.toString()}\n${result.stderr.toString()}`;
+        isMusl = /musl/i.test(output);
+      } catch {
+        // Use the standard glibc package when libc cannot be identified.
+      }
+    }
+    if (isMusl) target += "-musl";
+  }
+  return target;
+}
+
+async function responseJson(url: string, timeout: number): Promise<any> {
+  const response = await fetch(url, {
+    headers: { Accept: "application/json" },
+    signal: AbortSignal.timeout(timeout),
+  });
+  if (!response.ok) throw new Error(`OpenCode package metadata request failed (HTTP ${response.status}).`);
+  return response.json();
+}
+
+async function computeSha512(filePath: string): Promise<string> {
+  const hash = createHash("sha512");
+  for await (const chunk of createReadStream(filePath)) hash.update(chunk);
+  return `sha512-${hash.digest("base64")}`;
+}
+
+async function downloadAndInstall(): Promise<OpenFreeCliStatus> {
+  const latest = await responseJson(OPENCODE_LATEST_API, 15_000);
+  const version = typeof latest?.version === "string" ? latest.version : "";
+  const cliPackage = typeof latest?.metadata?.package === "string" ? latest.metadata.package : "";
+  if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(version)) {
+    throw new Error("OpenCode returned an invalid CLI version.");
+  }
+  if (!/^@[a-z0-9-]+\/cli$/.test(cliPackage)) {
+    throw new Error("OpenCode returned an unexpected CLI package name.");
+  }
+
+  const packageName = `${cliPackage.slice(0, -"/cli".length)}/cli-${openCodeTarget()}`;
+  const encodedPackageName = packageName.replace("/", "%2f");
+  const npmMetadata = await responseJson(
+    `${NPM_REGISTRY}/${encodedPackageName}/${encodeURIComponent(version)}`,
+    20_000,
+  );
+  if (npmMetadata?.name !== packageName || npmMetadata?.version !== version) {
+    throw new Error("The OpenCode CLI package metadata does not match the requested package version.");
+  }
+  const tarballUrl = typeof npmMetadata?.dist?.tarball === "string" ? npmMetadata.dist.tarball : "";
+  const integrity = typeof npmMetadata?.dist?.integrity === "string" ? npmMetadata.dist.integrity : "";
+  let parsedTarballUrl: URL;
+  try {
+    parsedTarballUrl = new URL(tarballUrl);
+  } catch {
+    throw new Error("OpenCode returned an invalid CLI package download URL.");
+  }
+  if (parsedTarballUrl.protocol !== "https:" || parsedTarballUrl.hostname !== "registry.npmjs.org") {
+    throw new Error("OpenCode returned an unexpected CLI package download URL.");
+  }
+  if (!/^sha512-[A-Za-z0-9+/]+={0,2}$/.test(integrity)) {
+    throw new Error("The OpenCode CLI package has no valid SHA-512 integrity value.");
+  }
+
+  const directory = managedDirectory();
+  await mkdir(directory, { recursive: true });
+  const staging = await mkdtemp(join(directory, `.install-${randomUUID()}-`));
+  const archivePath = join(staging, "opencode-cli.tgz");
+  const extractDirectory = join(staging, "extract");
+  try {
+    const response = await fetch(tarballUrl, { signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS) });
+    if (!response.ok) throw new Error(`OpenCode CLI download failed (HTTP ${response.status}).`);
+    const contentLength = Number(response.headers.get("content-length"));
+    if (Number.isFinite(contentLength) && contentLength > MAX_PACKAGE_BYTES) {
+      throw new Error("The OpenCode CLI package exceeds the 500 MB download limit.");
+    }
+    await Bun.write(archivePath, response);
+    const archiveSize = statSync(archivePath).size;
+    if (archiveSize > MAX_PACKAGE_BYTES) throw new Error("The OpenCode CLI package exceeds the 500 MB download limit.");
+    if (await computeSha512(archivePath) !== integrity) {
+      throw new Error("OpenCode CLI package integrity verification failed.");
+    }
+
+    const entries = execFileSync("tar", ["-tzf", archivePath], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+      timeout: 30_000,
+    }).split(/\r?\n/).filter(Boolean);
+    if (entries.some((entry) => {
+      const path = entry.replace(/\\/g, "/").replace(/\/+$/, "");
+      return path.startsWith("/") || (path !== "package" && !path.startsWith("package/")) || path.split("/").some((part) => part === ".." || part === ".");
+    })) {
+      throw new Error("The OpenCode CLI package contains an unsafe archive path.");
+    }
+    const packageBinary = `package/bin/${EXECUTABLE_NAME}`;
+    if (!entries.includes(packageBinary)) throw new Error("The OpenCode CLI package does not contain its executable.");
+
+    await mkdir(extractDirectory, { recursive: true });
+    execFileSync("tar", ["-xzf", archivePath, "-C", extractDirectory, packageBinary], {
+      stdio: "pipe",
+      timeout: 60_000,
+    });
+    const stagedBinary = join(extractDirectory, packageBinary);
+    if (!(await lstat(stagedBinary)).isFile()) throw new Error("The extracted OpenCode CLI is not a regular file.");
+    if (process.platform !== "win32") await chmod(stagedBinary, 0o755);
+
+    const versionCheck = Bun.spawnSync([stagedBinary, "--version"]);
+    const versionOutput = `${versionCheck.stdout.toString()}\n${versionCheck.stderr.toString()}`.trim();
+    if (versionCheck.exitCode !== 0 || !versionOutput) {
+      throw new Error("The downloaded OpenCode CLI failed its version check.");
+    }
+
+    const installedBinary = managedBinaryPath();
+    if (process.platform === "win32") await rm(installedBinary, { force: true });
+    await rename(stagedBinary, installedBinary);
+    await writeFile(join(directory, "version.txt"), version);
+    getDb().query("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)").run(SETTING_KEY, installedBinary);
+    return getOpenfreeCliStatus();
+  } finally {
+    await rm(staging, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
+export function installOpenfreeCli(): Promise<OpenFreeCliStatus> {
+  if (!installOperation) {
+    installOperation = downloadAndInstall().finally(() => {
+      installOperation = null;
+    });
+  }
+  return installOperation;
 }

@@ -61,6 +61,7 @@ export default function AddProviderModal({
   const [openfreeCliPath, setOpenfreeCliPath] = useState("");
   const [checkingOpenfreeCli, setCheckingOpenfreeCli] = useState(false);
   const [savingOpenfreeCliPath, setSavingOpenfreeCliPath] = useState(false);
+  const [installingOpenfreeCli, setInstallingOpenfreeCli] = useState(false);
   const [verifying, setVerifying] = useState(false);
   const [verificationWarning, setVerificationWarning] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -118,6 +119,7 @@ export default function AddProviderModal({
     setOpenfreeCliPath("");
     setCheckingOpenfreeCli(false);
     setSavingOpenfreeCliPath(false);
+    setInstallingOpenfreeCli(false);
     setError(null);
     setVerificationWarning(null);
     setStep("select");
@@ -283,6 +285,26 @@ export default function AddProviderModal({
       notifyError("Could not save OpenCode CLI path", message);
     } finally {
       setSavingOpenfreeCliPath(false);
+    }
+  };
+
+  const installManagedOpenfreeCli = async () => {
+    setInstallingOpenfreeCli(true);
+    setError(null);
+    try {
+      const status = await openfreeCli.install();
+      setOpenfreeCliStatus(status);
+      setOpenfreeCliPath(status.saved_path ?? "");
+      success(
+        "OpenCode CLI installed",
+        `Installed in KloveRouter's managed folder: ${status.managed_path}`,
+      );
+    } catch (cause: unknown) {
+      const message = cause instanceof Error ? cause.message : String(cause);
+      setError(message);
+      notifyError("Could not install OpenCode CLI", message);
+    } finally {
+      setInstallingOpenfreeCli(false);
     }
   };
 
@@ -604,6 +626,35 @@ export default function AddProviderModal({
                     >
                       Use automatic detection
                     </Button>
+                  </div>
+                  <div className="space-y-2 border-t pt-3">
+                    <div className="space-y-1">
+                      <p className="text-sm font-medium">KloveRouter managed installation</p>
+                      <code className="block break-all text-xs text-muted-foreground">
+                        {openfreeCliStatus?.managed_path ?? "Resolving the app data folder..."}
+                      </code>
+                      {openfreeCliStatus?.managed_installed && openfreeCliStatus.managed_version && (
+                        <p className="text-xs text-muted-foreground">
+                          Managed CLI version {openfreeCliStatus.managed_version} is installed.
+                        </p>
+                      )}
+                    </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => void installManagedOpenfreeCli()}
+                      disabled={checkingOpenfreeCli || savingOpenfreeCliPath || installingOpenfreeCli}
+                    >
+                      {installingOpenfreeCli
+                        ? "Installing OpenCode CLI..."
+                        : openfreeCliStatus?.managed_installed
+                          ? "Update managed CLI"
+                          : "Install managed CLI"}
+                    </Button>
+                    <p className="text-xs text-muted-foreground">
+                      Downloads the official platform package, verifies its integrity, and saves the CLI in this folder. You still need to sign in to OpenCode.
+                    </p>
                   </div>
                 </div>
               )}

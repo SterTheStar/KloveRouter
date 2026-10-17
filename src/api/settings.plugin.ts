@@ -6,6 +6,7 @@ import { modelService, providerModelPublicId } from "../services/model.service";
 import { modelPoolService } from "../services/model-pool.service";
 import {
   getOpenfreeCliStatus,
+  installOpenfreeCli,
   saveOpenfreeCliPath,
 } from "../services/openfree-cli.service";
 
@@ -40,6 +41,14 @@ export const settingsPlugin = (app: Elysia) =>
       },
       { body: t.Object({ path: t.String() }) },
     )
+    .post("/api/settings/openfree-cli/install", async ({ set }) => {
+      try {
+        return await installOpenfreeCli();
+      } catch (error) {
+        set.status = 500;
+        return { error: error instanceof Error ? error.message : String(error) };
+      }
+    })
     .get("/api/settings/chat", () => {
       const rows = getDb()
         .query("SELECT key, value FROM settings WHERE key IN (?, ?)")

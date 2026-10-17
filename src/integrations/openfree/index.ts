@@ -20,6 +20,7 @@ type OpenFreeModel = {
   owned_by: string;
   display_name: string;
   is_free: true;
+  context_window: 200_000;
   capabilities: {
     tools: boolean;
     vision: boolean;
@@ -98,6 +99,7 @@ export async function openfreeModels(): Promise<OpenFreeModel[]> {
           owned_by: typeof row.owned_by === "string" ? row.owned_by : "opencode",
           display_name: typeof row.name === "string" && row.name.trim() ? row.name.trim() : id,
           is_free: true as const,
+          context_window: 200_000 as const,
           capabilities: {
             tools: true,
             vision: false,
