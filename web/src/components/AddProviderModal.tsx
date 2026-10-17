@@ -338,12 +338,17 @@ export default function AddProviderModal({
       : selectedType?.protocol === "freebuff" || selectedType?.protocol === "qwen" || selectedType?.protocol === "atomesus" || selectedType?.protocol === "conol"
         ? Boolean(authCode.trim())
         : Boolean(apiKey.trim());
-    const shouldVerify = !skipVerification && hasCredentialToVerify;
+    const shouldVerify = !skipVerification && hasCredentialToVerify && selectedType?.protocol !== "openfree";
     setLoading(true);
     setVerifying(shouldVerify);
     setError(null);
     setVerificationWarning(null);
     try {
+      let openfreeLoginWarning: string | null = null;
+      if (selectedType?.protocol === "openfree" && apiKey.trim()) {
+        const login = await openfreeCli.login(apiKey.trim());
+        openfreeLoginWarning = login.warning;
+      }
       if (shouldVerify && selectedType?.protocol !== "chatgpt") await providers.validateCredential({
         base_url: baseUrl,
         ...(selectedType?.protocol === "freebuff" || selectedType?.protocol === "qwen" || selectedType?.protocol === "atomesus"
@@ -357,20 +362,24 @@ export default function AddProviderModal({
       const created = await providers.create({
         name,
         base_url: baseUrl,
-        ...(selectedType?.protocol === "chatgpt" || selectedType?.protocol === "openfree"
+        ...(selectedType?.protocol === "chatgpt"
           ? {}
-          : selectedType?.protocol === "freebuff" || selectedType?.protocol === "qwen" || selectedType?.protocol === "atomesus"
-            ? { auth_code: authCode }
-            : selectedType?.protocol === "conol"
-              ? { secret: authCode, account_id: conolParsedAccountId }
-              : { api_key: apiKey }),
+          : selectedType?.protocol === "openfree"
+            ? (apiKey.trim() ? { api_key: apiKey.trim() } : {})
+            : selectedType?.protocol === "freebuff" || selectedType?.protocol === "qwen" || selectedType?.protocol === "atomesus"
+              ? { auth_code: authCode }
+              : selectedType?.protocol === "conol"
+                ? { secret: authCode, account_id: conolParsedAccountId }
+                : { api_key: apiKey }),
         protocol: selectedType?.protocol,
         avatar: await resolveAvatarPayload(),
       });
       if (selectedType?.protocol === "chatgpt" && cookieFile)
         await providers.uploadCookies(created.id, cookieFile);
       invalidateProviders();
-      success("Provider added", `${name} is ready to use.`);
+      success("Provider added", openfreeLoginWarning
+        ? `The API key is saved. ${openfreeLoginWarning}`
+        : `${name} is ready to use.`);
       onSuccess();
       close();
     } catch (e: any) {
@@ -592,7 +601,7 @@ export default function AddProviderModal({
                     </AlertDescription>
                   </Alert>
                   <p className="text-xs text-muted-foreground">
-                    OpenFREE runs this CLI on the KloveRouter host. The CLI must be signed in to OpenCode. No API key or base URL is needed.
+                    OpenFREE runs this CLI on the KloveRouter host. Sign in with a Zen API key below, or leave it blank if this CLI already has an OpenCode account.
                   </p>
                   <div className="space-y-2">
                     <Label htmlFor="openfree-cli-path">OpenCode CLI executable path</Label>
@@ -653,7 +662,21 @@ export default function AddProviderModal({
                           : "Install managed CLI"}
                     </Button>
                     <p className="text-xs text-muted-foreground">
-                      Downloads the official platform package, verifies its integrity, and saves the CLI in this folder. You still need to sign in to OpenCode.
+                      Downloads the official platform package, verifies its integrity, and saves the CLI in this folder.
+                    </p>
+                  </div>
+                  <div className="space-y-2 border-t pt-3">
+                    <Label htmlFor="openfree-zen-api-key">OpenCode Zen API key (optional)</Label>
+                    <Input
+                      id="openfree-zen-api-key"
+                      type="password"
+                      autoComplete="new-password"
+                      value={apiKey}
+                      onChange={(event) => setApiKey(event.target.value)}
+                      placeholder="Paste your OpenCode Zen API key"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Saving this provider signs the CLI in through its API-key prompt and stores the key encrypted in KloveRouter. Leave it empty if the CLI already has an account.
                     </p>
                   </div>
                 </div>

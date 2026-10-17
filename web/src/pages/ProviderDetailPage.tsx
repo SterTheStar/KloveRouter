@@ -70,6 +70,7 @@ import SyncModelsModal, { type SyncModelItem } from "../components/SyncModelsMod
 import {
   antigravity,
   codex,
+  openfreeCli,
   providers,
   models as modelsApi,
 } from "../api/client";
@@ -243,6 +244,8 @@ export default function ProviderDetailPage({
   const [credentialDraftLabels, setCredentialDraftLabels] = useState<Record<string, string>>({});
   const [credentialDraftSecrets, setCredentialDraftSecrets] = useState<Record<string, string>>({});
   const [credentialSavingId, setCredentialSavingId] = useState<string | null>(null);
+  const [openfreeApiKey, setOpenfreeApiKey] = useState("");
+  const [savingOpenfreeApiKey, setSavingOpenfreeApiKey] = useState(false);
   const [logoutOpen, setLogoutOpen] = useState(false);
   const [logoutCredentialId, setLogoutCredentialId] = useState<string | null>(
     null,
@@ -264,6 +267,7 @@ export default function ProviderDetailPage({
         if (!credential.is_active) return false;
         if (credential.kind === "api_key" || credential.kind === "chatgpt" || credential.kind === "freebuff" || credential.kind === "qwen" || credential.kind === "atomesus" || credential.kind === "conol")
           return Boolean(credential.masked_secret);
+        if (credential.kind === "openfree") return true;
         return Boolean(
           credential.account_id || credential.email || credential.project_id,
         );
@@ -649,6 +653,34 @@ export default function ProviderDetailPage({
       notifyError("Could not add API key", e.message);
     } finally {
       setAddingKey(false);
+    }
+  };
+
+  const saveOpenfreeApiKey = async () => {
+    const secret = openfreeApiKey.trim();
+    if (!secret) {
+      setError("Enter your OpenCode Zen API key.");
+      return;
+    }
+    setSavingOpenfreeApiKey(true);
+    setError(null);
+    try {
+      const login = await openfreeCli.login(secret);
+      const updated = await providers.update(providerId, { api_key: secret });
+      setProvider(updated);
+      setOpenfreeApiKey("");
+      invalidateProviders(providerId);
+      if (login.logged_in) {
+        setSuccess("OpenCode Zen login complete. The API key is stored encrypted for OpenFREE requests.");
+      } else {
+        setSuccess(`API key stored encrypted for OpenFREE requests. ${login.warning ?? "The OpenCode CLI will receive it with each request."}`);
+      }
+      await load();
+    } catch (e: any) {
+      setError(e.message);
+      notifyError("Could not log in to OpenCode Zen", e.message);
+    } finally {
+      setSavingOpenfreeApiKey(false);
     }
   };
 
@@ -1116,8 +1148,33 @@ export default function ProviderDetailPage({
         <CardHeader><CardTitle>Credentials</CardTitle><p className="text-sm text-muted-foreground">Manage encrypted credentials and access tokens.</p></CardHeader>
         <CardContent className="space-y-3">
           {provider.protocol === "openfree" ? (
-            <div className="rounded-md border bg-muted/30 p-3 text-sm text-muted-foreground">
-              OpenFREE uses the authenticated OpenCode CLI on the KloveRouter host. Keep the CLI logged in there, or set <code>OPENFREE_CLI_PATH</code> in the KloveRouter environment. There is no API key to store here.
+            <div className="space-y-3 rounded-md border bg-muted/30 p-3">
+              <div>
+                <Label htmlFor="openfree-detail-api-key">OpenCode Zen API key</Label>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {credentials.find((credential) => credential.kind === "openfree")?.masked_secret
+                    ? `Saved encrypted (${credentials.find((credential) => credential.kind === "openfree")?.masked_secret}). Enter a new key to replace it.`
+                    : "No key is saved. You can use an existing OpenCode CLI login or add a Zen API key."}
+                </p>
+              </div>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <Input
+                  id="openfree-detail-api-key"
+                  type="password"
+                  autoComplete="new-password"
+                  value={openfreeApiKey}
+                  onChange={(event) => setOpenfreeApiKey(event.target.value)}
+                  placeholder="Paste your OpenCode Zen API key"
+                  className="sm:max-w-lg"
+                />
+                <Button onClick={saveOpenfreeApiKey} disabled={savingOpenfreeApiKey || !openfreeApiKey.trim()}>
+                  {savingOpenfreeApiKey ? <LoaderCircle className="size-4 animate-spin" /> : <LoginIcon className="size-4" />}
+                  {savingOpenfreeApiKey ? "Signing in..." : "Save key and sign in"}
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                KloveRouter stores this key encrypted and passes it to the OpenCode CLI for requests. If <code>expect</code> is installed on the KloveRouter host, the button also runs <code>opencode auth login opencode --method key</code> and saves the login in an app-managed OpenCode profile.
+              </p>
             </div>
           ) : provider.protocol === "chatgpt" ? (
             <div className="space-y-3">

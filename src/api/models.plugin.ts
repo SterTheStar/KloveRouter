@@ -102,13 +102,13 @@ async function freebuffTest(
   return response.json();
 }
 
-async function openfreeTest(model: string) {
+async function openfreeTest(model: string, credential: { id: string; secret?: string | null }) {
   const response = await openfreeResponses({
     model,
     messages: [{ role: "user", content: "Say 'ok' and nothing else." }],
     max_tokens: 10,
     stream: false,
-  }, model);
+  }, model, undefined, credential);
   return response.json();
 }
 
@@ -667,7 +667,7 @@ export const modelsPlugin = (app: Elysia) =>
                     ),
                   )
               : provider.protocol === "openfree"
-                ? await openfreeTest(model.model_id)
+              ? await openfreeTest(model.model_id, credential)
               : provider.protocol === "freebuff"
                    ? await freebuffTest(model.model_id, credential, provider.base_url)
                  : provider.protocol === "qwen"

@@ -237,7 +237,7 @@ export const providerService = {
                : protocol === "conol"
                  ? "Conol cookie"
                : protocol === "openfree"
-                 ? "OpenCode CLI"
+                 ? "OpenCode Zen account"
                : "Default API key",
       protocol === "codex"
         ? "codex"
@@ -274,7 +274,7 @@ export const providerService = {
     const updates: string[] = [];
     const values: any[] = [];
     const protocol = input.protocol ?? existing.protocol;
-    if (input.api_key !== undefined && (protocol === "codex" || protocol === "antigravity" || protocol === "openfree")) {
+    if (input.api_key !== undefined && (protocol === "codex" || protocol === "antigravity")) {
       throw new Error(`Provider protocol '${protocol}' does not accept api_key credentials`);
     }
     if (input.protocol !== undefined || input.api_key !== undefined) {
@@ -299,7 +299,7 @@ export const providerService = {
       updates.push("api_key = ?");
       values.push(encryptedApiKey);
       db.query(
-        "UPDATE provider_credentials SET secret = ?, updated_at = datetime('now') WHERE provider_id = ? AND id = COALESCE((SELECT fixed_credential_id FROM providers WHERE id = ?), id) AND kind IN ('api_key', 'codex', 'chatgpt', 'freebuff', 'qwen', 'atomesus')",
+        "UPDATE provider_credentials SET secret = ?, updated_at = datetime('now') WHERE provider_id = ? AND id = COALESCE((SELECT fixed_credential_id FROM providers WHERE id = ?), id) AND kind IN ('api_key', 'codex', 'chatgpt', 'freebuff', 'qwen', 'atomesus', 'openfree')",
       ).run(encryptedApiKey, id, id);
     }
     if (input.avatar !== undefined) {

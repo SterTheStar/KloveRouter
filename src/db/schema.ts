@@ -444,6 +444,19 @@ export function initSchema(db: Database): void {
     })();
   }
 
+  const openfreeSystemOneMigration = db.query("SELECT value FROM settings WHERE key = ?")
+    .get("migration_openfree_disable_jev_systemone_chat_model") as { value: string } | undefined;
+  if (!openfreeSystemOneMigration) {
+    db.transaction(() => {
+      db.query(`UPDATE models
+        SET is_active = 0, updated_at = datetime('now')
+        WHERE LOWER(model_id) = 'jev-1.13-free'
+          AND provider_id IN (SELECT id FROM providers WHERE protocol = 'openfree')`).run();
+      db.query("INSERT INTO settings (key, value) VALUES (?, ?)")
+        .run("migration_openfree_disable_jev_systemone_chat_model", "true");
+    })();
+  }
+
   const capabilityCols = db.query("PRAGMA table_info(model_capabilities)").all() as { name: string }[];
   for (const [name, type] of [["audio_input", "INTEGER"], ["audio_output", "INTEGER"], ["video", "INTEGER"], ["image_generation", "INTEGER"], ["text_to_speech", "INTEGER"], ["video_generation", "INTEGER"]] as const) {
     if (!capabilityCols.some((column) => column.name === name))
