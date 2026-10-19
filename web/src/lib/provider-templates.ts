@@ -325,7 +325,7 @@ export const PROVIDER_TEMPLATES: readonly ProviderTemplate[] = [
     name: "Google Antigravity",
     description: providerDescriptions.antigravity,
     logo: antigravityLogo,
-    placeholder: "https://cloudcode-pa.googleapis.com",
+    placeholder: "https://daily-cloudcode-pa.googleapis.com",
     preset: false,
   },
   {

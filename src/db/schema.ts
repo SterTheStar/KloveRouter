@@ -457,6 +457,19 @@ export function initSchema(db: Database): void {
     })();
   }
 
+  const antigravityEndpointMigration = db.query("SELECT value FROM settings WHERE key = ?")
+    .get("migration_antigravity_daily_endpoint") as { value: string } | undefined;
+  if (!antigravityEndpointMigration) {
+    db.transaction(() => {
+      db.query(`UPDATE providers
+        SET base_url = 'https://daily-cloudcode-pa.googleapis.com'
+        WHERE protocol = 'antigravity'
+          AND base_url = 'https://cloudcode-pa.googleapis.com'`).run();
+      db.query("INSERT INTO settings (key, value) VALUES (?, ?)")
+        .run("migration_antigravity_daily_endpoint", "true");
+    })();
+  }
+
   const capabilityCols = db.query("PRAGMA table_info(model_capabilities)").all() as { name: string }[];
   for (const [name, type] of [["audio_input", "INTEGER"], ["audio_output", "INTEGER"], ["video", "INTEGER"], ["image_generation", "INTEGER"], ["text_to_speech", "INTEGER"], ["video_generation", "INTEGER"]] as const) {
     if (!capabilityCols.some((column) => column.name === name))

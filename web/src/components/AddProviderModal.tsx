@@ -410,7 +410,7 @@ export default function AddProviderModal({
     try {
       const provider = await providers.create({
         name: name.trim() || "antigravity",
-        base_url: baseUrl || "https://cloudcode-pa.googleapis.com",
+        base_url: baseUrl || "https://daily-cloudcode-pa.googleapis.com",
         protocol: "antigravity",
         avatar: await resolveAvatarPayload(),
       });
