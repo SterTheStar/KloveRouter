@@ -157,6 +157,7 @@ export default function EditModelModal({
       setLoading(false);
     }
   };
+  if (!model) return null;
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="overflow-visible sm:max-w-3xl">
@@ -219,7 +220,7 @@ export default function EditModelModal({
             <ModelMetadataEditor value={metadata} onChange={setMetadata} />
           )}
           {activeTab === "generation" && (
-            <MediaSettingsEditor value={metadata} onChange={setMetadata} />
+            <MediaSettingsEditor value={metadata} onChange={setMetadata} modelIdentity={`${modelId} ${displayName}`} />
           )}
           {activeTab === "output-fixes" && (
             <ThinkTagModeEditor

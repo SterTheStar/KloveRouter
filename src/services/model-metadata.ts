@@ -74,6 +74,7 @@ export function parseRawModelMetadata(raw: any): ModelMetadataInput {
     .filter((value): value is string => typeof value === "string")
     .join(" ");
   const identitySuggestsImageGeneration = /(?:\bimage(?:[-_ ]?(?:gen|generation|create))?\b|dall[-_ ]?e|gpt[-_ ]?image|\bimagen\b|\bflux\b|stable[-_ ]?diffusion|ideogram|recraft)/i.test(identity);
+  const identitySuggestsTextToSpeech = /(?:text[-_ ]?to[-_ ]?speech|\btts\b|speech[-_ ]?(?:generation|synthesis)|voice[-_ ]?(?:gen|generation)|voxtral(?:[-_ ]?.*)?tts)/i.test(identity);
   const identitySuggestsVideoGeneration = /(?:\bvideo(?:[-_ ]?(?:gen|generation|create))?\b|\bsora\b|\bveo\b|runway|kling|seedance|hailuo|wan[-_ ]?video)/i.test(identity);
   const explicit = raw?.capabilities && typeof raw.capabilities === "object"
     ? raw.capabilities
@@ -114,7 +115,7 @@ export function parseRawModelMetadata(raw: any): ModelMetadataInput {
       audio_output: capability("audio_output", boolean(raw?.supportsAudioOutput) ?? (outputModalities.length ? outputModalities.some((item) => item.includes("audio") || item.includes("speech")) : undefined)),
       video: capability("video", boolean(raw?.supportsVideo) ?? (inputModalities.length ? inputModalities.some((item) => item.includes("video")) : undefined)),
       image_generation: capability("image_generation", boolean(raw?.supportsImageGeneration) ?? (outputModalities.length ? outputModalities.some((item) => item.includes("image")) : identitySuggestsImageGeneration ? true : undefined)),
-      text_to_speech: capability("text_to_speech", boolean(raw?.supportsTextToSpeech) ?? (outputModalities.length ? outputModalities.some((item) => item.includes("audio") || item.includes("speech")) : undefined)),
+      text_to_speech: capability("text_to_speech", boolean(raw?.supportsTextToSpeech) ?? (outputModalities.length ? outputModalities.some((item) => item.includes("audio") || item.includes("speech")) : undefined) ?? (identitySuggestsTextToSpeech ? true : undefined)),
       video_generation: capability("video_generation", boolean(raw?.supportsVideoGeneration) ?? (outputModalities.length ? outputModalities.some((item) => item.includes("video")) : identitySuggestsVideoGeneration ? true : undefined)),
       attachments: capability("attachments", boolean(raw?.supportsAttachments) ?? boolean(raw?.attachment) ?? (supportedMimeTypes.length ? supportedMimeTypes.some((item: string) => !item.startsWith("image/") && !item.startsWith("audio/") && !item.startsWith("video/") && item !== "text/plain") : (inputModalities.length ? inputModalities.some((item) => item.includes("file")) : undefined))),
       streaming: capability("streaming", boolean(raw?.supportsStreaming) ?? boolean(raw?.streaming) ?? boolean(raw?.supports_streaming)),

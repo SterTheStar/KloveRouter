@@ -19,7 +19,7 @@ export function modelCategories(model: CategorizedModel): ModelCategory[] {
   const identity = `${model.model_id ?? model.id ?? ""} ${model.display_name ?? ""}`.toLowerCase();
   const capabilities = model.capabilities ?? {};
   const image = capabilities.image_generation === true || (capabilities.image_generation !== false && /(?:\bimage(?:[-_ ]?(?:gen|generation|create))?\b|dall[-_ ]?e|gpt[-_ ]?image|\bimagen\b|\bflux\b|stable[-_ ]?diffusion|ideogram|recraft)/i.test(identity));
-  const tts = capabilities.text_to_speech === true || (capabilities.text_to_speech !== false && /(?:text[-_ ]?to[-_ ]?speech|\btts\b|speech[-_ ]?(?:generation|synthesis)|voice[-_ ]?(?:gen|generation)|voxtral[-_ ]?.*tts)/i.test(identity));
+  const tts = capabilities.text_to_speech === true || (capabilities.text_to_speech !== false && /(?:text[-_ ]?to[-_ ]?speech|\btts\b|speech[-_ ]?(?:generation|synthesis)|voice[-_ ]?(?:gen|generation)|voxtral(?:[-_ ]?.*)?tts)/i.test(identity));
   const video = capabilities.video_generation === true || (capabilities.video_generation !== false && /(?:\bvideo(?:[-_ ]?(?:gen|generation|create))?\b|\bsora\b|\bveo\b|runway|kling|seedance|hailuo|wan[-_ ]?video)/i.test(identity));
   const result: ModelCategory[] = [];
   if (!image && !tts && !video) result.push("chat");

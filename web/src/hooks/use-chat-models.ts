@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { models } from "../api/client";
 import type { ModelWithProvider } from "../types";
 import { modelApiId } from "../lib/chat";
+import { modelCategories } from "../lib/model-modality";
 import { queryCache, queryKeys } from "../lib/query-cache";
 
 /**
@@ -20,12 +21,13 @@ export function useChatModels() {
       .getOrFetch(queryKeys.models, 30_000, models.listAll)
       .then((list) => {
         if (cancelled) return;
+        const chatModels = list.filter((model) => modelCategories(model).includes("chat"));
         validModelIdsRef.current = new Set(
-          list.map((model) => model.model_pool
+          chatModels.map((model) => model.model_pool
             ? `pool/${model.pretty_id || model.model_id}`
             : modelApiId(model.provider_name, model.model_id, model.pretty_id)),
         );
-        setModelList(list);
+        setModelList(chatModels);
         setModelsError(null);
       })
       .catch((error: Error) => {

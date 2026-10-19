@@ -55,6 +55,8 @@ export function extractSseData(event: string): string {
 export interface ChatStreamDelta {
   content?: string;
   reasoning_content?: string;
+  audio?: unknown;
+  audio_transcript?: unknown;
 }
 
 export interface ChatStreamChunk {
