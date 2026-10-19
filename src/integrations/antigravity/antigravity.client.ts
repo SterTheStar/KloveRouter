@@ -12,7 +12,7 @@ import {
 import { logger } from "../../logger";
 
 const ENDPOINT =
-  "https://cloudcode-pa.googleapis.com/v1internal:streamGenerateContent?alt=sse";
+  "https://daily-cloudcode-pa.googleapis.com/v1internal:streamGenerateContent?alt=sse";
 export type AntigravityQuota = {
   group_name: string;
   limit_name: string;
@@ -95,8 +95,8 @@ export async function antigravityModels(credential: any) {
 
   const fingerprint = antigravityAuthService.fingerprint(account);
   const endpoints = [
-    "https://cloudcode-pa.googleapis.com/v1internal:fetchAvailableModels",
     "https://daily-cloudcode-pa.googleapis.com/v1internal:fetchAvailableModels",
+    "https://cloudcode-pa.googleapis.com/v1internal:fetchAvailableModels",
   ];
   let lastError = "";
   for (const endpoint of endpoints) {
@@ -166,7 +166,7 @@ export async function antigravityUsage(
     throw new Error("Antigravity account is not ready");
   const fingerprint = antigravityAuthService.fingerprint(account);
   const response = await fetch(
-    "https://cloudcode-pa.googleapis.com/v1internal:fetchAvailableModels",
+    "https://daily-cloudcode-pa.googleapis.com/v1internal:fetchAvailableModels",
     {
       method: "POST",
       headers: {
