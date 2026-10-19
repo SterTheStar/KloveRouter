@@ -155,7 +155,7 @@ function handleChunk(raw: string, handlers: ChatStreamHandlers): void {
   }
   const delta = chunk.choices?.[0]?.delta;
   if (typeof delta?.content === "string") handlers.onContent(delta.content);
-  if (delta?.audio !== undefined || delta?.audio_transcript !== undefined)
+  if (delta?.audio !== undefined || typeof delta?.audio_transcript === "string")
     handlers.onContent({ __audio: delta.audio, transcript: delta.audio_transcript });
   if (typeof delta?.reasoning_content === "string")
     handlers.onReasoning(delta.reasoning_content);

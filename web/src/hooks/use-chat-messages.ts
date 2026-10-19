@@ -179,16 +179,19 @@ export function useChatMessages({
     const pending = [...(messagesByChat[id] ?? [])].reverse().find(
       (message) => message.role === "assistant" && !message.stats && !message.error,
     );
-    setStreamingByChat((previous) => ({ ...previous, [id]: false }));
     if (pending?.role === "assistant") {
       void chatsApi.stopGeneration(id, pending.id).then(() => {
         controllersRef.current.get(id)?.abort();
+        setStreamingByChat((previous) => ({ ...previous, [id]: false }));
       }).catch((error: Error) => {
+        setStreamingByChat((previous) => ({ ...previous, [id]: true }));
         updateMessage(id, pending.id, (message) => ({
           ...message,
           error: `${message.error ? `${message.error}\n` : ""}Could not stop generation: ${error.message}`,
         }));
       });
+    } else {
+      setStreamingByChat((previous) => ({ ...previous, [id]: false }));
     }
   }, [chatId, messagesByChat, updateMessage]);
 
@@ -222,6 +225,18 @@ export function useChatMessages({
         })),
         onUsage: () => undefined,
         onStats: (stats) => {
+          setUsageByChat((previous) => {
+            const current = previous[targetChatId] ?? { prompt_tokens: 0, completion_tokens: 0, cache_read_tokens: 0, cache_write_tokens: 0 };
+            return {
+              ...previous,
+              [targetChatId]: {
+                prompt_tokens: stats.prompt_tokens,
+                completion_tokens: stats.completion_tokens,
+                cache_read_tokens: stats.cache_read_tokens ?? current.cache_read_tokens,
+                cache_write_tokens: stats.cache_write_tokens ?? current.cache_write_tokens,
+              },
+            };
+          });
           updateMessage(targetChatId, assistantMessageId, (message) => ({ ...message, stats }));
           void chatsApi.get(targetChatId).then((result) => {
             setMessagesByChat((previous) => ({ ...previous, [targetChatId]: result.messages }));
@@ -261,6 +276,7 @@ export function useChatMessages({
       usageFallback,
       onTitle,
     }: StreamReplyOptions): Promise<void> => {
+      if (controllersRef.current.has(targetChatId)) return;
       const controller = new AbortController();
       controllersRef.current.set(targetChatId, controller);
       streamingChatsRef.current.add(targetChatId);

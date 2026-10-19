@@ -406,12 +406,17 @@ export default function ChatPage({
     };
     appendMessages(chatId, [assistantMessage]);
     onChatActivity(chatId);
-    await runChat({
-      chatId,
-      history: remaining.map((message) => ({ role: message.role, content: message.content })),
-      assistantMessageId: assistantMessage.id,
-      regenerate: true,
-    });
+    try {
+      await runChat({
+        chatId,
+        history: remaining.map((message) => ({ role: message.role, content: message.content })),
+        assistantMessageId: assistantMessage.id,
+        regenerate: true,
+      });
+    } catch (error: any) {
+      setActionError(error?.message ?? "Could not regenerate the response");
+      void chatsApi.get(chatId).then((result) => setMessageList(chatId, result.messages)).catch(() => undefined);
+    }
   };
 
   const editMessage = async (messageId: string, newText: string) => {
@@ -451,12 +456,17 @@ export default function ChatPage({
     };
     appendMessages(chatId, [assistantMessage]);
     onChatActivity(chatId);
-    await runChat({
-      chatId,
-      history: remaining.map((message) => ({ role: message.role, content: message.content })),
-      assistantMessageId: assistantMessage.id,
-      regenerate: true,
-    });
+    try {
+      await runChat({
+        chatId,
+        history: remaining.map((message) => ({ role: message.role, content: message.content })),
+        assistantMessageId: assistantMessage.id,
+        regenerate: true,
+      });
+    } catch (error: any) {
+      setActionError(error?.message ?? "Could not resend the message");
+      void chatsApi.get(chatId).then((result) => setMessageList(chatId, result.messages)).catch(() => undefined);
+    }
   };
 
   const deleteMessage = async (messageId: string) => {
@@ -477,6 +487,11 @@ export default function ChatPage({
       void send();
     }
   };
+
+  useEffect(() => {
+    clientStartedMessagesRef.current.clear();
+    resumedMessagesRef.current.clear();
+  }, [chatId]);
 
   useEffect(() => {
     if (!chatId || !messages.length) return;
