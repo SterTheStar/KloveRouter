@@ -184,6 +184,17 @@ function isQuotaError(error: unknown) {
   );
 }
 
+function isAntigravityQuotaError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  return /QUOTA_EXHAUSTED|quota exceeded|per-model quota|per model quota/i.test(message);
+}
+
+function isAntigravityCapacityError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  if (isAntigravityQuotaError(error)) return false;
+  return /RESOURCE_EXHAUSTED|MODEL_CAPACITY_EXHAUSTED|model capacity/i.test(message);
+}
+
 const sensitiveErrorKey = /token|secret|password|authorization|api.?key|cookie/i;
 
 function safeErrorDetail(value: unknown, depth = 0): unknown {
@@ -1563,8 +1574,18 @@ export const proxyPlugin = (app: Elysia) =>
               credentialService.markError(credential.id, error.message);
               failures.push(error);
               requestLogService.captureError(requestLogId, error);
-              if (isAbortError(error) || !isTransientProviderError(error) || provider.credential_mode !== "round_robin") {
-                const statusCode = isQuotaError(error) ? 429 : errorStatus(error) ?? 502;
+              const quotaError = isAntigravityQuotaError(error);
+              const capacityError = isAntigravityCapacityError(error);
+              if (
+                isAbortError(error) ||
+                !isTransientProviderError(error) ||
+                provider.credential_mode !== "round_robin" ||
+                capacityError
+              ) {
+                const statusCode =
+                  quotaError || capacityError
+                    ? 429
+                    : errorStatus(error) ?? 502;
                 requestLogService.complete(requestLogId, {
                   status: "error",
                   statusCode,
@@ -1572,8 +1593,12 @@ export const proxyPlugin = (app: Elysia) =>
                 });
                 set.status = statusCode;
                 return {
-                  error: "Antigravity request failed",
-                  message: error.message,
+                  error: capacityError
+                    ? "Antigravity model capacity exhausted"
+                    : "Antigravity request failed",
+                  message: capacityError
+                    ? `Antigravity rejected the request with a capacity error that is not a quota failure. The credential was not blocked. ${error.message}`
+                    : error.message,
                 };
               }
               credentialService.markCooldown(
