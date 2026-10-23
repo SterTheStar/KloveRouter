@@ -103,7 +103,7 @@ export const openfreeCli = {
 export const providers = {
   validateCredential: (data: {
     base_url: string;
-    protocol?: "openai" | "openai-responses" | "anthropic" | "codex" | "chatgpt" | "antigravity" | "freebuff" | "qwen" | "atomesus" | "conol" | "openfree";
+    protocol?: "openai" | "openai-responses" | "anthropic" | "codex" | "chatgpt" | "antigravity" | "freebuff" | "qwen" | "atomesus" | "conol" | "perch" | "openfree";
     api_key?: string;
     auth_code?: string;
     secret?: string;
@@ -125,7 +125,7 @@ export const providers = {
     account_id?: string;
     avatar?: string;
     custom_headers?: unknown;
-      protocol?: "openai" | "openai-responses" | "anthropic" | "codex" | "chatgpt" | "antigravity" | "freebuff" | "qwen" | "atomesus" | "conol" | "openfree";
+      protocol?: "openai" | "openai-responses" | "anthropic" | "codex" | "chatgpt" | "antigravity" | "freebuff" | "qwen" | "atomesus" | "conol" | "perch" | "openfree";
    }) =>
      request<import("../types").Provider>("/api/providers", {
        method: "POST",
@@ -139,7 +139,7 @@ export const providers = {
        api_key?: string;
        avatar?: string | null;
         custom_headers?: unknown;
-       protocol?: "openai" | "openai-responses" | "anthropic" | "codex" | "chatgpt" | "antigravity" | "freebuff" | "qwen" | "atomesus" | "conol" | "openfree";
+       protocol?: "openai" | "openai-responses" | "anthropic" | "codex" | "chatgpt" | "antigravity" | "freebuff" | "qwen" | "atomesus" | "conol" | "perch" | "openfree";
       credential_mode?: "fixed" | "round_robin";
       fixed_credential_id?: string | null;
       is_active?: number;
@@ -174,7 +174,7 @@ export const providers = {
     id: string,
     data: {
       label: string;
-       kind?: "api_key" | "codex" | "chatgpt" | "antigravity" | "freebuff" | "qwen" | "atomesus" | "conol" | "openfree";
+       kind?: "api_key" | "codex" | "chatgpt" | "antigravity" | "freebuff" | "qwen" | "atomesus" | "conol" | "perch" | "openfree";
       secret?: string;
       access_token?: string;
       refresh_token?: string;
@@ -305,6 +305,13 @@ export const freebuff = {
       method: "POST",
       body: JSON.stringify({ credential_id }),
     }),
+};
+
+export const perch = {
+  usage: (credential_id: string) =>
+    request<import("../types").PerchUsage>(
+      `/api/perch/usage?credential_id=${encodeURIComponent(credential_id)}`,
+    ),
 };
 
 // Models

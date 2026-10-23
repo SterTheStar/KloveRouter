@@ -337,7 +337,7 @@ export default function AddProviderModal({
       return setError("Conol.ai account_id is required. Enter it separately or use account_id=<id> on the first line.");
     const hasCredentialToVerify = selectedType?.protocol === "chatgpt"
       ? Boolean(cookieFile)
-      : selectedType?.protocol === "freebuff" || selectedType?.protocol === "qwen" || selectedType?.protocol === "atomesus" || selectedType?.protocol === "conol"
+      : selectedType?.protocol === "freebuff" || selectedType?.protocol === "qwen" || selectedType?.protocol === "atomesus" || selectedType?.protocol === "conol" || selectedType?.protocol === "perch"
         ? Boolean(authCode.trim())
         : Boolean(apiKey.trim());
     const shouldVerify = !skipVerification && hasCredentialToVerify && selectedType?.protocol !== "openfree";
@@ -353,7 +353,7 @@ export default function AddProviderModal({
       }
       if (shouldVerify && selectedType?.protocol !== "chatgpt") await providers.validateCredential({
         base_url: baseUrl,
-        ...(selectedType?.protocol === "freebuff" || selectedType?.protocol === "qwen" || selectedType?.protocol === "atomesus"
+        ...(selectedType?.protocol === "freebuff" || selectedType?.protocol === "qwen" || selectedType?.protocol === "atomesus" || selectedType?.protocol === "perch"
           ? { auth_code: authCode }
           : selectedType?.protocol === "conol"
             ? { secret: authCode, account_id: conolParsedAccountId }
@@ -368,8 +368,8 @@ export default function AddProviderModal({
           ? {}
           : selectedType?.protocol === "openfree"
             ? (apiKey.trim() ? { api_key: apiKey.trim() } : {})
-            : selectedType?.protocol === "freebuff" || selectedType?.protocol === "qwen" || selectedType?.protocol === "atomesus"
-              ? { auth_code: authCode }
+            : selectedType?.protocol === "freebuff" || selectedType?.protocol === "qwen" || selectedType?.protocol === "atomesus" || selectedType?.protocol === "perch"
+              ? (authCode.trim() ? { auth_code: authCode } : {})
               : selectedType?.protocol === "conol"
                 ? { secret: authCode, account_id: conolParsedAccountId }
                 : { api_key: apiKey }),
@@ -717,29 +717,6 @@ export default function AddProviderModal({
                           placeholder="Paste the Conol.ai cookie (kept hidden)"
                         />
                         <p className="text-xs text-muted-foreground">Enter Account ID and cookie separately. Cookie stays hidden and is encrypted before storage.</p>
-                      </>
-                    ) : (
-                      <>
-                        {selectedType?.protocol === "chatgpt" ? (
-                          <div>
-                            <Label htmlFor="provider-cookies">cookies.txt (Netscape)</Label>
-                            <Input id="provider-cookies" type="file" accept=".txt,text/plain" onChange={(e) => setCookieFile(e.target.files?.[0] ?? null)} />
-                          </div>
-                        ) : (
-                          <div>
-                            <Label htmlFor="provider-key">
-                              {selectedType?.protocol === "atomesus" ? "Bearer token (optional)" : selectedType?.protocol === "freebuff" || selectedType?.protocol === "qwen" ? "Auth code (optional)" : "API key (optional)"}
-                            </Label>
-                            <Input id="provider-key" type="password" value={selectedType?.protocol === "freebuff" || selectedType?.protocol === "qwen" || selectedType?.protocol === "atomesus" ? authCode : apiKey} onChange={(e) => selectedType?.protocol === "freebuff" || selectedType?.protocol === "qwen" || selectedType?.protocol === "atomesus" ? setAuthCode(e.target.value) : setApiKey(e.target.value)} placeholder={selectedType?.protocol === "atomesus" ? "Paste your Atomesus bearer token" : selectedType?.protocol === "freebuff" || selectedType?.protocol === "qwen" ? "Paste your auth token" : "sk-..."} />
-                          </div>
-                        )}
-                    {selectedType?.protocol === "chatgpt" ? (
-                      <div className="space-y-2 rounded-lg border border-dashed p-3 text-xs text-muted-foreground">
-                        <p className="font-medium text-foreground">ChatGPT cookies.txt</p>
-                        <p>Export your own logged-in ChatGPT cookies in Netscape cookies.txt format. Only chatgpt.com and openai.com cookies are accepted and the resulting Cookie header is encrypted before storage.</p>
-                      </div>
-                    ) : (selectedType?.protocol === "freebuff" || selectedType?.protocol === "qwen" || selectedType?.protocol === "conol") && (
-                      selectedType?.protocol === "conol" ? (
                         <div className="space-y-3 rounded-lg border border-dashed p-3 text-xs text-muted-foreground">
                           <p className="font-medium text-foreground">How to get your Conol.ai account and session cookie:</p>
                           <ol className="list-inside list-decimal space-y-1">
@@ -775,7 +752,29 @@ export default function AddProviderModal({
                           </div>
                           <p>Press <kbd className="rounded border bg-muted px-1 font-mono">Enter</kbd>, then paste the Account ID into the Account ID field and the complete cookie string into the Cookie field above.</p>
                         </div>
-                      ) : selectedType?.protocol === "qwen" ? (
+                      </>
+                    ) : (
+                      <>
+                        {selectedType?.protocol === "chatgpt" ? (
+                          <div>
+                            <Label htmlFor="provider-cookies">cookies.txt (Netscape)</Label>
+                            <Input id="provider-cookies" type="file" accept=".txt,text/plain" onChange={(e) => setCookieFile(e.target.files?.[0] ?? null)} />
+                          </div>
+                        ) : (
+                          <div>
+                            <Label htmlFor="provider-key">
+                              {selectedType?.protocol === "atomesus" ? "Bearer token (optional)" : selectedType?.protocol === "perch" ? "Session JSON or access token (optional)" : selectedType?.protocol === "freebuff" || selectedType?.protocol === "qwen" ? "Auth code (optional)" : "API key (optional)"}
+                            </Label>
+                            <Input id="provider-key" type="password" value={selectedType?.protocol === "freebuff" || selectedType?.protocol === "qwen" || selectedType?.protocol === "atomesus" || selectedType?.protocol === "perch" ? authCode : apiKey} onChange={(e) => selectedType?.protocol === "freebuff" || selectedType?.protocol === "qwen" || selectedType?.protocol === "atomesus" || selectedType?.protocol === "perch" ? setAuthCode(e.target.value) : setApiKey(e.target.value)} placeholder={selectedType?.protocol === "atomesus" ? "Paste your Atomesus bearer token" : selectedType?.protocol === "perch" ? "Paste the perch login session JSON or access token" : selectedType?.protocol === "freebuff" || selectedType?.protocol === "qwen" ? "Paste your auth token" : "sk-..."} />
+                          </div>
+                        )}
+                    {selectedType?.protocol === "chatgpt" ? (
+                      <div className="space-y-2 rounded-lg border border-dashed p-3 text-xs text-muted-foreground">
+                        <p className="font-medium text-foreground">ChatGPT cookies.txt</p>
+                        <p>Export your own logged-in ChatGPT cookies in Netscape cookies.txt format. Only chatgpt.com and openai.com cookies are accepted and the resulting Cookie header is encrypted before storage.</p>
+                      </div>
+                    ) : (selectedType?.protocol === "freebuff" || selectedType?.protocol === "qwen" || selectedType?.protocol === "perch") && (
+                      selectedType?.protocol === "qwen" ? (
                         <div className="space-y-3 rounded-lg border border-dashed p-3 text-xs text-muted-foreground">
                           <p className="font-medium text-foreground">How to get your Qwen token:</p>
                           <ol className="list-inside list-decimal space-y-1">
@@ -812,6 +811,16 @@ export default function AddProviderModal({
                           </div>
                           <p>Press <kbd className="rounded border bg-muted px-1 font-mono">Enter</kbd>, then copy the token that appears in the console and paste it above.</p>
                           <p className="text-muted-foreground">The token is encrypted before being stored.</p>
+                        </div>
+                      ) : selectedType?.protocol === "perch" ? (
+                        <div className="space-y-3 rounded-lg border border-dashed p-3 text-xs text-muted-foreground">
+                          <p className="font-medium text-foreground">How to connect Perch AI:</p>
+                          <ol className="list-inside list-decimal space-y-1">
+                            <li>Leave the field empty to use the session created by <code>perch login</code> on the KloveRouter host (<code>~/.perch/cli-auth-session.json</code>).</li>
+                            <li>Or paste the complete <code>cli-auth-session.json</code> content, or just an access token, into the field above.</li>
+                            <li>Save the provider, then sync models to load the Perch catalog.</li>
+                          </ol>
+                          <p className="text-amber-600 dark:text-amber-400">Perch's documentation warns that calling its API outside the official CLI may violate its terms and risk account suspension. Use it only with an account you are permitted to use this way.</p>
                         </div>
                       ) : (
                         <p className="text-xs text-muted-foreground">

@@ -5,7 +5,7 @@ export interface Provider {
   avatar: string | null;
   avatar_sources: string[];
   avatar_override?: string | null;
-  protocol: "openai" | "openai-responses" | "anthropic" | "codex" | "chatgpt" | "antigravity" | "freebuff" | "qwen" | "atomesus" | "conol" | "openfree";
+  protocol: "openai" | "openai-responses" | "anthropic" | "codex" | "chatgpt" | "antigravity" | "freebuff" | "qwen" | "atomesus" | "conol" | "perch" | "openfree";
   is_active: number;
   created_at: string;
   updated_at: string;
@@ -23,7 +23,7 @@ export interface ProviderCredential {
   id: string;
   provider_id: string;
   label: string;
-  kind: "api_key" | "codex" | "chatgpt" | "antigravity" | "freebuff" | "qwen" | "atomesus" | "conol" | "openfree";
+  kind: "api_key" | "codex" | "chatgpt" | "antigravity" | "freebuff" | "qwen" | "atomesus" | "conol" | "perch" | "openfree";
   account_id: string | null;
   email?: string | null;
   project_id?: string | null;
@@ -313,6 +313,51 @@ export interface CodexUsage {
     unlimited?: boolean;
     balance?: string | number;
   };
+}
+
+export interface PerchUsageWindow {
+  points: number | null;
+  usd: number | null;
+  tokens: number | null;
+  calls: number | null;
+}
+
+export interface PerchUsage {
+  ok: boolean;
+  source: "perch" | "local";
+  cached: boolean;
+  fetched_at: string;
+  warning?: string;
+  profile: {
+    id: string | null;
+    email: string | null;
+    name: string | null;
+  } | null;
+  plan: {
+    code: string | null;
+    name: string | null;
+    membership_role: string | null;
+    entitlements: Array<{ key: string; value: unknown }>;
+  } | null;
+  usage: {
+    daily: PerchUsageWindow;
+    weekly: PerchUsageWindow;
+    monthly: PerchUsageWindow & { manual_points: number | null };
+    rolling: {
+      enabled: boolean;
+      window_5h_usd: number | null;
+      cap_5h_usd: number | null;
+      next_free_5h: string | null;
+      window_7d_usd: number | null;
+      cap_7d_usd: number | null;
+      next_free_7d: string | null;
+    } | null;
+  };
+  credits: {
+    balance_points: number | null;
+    enabled: boolean | null;
+  };
+  billing: unknown | null;
 }
 
 export interface AntigravityQuota {

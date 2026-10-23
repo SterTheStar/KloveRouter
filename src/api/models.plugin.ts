@@ -26,6 +26,7 @@ import { openfreeModels, openfreeResponses } from "../integrations/openfree";
 import { qwenModels, qwenResponses } from "../integrations/qwen";
 import { atomesusModels, atomesusTest } from "../integrations/atomesus";
 import { conolModels, conolResponses } from "../integrations/conol";
+import { perchModels, perchTest } from "../integrations/perch";
 import {
   chatgptModels,
   chatgptTest,
@@ -433,6 +434,21 @@ export const modelsPlugin = (app: Elysia) =>
             return { success: true, models_found: selected.length, message: `Synced ${selected.length} Atomesus models from ${provider.name}` };
           }
 
+          if (provider.protocol === "perch") {
+            const available = perchModels();
+            if (query.preview === true) return preview(available);
+            const selected = selectModels(available);
+            for (const model of selected)
+              saveSyncedModel({
+                provider_id: id,
+                model_id: model.id,
+                display_name: model.display_name,
+                is_manual: 0,
+                ...await resolveModelMetadata(provider.protocol, model.id, model),
+              });
+            return { success: true, models_found: selected.length, message: `Synced ${selected.length} Perch models from ${provider.name}` };
+          }
+
           if (provider.protocol === "conol") {
             const credential =
               credentialService.select(
@@ -676,6 +692,8 @@ export const modelsPlugin = (app: Elysia) =>
                      ? await atomesusTest(model.model_id, credential, provider.base_url)
                    : provider.protocol === "conol"
                      ? await conolTest(model.model_id, credential, provider.base_url)
+                   : provider.protocol === "perch"
+                     ? await perchTest(model.model_id, credential, provider.base_url)
               : provider.protocol === "chatgpt"
                       ? {
                          choices: [

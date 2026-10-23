@@ -12,11 +12,12 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { antigravity, codex, freebuff, providers } from "../api/client";
+import { antigravity, codex, freebuff, perch, providers } from "../api/client";
 import type {
   AntigravityQuota,
   CodexUsage,
   CodexUsageWindow,
+  PerchUsage,
   Provider,
   ProviderCredential,
 } from "../types";
@@ -93,6 +94,146 @@ function FreebuffUsageSummary({ usage }: { usage: any }) {
           {rateLimit?.resetAt ? ` · Resets ${new Date(rateLimit.resetAt).toLocaleString()}` : rateLimit?.reset_at ? ` · Resets ${new Date(rateLimit.reset_at).toLocaleString()}` : ""}
           {expires ? ` · Session expires ${expires}` : ""}
         </div>
+      </div>
+    </div>
+  );
+}
+
+function usageNumber(value: number | null | undefined) {
+  if (value === null || value === undefined || !Number.isFinite(value))
+    return "—";
+  return new Intl.NumberFormat().format(value);
+}
+
+function usageUsd(value: number | null | undefined) {
+  if (value === null || value === undefined || !Number.isFinite(value))
+    return "—";
+  return value > 0 && value < 0.01
+    ? `$${value.toFixed(4)}`
+    : `$${value.toFixed(2)}`;
+}
+
+function usageDate(value: string | null | undefined) {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.toLocaleString();
+}
+
+function PerchRollingLimit({
+  label,
+  used,
+  cap,
+  reset,
+}: {
+  label: string;
+  used: number | null;
+  cap: number | null;
+  reset: string | null;
+}) {
+  const percent =
+    used !== null && cap !== null && cap > 0
+      ? Math.min(100, Math.max(0, (used / cap) * 100))
+      : 0;
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between gap-3 text-sm">
+        <span>{label}</span>
+        <span className="font-medium">
+          {used !== null && cap !== null
+            ? `${usageUsd(used)} / ${usageUsd(cap)}`
+            : "—"}
+        </span>
+      </div>
+      <div className="h-2 overflow-hidden rounded-full bg-muted">
+        <div
+          className="h-full rounded-full bg-primary transition-all"
+          style={{ width: `${percent}%` }}
+        />
+      </div>
+      <div className="text-xs text-muted-foreground">
+        {reset ? `Frees up ${usageDate(reset)}` : "Reset time unavailable"}
+      </div>
+    </div>
+  );
+}
+
+function PerchUsageSummary({ usage }: { usage: PerchUsage | null }) {
+  if (!usage)
+    return (
+      <div className="text-sm text-muted-foreground">
+        No Perch usage data returned.
+      </div>
+    );
+
+  const windows = [
+    { label: "Daily", value: usage.usage.daily },
+    { label: "Weekly", value: usage.usage.weekly },
+    { label: "Monthly", value: usage.usage.monthly },
+  ];
+  const rolling = usage.usage.rolling;
+  const updated = usageDate(usage.fetched_at);
+
+  return (
+    <div className="space-y-5">
+      {usage.source === "local" && (
+        <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-300">
+          {usage.warning ||
+            "Perch usage endpoint unavailable. Showing local KloveRouter usage."}
+        </div>
+      )}
+
+      <div className="grid gap-3 sm:grid-cols-3">
+        {windows.map(({ label, value }) => (
+          <div key={label} className="rounded-lg border bg-muted/30 p-3">
+            <div className="text-xs text-muted-foreground">{label}</div>
+            <div className="mt-1 text-lg font-semibold">
+              {usageNumber(value.tokens)}{" "}
+              <span className="text-xs font-normal text-muted-foreground">
+                tokens
+              </span>
+            </div>
+            <div className="mt-1 text-xs text-muted-foreground">
+              {usageNumber(value.calls)} calls · {usageUsd(value.usd)}
+              {value.points !== null
+                ? ` · ${usageNumber(value.points)} pt`
+                : ""}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {rolling?.enabled && (
+        <div className="space-y-4">
+          <PerchRollingLimit
+            label="5-hour spend limit"
+            used={rolling.window_5h_usd}
+            cap={rolling.cap_5h_usd}
+            reset={rolling.next_free_5h}
+          />
+          <PerchRollingLimit
+            label="7-day spend limit"
+            used={rolling.window_7d_usd}
+            cap={rolling.cap_7d_usd}
+            reset={rolling.next_free_7d}
+          />
+        </div>
+      )}
+
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+        <span>
+          Plan: {usage.plan?.name || usage.plan?.code || "unknown"}
+        </span>
+        {usage.credits.enabled !== null && (
+          <span>
+            Credits:{" "}
+            {usage.credits.enabled
+              ? `${usageNumber(usage.credits.balance_points)} pt`
+              : "disabled"}
+          </span>
+        )}
+        {updated && <span>Updated: {updated}</span>}
+        {usage.cached && <span>cached</span>}
+        {usage.source === "local" && <span>source: local usage log</span>}
       </div>
     </div>
   );
@@ -290,6 +431,7 @@ export default function UsageLimitsPage() {
       credits: any[];
       antigravityQuota: AntigravityQuota[] | null;
       freebuffUsage: any | null;
+      perchUsage: PerchUsage | null;
     }[]
   >([]);
   const [loading, setLoading] = useState(true);
@@ -310,21 +452,35 @@ export default function UsageLimitsPage() {
     try {
       refresh ? setRefreshing(true) : setLoading(true);
       const providerList = await providers.list();
-      const oauthProviders = providerList.filter(
+      const usageProviders = providerList.filter(
         (provider) =>
-          provider.protocol === "codex" || provider.protocol === "antigravity" || provider.protocol === "freebuff",
+          provider.protocol === "codex" ||
+          provider.protocol === "antigravity" ||
+          provider.protocol === "freebuff" ||
+          provider.protocol === "perch",
       );
       const accountGroups = await Promise.all(
-        oauthProviders.map(async (provider) => {
+        usageProviders.map(async (provider) => {
           const credentials = (await providers.credentials(provider.id)).filter(
             (credential) =>
               (credential.kind === "codex" && credential.account_id) ||
               (credential.kind === "antigravity" && credential.email) ||
-              (credential.kind === "freebuff" && credential.masked_secret),
+              (credential.kind === "freebuff" && credential.masked_secret) ||
+              credential.kind === "perch",
           );
           return Promise.all(
             credentials.map(async (credential) => {
               try {
+                if (provider.protocol === "perch")
+                  return {
+                    provider,
+                    credential,
+                    usage: null,
+                    credits: [],
+                    antigravityQuota: null,
+                    freebuffUsage: null,
+                    perchUsage: await perch.usage(credential.id),
+                  };
                 if (provider.protocol === "antigravity")
                   return {
                     provider,
@@ -333,6 +489,7 @@ export default function UsageLimitsPage() {
                     credits: [],
                     antigravityQuota: await antigravity.usage(credential.id),
                     freebuffUsage: null,
+                    perchUsage: null,
                   };
                 if (provider.protocol === "freebuff")
                   return {
@@ -342,6 +499,7 @@ export default function UsageLimitsPage() {
                     credits: [],
                     antigravityQuota: null,
                     freebuffUsage: await freebuff.usage(credential.id),
+                    perchUsage: null,
                   };
                 const [usageResult, creditResult] = await Promise.all([
                   codex.usage(credential.id),
@@ -354,6 +512,7 @@ export default function UsageLimitsPage() {
                   credits: creditsFromPayload(creditResult),
                   antigravityQuota: null,
                   freebuffUsage: null,
+                  perchUsage: null,
                 };
               } catch {
                 return {
@@ -363,6 +522,7 @@ export default function UsageLimitsPage() {
                   credits: [],
                   antigravityQuota: null,
                   freebuffUsage: null,
+                  perchUsage: null,
                 };
               }
             }),
@@ -425,7 +585,7 @@ export default function UsageLimitsPage() {
             Usage limits
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            OAuth account limits and reset credits.
+            Account usage, limits and reset credits.
           </p>
         </div>
         <Button
@@ -449,23 +609,25 @@ export default function UsageLimitsPage() {
       {!accounts.length ? (
         <Card>
           <CardContent className="p-10 text-center text-sm text-muted-foreground">
-            No OAuth accounts connected.
+            No usage-tracked accounts connected.
           </CardContent>
         </Card>
       ) : (
         <div className="grid gap-5 xl:grid-cols-2">
           {accounts.map(
-            ({ provider, credential, usage, credits, antigravityQuota, freebuffUsage: freebuffData }) => (
+            ({ provider, credential, usage, credits, antigravityQuota, freebuffUsage: freebuffData, perchUsage: perchData }) => (
               <Card key={credential.id}>
                 <CardHeader>
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex items-center gap-3">
-                      <ProviderIcon name={provider.name} src={provider.avatar} fallbackLabel={credential.email || credential.label} className="size-11" />
+                      <ProviderIcon name={provider.name} src={provider.avatar} fallbackLabel={perchData?.profile?.email || credential.email || credential.label} className="size-11" />
                       <div>
                         <CardTitle>
                           {provider.protocol === "antigravity"
                             ? credential.email || credential.label
-                            : credential.label}
+                            : provider.protocol === "perch"
+                              ? perchData?.profile?.email || credential.label
+                              : credential.label}
                         </CardTitle>
                         {provider.protocol === "freebuff" ? (
                           <div className="text-xs text-muted-foreground">
@@ -473,10 +635,24 @@ export default function UsageLimitsPage() {
                           </div>
                         ) : (
                           <div className="text-xs text-muted-foreground">
-                            {accountIdentity(provider, credential)} ·{" "}
-                            {provider.protocol === "antigravity"
-                              ? "Antigravity account"
-                              : usage?.plan_type ?? "Codex OAuth account"}
+                            {provider.protocol === "perch" ? (
+                              <>
+                                {perchData?.plan?.name ||
+                                  perchData?.plan?.code ||
+                                  "Perch account"}{" "}
+                                ·{" "}
+                                {perchData?.source === "local"
+                                  ? "local KloveRouter usage"
+                                  : "Perch usage"}
+                              </>
+                            ) : (
+                              <>
+                                {accountIdentity(provider, credential)} ·{" "}
+                                {provider.protocol === "antigravity"
+                                  ? "Antigravity account"
+                                  : usage?.plan_type ?? "Codex OAuth account"}
+                              </>
+                            )}
                           </div>
                         )}
                       </div>
@@ -524,6 +700,8 @@ export default function UsageLimitsPage() {
                 <CardContent className="space-y-5">
                     {provider.protocol === "freebuff" ? (
                       <FreebuffUsageSummary usage={freebuffData} />
+                    ) : provider.protocol === "perch" ? (
+                      <PerchUsageSummary usage={perchData} />
                     ) : provider.protocol === "antigravity" ? (
                     antigravityQuota?.length ? (
                       <AntigravityQuotaSummary quotas={antigravityQuota} />

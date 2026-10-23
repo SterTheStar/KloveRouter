@@ -4,7 +4,7 @@ import { logger } from "../logger";
 import { validateCredential } from "./credential-validation";
 import type { ProviderProtocol } from "./provider-appearance";
 
-export type CredentialKind = "api_key" | "codex" | "chatgpt" | "antigravity" | "freebuff" | "qwen" | "atomesus" | "conol" | "openfree";
+export type CredentialKind = "api_key" | "codex" | "chatgpt" | "antigravity" | "freebuff" | "qwen" | "atomesus" | "conol" | "perch" | "openfree";
 export type CredentialMode = "fixed" | "round_robin";
 
 export interface ProviderCredential {
@@ -101,9 +101,14 @@ export const credentialService = {
     const credential = this.findById(id);
     if (!credential) return null;
     return {
-      authenticated: credential.kind === "chatgpt" || credential.kind === "conol" || credential.kind === "openfree"
-        ? Boolean(credential.secret)
-        : Boolean(credential.access_token),
+      authenticated:
+        credential.kind === "chatgpt" ||
+        credential.kind === "conol" ||
+        credential.kind === "openfree"
+          ? Boolean(credential.secret)
+          : credential.kind === "perch"
+            ? true
+            : Boolean(credential.access_token),
       account_id: credential.account_id,
       email: credential.email ?? null,
       project_id: credential.project_id ?? null,
@@ -307,6 +312,8 @@ export const credentialService = {
                  ? `${alias}.kind = 'atomesus' AND ${alias}.secret IS NOT NULL`
                : provider?.protocol === "conol"
                  ? `${alias}.kind = 'conol' AND ${alias}.secret IS NOT NULL AND ${alias}.account_id IS NOT NULL`
+               : provider?.protocol === "perch"
+                 ? `${alias}.kind = 'perch'`
                : provider?.protocol === "openfree"
                  ? `${alias}.kind = 'openfree' AND ${alias}.secret IS NOT NULL`
                : `${alias}.kind = 'api_key' AND (${alias}.secret IS NOT NULL OR NOT EXISTS (SELECT 1 FROM provider_credentials configured WHERE configured.provider_id = ${alias}.provider_id AND configured.kind = 'api_key' AND configured.is_active = 1 AND configured.secret IS NOT NULL))`;

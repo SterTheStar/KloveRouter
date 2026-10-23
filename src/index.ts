@@ -21,6 +21,7 @@ import {
   antigravityUsagePlugin,
   freebuffUsagePlugin,
   requestLogsPlugin,
+  perchUsagePlugin,
   rtkPlugin,
   chatPlugin,
   chatControlPlugin,
@@ -117,6 +118,7 @@ const protectedApp = new Elysia()
   .use(requestLogsPlugin)
   .use(antigravityUsagePlugin)
   .use(freebuffUsagePlugin)
+  .use(perchUsagePlugin)
   .use(codexPlugin)
   .use(rtkPlugin)
   .use(cavemanPlugin)

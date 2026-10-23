@@ -52,7 +52,7 @@ import { faviconForEndpoint, protocolIcon } from "./provider-icons";
 
 export type ProviderTemplate = {
   id: string;
-  protocol: "openai" | "openai-responses" | "antigravity" | "anthropic" | "codex" | "chatgpt" | "freebuff" | "qwen" | "atomesus" | "conol" | "openfree";
+  protocol: "openai" | "openai-responses" | "antigravity" | "anthropic" | "codex" | "chatgpt" | "freebuff" | "qwen" | "atomesus" | "conol" | "perch" | "openfree";
   name: string;
   description: string;
   logo: string;
@@ -196,6 +196,8 @@ const providerDescriptions: Record<string, string> = {
     "Atomesus models with effort controls, persistent upstream sessions, streaming, and encrypted token storage.",
   conol:
     "Conol.ai agents with account and browser-cookie authentication. Credentials are stored encrypted.",
+  perch:
+    "Perch AI models through a CLI session. Paste a session JSON/access token or use the session created by `perch login` on the KloveRouter host. Direct API use may violate Perch's terms.",
   blueminds:
     "An OpenAI-compatible gateway for accessing hosted language models through BlueMinds.",
   agnes:
@@ -389,6 +391,15 @@ export const PROVIDER_TEMPLATES: readonly ProviderTemplate[] = [
     description: providerDescriptions.conol,
     logo: conolLogo,
     placeholder: "https://conol.ai",
+    preset: false,
+  },
+  {
+    id: "perch",
+    protocol: "perch",
+    name: "Perch AI",
+    description: providerDescriptions.perch,
+    logo: templateLogo("perch", "https://app.perchai.app"),
+    placeholder: "https://app.perchai.app",
     preset: false,
   },
   ...openAiCompatiblePresets.map(([id, name, placeholder]) => ({

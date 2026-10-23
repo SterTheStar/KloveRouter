@@ -58,6 +58,18 @@ export interface DailyStats {
   estimated_cost_usd: number;
 }
 
+export interface ProviderUsageWindow {
+  tokens: number;
+  calls: number;
+  estimated_cost_usd: number;
+}
+
+export interface ProviderUsageWindows {
+  daily: ProviderUsageWindow;
+  weekly: ProviderUsageWindow;
+  monthly: ProviderUsageWindow;
+}
+
 export const usageService = {
   record(
     providerId: string,
@@ -205,6 +217,53 @@ export const usageService = {
          ORDER BY date ASC`,
       )
       .all(...(days > 0 ? [`-${days}`] : [])) as DailyStats[];
+  },
+
+  getProviderWindows(providerId: string): ProviderUsageWindows {
+    const db = getDb();
+    const row = db
+      .query(
+        `SELECT
+           COALESCE(SUM(CASE WHEN created_at >= datetime('now', '-1 day') THEN tokens_total ELSE 0 END), 0) AS daily_tokens,
+           COALESCE(SUM(CASE WHEN created_at >= datetime('now', '-1 day') THEN 1 ELSE 0 END), 0) AS daily_calls,
+           COALESCE(SUM(CASE WHEN created_at >= datetime('now', '-1 day') THEN estimated_cost_usd ELSE 0 END), 0) AS daily_usd,
+           COALESCE(SUM(CASE WHEN created_at >= datetime('now', '-7 days') THEN tokens_total ELSE 0 END), 0) AS weekly_tokens,
+           COALESCE(SUM(CASE WHEN created_at >= datetime('now', '-7 days') THEN 1 ELSE 0 END), 0) AS weekly_calls,
+           COALESCE(SUM(CASE WHEN created_at >= datetime('now', '-7 days') THEN estimated_cost_usd ELSE 0 END), 0) AS weekly_usd,
+           COALESCE(SUM(CASE WHEN created_at >= datetime('now', '-30 days') THEN tokens_total ELSE 0 END), 0) AS monthly_tokens,
+           COALESCE(SUM(CASE WHEN created_at >= datetime('now', '-30 days') THEN 1 ELSE 0 END), 0) AS monthly_calls,
+           COALESCE(SUM(CASE WHEN created_at >= datetime('now', '-30 days') THEN estimated_cost_usd ELSE 0 END), 0) AS monthly_usd
+         FROM usage_log
+         WHERE provider_id = ?`,
+      )
+      .get(providerId) as {
+      daily_tokens: number;
+      daily_calls: number;
+      daily_usd: number;
+      weekly_tokens: number;
+      weekly_calls: number;
+      weekly_usd: number;
+      monthly_tokens: number;
+      monthly_calls: number;
+      monthly_usd: number;
+    };
+    return {
+      daily: {
+        tokens: Number(row.daily_tokens),
+        calls: Number(row.daily_calls),
+        estimated_cost_usd: Number(row.daily_usd),
+      },
+      weekly: {
+        tokens: Number(row.weekly_tokens),
+        calls: Number(row.weekly_calls),
+        estimated_cost_usd: Number(row.weekly_usd),
+      },
+      monthly: {
+        tokens: Number(row.monthly_tokens),
+        calls: Number(row.monthly_calls),
+        estimated_cost_usd: Number(row.monthly_usd),
+      },
+    };
   },
 
   getModelTps(modelId: string): number | null {

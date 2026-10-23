@@ -17,6 +17,7 @@ import {
   freebuffUsagePlugin,
 } from "./codex.plugin";
 import { requestLogsPlugin } from "./request-logs.plugin";
+import { perchUsagePlugin } from "./perch.plugin";
 import { rtkPlugin } from "../plugins/rtk";
 import { setupPlugin } from "./setup.plugin";
 import { avatarMediaPlugin } from "./avatar-media.plugin";
@@ -37,6 +38,7 @@ export {
   antigravityUsagePlugin,
   freebuffUsagePlugin,
   requestLogsPlugin,
+  perchUsagePlugin,
   rtkPlugin,
   chatPlugin,
   chatControlPlugin,

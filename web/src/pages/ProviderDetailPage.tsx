@@ -265,6 +265,7 @@ export default function ProviderDetailPage({
     () =>
       credentials.filter((credential) => {
         if (!credential.is_active) return false;
+        if (credential.kind === "perch") return true;
         if (credential.kind === "api_key" || credential.kind === "chatgpt" || credential.kind === "freebuff" || credential.kind === "qwen" || credential.kind === "atomesus" || credential.kind === "conol")
           return Boolean(credential.masked_secret);
         if (credential.kind === "openfree") return Boolean(credential.masked_secret);
@@ -716,8 +717,8 @@ export default function ProviderDetailPage({
     const label = newKeyLabelRef.current?.value.trim() ?? "";
     const authCode = newAuthCodeRef.current?.value.trim() ?? "";
     const accountId = newAccountIdRef.current?.value.trim() ?? "";
-    if (!label || !authCode || (provider.protocol === "conol" && !accountId)) {
-      setError(`${provider.protocol === "chatgpt" ? "Credential" : provider.protocol === "conol" ? "Conol credential" : "Auth code"} label and value are required.`);
+    if (!label || (!authCode && provider.protocol !== "perch") || (provider.protocol === "conol" && !accountId)) {
+      setError(`${provider.protocol === "chatgpt" ? "Credential" : provider.protocol === "conol" ? "Conol credential" : provider.protocol === "perch" ? "Perch credential" : "Auth code"} label is required${provider.protocol === "perch" ? "." : " and value are required."}`);
       return;
     }
     setAddingKey(true);
@@ -725,7 +726,7 @@ export default function ProviderDetailPage({
     try {
       await providers.addCredential(providerId, {
         label,
-        kind: provider.protocol === "chatgpt" ? "chatgpt" : provider.protocol === "qwen" ? "qwen" : provider.protocol === "atomesus" ? "atomesus" : provider.protocol === "conol" ? "conol" : "freebuff",
+        kind: provider.protocol === "chatgpt" ? "chatgpt" : provider.protocol === "qwen" ? "qwen" : provider.protocol === "atomesus" ? "atomesus" : provider.protocol === "conol" ? "conol" : provider.protocol === "perch" ? "perch" : "freebuff",
         secret: authCode,
         ...(provider.protocol === "conol" ? { account_id: accountId } : {}),
       });
@@ -733,13 +734,13 @@ export default function ProviderDetailPage({
       if (newAuthCodeRef.current) newAuthCodeRef.current.value = "";
       if (newAccountIdRef.current) newAccountIdRef.current.value = "";
       setShowAddKey(false);
-      setSuccess(provider.protocol === "chatgpt" ? "ChatGPT session credential added." : provider.protocol === "atomesus" ? "Atomesus token added." : provider.protocol === "qwen" ? "Qwen auth code added." : provider.protocol === "conol" ? "Conol credential added." : "Freebuff auth code added.");
+      setSuccess(provider.protocol === "chatgpt" ? "ChatGPT session credential added." : provider.protocol === "atomesus" ? "Atomesus token added." : provider.protocol === "qwen" ? "Qwen auth code added." : provider.protocol === "conol" ? "Conol credential added." : provider.protocol === "perch" ? "Perch session credential added." : "Freebuff auth code added.");
       invalidateModels(providerId);
       invalidateProviders(providerId);
       await load();
     } catch (e: any) {
       setError(e.message);
-      notifyError(provider.protocol === "chatgpt" ? "Could not add session credential" : provider.protocol === "conol" ? "Could not add Conol credential" : "Could not add auth code", e.message);
+      notifyError(provider.protocol === "chatgpt" ? "Could not add session credential" : provider.protocol === "conol" ? "Could not add Conol credential" : provider.protocol === "perch" ? "Could not add Perch credential" : "Could not add auth code", e.message);
     } finally {
       setAddingKey(false);
     }
@@ -1195,13 +1196,13 @@ export default function ProviderDetailPage({
               </div>
               {showAddKey && <div className="grid gap-2 rounded-md border border-dashed p-3 md:grid-cols-[1fr_1.5fr_auto]"><Input ref={newKeyLabelRef} placeholder="Credential label (optional)" /><Input ref={cookieFileRef} type="file" accept=".txt,text/plain" aria-label="ChatGPT cookies.txt file" /><Button onClick={uploadChatGptCookies} disabled={addingKey}>{addingKey ? <LoaderCircle className="size-4 animate-spin" /> : <><Add className="size-4" /> Upload cookies</>}</Button></div>}
             </div>
-          ) : provider.protocol === "freebuff" || provider.protocol === "qwen" || provider.protocol === "atomesus" || provider.protocol === "conol" ? (
+          ) : provider.protocol === "freebuff" || provider.protocol === "qwen" || provider.protocol === "atomesus" || provider.protocol === "conol" || provider.protocol === "perch" ? (
             <div id="provider-credentials" className="space-y-3">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                   <Label>{provider.protocol === "conol" ? "Conol.ai credentials" : provider.protocol === "atomesus" ? "Atomesus tokens" : provider.protocol === "qwen" ? "Qwen auth codes" : "Freebuff auth codes"}</Label>
+                   <Label>{provider.protocol === "conol" ? "Conol.ai credentials" : provider.protocol === "atomesus" ? "Atomesus tokens" : provider.protocol === "qwen" ? "Qwen auth codes" : provider.protocol === "perch" ? "Perch sessions" : "Freebuff auth codes"}</Label>
                   <p className="text-xs text-muted-foreground">
-                     {provider.protocol === "conol" ? "Account ID and cookies are stored encrypted." : "Tokens are stored encrypted and rotated according to the selected routing strategy."}
+                     {provider.protocol === "conol" ? "Account ID and cookies are stored encrypted." : provider.protocol === "perch" ? "Paste a session JSON or access token, or leave it empty to use the host's `perch login` session. Credentials are stored encrypted." : "Tokens are stored encrypted and rotated according to the selected routing strategy."}
                   </p>
                 </div>
                 <Button
@@ -1210,28 +1211,28 @@ export default function ProviderDetailPage({
                   onClick={() => setShowAddKey((value) => !value)}
                 >
                   {showAddKey ? <CloseCircle className="size-4" /> : <Add className="size-4" />}
-                  {showAddKey ? "Cancel" : provider.protocol === "conol" ? "Add credential" : "Add auth code"}
+                  {showAddKey ? "Cancel" : provider.protocol === "conol" || provider.protocol === "perch" ? "Add credential" : "Add auth code"}
                 </Button>
               </div>
               <div className="space-y-2">
-                {credentials.filter((credential) => credential.kind === "freebuff" || credential.kind === "qwen" || credential.kind === "atomesus" || credential.kind === "conol").map((credential) => renderCredentialRow(credential, provider.protocol === "conol" ? "credential" : "auth code"))}
-                {!credentials.some((credential) => credential.kind === "freebuff" || credential.kind === "qwen" || credential.kind === "atomesus" || credential.kind === "conol") && (
-                  <div className="text-xs text-muted-foreground">{provider.protocol === "conol" ? "No Conol credentials configured." : "No auth codes configured."}</div>
+                {credentials.filter((credential) => credential.kind === "freebuff" || credential.kind === "qwen" || credential.kind === "atomesus" || credential.kind === "conol" || credential.kind === "perch").map((credential) => renderCredentialRow(credential, provider.protocol === "conol" ? "credential" : provider.protocol === "perch" ? "session" : "auth code"))}
+                {!credentials.some((credential) => credential.kind === "freebuff" || credential.kind === "qwen" || credential.kind === "atomesus" || credential.kind === "conol" || credential.kind === "perch") && (
+                  <div className="text-xs text-muted-foreground">{provider.protocol === "conol" ? "No Conol credentials configured." : provider.protocol === "perch" ? "No Perch credentials configured." : "No auth codes configured."}</div>
                 )}
               </div>
               {showAddKey && (
                 <div className="grid gap-2 rounded-md border border-dashed p-3 md:grid-cols-[1fr_1.5fr_auto]">
-                  <Input ref={newKeyLabelRef} placeholder={provider.protocol === "conol" ? "Credential label" : "Auth code label"} />
+                  <Input ref={newKeyLabelRef} placeholder={provider.protocol === "conol" || provider.protocol === "perch" ? "Credential label" : "Auth code label"} />
                   {provider.protocol === "conol" && <Input ref={newAccountIdRef} placeholder="Conol account_id" />}
-                  <Input ref={newAuthCodeRef} type="password" placeholder={provider.protocol === "conol" ? "Paste complete Cookie header (hidden)" : provider.protocol === "atomesus" ? "Paste Atomesus bearer token" : provider.protocol === "qwen" ? "Paste Qwen auth token" : "Paste Freebuff auth code"} />
+                  <Input ref={newAuthCodeRef} type="password" placeholder={provider.protocol === "conol" ? "Paste complete Cookie header (hidden)" : provider.protocol === "perch" ? "Paste session JSON or access token (optional)" : provider.protocol === "atomesus" ? "Paste Atomesus bearer token" : provider.protocol === "qwen" ? "Paste Qwen auth token" : "Paste Freebuff auth code"} />
                   <Button onClick={addFreebuffAuthCode} disabled={addingKey}>
                     {addingKey ? <LoaderCircle className="size-4 animate-spin" /> : <Add className="size-4" />}
-                    {provider.protocol === "conol" ? "Add credential" : "Add code"}
+                    {provider.protocol === "conol" || provider.protocol === "perch" ? "Add credential" : "Add code"}
                   </Button>
                 </div>
               )}
             </div>
-          ) : provider.protocol === "codex" || provider.protocol === "antigravity" ? null : (
+          ) : (
             <div className="space-y-3">
               <div className="flex items-center justify-between gap-3">
                 <Label>API keys</Label>

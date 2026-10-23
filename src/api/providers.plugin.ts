@@ -10,6 +10,7 @@ import { assertSafeRemoteUrl } from "../services/ssrf";
 import { chatgptModels, parseChatGptCookies } from "../integrations/chatgpt";
 import { qwenModels } from "../integrations/qwen";
 import { conolValidate } from "../integrations/conol";
+import { perchValidate } from "../integrations/perch";
 import { credentialKindForProtocol, validateCredential } from "../services/credential-validation";
 import type { ProviderProtocol } from "../services/provider-appearance";
 import { anthropicEndpoint } from "../clients/anthropic";
@@ -44,6 +45,8 @@ export const providersPlugin = (app: Elysia) =>
           const credential = { id: "validation", secret: secret ?? "", account_id: body.account_id };
           if (protocol === "conol") {
             await conolValidate(credential, provider.base_url);
+          } else if (protocol === "perch") {
+            await perchValidate(credential, provider.base_url);
           } else if (protocol === "chatgpt") {
             const models = await chatgptModels(credential, { strict: true, baseUrl: provider.base_url });
             if (!models.length) throw new Error("ChatGPT returned no models");
@@ -75,7 +78,7 @@ export const providersPlugin = (app: Elysia) =>
       {
         body: t.Object({
           base_url: t.String({ minLength: 1 }),
-           protocol: t.Optional(t.Union([t.Literal("openai"), t.Literal("openai-responses"), t.Literal("anthropic"), t.Literal("codex"), t.Literal("chatgpt"), t.Literal("antigravity"), t.Literal("freebuff"), t.Literal("qwen"), t.Literal("atomesus"), t.Literal("conol"), t.Literal("openfree")])),
+           protocol: t.Optional(t.Union([t.Literal("openai"), t.Literal("openai-responses"), t.Literal("anthropic"), t.Literal("codex"), t.Literal("chatgpt"), t.Literal("antigravity"), t.Literal("freebuff"), t.Literal("qwen"), t.Literal("atomesus"), t.Literal("conol"), t.Literal("perch"), t.Literal("openfree")])),
           api_key: t.Optional(t.String()),
           auth_code: t.Optional(t.String()),
           secret: t.Optional(t.String()),
@@ -155,6 +158,7 @@ export const providersPlugin = (app: Elysia) =>
               t.Literal("qwen"),
               t.Literal("atomesus"),
               t.Literal("conol"),
+              t.Literal("perch"),
               t.Literal("openfree"),
             ]),
           ),
@@ -215,6 +219,7 @@ export const providersPlugin = (app: Elysia) =>
               t.Literal("qwen"),
               t.Literal("atomesus"),
               t.Literal("conol"),
+              t.Literal("perch"),
               t.Literal("openfree"),
             ]),
           ),
@@ -252,7 +257,7 @@ export const providersPlugin = (app: Elysia) =>
           !credential ||
           credential.provider_id !== id ||
             credential.kind === "chatgpt" ||
-            credential.kind !== "api_key" && credential.kind !== "freebuff" && credential.kind !== "qwen" && credential.kind !== "atomesus" && credential.kind !== "conol"
+            credential.kind !== "api_key" && credential.kind !== "freebuff" && credential.kind !== "qwen" && credential.kind !== "atomesus" && credential.kind !== "conol" && credential.kind !== "perch"
         ) {
           set.status = 404;
           return { error: "Credential secret not found" };
@@ -326,6 +331,7 @@ export const providersPlugin = (app: Elysia) =>
               t.Literal("qwen"),
               t.Literal("atomesus"),
               t.Literal("conol"),
+              t.Literal("perch"),
               t.Literal("openfree"),
             ]),
           ),
@@ -370,6 +376,7 @@ export const providersPlugin = (app: Elysia) =>
               t.Literal("qwen"),
               t.Literal("atomesus"),
               t.Literal("conol"),
+              t.Literal("perch"),
               t.Literal("openfree"),
             ]),
           ),
