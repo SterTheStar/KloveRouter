@@ -5,7 +5,7 @@ import { validateCredential } from "./credential-validation";
 import type { ProviderProtocol } from "./provider-appearance";
 
 export type CredentialKind = "api_key" | "codex" | "chatgpt" | "antigravity" | "freebuff" | "qwen" | "atomesus" | "conol" | "perch" | "openfree";
-export type CredentialMode = "fixed" | "round_robin";
+export type CredentialMode = "fixed" | "round_robin" | "failover";
 
 export interface ProviderCredential {
   id: string;
@@ -375,7 +375,34 @@ export const credentialService = {
             (candidate) => candidate.id === state.last_credential_id,
           )
         : -1;
-      const selected = candidates[(previousIndex + 1) % candidates.length];
+      let selectedIndex: number;
+      if (mode === "failover") {
+        if (state?.last_credential_id) {
+          const lastIndex = candidates.findIndex(
+            (candidate) => candidate.id === state.last_credential_id,
+          );
+          if (lastIndex >= 0) {
+            selectedIndex = lastIndex;
+          } else if (fixedId) {
+            const fixedIndex = candidates.findIndex(
+              (candidate) => candidate.id === fixedId,
+            );
+            selectedIndex = fixedIndex >= 0 ? fixedIndex : 0;
+          } else {
+            selectedIndex = 0;
+          }
+        } else if (fixedId) {
+          const fixedIndex = candidates.findIndex(
+            (candidate) => candidate.id === fixedId,
+          );
+          selectedIndex = fixedIndex >= 0 ? fixedIndex : 0;
+        } else {
+          selectedIndex = 0;
+        }
+      } else {
+        selectedIndex = (previousIndex + 1) % candidates.length;
+      }
+      const selected = candidates[selectedIndex];
       db.query(
         "INSERT INTO provider_credential_rotation (provider_id, last_credential_id, updated_at) VALUES (?, ?, datetime('now')) ON CONFLICT(provider_id) DO UPDATE SET last_credential_id = excluded.last_credential_id, updated_at = datetime('now')",
       ).run(providerId, selected.id);

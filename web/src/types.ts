@@ -10,7 +10,7 @@ export interface Provider {
   created_at: string;
   updated_at: string;
   api_key?: string;
-  credential_mode?: "fixed" | "round_robin";
+  credential_mode?: "fixed" | "round_robin" | "failover";
   fixed_credential_id?: string | null;
 }
 

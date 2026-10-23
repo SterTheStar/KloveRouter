@@ -140,7 +140,7 @@ export const providers = {
        avatar?: string | null;
         custom_headers?: unknown;
        protocol?: "openai" | "openai-responses" | "anthropic" | "codex" | "chatgpt" | "antigravity" | "freebuff" | "qwen" | "atomesus" | "conol" | "perch" | "openfree";
-      credential_mode?: "fixed" | "round_robin";
+      credential_mode?: "fixed" | "round_robin" | "failover";
       fixed_credential_id?: string | null;
       is_active?: number;
     },

@@ -100,9 +100,9 @@ async function resolveMediaRoute(modelName: unknown, modality: "image_generation
   const apiKey = gatewayKey ? await keyService.verify(gatewayKey) : null;
   if (!apiKey) return { status: 401, error: apiError("Valid API key required", "authentication_error") } as const;
 
-  const sequence = provider.credential_mode === "round_robin" ? credentialService.beginRequest(provider.id) : undefined;
+  const sequence = provider.credential_mode === "round_robin" || provider.credential_mode === "failover" ? credentialService.beginRequest(provider.id) : undefined;
   const credential = credentialService.select(provider.id, provider.credential_mode, provider.fixed_credential_id, sequence)
-    || credentialService.select(provider.id, "round_robin", null, sequence);
+    || credentialService.select(provider.id, provider.credential_mode === "failover" ? "failover" : "round_robin", null, sequence);
   if (!credential) return { status: 503, error: apiError(`Provider "${provider.name}" has no active credential`, "server_error", "no_active_credential") } as const;
   return { route: { provider, model, requestedModel: modelName, credential } as MediaRoute, gatewayKeyName: apiKey.name } as const;
 }
@@ -254,9 +254,9 @@ function routeForVideoJob(job: NonNullable<ReturnType<typeof getVideoJob>>) {
   const provider = providerService.findById(job.provider_id);
   const model = modelService.findById(job.model_id);
   if (!provider || !model || !provider.is_active || !model.is_active || !isOpenAICompatibleProtocol(provider.protocol)) return null;
-  const sequence = provider.credential_mode === "round_robin" ? credentialService.beginRequest(provider.id) : undefined;
+  const sequence = provider.credential_mode === "round_robin" || provider.credential_mode === "failover" ? credentialService.beginRequest(provider.id) : undefined;
   const credential = credentialService.select(provider.id, provider.credential_mode, provider.fixed_credential_id, sequence)
-    || credentialService.select(provider.id, "round_robin", null, sequence);
+    || credentialService.select(provider.id, provider.credential_mode === "failover" ? "failover" : "round_robin", null, sequence);
   if (!credential) return null;
   return { provider, model, requestedModel: job.model_name, credential } as MediaRoute;
 }

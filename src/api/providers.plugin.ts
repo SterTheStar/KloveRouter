@@ -163,7 +163,7 @@ export const providersPlugin = (app: Elysia) =>
             ]),
           ),
           credential_mode: t.Optional(
-            t.Union([t.Literal("fixed"), t.Literal("round_robin")]),
+            t.Union([t.Literal("fixed"), t.Literal("round_robin"), t.Literal("failover")]),
           ),
           fixed_credential_id: t.Optional(t.Union([t.String(), t.Null()])),
         }),
@@ -224,7 +224,7 @@ export const providersPlugin = (app: Elysia) =>
             ]),
           ),
           credential_mode: t.Optional(
-            t.Union([t.Literal("fixed"), t.Literal("round_robin")]),
+            t.Union([t.Literal("fixed"), t.Literal("round_robin"), t.Literal("failover")]),
           ),
           fixed_credential_id: t.Optional(t.Union([t.String(), t.Null()])),
           is_active: t.Optional(t.Numeric()),

@@ -592,20 +592,20 @@ export default function ProviderDetailPage({
   };
 
   const setCredentialMode = async (
-    mode: "fixed" | "round_robin",
+    mode: "fixed" | "round_robin" | "failover",
     fixedId?: string | null,
   ) => {
     const selectedId =
-      mode === "fixed"
-        ? (fixedId ??
+      mode === "round_robin"
+        ? null
+        : (fixedId ??
           provider?.fixed_credential_id ??
           routableCredentials[0]?.id ??
-          null)
-        : null;
-    if (mode === "fixed" && !selectedId)
+          null);
+    if (mode !== "round_robin" && !selectedId)
       return notifyError(
         "No credential available",
-        "Add or connect a credential before selecting fixed routing.",
+        "Add or connect a credential before selecting this routing.",
       );
     setRoutingSaving(true);
     try {
@@ -617,7 +617,9 @@ export default function ProviderDetailPage({
       notifySuccess(
         mode === "round_robin"
           ? "Round robin enabled"
-          : "Fixed credential selected",
+          : mode === "failover"
+            ? "Failover enabled"
+            : "Fixed credential selected",
       );
     } catch (e: any) {
       setError(e.message);
@@ -1012,7 +1014,9 @@ export default function ProviderDetailPage({
                   >
                     {provider.credential_mode === "round_robin"
                       ? "Round robin"
-                      : "Fixed credential"}
+                      : provider.credential_mode === "failover"
+                        ? "Failover"
+                        : "Fixed credential"}
                     <ChevronDown className="size-4 text-muted-foreground" />
                   </DropdownMenuTrigger>
                   <DropdownMenuContent className="min-w-[var(--anchor-width)]">
@@ -1021,11 +1025,17 @@ export default function ProviderDetailPage({
                       <DropdownMenuRadioGroup
                         value={provider.credential_mode ?? "fixed"}
                         onValueChange={(value) =>
-                          setCredentialMode(value as "fixed" | "round_robin")
+                          setCredentialMode(value as "fixed" | "round_robin" | "failover")
                         }
                       >
                         <DropdownMenuRadioItem value="fixed">
                           Fixed credential
+                        </DropdownMenuRadioItem>
+                        <DropdownMenuRadioItem
+                          value="failover"
+                          disabled={routableCredentials.length < 2}
+                        >
+                          Failover (on error)
                         </DropdownMenuRadioItem>
                         <DropdownMenuRadioItem
                           value="round_robin"
@@ -1100,7 +1110,9 @@ export default function ProviderDetailPage({
               <p className="text-xs text-muted-foreground">
                 {provider.credential_mode === "round_robin"
                   ? `Requests rotate across ${routableCredentials.length} active credentials, selecting the least recently used.`
-                  : "Every request uses the selected credential. If it becomes unavailable, the backend falls back to another active credential."}
+                  : provider.credential_mode === "failover"
+                    ? `Uses the selected credential until it fails, then fails over to the next active credential. ${routableCredentials.length} active credentials available.`
+                    : "Every request uses the selected credential. If it becomes unavailable, the backend falls back to another active credential."}
               </p>
             </div>
           )}
