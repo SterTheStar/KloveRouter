@@ -12,6 +12,7 @@ const protocolKinds: Record<ProviderProtocol, CredentialKind> = {
   qwen: "qwen",
   atomesus: "atomesus",
   conol: "conol",
+  perch: "perch",
   openfree: "openfree",
 };
 
@@ -22,6 +23,7 @@ const secretKinds = new Set<CredentialKind>([
   "qwen",
   "atomesus",
   "conol",
+  "perch",
   "openfree",
 ]);
 

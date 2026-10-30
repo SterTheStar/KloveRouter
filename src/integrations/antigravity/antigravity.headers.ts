@@ -35,15 +35,15 @@ export function getImpersonationHeaders(
   fp: DeviceFingerprint,
   model?: string,
 ) {
+  const clientMetadata = { ...fp.clientMetadata, ideType: "IDE_UNSPECIFIED" };
   return {
     Authorization: `Bearer ${token}`,
     "Content-Type": "application/json",
-    "User-Agent":
-      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Antigravity/2.0.1 Chrome/138.0.7204.235 Electron/37.3.1 Safari/537.36",
+    "User-Agent": fp.userAgent,
     "X-Goog-Api-Client": fp.apiClient,
     "X-Goog-QuotaUser": fp.quotaUser,
     "X-Client-Device-Id": fp.deviceId,
-    "Client-Metadata": JSON.stringify(fp.clientMetadata),
+    "Client-Metadata": JSON.stringify(clientMetadata),
     ...(model?.includes("claude")
       ? { "anthropic-beta": "interleaved-thinking-2025-05-14" }
       : {}),

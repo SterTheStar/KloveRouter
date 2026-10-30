@@ -152,9 +152,9 @@ export const chatService = {
       JSON.stringify(input.content === undefined ? parseJson(current.content, current.content) : input.content ?? ""),
       input.attachments === undefined
         ? current.attachments
-        : input.attachments?.length
-          ? JSON.stringify(input.attachments)
-          : null,
+        : input.attachments === null
+          ? null
+          : JSON.stringify(input.attachments),
       id,
     );
     if (input.truncateAfter) {
@@ -263,7 +263,7 @@ export const chatService = {
       "UPDATE chat_messages SET content = ?, reasoning = ?, stats = ?, error = ? WHERE id = ?",
     ).run(
       JSON.stringify(input.content === undefined ? parseJson(current.content, current.content) : input.content),
-      input.reasoning === undefined ? current.reasoning : input.reasoning || null,
+      input.reasoning === undefined ? current.reasoning : (input.reasoning ?? null),
       input.stats === undefined ? current.stats : input.stats ? JSON.stringify(input.stats) : null,
       input.error === undefined ? current.error : input.error,
       id,

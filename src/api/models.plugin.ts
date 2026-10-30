@@ -26,6 +26,7 @@ import { openfreeModels, openfreeResponses } from "../integrations/openfree";
 import { qwenModels, qwenResponses } from "../integrations/qwen";
 import { atomesusModels, atomesusTest } from "../integrations/atomesus";
 import { conolModels, conolResponses } from "../integrations/conol";
+import { perchModels, perchTest } from "../integrations/perch";
 import {
   chatgptModels,
   chatgptTest,
@@ -309,7 +310,7 @@ export const modelsPlugin = (app: Elysia) =>
                 provider.id,
                 provider.credential_mode,
                 provider.fixed_credential_id,
-              ) || credentialService.select(provider.id, "round_robin");
+              ) || credentialService.select(provider.id, provider.credential_mode === "failover" ? "failover" : "round_robin");
             if (!credential) {
               set.status = 503;
               return { error: "No active Codex account" };
@@ -339,7 +340,7 @@ export const modelsPlugin = (app: Elysia) =>
                 provider.id,
                 provider.credential_mode,
                 provider.fixed_credential_id,
-              ) || credentialService.select(provider.id, "round_robin");
+              ) || credentialService.select(provider.id, provider.credential_mode === "failover" ? "failover" : "round_robin");
             if (!credential) {
               set.status = 503;
               return { error: "No active Antigravity account" };
@@ -398,7 +399,7 @@ export const modelsPlugin = (app: Elysia) =>
                 provider.id,
                 provider.credential_mode,
                 provider.fixed_credential_id,
-              ) || credentialService.select(provider.id, "round_robin");
+              ) || credentialService.select(provider.id, provider.credential_mode === "failover" ? "failover" : "round_robin");
             if (!credential) {
               set.status = 503;
               return { error: "No active Qwen credential" };
@@ -433,13 +434,28 @@ export const modelsPlugin = (app: Elysia) =>
             return { success: true, models_found: selected.length, message: `Synced ${selected.length} Atomesus models from ${provider.name}` };
           }
 
+          if (provider.protocol === "perch") {
+            const available = perchModels();
+            if (query.preview === true) return preview(available);
+            const selected = selectModels(available);
+            for (const model of selected)
+              saveSyncedModel({
+                provider_id: id,
+                model_id: model.id,
+                display_name: model.display_name,
+                is_manual: 0,
+                ...await resolveModelMetadata(provider.protocol, model.id, model),
+              });
+            return { success: true, models_found: selected.length, message: `Synced ${selected.length} Perch models from ${provider.name}` };
+          }
+
           if (provider.protocol === "conol") {
             const credential =
               credentialService.select(
                 provider.id,
                 provider.credential_mode,
                 provider.fixed_credential_id,
-              ) || credentialService.select(provider.id, "round_robin");
+              ) || credentialService.select(provider.id, provider.credential_mode === "failover" ? "failover" : "round_robin");
             if (!credential) {
               set.status = 503;
               return { error: "No active Conol credential" };
@@ -465,7 +481,7 @@ export const modelsPlugin = (app: Elysia) =>
                 provider.id,
                 provider.credential_mode,
                 provider.fixed_credential_id,
-              ) || credentialService.select(provider.id, "round_robin");
+              ) || credentialService.select(provider.id, provider.credential_mode === "failover" ? "failover" : "round_robin");
             if (!credential) {
               set.status = 503;
               return { error: "No active ChatGPT credential" };
@@ -489,7 +505,7 @@ export const modelsPlugin = (app: Elysia) =>
               provider.id,
               provider.credential_mode,
               provider.fixed_credential_id,
-            ) || credentialService.select(provider.id, "round_robin");
+            ) || credentialService.select(provider.id, provider.credential_mode === "failover" ? "failover" : "round_robin");
           const normalizedBase = provider.base_url.replace(/\/+$/, "");
           const url = provider.protocol === "anthropic"
             ? anthropicEndpoint(provider, "models")
@@ -604,7 +620,7 @@ export const modelsPlugin = (app: Elysia) =>
             provider.id,
             provider.credential_mode,
             provider.fixed_credential_id,
-          ) || credentialService.select(provider.id, "round_robin");
+          ) || credentialService.select(provider.id, provider.credential_mode === "failover" ? "failover" : "round_robin");
         if (!credential) {
           set.status = 503;
           return { success: false, error: "No active provider credential" };
@@ -676,6 +692,8 @@ export const modelsPlugin = (app: Elysia) =>
                      ? await atomesusTest(model.model_id, credential, provider.base_url)
                    : provider.protocol === "conol"
                      ? await conolTest(model.model_id, credential, provider.base_url)
+                   : provider.protocol === "perch"
+                     ? await perchTest(model.model_id, credential, provider.base_url)
               : provider.protocol === "chatgpt"
                       ? {
                          choices: [

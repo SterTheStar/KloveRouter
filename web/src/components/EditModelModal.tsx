@@ -17,6 +17,7 @@ import type { Model, ModelMetadataInput } from "../types";
 import { useToast } from "./ui/toast";
 import {
   emptyModelMetadata,
+  MediaSettingsEditor,
   ModelMetadataEditor,
   modelFormTabsFor,
   PricingEditor,
@@ -156,6 +157,7 @@ export default function EditModelModal({
       setLoading(false);
     }
   };
+  if (!model) return null;
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="overflow-visible sm:max-w-3xl">
@@ -216,6 +218,9 @@ export default function EditModelModal({
           )}
           {activeTab === "capabilities" && (
             <ModelMetadataEditor value={metadata} onChange={setMetadata} />
+          )}
+          {activeTab === "generation" && (
+            <MediaSettingsEditor value={metadata} onChange={setMetadata} modelIdentity={`${modelId} ${displayName}`} />
           )}
           {activeTab === "output-fixes" && (
             <ThinkTagModeEditor

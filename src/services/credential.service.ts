@@ -4,8 +4,8 @@ import { logger } from "../logger";
 import { validateCredential } from "./credential-validation";
 import type { ProviderProtocol } from "./provider-appearance";
 
-export type CredentialKind = "api_key" | "codex" | "chatgpt" | "antigravity" | "freebuff" | "qwen" | "atomesus" | "conol" | "openfree";
-export type CredentialMode = "fixed" | "round_robin";
+export type CredentialKind = "api_key" | "codex" | "chatgpt" | "antigravity" | "freebuff" | "qwen" | "atomesus" | "conol" | "perch" | "openfree";
+export type CredentialMode = "fixed" | "round_robin" | "failover";
 
 export interface ProviderCredential {
   id: string;
@@ -101,9 +101,14 @@ export const credentialService = {
     const credential = this.findById(id);
     if (!credential) return null;
     return {
-      authenticated: credential.kind === "chatgpt" || credential.kind === "conol" || credential.kind === "openfree"
-        ? Boolean(credential.secret)
-        : Boolean(credential.access_token),
+      authenticated:
+        credential.kind === "chatgpt" ||
+        credential.kind === "conol" ||
+        credential.kind === "openfree"
+          ? Boolean(credential.secret)
+          : credential.kind === "perch"
+            ? true
+            : Boolean(credential.access_token),
       account_id: credential.account_id,
       email: credential.email ?? null,
       project_id: credential.project_id ?? null,
@@ -307,6 +312,8 @@ export const credentialService = {
                  ? `${alias}.kind = 'atomesus' AND ${alias}.secret IS NOT NULL`
                : provider?.protocol === "conol"
                  ? `${alias}.kind = 'conol' AND ${alias}.secret IS NOT NULL AND ${alias}.account_id IS NOT NULL`
+               : provider?.protocol === "perch"
+                 ? `${alias}.kind = 'perch'`
                : provider?.protocol === "openfree"
                  ? `${alias}.kind = 'openfree' AND ${alias}.secret IS NOT NULL`
                : `${alias}.kind = 'api_key' AND (${alias}.secret IS NOT NULL OR NOT EXISTS (SELECT 1 FROM provider_credentials configured WHERE configured.provider_id = ${alias}.provider_id AND configured.kind = 'api_key' AND configured.is_active = 1 AND configured.secret IS NOT NULL))`;
@@ -368,7 +375,34 @@ export const credentialService = {
             (candidate) => candidate.id === state.last_credential_id,
           )
         : -1;
-      const selected = candidates[(previousIndex + 1) % candidates.length];
+      let selectedIndex: number;
+      if (mode === "failover") {
+        if (state?.last_credential_id) {
+          const lastIndex = candidates.findIndex(
+            (candidate) => candidate.id === state.last_credential_id,
+          );
+          if (lastIndex >= 0) {
+            selectedIndex = lastIndex;
+          } else if (fixedId) {
+            const fixedIndex = candidates.findIndex(
+              (candidate) => candidate.id === fixedId,
+            );
+            selectedIndex = fixedIndex >= 0 ? fixedIndex : 0;
+          } else {
+            selectedIndex = 0;
+          }
+        } else if (fixedId) {
+          const fixedIndex = candidates.findIndex(
+            (candidate) => candidate.id === fixedId,
+          );
+          selectedIndex = fixedIndex >= 0 ? fixedIndex : 0;
+        } else {
+          selectedIndex = 0;
+        }
+      } else {
+        selectedIndex = (previousIndex + 1) % candidates.length;
+      }
+      const selected = candidates[selectedIndex];
       db.query(
         "INSERT INTO provider_credential_rotation (provider_id, last_credential_id, updated_at) VALUES (?, ?, datetime('now')) ON CONFLICT(provider_id) DO UPDATE SET last_credential_id = excluded.last_credential_id, updated_at = datetime('now')",
       ).run(providerId, selected.id);

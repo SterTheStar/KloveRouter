@@ -89,7 +89,7 @@ export async function loginOpenfreeCli(apiKey: string): Promise<OpenFreeCliLogin
       OPENCODE_DB: authDatabasePath,
     };
     // Force the CLI to show its key prompt even if the server has a global Zen key.
-    delete childEnvironment.OPENCODE_API_KEY;
+    delete (childEnvironment as Record<string, unknown>).OPENCODE_API_KEY;
     const child = spawn(expectPath, ["-c", script], {
       env: childEnvironment,
       stdio: ["pipe", "ignore", "ignore"],

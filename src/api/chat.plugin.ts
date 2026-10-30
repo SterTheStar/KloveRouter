@@ -69,6 +69,7 @@ function chatStatsStream(
   assistantMessageId?: string,
   onFinish?: (() => void) | undefined,
   generationSignal?: AbortSignal,
+  titleGenerator?: (() => Promise<string>) | undefined,
 ): Response {
   const reader = response.body?.getReader();
   if (!reader) {
@@ -221,7 +222,7 @@ function chatStatsStream(
         assistantReasoning += reasoningDelta;
       }
       if (delta?.audio !== undefined || delta?.audio_transcript !== undefined) {
-        if (typeof assistantContent === "string") assistantContent = { role: "assistant", content: "", audio: { data: "", transcript: "" } };
+        if (typeof assistantContent === "string") assistantContent = { role: "assistant", content: assistantContent, audio: { data: "", transcript: "" } };
         const audio = typeof delta.audio === "string" ? { data: delta.audio } : delta.audio ?? {};
         if (typeof audio.data === "string") assistantContent.audio.data += audio.data;
         if (typeof audio.transcript === "string") assistantContent.audio.transcript += audio.transcript;
@@ -251,11 +252,17 @@ function chatStatsStream(
               }
               if (raw === SSE_DONE) {
                 receivedDone = true;
-                if (!(typeof assistantContent === "string" ? assistantContent : assistantContent.content ?? "").trim() && !assistantReasoning.trim() && !sawToolOrRefusalOutput && !assistantError) {
+                if (!(typeof assistantContent === "string" ? assistantContent : assistantContent.content ?? "").trim() && !assistantReasoning.trim() && !(typeof assistantContent !== "string" && (assistantContent?.audio?.data || assistantContent?.audio?.transcript)) && !sawToolOrRefusalOutput && !assistantError) {
                   assistantError = "The model returned an empty response: no text, reasoning, tool call, or refusal was received.";
                 }
                 persistProgress(true);
                 emitStats(controller);
+                if (titleGenerator && chatId) {
+                  void titleGenerator().then((title) => {
+                    const updated = chatService.setGeneratedTitle(chatId, title);
+                    if (updated && streamOpen && clientConnected) enqueue(controller, encoder.encode(statsEvent({ type: "klove_chat_title", chat_id: chatId, title: updated.title })));
+                  }).catch(() => undefined);
+                }
                 enqueue(controller, encoder.encode(DONE_MARKER));
                 continue;
               }
@@ -286,11 +293,12 @@ function chatStatsStream(
               ? String(generationSignal.reason?.message ?? "Generation stopped by user. The partial response was saved.")
               : assistantError ?? "Chat stream ended before completion: the provider closed the stream without a [DONE] event.";
           }
-          else if (!(typeof assistantContent === "string" ? assistantContent : assistantContent.content ?? "").trim() && !assistantReasoning.trim() && !sawToolOrRefusalOutput && !assistantError) {
+          else if (!(typeof assistantContent === "string" ? assistantContent : assistantContent.content ?? "").trim() && !assistantReasoning.trim() && !(typeof assistantContent !== "string" && (assistantContent?.audio?.data || assistantContent?.audio?.transcript)) && !sawToolOrRefusalOutput && !assistantError) {
             assistantError = "The model returned an empty response: no text, reasoning, tool call, or refusal was received.";
           }
           persistProgress(true);
           emitStats(controller);
+          if (!receivedDone && streamOpen) enqueue(controller, encoder.encode(DONE_MARKER));
         } catch (error: any) {
           assistantError = generationSignal?.aborted
             ? String(generationSignal.reason?.message ?? "Generation stopped by user. The partial response was saved.")
@@ -308,6 +316,7 @@ function chatStatsStream(
               ),
             );
             emitStats(controller);
+            if (streamOpen) enqueue(controller, encoder.encode(DONE_MARKER));
           }
         } finally {
           onFinish?.();
@@ -473,11 +482,6 @@ export const chatPlugin = (app: Elysia) =>
       if (chatId && assistantMessageId) {
         chatGenerationService.start(chatId, assistantMessageId, generationController);
       }
-      if (titleGenerator && chatId) {
-        startTitleGeneration(titleGenerator, (title) => {
-          chatService.setGeneratedTitle(chatId!, title);
-        });
-      }
       let response: Response;
       try {
         response = await fetch(
@@ -526,6 +530,7 @@ export const chatPlugin = (app: Elysia) =>
           ? () => chatGenerationService.finish(chatId!, assistantMessageId!)
           : undefined,
         generationController.signal,
+        titleGenerator,
       );
     },
     {

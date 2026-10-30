@@ -24,6 +24,7 @@ import { openfreeResponses } from "../integrations/openfree";
 import { cleanQwenStream, extractQwenContent, qwenResponses } from "../integrations/qwen";
 import { atomesusResponses } from "../integrations/atomesus";
 import { conolContent, conolModelMetadataFromId, conolResponses } from "../integrations/conol";
+import { perchResponses } from "../integrations/perch";
 import {
   chatgptResponses,
   chatgptStreamToOpenAI,
@@ -182,6 +183,17 @@ function isQuotaError(error: unknown) {
   return /429|quota|resource_exhausted|too many requests|rate.?limit/i.test(
     message,
   );
+}
+
+function isAntigravityQuotaError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  return /QUOTA_EXHAUSTED|quota exceeded|per-model quota|per model quota/i.test(message);
+}
+
+function isAntigravityCapacityError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  if (isAntigravityQuotaError(error)) return false;
+  return /RESOURCE_EXHAUSTED|MODEL_CAPACITY_EXHAUSTED|model capacity/i.test(message);
 }
 
 const sensitiveErrorKey = /token|secret|password|authorization|api.?key|cookie/i;
@@ -655,7 +667,7 @@ export const proxyPlugin = (app: Elysia) =>
             const abort = () => upstreamController.abort(request.signal.reason);
             if (request.signal.aborted) abort(); else request.signal.addEventListener("abort", abort, { once: true });
             const providerCredential = credentialService.select(provider.id, provider.credential_mode, provider.fixed_credential_id)
-              || credentialService.select(provider.id, "round_robin");
+              || credentialService.select(provider.id, provider.credential_mode === "failover" ? "failover" : "round_robin");
             if (!providerCredential) {
               set.status = 503;
               return { error: { message: "No active provider credential", type: "server_error", code: "no_active_credential" } };
@@ -998,7 +1010,7 @@ export const proxyPlugin = (app: Elysia) =>
         });
 
         const requestSequence =
-          provider.credential_mode === "round_robin"
+          provider.credential_mode === "round_robin" || provider.credential_mode === "failover"
             ? credentialService.beginRequest(provider.id)
             : undefined;
         let credential =
@@ -1010,7 +1022,7 @@ export const proxyPlugin = (app: Elysia) =>
           ) ||
           credentialService.select(
             provider.id,
-            "round_robin",
+            provider.credential_mode === "failover" ? "failover" : "round_robin",
             null,
             requestSequence,
           );
@@ -1108,9 +1120,9 @@ export const proxyPlugin = (app: Elysia) =>
               failures.push(error);
               requestLogService.captureError(requestLogId, error);
               credentialService.markError(credentialId, error.message);
-              if (isAbortError(error) || !isTransientProviderError(error) || provider.credential_mode !== "round_robin") break;
+              if (isAbortError(error) || !isTransientProviderError(error) || (provider.credential_mode !== "round_robin" && provider.credential_mode !== "failover")) break;
               credentialService.markCooldown(credentialId, 10, error.message, requestSequence);
-              const next = credentialService.select(provider.id, "round_robin", null, requestSequence);
+              const next = credentialService.select(provider.id, provider.credential_mode === "failover" ? "failover" : "round_robin", null, requestSequence);
               if (!next || attempted.has(next.id)) break;
               credential = next;
               requestLogService.setCredential(requestLogId, credential);
@@ -1154,9 +1166,9 @@ export const proxyPlugin = (app: Elysia) =>
               failures.push(error);
               requestLogService.captureError(requestLogId, error);
               credentialService.markError(credentialId, error.message);
-              if (isAbortError(error) || !isTransientProviderError(error) || provider.credential_mode !== "round_robin") break;
+              if (isAbortError(error) || !isTransientProviderError(error) || (provider.credential_mode !== "round_robin" && provider.credential_mode !== "failover")) break;
               credentialService.markCooldown(credentialId, 10, error.message, requestSequence);
-              const next = credentialService.select(provider.id, "round_robin", null, requestSequence);
+              const next = credentialService.select(provider.id, provider.credential_mode === "failover" ? "failover" : "round_robin", null, requestSequence);
               if (!next || attempted.has(next.id)) break;
               credential = next;
               requestLogService.setCredential(requestLogId, credential);
@@ -1189,9 +1201,9 @@ export const proxyPlugin = (app: Elysia) =>
               failures.push(error);
               requestLogService.captureError(requestLogId, error);
               credentialService.markError(credentialId, error.message);
-              if (isAbortError(error) || !isTransientProviderError(error) || provider.credential_mode !== "round_robin") break;
+              if (isAbortError(error) || !isTransientProviderError(error) || (provider.credential_mode !== "round_robin" && provider.credential_mode !== "failover")) break;
               credentialService.markCooldown(credentialId, 10, error.message, requestSequence);
-              const next = credentialService.select(provider.id, "round_robin", null, requestSequence);
+              const next = credentialService.select(provider.id, provider.credential_mode === "failover" ? "failover" : "round_robin", null, requestSequence);
               if (!next || attempted.has(next.id)) break;
               credential = next;
               requestLogService.setCredential(requestLogId, credential);
@@ -1296,12 +1308,12 @@ export const proxyPlugin = (app: Elysia) =>
               const status = errorStatus(error);
               if (status !== undefined) failureStatuses.push(status);
               credentialService.markError(credential.id, error.message);
-              if (!isTransientProviderError(error) || provider.credential_mode !== "round_robin") break;
+              if (!isTransientProviderError(error) || (provider.credential_mode !== "round_robin" && provider.credential_mode !== "failover")) break;
               credentialService.markCooldown(credential.id, 10, error.message, requestSequence);
               await new Promise((resolve) => setTimeout(resolve, retryDelay(attempted.size - 1)));
               const next = credentialService.select(
                 provider.id,
-                "round_robin",
+                provider.credential_mode === "failover" ? "failover" : "round_robin",
                 null,
                 requestSequence,
               );
@@ -1423,7 +1435,7 @@ export const proxyPlugin = (app: Elysia) =>
               failures.push(error);
               requestLogService.captureError(requestLogId, error);
               credentialService.markError(credential.id, error.message);
-              if (isAbortError(error) || !isTransientProviderError(error) || provider.credential_mode !== "round_robin") break;
+              if (isAbortError(error) || !isTransientProviderError(error) || (provider.credential_mode !== "round_robin" && provider.credential_mode !== "failover")) break;
               credentialService.markCooldown(
                 credential.id,
                 10,
@@ -1432,7 +1444,7 @@ export const proxyPlugin = (app: Elysia) =>
               );
               const next = credentialService.select(
                 provider.id,
-                "round_robin",
+                provider.credential_mode === "failover" ? "failover" : "round_robin",
                 null,
                 requestSequence,
               );
@@ -1550,10 +1562,10 @@ export const proxyPlugin = (app: Elysia) =>
               if (isModelNotFoundError(error)) {
                 failures.push(error);
               requestLogService.captureError(requestLogId, error);
-                if (isAbortError(error) || !isTransientProviderError(error) || provider.credential_mode !== "round_robin") break;
+                if (isAbortError(error) || !isTransientProviderError(error) || (provider.credential_mode !== "round_robin" && provider.credential_mode !== "failover")) break;
                 const next = credentialService.select(
                   provider.id,
-                  "round_robin",
+                  provider.credential_mode === "failover" ? "failover" : "round_robin",
                   null,
                   requestSequence,
                 );
@@ -1565,8 +1577,18 @@ export const proxyPlugin = (app: Elysia) =>
               credentialService.markError(credential.id, error.message);
               failures.push(error);
               requestLogService.captureError(requestLogId, error);
-              if (isAbortError(error) || !isTransientProviderError(error) || provider.credential_mode !== "round_robin") {
-                const statusCode = isQuotaError(error) ? 429 : errorStatus(error) ?? 502;
+              const quotaError = isAntigravityQuotaError(error);
+              const capacityError = isAntigravityCapacityError(error);
+              if (
+                isAbortError(error) ||
+                !isTransientProviderError(error) ||
+                (provider.credential_mode !== "round_robin" && provider.credential_mode !== "failover") ||
+                capacityError
+              ) {
+                const statusCode =
+                  quotaError || capacityError
+                    ? 429
+                    : errorStatus(error) ?? 502;
                 requestLogService.complete(requestLogId, {
                   status: "error",
                   statusCode,
@@ -1574,8 +1596,12 @@ export const proxyPlugin = (app: Elysia) =>
                 });
                 set.status = statusCode;
                 return {
-                  error: "Antigravity request failed",
-                  message: error.message,
+                  error: capacityError
+                    ? "Antigravity model capacity exhausted"
+                    : "Antigravity request failed",
+                  message: capacityError
+                    ? `Antigravity rejected the request with a capacity error that is not a quota failure. The credential was not blocked. ${error.message}`
+                    : error.message,
                 };
               }
               credentialService.markCooldown(
@@ -1586,7 +1612,7 @@ export const proxyPlugin = (app: Elysia) =>
               );
               const next = credentialService.select(
                 provider.id,
-                "round_robin",
+                provider.credential_mode === "failover" ? "failover" : "round_robin",
                 null,
                 requestSequence,
               );
@@ -1695,8 +1721,8 @@ export const proxyPlugin = (app: Elysia) =>
               failures.push(error);
               requestLogService.captureError(requestLogId, error);
               credentialService.markError(credential.id, error.message);
-              if (isAbortError(error) || !isTransientProviderError(error) || provider.credential_mode !== "round_robin") break;
-              const next = credentialService.select(provider.id, "round_robin", null, requestSequence);
+              if (isAbortError(error) || !isTransientProviderError(error) || (provider.credential_mode !== "round_robin" && provider.credential_mode !== "failover")) break;
+              const next = credentialService.select(provider.id, provider.credential_mode === "failover" ? "failover" : "round_robin", null, requestSequence);
               if (!next || attempted.has(next.id)) break;
               credential = next;
               requestLogService.setCredential(requestLogId, credential);
@@ -1771,8 +1797,8 @@ export const proxyPlugin = (app: Elysia) =>
               failures.push(error);
               requestLogService.captureError(requestLogId, error);
               credentialService.markError(credential.id, error.message);
-              if (isAbortError(error) || !isTransientProviderError(error) || provider.credential_mode !== "round_robin") break;
-              const next = credentialService.select(provider.id, "round_robin", null, requestSequence);
+              if (isAbortError(error) || !isTransientProviderError(error) || (provider.credential_mode !== "round_robin" && provider.credential_mode !== "failover")) break;
+              const next = credentialService.select(provider.id, provider.credential_mode === "failover" ? "failover" : "round_robin", null, requestSequence);
               if (!next || attempted.has(next.id)) break;
               credential = next;
               requestLogService.setCredential(requestLogId, credential);
@@ -1782,6 +1808,55 @@ export const proxyPlugin = (app: Elysia) =>
           set.status = statusCode;
           requestLogService.complete(requestLogId, { status: "error", statusCode, error: errorMessage(failures.at(-1)) });
           return { error: "Qwen request failed", message: errorMessage(failures.at(-1)) };
+        }
+
+        if (provider.protocol === "perch") {
+          const attempted = new Set<string>();
+          const failures: unknown[] = [];
+          while (credential && !attempted.has(credential.id)) {
+            attempted.add(credential.id);
+            try {
+              const start = performance.now();
+              const result = await perchResponses(body, parsed.modelId, credential, provider.base_url, request.signal);
+              const modelRecord = modelService.findByProviderAndModel(provider.id, parsed.modelId);
+              const credentialId = credential.id;
+              if (!body.stream) {
+                const durationMs = Math.round(performance.now() - start);
+                const completion = result as any;
+                const details = tokenDetails(completion.usage);
+                const promptTokens = Number(completion.usage?.prompt_tokens ?? 0) || countMessages(body.messages, { model: parsed.modelId, provider: provider.name });
+                const completionTokens = Number(completion.usage?.completion_tokens ?? 0) || countCompletion(completion.choices?.[0]?.message?.content ?? "", { model: parsed.modelId, provider: provider.name });
+                const usage = usageService.record(provider.id, modelRecord?.id ?? parsed.modelId, parsed.modelId, promptTokens, completionTokens, durationMs, durationMs, details);
+                requestLogService.complete(requestLogId, { promptTokens, completionTokens, cacheRead: details.cacheRead, cacheWrite: details.cacheWrite, cost: usage.estimated_cost_usd, durationMs });
+                credentialService.clearError(credentialId);
+                credentialService.clearCooldown(credentialId);
+                return fixThinkTag(completion);
+              }
+              return recordSseUsageResponse(fixThinkTagStream(result as Response), (promptTokens, completionTokens, durationMs, generationDurationMs, details) => {
+                const usage = usageService.record(provider.id, modelRecord?.id ?? parsed.modelId, parsed.modelId, promptTokens, completionTokens, durationMs, generationDurationMs, details);
+                requestLogService.complete(requestLogId, { promptTokens, completionTokens, cacheRead: details?.cacheRead, cacheWrite: details?.cacheWrite, cost: usage.estimated_cost_usd, durationMs });
+                credentialService.clearError(credentialId);
+                credentialService.clearCooldown(credentialId);
+              }, start, (error) => {
+                credentialService.markError(credentialId, error.message);
+                requestLogService.complete(requestLogId, { status: "error", statusCode: 502, error: error.message });
+              }, { messages: body.messages, model: parsed.modelId, provider: provider.name, onProgress: (chars) => requestLogService.progress(requestLogId, chars) });
+            } catch (error: any) {
+              failures.push(error);
+              requestLogService.captureError(requestLogId, error);
+              credentialService.markError(credential.id, error.message);
+              if (isAbortError(error) || !isTransientProviderError(error) || (provider.credential_mode !== "round_robin" && provider.credential_mode !== "failover")) break;
+              credentialService.markCooldown(credential.id, 10, error.message, requestSequence);
+              const next = credentialService.select(provider.id, provider.credential_mode === "failover" ? "failover" : "round_robin", null, requestSequence);
+              if (!next || attempted.has(next.id)) break;
+              credential = next;
+              requestLogService.setCredential(requestLogId, credential);
+            }
+          }
+          const statusCode = failureStatus(failures);
+          set.status = statusCode;
+          requestLogService.complete(requestLogId, { status: "error", statusCode, error: errorMessage(failures.at(-1)) });
+          return { error: "Perch request failed", message: errorMessage(failures.at(-1)) };
         }
 
         if (provider.protocol === "conol") {
@@ -1820,9 +1895,9 @@ export const proxyPlugin = (app: Elysia) =>
               failures.push(error);
               requestLogService.captureError(requestLogId, error);
               credentialService.markError(credential.id, error.message);
-              if (isAbortError(error) || !isTransientProviderError(error) || provider.credential_mode !== "round_robin") break;
+              if (isAbortError(error) || !isTransientProviderError(error) || (provider.credential_mode !== "round_robin" && provider.credential_mode !== "failover")) break;
               credentialService.markCooldown(credential.id, 10, error.message, requestSequence);
-              const next = credentialService.select(provider.id, "round_robin", null, requestSequence);
+              const next = credentialService.select(provider.id, provider.credential_mode === "failover" ? "failover" : "round_robin", null, requestSequence);
               if (!next || attempted.has(next.id)) break;
               credential = next;
               requestLogService.setCredential(requestLogId, credential);
@@ -1853,9 +1928,9 @@ export const proxyPlugin = (app: Elysia) =>
               failures.push(error);
               requestLogService.captureError(requestLogId, error);
               credentialService.markError(credential.id, error.message);
-              if (isAbortError(error) || !isTransientProviderError(error) || provider.credential_mode !== "round_robin") break;
+              if (isAbortError(error) || !isTransientProviderError(error) || (provider.credential_mode !== "round_robin" && provider.credential_mode !== "failover")) break;
               credentialService.markCooldown(credential.id, 10, error.message, requestSequence);
-              const next = credentialService.select(provider.id, "round_robin", null, requestSequence);
+              const next = credentialService.select(provider.id, provider.credential_mode === "failover" ? "failover" : "round_robin", null, requestSequence);
               if (!next || attempted.has(next.id)) break;
               credential = next;
               requestLogService.setCredential(requestLogId, credential);
@@ -1967,7 +2042,7 @@ export const proxyPlugin = (app: Elysia) =>
               failures.push(error);
               requestLogService.captureError(requestLogId, error);
               credentialService.markError(credential.id, error.message);
-              if (isAbortError(error) || !isTransientProviderError(error) || provider.credential_mode !== "round_robin") break;
+              if (isAbortError(error) || !isTransientProviderError(error) || (provider.credential_mode !== "round_robin" && provider.credential_mode !== "failover")) break;
               credentialService.markCooldown(
                 credential.id,
                 10,
@@ -1976,7 +2051,7 @@ export const proxyPlugin = (app: Elysia) =>
               );
               const next = credentialService.select(
                 provider.id,
-                "round_robin",
+                provider.credential_mode === "failover" ? "failover" : "round_robin",
                 null,
                 requestSequence,
               );
@@ -2079,7 +2154,7 @@ export const proxyPlugin = (app: Elysia) =>
               failures.push(error);
               requestLogService.captureError(requestLogId, error);
               credentialService.markError(credential.id, error.message);
-              if (isAbortError(error) || !isTransientProviderError(error) || provider.credential_mode !== "round_robin") break;
+              if (isAbortError(error) || !isTransientProviderError(error) || (provider.credential_mode !== "round_robin" && provider.credential_mode !== "failover")) break;
               credentialService.markCooldown(
                 credential.id,
                 10,
@@ -2088,7 +2163,7 @@ export const proxyPlugin = (app: Elysia) =>
               );
               const next = credentialService.select(
                 provider.id,
-                "round_robin",
+                provider.credential_mode === "failover" ? "failover" : "round_robin",
                 null,
                 requestSequence,
               );
@@ -2155,7 +2230,7 @@ export const proxyPlugin = (app: Elysia) =>
               failures.push(error);
               requestLogService.captureError(requestLogId, error);
               credentialService.markError(credential.id, error.message);
-              if (isAbortError(error) || !isTransientProviderError(error) || provider.credential_mode !== "round_robin") break;
+              if (isAbortError(error) || !isTransientProviderError(error) || (provider.credential_mode !== "round_robin" && provider.credential_mode !== "failover")) break;
               credentialService.markCooldown(
                 credential.id,
                 10,
@@ -2164,7 +2239,7 @@ export const proxyPlugin = (app: Elysia) =>
               );
               const next = credentialService.select(
                 provider.id,
-                "round_robin",
+                provider.credential_mode === "failover" ? "failover" : "round_robin",
                 null,
                 requestSequence,
               );

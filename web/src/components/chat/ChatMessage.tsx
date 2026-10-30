@@ -25,11 +25,16 @@ function AssistantAudio({ audio }: { audio: { data?: string; format?: string; tr
   useEffect(() => {
     if (!audio.data) { setUrl(""); return; }
     const mime = audio.format?.startsWith("audio/") ? audio.format : `audio/${audio.format ?? "mpeg"}`;
-    const binary = atob(audio.data);
-    const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
-    const objectUrl = URL.createObjectURL(new Blob([bytes], { type: mime }));
-    setUrl(objectUrl);
-    return () => URL.revokeObjectURL(objectUrl);
+    let objectUrl = "";
+    try {
+      const binary = atob(audio.data);
+      const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+      objectUrl = URL.createObjectURL(new Blob([bytes], { type: mime }));
+      setUrl(objectUrl);
+    } catch {
+      setUrl("");
+    }
+    return () => { if (objectUrl) URL.revokeObjectURL(objectUrl); };
   }, [audio.data, audio.format]);
   return <div className="mt-2 max-w-xl space-y-2">{url && <audio controls src={url} className="w-full" />}{audio.transcript && <p className="text-sm text-muted-foreground">{audio.transcript}</p>}</div>;
 }

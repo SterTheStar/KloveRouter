@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { googleStreamToOpenAI, toGoogleBody } from "./antigravity.transform";
+import {
+  googleStreamToOpenAI,
+  sanitizeAntigravityPayload,
+  toGoogleBody,
+} from "./antigravity.transform";
 
 const encoder = new TextEncoder();
 
@@ -194,5 +198,67 @@ describe("toGoogleBody", () => {
       includeThoughts: false,
       thinkingBudget: 0,
     });
+  });
+
+  test("sanitizes harness-specific system prompt markers like the masking sidecar", async () => {
+    const transformed = await toGoogleBody({
+      model: "gemini-test",
+      messages: [
+        {
+          role: "system",
+          content: [
+            "<system-conventions>",
+            "RFC 2119: MUST, REQUIRED, SHOULD, RECOMMENDED, MAY, OPTIONAL.",
+            "</system-conventions>",
+            "<system-directive>Oh My Pi coding harness</system-directive>",
+            "<critical>omp Live</critical>",
+          ].join("\n"),
+        },
+        { role: "user", content: "hello" },
+      ],
+    }, "project");
+
+    const text = transformed.request.systemInstruction.parts
+      .map((part: any) => part.text ?? "")
+      .join("\n");
+
+    expect(text).toContain("<guidelines>");
+    expect(text).toContain("Requirement terminology: MUST means mandatory");
+    expect(text).toContain("<instructions>");
+    expect(text).toContain("<important>");
+    expect(text).toContain("AI coding assistant");
+    expect(text).toContain("coding assistant live");
+    expect(text).not.toContain("system-conventions");
+    expect(text).not.toContain("RFC 2119");
+    expect(text).not.toContain("used_claude");
+    expect(text).not.toContain("Oh My Pi");
+    expect((transformed as any).requestType).toBeUndefined();
+  });
+
+  test("replaces standalone RFC 2119 clauses without a wrapper", async () => {
+    const transformed = await toGoogleBody({
+      model: "gemini-test",
+      messages: [
+        {
+          role: "system",
+          content: "RFC 2119: MUST and SHOULD are normative terms.",
+        },
+        { role: "user", content: "hello" },
+      ],
+    }, "project");
+
+    const text = transformed.request.systemInstruction.parts[0].text;
+    expect(text).toBe(
+      "Requirement terminology: MUST means mandatory, SHOULD means recommended, and MAY means optional.",
+    );
+  });
+
+  test("drops telemetry keys recursively", () => {
+    expect(
+      sanitizeAntigravityPayload({
+        used_claude: { nested: true },
+        nested: { used_claude_conservative: true, keep: "value" },
+      } as Record<string, unknown>),
+    ).toEqual({ nested: { keep: "value" } });
   });
 });

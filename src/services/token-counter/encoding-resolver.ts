@@ -17,6 +17,6 @@ export function resolveEncoding(model = "", provider = ""): EncodingResolution {
   const exact = EXACT_OPENAI.has(normalized) || normalized.startsWith("gpt-") || normalized.startsWith("o1") || normalized.startsWith("o3");
   return {
     encoding: "cl100k_base",
-    estimated: !exact || providerName === "qwen" || providerName === "conol" || providerName === "openfree",
+    estimated: !exact || providerName === "qwen" || providerName === "conol" || providerName === "perch" || providerName === "openfree",
   };
 }

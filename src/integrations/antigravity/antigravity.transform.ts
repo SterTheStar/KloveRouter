@@ -4,6 +4,47 @@ import { resolveImageData, openAIImageUrl, audioSource } from "../../services/mu
 function modelId(model: string) {
   return model.toLowerCase().replace(/^antigravity-/, "");
 }
+
+const CANONICAL_CONVENTIONS = `<guidelines>
+Requirement terminology: MUST means mandatory, SHOULD means recommended, and MAY means optional.
+</guidelines>`;
+
+const REMOVED_ANTIGRAVITY_KEYS = new Set([
+  "used_claude",
+  "used_claude_conservative",
+]);
+
+function sanitizeAntigravityText(text: string): string {
+  let result = text;
+  result = result.replace(
+    /<system[-_]conventions\b[^>]*>[\s\S]{0,12000}?<\/system[-_]conventions\s*>/gi,
+    CANONICAL_CONVENTIONS,
+  );
+  result = result.replace(
+    /\bRFC\s+(?:2119|8174)\b[^\r\n]{0,400}\b(?:MUST|REQUIRED|SHOULD|RECOMMENDED|MAY|OPTIONAL)\b[^\r\n]{0,400}(?:\.|$)/gi,
+    "Requirement terminology: MUST means mandatory, SHOULD means recommended, and MAY means optional.",
+  );
+  result = result.replace(/<(\/?)system[-_]directive>/gi, "<$1instructions>");
+  result = result.replace(/<(\/?)critical>/gi, "<$1important>");
+  result = result.replace(/Oh My Pi coding harness/gi, "AI coding assistant");
+  result = result.replace(/Oh My Pi/gi, "coding assistant");
+  result = result.replace(/omp Live/gi, "coding assistant live");
+  return result;
+}
+
+export function sanitizeAntigravityPayload<T>(value: T): T {
+  if (typeof value === "string") return sanitizeAntigravityText(value) as T;
+  if (Array.isArray(value)) return value.map(sanitizeAntigravityPayload) as T;
+  if (value && typeof value === "object") {
+    const output: Record<string, unknown> = {};
+    for (const [key, child] of Object.entries(value)) {
+      if (REMOVED_ANTIGRAVITY_KEYS.has(key)) continue;
+      output[key] = sanitizeAntigravityPayload(child);
+    }
+    return output as T;
+  }
+  return value;
+}
 function modelReasoningEffort(model: string) {
   const normalized = model.toLowerCase();
   if (normalized.includes("gemini-3.5-flash-extra-low")) return "low";
@@ -361,8 +402,7 @@ export async function toGoogleBody(
     model: modelId(body.model),
     userAgent: "antigravity",
     requestId: `agent-${crypto.randomUUID()}`,
-    requestType: "agent",
-    request,
+    request: sanitizeAntigravityPayload(request),
   };
 }
 export function googleEventToOpenAI(data: any, model: string, id: string) {

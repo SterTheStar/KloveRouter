@@ -63,7 +63,7 @@ export default function AddModelModal({
   const showOutputFixes = modelCategories({ model_id: modelId, display_name: displayName, capabilities: metadata.capabilities }).includes("chat");
   const tabs = modelFormTabsFor(showOutputFixes);
   useEffect(() => {
-    if (!showOutputFixes && activeTab === "output-fixes") setActiveTab("capabilities");
+    if (!showOutputFixes && activeTab === "output-fixes") setActiveTab("generation");
   }, [showOutputFixes, activeTab]);
   const close = () => {
     if (loading) return;
@@ -185,6 +185,9 @@ export default function AddModelModal({
           {activeTab === "capabilities" && (
             <ModelMetadataEditor value={metadata} onChange={setMetadata} />
           )}
+          {activeTab === "generation" && (
+            <MediaSettingsEditor value={metadata} onChange={setMetadata} modelIdentity={`${modelId} ${displayName}`} />
+          )}
           {activeTab === "output-fixes" && (
             <ThinkTagModeEditor
               value={thinkOpeningTagMode}
@@ -217,9 +220,72 @@ export default function AddModelModal({
   );
 }
 
+export function MediaSettingsEditor({ value, onChange, modelIdentity = "" }: { value: ModelMetadataInput; onChange: (value: ModelMetadataInput) => void; modelIdentity?: string }) {
+  const generationKeys = ["image_generation", "text_to_speech", "video_generation"] as const;
+  const detectedTypes = modelCategories({ model_id: modelIdentity, capabilities: value.capabilities });
+  const updateCapability = (key: (typeof generationKeys)[number]) => {
+    const current = value.capabilities[key] ?? null;
+    const category = key === "image_generation" ? "image" : key === "text_to_speech" ? "tts" : "video";
+    const detected = current === null && detectedTypes.includes(category);
+    onChange({ ...value, capabilities: { ...value.capabilities, [key]: current === true || detected ? false : true } });
+  };
+  const selectChat = () => onChange({
+    ...value,
+    capabilities: {
+      ...value.capabilities,
+      image_generation: false,
+      text_to_speech: false,
+      video_generation: false,
+    },
+  });
+  const updateSetting = (section: "image" | "text_to_speech" | "video", key: string, raw: string) => {
+    const numeric = key === "speed" || key === "seconds";
+    const previous = value.media_settings ?? {};
+    const current = { ...(previous[section] ?? {}) } as Record<string, string | number | undefined>;
+    current[key] = raw === "" ? undefined : numeric ? Number(raw) : raw;
+    const media_settings = { ...previous, [section]: Object.fromEntries(Object.entries(current).filter(([, item]) => item !== undefined)) };
+    if (!Object.keys(media_settings[section] ?? {}).length) delete media_settings[section];
+    onChange({ ...value, media_settings });
+  };
+  const field = (section: "image" | "text_to_speech" | "video", key: string, label: string, placeholder: string, type = "text", min?: number, max?: number, step?: number) => {
+    const current = value.media_settings?.[section]?.[key as never] as string | number | undefined;
+    return <div key={key} className="space-y-1.5"><Label>{label}</Label><Input type={type} min={min} max={max} step={step} value={current ?? ""} placeholder={placeholder} onChange={(event) => updateSetting(section, key, event.target.value)} /></div>;
+  };
+  const modalityChoices = [
+    { title: "Image", key: "image_generation", category: "image", hint: "Image generation, edits, and variations" },
+    { title: "Text to speech", key: "text_to_speech", category: "tts", hint: "Speech output and audio format" },
+    { title: "Video", key: "video_generation", category: "video", hint: "Video generation jobs" },
+  ] as const;
+  const activeModalities = modalityChoices.filter(({ key, category }) => value.capabilities[key] === true || (value.capabilities[key] == null && detectedTypes.includes(category)));
+  const chatSelected = activeModalities.length === 0 && detectedTypes.includes("chat");
+  const configSection = (title: string, description: string, fields: React.ReactNode) => <section key={title} className="space-y-3 rounded-lg border border-border p-4">
+    <div><h3 className="text-sm font-medium">{title}</h3><p className="mt-1 text-xs text-tertiary">{description}</p></div>
+    <div className="grid gap-3 sm:grid-cols-2">{fields}</div>
+  </section>;
+  return <div className="space-y-4 py-1">
+    <div><h3 className="text-sm font-medium">Supported generation types</h3><p className="mt-1 text-xs text-tertiary">Select only the modalities this model supports. Configuration fields appear only for enabled types.</p></div>
+    <div className="grid gap-2 sm:grid-cols-3">
+      {modalityChoices.map(({ key, title, hint }) => {
+        const state = value.capabilities[key] ?? null;
+        return <button key={key} type="button" onClick={() => updateCapability(key)} aria-pressed={state === true} aria-label={`${title}: ${state === null ? "unknown" : state ? "supported" : "unsupported"}`} className={`rounded-xl border border-border p-3 text-left transition-colors ${state === true ? "border-primary/50 bg-primary/10" : state === false ? "bg-muted/30 text-tertiary" : "border-dashed text-tertiary"}`}>
+          <span className="flex items-center justify-between gap-2 text-sm font-medium"><span>{title}</span><span className="text-[10px] uppercase tracking-wide">{state === true ? "On" : state === false ? "Off" : "Auto"}</span></span>
+          <span className="mt-1 block text-xs opacity-80">{hint}</span>
+        </button>;
+      })}
+    </div>
+    {activeModalities.length ? <div className="space-y-3 border-t pt-4">
+      <div><h3 className="text-sm font-medium">Defaults for supported types</h3><p className="mt-1 text-xs text-tertiary">Defaults are applied only when the request does not include a value.</p></div>
+      {value.capabilities.image_generation === true && configSection("Image", "Image size, quality, and output format.", <>{field("image", "size", "Default size", "e.g. 1024x1024")}{field("image", "quality", "Default quality", "e.g. auto, high, standard")}{field("image", "output_format", "Output format", "e.g. png, jpeg, webp")}</>)}
+      {value.capabilities.text_to_speech === true && configSection("Text to speech", "Default voice, audio format, and speed.", <>{field("text_to_speech", "voice", "Default voice", "e.g. alloy")}{field("text_to_speech", "response_format", "Audio format", "e.g. mp3, wav, opus")}{field("text_to_speech", "speed", "Speed", "1", "number", 0.25, 4, 0.05)}</>)}
+      {value.capabilities.video_generation === true && configSection("Video", "Default frame size and duration.", <>{field("video", "size", "Default size", "e.g. 1280x720")}{field("video", "seconds", "Duration (seconds)", "e.g. 4", "number", 0.1, 600, 0.1)}</>)}
+    </div> : <p className="rounded-lg border border-dashed border-border bg-background/60 p-4 text-sm text-tertiary">No generation type is enabled. Choose Image, Text to speech, or Video above to configure only the matching options.</p>}
+  </div>;
+}
+
 export function modelFormTabsFor(includeOutputFixes = true) {
   return [
   { id: "general", label: "General" },
+  { id: "generation", label: "Model type" },
   { id: "capabilities", label: "Capabilities" },
   ...(includeOutputFixes ? [{ id: "output-fixes", label: "Output fixes" }] : []),
   { id: "pricing", label: "Pricing" },

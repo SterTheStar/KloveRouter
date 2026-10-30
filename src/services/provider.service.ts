@@ -236,6 +236,8 @@ export const providerService = {
                  ? "Atomesus token"
                : protocol === "conol"
                  ? "Conol cookie"
+               : protocol === "perch"
+                 ? "Perch session"
                : protocol === "openfree"
                  ? "OpenCode Zen account"
                : "Default API key",
@@ -253,6 +255,8 @@ export const providerService = {
                  ? "atomesus"
                : protocol === "conol"
                  ? "conol"
+               : protocol === "perch"
+                 ? "perch"
                : protocol === "openfree"
                  ? "openfree"
                : "api_key",
@@ -289,9 +293,13 @@ export const providerService = {
         throw new Error("OpenCode Zen API key is required for OpenFREE.");
       }
       if (automatic && input.protocol !== undefined) {
-        validateCredential(protocol, automatic.kind, secret);
+        validateCredential(protocol, automatic.kind, secret, {
+          allowEmptySecret: protocol === "perch",
+        });
       } else {
-        validateCredential(protocol, expectedKind, secret);
+        validateCredential(protocol, expectedKind, secret, {
+          allowEmptySecret: protocol === "perch",
+        });
       }
     }
 
@@ -308,7 +316,7 @@ export const providerService = {
       updates.push("api_key = ?");
       values.push(encryptedApiKey);
       db.query(
-        "UPDATE provider_credentials SET secret = ?, updated_at = datetime('now') WHERE provider_id = ? AND id = COALESCE((SELECT fixed_credential_id FROM providers WHERE id = ?), id) AND kind IN ('api_key', 'codex', 'chatgpt', 'freebuff', 'qwen', 'atomesus', 'openfree')",
+        "UPDATE provider_credentials SET secret = ?, updated_at = datetime('now') WHERE provider_id = ? AND id = COALESCE((SELECT fixed_credential_id FROM providers WHERE id = ?), id) AND kind IN ('api_key', 'codex', 'chatgpt', 'freebuff', 'qwen', 'atomesus', 'perch', 'openfree')",
       ).run(encryptedApiKey, id, id);
     }
     if (input.avatar !== undefined) {

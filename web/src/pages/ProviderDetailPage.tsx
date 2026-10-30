@@ -221,6 +221,7 @@ export default function ProviderDetailPage({
     () =>
       credentials.filter((credential) => {
         if (!credential.is_active) return false;
+        if (credential.kind === "perch") return true;
         if (credential.kind === "api_key" || credential.kind === "chatgpt" || credential.kind === "freebuff" || credential.kind === "qwen" || credential.kind === "atomesus" || credential.kind === "conol")
           return Boolean(credential.masked_secret);
         if (credential.kind === "openfree") return Boolean(credential.masked_secret);
@@ -281,7 +282,7 @@ export default function ProviderDetailPage({
   const discard = () => {
     setName(provider?.name ?? "");
     setBaseUrl(provider?.base_url ?? "");
-    setCustomHeaderRows(Object.entries(provider?.custom_headers ?? {}).map(([headerName, value], index) => ({ id: `${index}-${headerName}`, name: headerName, value })));
+    setCustomHeaderRows(Object.entries(provider?.custom_headers ?? {}).map(([headerName, value], index) => ({ id: `${index}-${headerName}`, name: headerName, value: String(value) })));
     setAvatar(provider?.avatar_override ?? null);
     setError(null);
     setSuccess("Unsaved changes discarded.");
@@ -574,20 +575,20 @@ export default function ProviderDetailPage({
   };
 
   const setCredentialMode = async (
-    mode: "fixed" | "round_robin",
+    mode: "fixed" | "round_robin" | "failover",
     fixedId?: string | null,
   ) => {
     const selectedId =
-      mode === "fixed"
-        ? (fixedId ??
+      mode === "round_robin"
+        ? null
+        : (fixedId ??
           provider?.fixed_credential_id ??
           routableCredentials[0]?.id ??
-          null)
-        : null;
-    if (mode === "fixed" && !selectedId)
+          null);
+    if (mode !== "round_robin" && !selectedId)
       return notifyError(
         "No credential available",
-        "Add or connect a credential before selecting fixed routing.",
+        "Add or connect a credential before selecting this routing.",
       );
     setRoutingSaving(true);
     try {
@@ -599,7 +600,9 @@ export default function ProviderDetailPage({
       notifySuccess(
         mode === "round_robin"
           ? "Round robin enabled"
-          : "Fixed credential selected",
+          : mode === "failover"
+            ? "Failover enabled"
+            : "Fixed credential selected",
       );
     } catch (e: any) {
       setError(e.message);
@@ -699,8 +702,8 @@ export default function ProviderDetailPage({
     const label = newKeyLabelRef.current?.value.trim() ?? "";
     const authCode = newAuthCodeRef.current?.value.trim() ?? "";
     const accountId = newAccountIdRef.current?.value.trim() ?? "";
-    if (!label || !authCode || (provider.protocol === "conol" && !accountId)) {
-      setError(`${provider.protocol === "chatgpt" ? "Credential" : provider.protocol === "conol" ? "Conol credential" : "Auth code"} label and value are required.`);
+    if (!label || (!authCode && provider.protocol !== "perch") || (provider.protocol === "conol" && !accountId)) {
+      setError(`${provider.protocol === "chatgpt" ? "Credential" : provider.protocol === "conol" ? "Conol credential" : provider.protocol === "perch" ? "Perch credential" : "Auth code"} label is required${provider.protocol === "perch" ? "." : " and value are required."}`);
       return;
     }
     setAddingKey(true);
@@ -708,7 +711,7 @@ export default function ProviderDetailPage({
     try {
       await providers.addCredential(providerId, {
         label,
-        kind: provider.protocol === "chatgpt" ? "chatgpt" : provider.protocol === "qwen" ? "qwen" : provider.protocol === "atomesus" ? "atomesus" : provider.protocol === "conol" ? "conol" : "freebuff",
+        kind: provider.protocol === "chatgpt" ? "chatgpt" : provider.protocol === "qwen" ? "qwen" : provider.protocol === "atomesus" ? "atomesus" : provider.protocol === "conol" ? "conol" : provider.protocol === "perch" ? "perch" : "freebuff",
         secret: authCode,
         ...(provider.protocol === "conol" ? { account_id: accountId } : {}),
       });
@@ -716,13 +719,13 @@ export default function ProviderDetailPage({
       if (newAuthCodeRef.current) newAuthCodeRef.current.value = "";
       if (newAccountIdRef.current) newAccountIdRef.current.value = "";
       setShowAddKey(false);
-      setSuccess(provider.protocol === "chatgpt" ? "ChatGPT session credential added." : provider.protocol === "atomesus" ? "Atomesus token added." : provider.protocol === "qwen" ? "Qwen auth code added." : provider.protocol === "conol" ? "Conol credential added." : "Freebuff auth code added.");
+      setSuccess(provider.protocol === "chatgpt" ? "ChatGPT session credential added." : provider.protocol === "atomesus" ? "Atomesus token added." : provider.protocol === "qwen" ? "Qwen auth code added." : provider.protocol === "conol" ? "Conol credential added." : provider.protocol === "perch" ? "Perch session credential added." : "Freebuff auth code added.");
       invalidateModels(providerId);
       invalidateProviders(providerId);
       await load();
     } catch (e: any) {
       setError(e.message);
-      notifyError(provider.protocol === "chatgpt" ? "Could not add session credential" : provider.protocol === "conol" ? "Could not add Conol credential" : "Could not add auth code", e.message);
+      notifyError(provider.protocol === "chatgpt" ? "Could not add session credential" : provider.protocol === "conol" ? "Could not add Conol credential" : provider.protocol === "perch" ? "Could not add Perch credential" : "Could not add auth code", e.message);
     } finally {
       setAddingKey(false);
     }
@@ -1005,7 +1008,9 @@ export default function ProviderDetailPage({
                   >
                     {provider.credential_mode === "round_robin"
                       ? "Round robin"
-                      : "Fixed credential"}
+                      : provider.credential_mode === "failover"
+                        ? "Failover"
+                        : "Fixed credential"}
                     <ChevronDown className="size-4 text-tertiary" />
                   </DropdownMenuTrigger>
                   <DropdownMenuContent className="min-w-[var(--anchor-width)]">
@@ -1014,11 +1019,17 @@ export default function ProviderDetailPage({
                       <DropdownMenuRadioGroup
                         value={provider.credential_mode ?? "fixed"}
                         onValueChange={(value) =>
-                          setCredentialMode(value as "fixed" | "round_robin")
+                          setCredentialMode(value as "fixed" | "round_robin" | "failover")
                         }
                       >
                         <DropdownMenuRadioItem value="fixed">
                           Fixed credential
+                        </DropdownMenuRadioItem>
+                        <DropdownMenuRadioItem
+                          value="failover"
+                          disabled={routableCredentials.length < 2}
+                        >
+                          Failover (on error)
                         </DropdownMenuRadioItem>
                         <DropdownMenuRadioItem
                           value="round_robin"
@@ -1093,7 +1104,9 @@ export default function ProviderDetailPage({
               <p className="text-xs text-tertiary">
                 {provider.credential_mode === "round_robin"
                   ? `Requests rotate across ${routableCredentials.length} active credentials, selecting the least recently used.`
-                  : "Every request uses the selected credential. If it becomes unavailable, the backend falls back to another active credential."}
+                  : provider.credential_mode === "failover"
+                    ? `Uses the selected credential until it fails, then fails over to the next active credential. ${routableCredentials.length} active credentials available.`
+                    : "Every request uses the selected credential. If it becomes unavailable, the backend falls back to another active credential."}
               </p>
             </div>
           )}
@@ -1189,13 +1202,13 @@ export default function ProviderDetailPage({
               </div>
               {showAddKey && <div className="grid gap-2 rounded-lg border border-dashed border-border bg-background/60 p-3 md:grid-cols-[1fr_1.5fr_auto]"><Input ref={newKeyLabelRef} placeholder="Credential label (optional)" /><Input ref={cookieFileRef} type="file" accept=".txt,text/plain" aria-label="ChatGPT cookies.txt file" /><Button onClick={uploadChatGptCookies} disabled={addingKey}>{addingKey ? <LoaderCircle className="size-4 animate-spin" /> : <><Add className="size-4" /> Upload cookies</>}</Button></div>}
             </div>
-          ) : provider.protocol === "freebuff" || provider.protocol === "qwen" || provider.protocol === "atomesus" || provider.protocol === "conol" ? (
+          ) : provider.protocol === "freebuff" || provider.protocol === "qwen" || provider.protocol === "atomesus" || provider.protocol === "conol" || provider.protocol === "perch" ? (
             <div id="provider-credentials" className="space-y-3">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                   <Label>{provider.protocol === "conol" ? "Conol.ai credentials" : provider.protocol === "atomesus" ? "Atomesus tokens" : provider.protocol === "qwen" ? "Qwen auth codes" : "Freebuff auth codes"}</Label>
+                   <Label>{provider.protocol === "conol" ? "Conol.ai credentials" : provider.protocol === "atomesus" ? "Atomesus tokens" : provider.protocol === "qwen" ? "Qwen auth codes" : provider.protocol === "perch" ? "Perch sessions" : "Freebuff auth codes"}</Label>
                   <p className="text-xs text-tertiary">
-                     {provider.protocol === "conol" ? "Account ID and cookies are stored encrypted." : "Tokens are stored encrypted and rotated according to the selected routing strategy."}
+                     {provider.protocol === "conol" ? "Account ID and cookies are stored encrypted." : provider.protocol === "perch" ? "Paste a session JSON or access token, or leave it empty to use the host's `perch login` session. Credentials are stored encrypted." : "Tokens are stored encrypted and rotated according to the selected routing strategy."}
                   </p>
                 </div>
                 <Button
@@ -1204,28 +1217,28 @@ export default function ProviderDetailPage({
                   onClick={() => setShowAddKey((value) => !value)}
                 >
                   {showAddKey ? <CloseCircle className="size-4" /> : <Add className="size-4" />}
-                  {showAddKey ? "Cancel" : provider.protocol === "conol" ? "Add credential" : "Add auth code"}
+                  {showAddKey ? "Cancel" : provider.protocol === "conol" || provider.protocol === "perch" ? "Add credential" : "Add auth code"}
                 </Button>
               </div>
               <div className="space-y-2">
-                {credentials.filter((credential) => credential.kind === "freebuff" || credential.kind === "qwen" || credential.kind === "atomesus" || credential.kind === "conol").map((credential) => renderCredentialRow(credential, provider.protocol === "conol" ? "credential" : "auth code"))}
-                {!credentials.some((credential) => credential.kind === "freebuff" || credential.kind === "qwen" || credential.kind === "atomesus" || credential.kind === "conol") && (
-                  <div className="text-xs text-tertiary">{provider.protocol === "conol" ? "No Conol credentials configured." : "No auth codes configured."}</div>
+                {credentials.filter((credential) => credential.kind === "freebuff" || credential.kind === "qwen" || credential.kind === "atomesus" || credential.kind === "conol" || credential.kind === "perch").map((credential) => renderCredentialRow(credential, provider.protocol === "conol" ? "credential" : provider.protocol === "perch" ? "session" : "auth code"))}
+                {!credentials.some((credential) => credential.kind === "freebuff" || credential.kind === "qwen" || credential.kind === "atomesus" || credential.kind === "conol" || credential.kind === "perch") && (
+                  <div className="text-xs text-tertiary">{provider.protocol === "conol" ? "No Conol credentials configured." : provider.protocol === "perch" ? "No Perch credentials configured." : "No auth codes configured."}</div>
                 )}
               </div>
               {showAddKey && (
                 <div className="grid gap-2 rounded-lg border border-dashed border-border bg-background/60 p-3 md:grid-cols-[1fr_1.5fr_auto]">
-                  <Input ref={newKeyLabelRef} placeholder={provider.protocol === "conol" ? "Credential label" : "Auth code label"} />
+                  <Input ref={newKeyLabelRef} placeholder={provider.protocol === "conol" || provider.protocol === "perch" ? "Credential label" : "Auth code label"} />
                   {provider.protocol === "conol" && <Input ref={newAccountIdRef} placeholder="Conol account_id" />}
-                  <Input ref={newAuthCodeRef} type="password" placeholder={provider.protocol === "conol" ? "Paste complete Cookie header (hidden)" : provider.protocol === "atomesus" ? "Paste Atomesus bearer token" : provider.protocol === "qwen" ? "Paste Qwen auth token" : "Paste Freebuff auth code"} />
+                  <Input ref={newAuthCodeRef} type="password" placeholder={provider.protocol === "conol" ? "Paste complete Cookie header (hidden)" : provider.protocol === "perch" ? "Paste session JSON or access token (optional)" : provider.protocol === "atomesus" ? "Paste Atomesus bearer token" : provider.protocol === "qwen" ? "Paste Qwen auth token" : "Paste Freebuff auth code"} />
                   <Button onClick={addFreebuffAuthCode} disabled={addingKey}>
                     {addingKey ? <LoaderCircle className="size-4 animate-spin" /> : <Add className="size-4" />}
-                    {provider.protocol === "conol" ? "Add credential" : "Add code"}
+                    {provider.protocol === "conol" || provider.protocol === "perch" ? "Add credential" : "Add code"}
                   </Button>
                 </div>
               )}
             </div>
-          ) : provider.protocol === "codex" || provider.protocol === "antigravity" ? null : (
+          ) : (
             <div className="space-y-3">
               <div className="flex items-center justify-between gap-3">
                 <Label>API keys</Label>

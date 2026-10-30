@@ -92,7 +92,7 @@ export function HtmlPreview({
   const [reloadKey, setReloadKey] = useState(0);
   const srcDoc = useMemo(
     () => injectBridge(code, makeBridge(tokenRef.current)),
-    [code],
+    [code, streaming],
   );
 
   useEffect(() => {

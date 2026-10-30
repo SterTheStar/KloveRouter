@@ -9,6 +9,7 @@ export type ProviderProtocol =
   | "qwen"
   | "atomesus"
   | "conol"
+  | "perch"
   | "openfree";
 
 export function isOpenAICompatibleProtocol(protocol: ProviderProtocol): boolean {

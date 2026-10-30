@@ -27,7 +27,10 @@ Compound models expose a stable `pool/<id>` model that routes across selected pr
 | Codex | OAuth | Responses-compatible requests and account rotation |
 | Antigravity | Google OAuth | Gemini, Claude, and supported GPT-family models |
 | ChatGPT | Session credentials | ChatGPT-backed models, depending on account access |
+| Perch AI | Perch session JSON/access token, or the host's `perch login` session | Perch models with streaming, reasoning, and tool calls |
 | OpenFREE | Authenticated OpenCode CLI | Live free OpenCode Zen models, including Big Pickle, streaming, and bridged tool calls |
+
+Perch AI issues short-lived turn tickets against a CLI session and rotates Supabase refresh tokens. Klove stores a pasted session encrypted, or reads `~/.perch/cli-auth-session.json` from the host. Perch's documentation warns that calling its API outside the official CLI may violate its terms and risk account suspension; connect only an account you are permitted to use this way.
 
 ## Quick start
 
