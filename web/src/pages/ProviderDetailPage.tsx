@@ -77,8 +77,8 @@ import {
 import type {
   Model,
   ModelCapabilities,
-  Provider,
   ProviderCredential,
+  ProviderDetail,
 } from "../types";
 import { copyToClipboard } from "../lib/clipboard";
 import { useToast } from "../components/ui/toast";
@@ -95,7 +95,7 @@ export default function ProviderDetailPage({
   onBack: () => void;
 }) {
   const { success: notifySuccess, error: notifyError } = useToast();
-  const [provider, setProvider] = useState<Provider | null>(null);
+  const [provider, setProvider] = useState<ProviderDetail | null>(null);
   const [list, setList] = useState<Model[]>([]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
@@ -296,7 +296,7 @@ export default function ProviderDetailPage({
     setProvider({ ...provider, is_active: provider.is_active ? 0 : 1 });
     try {
       const updated = await providers.toggle(providerId);
-      setProvider(updated);
+      setProvider((current) => (current ? { ...current, ...updated } : current));
       invalidateProviders(providerId);
       setSuccess(updated.is_active ? "Provider enabled." : "Provider disabled.");
     } catch (e: any) {

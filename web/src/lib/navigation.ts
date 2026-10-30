@@ -80,6 +80,6 @@ export function navigateToRoute(route: AppRoute, replace = false): void {
   window.dispatchEvent(new PopStateEvent("popstate"));
 }
 
-export function shouldHandleLinkClick(event: React.MouseEvent<HTMLAnchorElement>): boolean {
+export function shouldHandleLinkClick(event: React.MouseEvent<Element>): boolean {
   return event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey;
 }

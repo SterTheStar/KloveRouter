@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
 import {
   RiArrowLeftLine as ArrowLeft,
   RiArrowRightLine as ArrowRight,
@@ -180,9 +180,15 @@ function SectionTitle({ eyebrow, title, description }: { eyebrow: string; title:
   return <div className="mb-7 space-y-2"><p className="text-xs font-medium text-tertiary">{eyebrow}</p><h1 className="text-2xl font-semibold tracking-tight text-foreground">{title}</h1><p className="max-w-3xl text-sm leading-6 text-muted-foreground">{description}</p></div>;
 }
 
-function Endpoint({ method, path, description }: { method: string; path: string; description: string }) {
+const DocNavigationContext = createContext<((id: DocId) => void) | null>(null);
+
+function Endpoint({ method, path, description, to }: { method: string; path: string; description: string; to?: DocId }) {
   const color = method === "GET" ? "text-success" : method === "DELETE" ? "text-destructive" : "text-accent-blue";
-  return <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-border bg-card px-4 py-3"><Badge variant="outline" className={`font-mono ${color}`}>{method}</Badge><code className="text-sm font-medium">{path}</code><span className="ml-auto text-xs text-tertiary">{description}</span></div>;
+  const selectDoc = useContext(DocNavigationContext);
+  const body = <><Badge variant="outline" className={`font-mono ${color}`}>{method}</Badge><code className="text-sm font-medium">{path}</code><span className="ml-auto text-xs text-tertiary">{description}</span></>;
+  if (!to || !selectDoc) return <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-border bg-card px-4 py-3">{body}</div>;
+  const target = to;
+  return <a href={`/docs#${target}`} onClick={(event) => { if (!shouldHandleLinkClick(event)) return; event.preventDefault(); selectDoc(target); }} className="group flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-border bg-card px-4 py-3 transition-colors hover:border-border-strong hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong">{body}<ArrowRight className="size-3.5 shrink-0 text-tertiary opacity-0 transition-opacity group-hover:opacity-100" /></a>;
 }
 
 function Callout({ children }: { children: ReactNode }) {
@@ -256,7 +262,9 @@ export default function DocsPage({ onBack }: { onBack: () => void }) {
           </header>
           <div className="mb-7 flex items-center gap-2 text-xs text-tertiary"><a href="/docs#overview" onClick={(event) => { if (!shouldHandleLinkClick(event)) return; event.preventDefault(); selectDoc("overview"); }} className="hover:text-foreground hover:underline">Docs</a><span>/</span><span>{selected.group}</span><span>/</span><span className="text-foreground">{selected.title}</span></div>
           <div className="flex flex-col gap-5 [&>*]:!my-0">
-            <DocContent id={active} onSelectDoc={selectDoc} />
+            <DocNavigationContext.Provider value={selectDoc}>
+              <DocContent id={active} onSelectDoc={selectDoc} />
+            </DocNavigationContext.Provider>
           </div>
         </div>
       </article>
