@@ -111,7 +111,7 @@ export default function ModelSettingsMenu({
     <div ref={rootRef} className="relative shrink-0">
       <button
         type="button"
-        className="flex h-8 max-w-[min(16rem,calc(100vw-7rem))] items-center gap-1.5 rounded-full px-2.5 text-sm font-medium text-foreground/80 transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-60 sm:max-w-72"
+        className={`flex h-7 max-w-[min(16rem,calc(100vw-7rem))] items-center gap-1 rounded-lg px-2 text-sm text-foreground transition-colors hover:bg-accent disabled:pointer-events-none disabled:opacity-60 sm:max-w-72 ${open ? "bg-accent" : ""}`}
         onClick={() => setOpen((value) => !value)}
         disabled={disabled}
         aria-haspopup="dialog"
@@ -122,19 +122,19 @@ export default function ModelSettingsMenu({
           {current?.display_name || (current ? modelDisplayId(current) : "Select model")}
         </span>
         {selectedEffort && (
-          <span className="hidden min-w-0 max-w-28 items-center gap-1 truncate text-xs font-normal text-muted-foreground sm:flex">
-            <span className="shrink-0 text-muted-foreground/50">/</span>
+          <span className="hidden min-w-0 max-w-28 items-center gap-1 truncate text-xs text-tertiary sm:flex">
+            <span className="shrink-0 text-tertiary/60">/</span>
             <span className="truncate">{selectedEffort.display_name}</span>
           </span>
         )}
         <ChevronDown
-          className={`size-3.5 shrink-0 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`}
+          className={`size-3.5 shrink-0 text-tertiary transition-transform ${open ? "rotate-180" : ""}`}
         />
       </button>
 
       {open && (
         <div
-          className="fixed inset-x-0 top-20 bottom-0 z-[120] h-auto max-h-[calc(100dvh-5rem)] w-screen max-w-none overflow-hidden rounded-t-2xl bg-popover pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] text-popover-foreground shadow-2xl ring-1 ring-foreground/10 sm:absolute sm:right-0 sm:bottom-11 sm:top-auto sm:inset-x-auto sm:h-[min(32rem,calc(100vh-5rem))] sm:max-h-none sm:w-[min(46rem,calc(100vw-2rem))] sm:max-w-[calc(100vw-2rem)] sm:rounded-xl sm:pt-0 sm:pb-0"
+          className="fixed inset-x-0 top-20 bottom-0 z-[120] h-auto max-h-[calc(100dvh-5rem)] w-screen max-w-none overflow-hidden rounded-t-2xl border border-border bg-popover pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] text-popover-foreground shadow-[0px_4px_16px_0px_rgba(0,0,0,0.05)] sm:absolute sm:right-0 sm:bottom-10 sm:top-auto sm:inset-x-auto sm:h-[min(30rem,calc(100vh-5rem))] sm:max-h-none sm:w-[min(42rem,calc(100vw-2rem))] sm:max-w-[calc(100vw-2rem)] sm:rounded-xl sm:pt-0 sm:pb-0"
           role="dialog"
           aria-label="Model and reasoning settings"
         >

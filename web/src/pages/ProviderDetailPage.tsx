@@ -27,7 +27,6 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs } from "@/components/ui/tabs";
 import { Label } from "@/components/ui/label";
-import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { pathForPage, shouldHandleLinkClick } from "../lib/navigation";
 import {
@@ -63,6 +62,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import AvatarUpload from "../components/AvatarUpload";
+import { formatContextWindow as formatTokenLimit, ModelCapabilityBadges } from "../components/ModelCapabilities";
 import AddModelModal from "../components/AddModelModal";
 import EditModelModal from "../components/EditModelModal";
 import ConfirmDialog from "../components/ConfirmDialog";
@@ -85,51 +85,7 @@ import { useToast } from "../components/ui/toast";
 import { modelDisplayId, modelPublicId } from "../lib/model-id";
 import { queryCache, queryKeys, invalidateModels, invalidateProviders } from "../lib/query-cache";
 import { isOpenCodeProvider } from "../../../src/services/provider-appearance";
-import { modelCategories, modelCategoryLabel, type ModelCategory } from "../lib/model-modality";
-
-const metadataCapabilityLabels: Record<keyof ModelCapabilities, string> = {
-  reasoning: "Reasoning",
-  tools: "Tools",
-  vision: "Vision",
-  audio_input: "Audio input",
-  audio_output: "Audio output",
-  video: "Video",
-  image_generation: "Image generation",
-  text_to_speech: "Text to speech",
-  video_generation: "Video generation",
-  attachments: "Files",
-  streaming: "Streaming",
-  non_streaming: "Non-streaming",
-};
-
-function formatTokenLimit(value: number): string {
-  if (value >= 1_000_000) return `${value / 1_000_000}M`;
-  if (value >= 1_000) return `${value / 1_000}K`;
-  return value.toLocaleString();
-}
-
-function ModelMetadataBadges({ model }: { model: Model }) {
-  const supported = (
-    Object.keys(metadataCapabilityLabels) as (keyof ModelCapabilities)[]
-  ).filter((key) => !["image_generation", "text_to_speech", "video_generation"].includes(key) && model.capabilities?.[key] === true);
-  const modalities = modelCategories(model).filter((category) => category !== "chat");
-  if (model.context_window == null && !supported.length && !modalities.length) return null;
-  return (
-    <div className="mt-1 flex flex-wrap gap-1">
-      {model.context_window != null && (
-        <Badge variant="outline" className="font-mono text-[10px]">
-          {formatTokenLimit(model.context_window)} context
-        </Badge>
-      )}
-      {supported.map((key) => (
-        <Badge key={key} variant="secondary" className="text-[10px]">
-          {metadataCapabilityLabels[key]}
-        </Badge>
-      ))}
-      {modalities.map((category) => <Badge key={category} variant="secondary" className="text-[10px]">{modelCategoryLabel(category)}</Badge>)}
-    </div>
-  );
-}
+import { modelCategories, type ModelCategory } from "../lib/model-modality";
 
 export default function ProviderDetailPage({
   providerId,
@@ -157,7 +113,6 @@ export default function ProviderDetailPage({
     synced: false,
     capabilities: false,
   });
-  const [modelCategory, setModelCategory] = useState<ModelCategory | "all">("all");
   const contextBounds = useMemo(() => {
     const values = list
       .map((model) => model.context_window)
@@ -190,12 +145,10 @@ export default function ProviderDetailPage({
     if (modelFilters.manual) result = result.filter((m) => m.is_manual === 1);
     if (modelFilters.synced) result = result.filter((m) => m.is_manual === 0);
     if (modelFilters.capabilities) result = result.filter((m) => Object.values(m.capabilities ?? {}).some(Boolean));
-    if (modelCategory !== "all") result = result.filter((model) => modelCategories(model).includes(modelCategory));
     if (minContext !== null) result = result.filter((m) => (m.context_window ?? 0) >= minContext);
     if (maxContext !== null) result = result.filter((m) => (m.context_window ?? Number.POSITIVE_INFINITY) <= maxContext);
     return result;
-  }, [list, searchQuery, modelFilters, minContext, maxContext, modelCategory]);
-  const modelCategoryCounts = useMemo(() => Object.fromEntries((["all", "chat", "image", "tts", "video"] as const).map((category) => [category, category === "all" ? list.length : list.filter((model) => modelCategories(model).includes(category)).length])), [list]);
+  }, [list, searchQuery, modelFilters, minContext, maxContext]);
   const activeFilterCount = Object.values(modelFilters).filter(Boolean).length + (minContext !== null ? 1 : 0) + (maxContext !== null ? 1 : 0);
   const clearFilters = () => {
     setModelFilters({ free: false, active: false, manual: false, synced: false, capabilities: false });
@@ -238,6 +191,9 @@ export default function ProviderDetailPage({
   const [authAction, setAuthAction] = useState<"login" | "logout" | null>(null);
   const [avatar, setAvatar] = useState<string | null>(null);
   const originalAvatarRef = useRef<string | null>(null);
+  const originalNameRef = useRef("");
+  const originalBaseUrlRef = useRef("");
+  const originalHeadersRef = useRef<Record<string, string>>({});
   const [credentials, setCredentials] = useState<ProviderCredential[]>([]);
   const [credentialAction, setCredentialAction] = useState(false);
   const [editingCredentialIds, setEditingCredentialIds] = useState<Record<string, boolean>>({});
@@ -292,6 +248,9 @@ export default function ProviderDetailPage({
       setCustomHeaderRows(Object.entries(current.custom_headers ?? {}).map(([headerName, value], index) => ({ id: `${index}-${headerName}`, name: headerName, value })));
       setAvatar(current.avatar_override ?? null);
       originalAvatarRef.current = current.avatar_override ?? null;
+      originalNameRef.current = current.name;
+      originalBaseUrlRef.current = current.base_url;
+      originalHeadersRef.current = current.custom_headers ?? {};
       setConnectedAccount(
         providerCredentials.find(
           (credential) => credential.kind === "codex" && credential.account_id,
@@ -328,6 +287,26 @@ export default function ProviderDetailPage({
     setSuccess("Unsaved changes discarded.");
   };
 
+  const [togglingProvider, setTogglingProvider] = useState(false);
+  const toggleProvider = async () => {
+    if (!provider || togglingProvider) return;
+    const previous = provider;
+    setTogglingProvider(true);
+    setProvider({ ...provider, is_active: provider.is_active ? 0 : 1 });
+    try {
+      const updated = await providers.toggle(providerId);
+      setProvider(updated);
+      invalidateProviders(providerId);
+      setSuccess(updated.is_active ? "Provider enabled." : "Provider disabled.");
+    } catch (e: any) {
+      setProvider(previous);
+      setError(e.message);
+      notifyError("Could not update provider", e.message);
+    } finally {
+      setTogglingProvider(false);
+    }
+  };
+
   const save = async () => {
     setSaving(true);
     try {
@@ -350,6 +329,10 @@ export default function ProviderDetailPage({
       });
       setProvider(updated);
       setCustomHeaderRows(Object.entries(updated.custom_headers ?? {}).map(([headerName, value], index) => ({ id: `${index}-${headerName}`, name: headerName, value })));
+      originalNameRef.current = updated.name;
+      originalBaseUrlRef.current = updated.base_url;
+      originalHeadersRef.current = updated.custom_headers ?? {};
+      originalAvatarRef.current = updated.avatar_override ?? null;
       invalidateProviders(providerId);
       setSuccess("Provider updated.");
     } catch (e: any) {
@@ -875,9 +858,9 @@ export default function ProviderDetailPage({
       ? (credential.kind === "conol" ? `Account ${credential.account_id ?? "configured"} · Cookie hidden` : "Cookie hidden")
       : (revealed ?? credential.masked_secret ?? secretLabel);
     return (
-      <div key={credential.id} className="grid min-w-0 items-center gap-2 border-b border-border/60 py-2 last:border-b-0 md:grid-cols-[minmax(0,1fr)_auto]">
-        <div className="grid min-w-0 overflow-hidden rounded-lg border border-input bg-background shadow-xs md:grid-cols-[minmax(8rem,0.65fr)_minmax(0,1.8fr)]">
-          <div className="min-w-0 border-b border-input md:border-b-0 md:border-r">
+      <div key={credential.id} className="grid min-w-0 items-center gap-2 border-b border-border py-2 last:border-b-0 md:grid-cols-[minmax(0,1fr)_auto]">
+        <div className="grid min-w-0 overflow-hidden rounded-lg border border-border bg-background md:grid-cols-[minmax(8rem,0.65fr)_minmax(0,1.8fr)]">
+          <div className="min-w-0 border-b border-border md:border-b-0 md:border-r">
             <Input value={editing ? (credentialDraftLabels[credential.id] ?? credential.label) : credential.label} readOnly={!editing} onChange={(event) => setCredentialDraftLabels((current) => ({ ...current, [credential.id]: event.target.value }))} aria-label={`${credential.label} label`} placeholder="Label" className="h-9 min-w-0 rounded-none border-0 bg-transparent shadow-none focus-visible:ring-0" />
           </div>
           <div className="relative min-w-0">
@@ -923,7 +906,7 @@ export default function ProviderDetailPage({
   if (loading)
     return (
       <div className="flex justify-center p-12">
-        <LoaderCircle className="size-5 animate-spin text-muted-foreground" />
+        <LoaderCircle className="size-5 animate-spin text-tertiary" />
       </div>
     );
   if (!provider)
@@ -937,7 +920,7 @@ export default function ProviderDetailPage({
 
   return (
     <div className="mx-auto w-full max-w-7xl space-y-6 p-4 sm:p-6">
-      <header className="flex min-w-0 items-center gap-2 border-b border-border/60 pb-4 sm:gap-3">
+      <header className="flex min-w-0 items-center gap-2 border-b border-border pb-4 sm:gap-3">
         <Button variant="outline" size="sm" className="shrink-0" render={<a href={pathForPage("dashboard")} />} onClick={(event) => {
           if (!shouldHandleLinkClick(event)) return;
           event.preventDefault();
@@ -946,7 +929,7 @@ export default function ProviderDetailPage({
           <ArrowLeft className="size-4" />
           <span className="hidden sm:inline">Back</span>
         </Button>
-        <h1 className="min-w-0 flex-1 truncate font-heading text-lg font-semibold tracking-tight sm:text-2xl">{name || provider.name}</h1>
+        <h1 className="min-w-0 flex-1 truncate font-heading text-lg font-semibold tracking-tight text-foreground sm:text-2xl">{name || provider.name}</h1>
         <div className="flex shrink-0 gap-1.5 sm:gap-2">
           <Button variant="ghost" size="sm" className="px-2 sm:px-2.5" onClick={discard} disabled={saving} aria-label="Discard changes">
             <CloseLine className="size-4 sm:hidden" />
@@ -962,7 +945,18 @@ export default function ProviderDetailPage({
       {success && <Alert><Check className="size-4" /><AlertDescription>{success}</AlertDescription></Alert>}
 
       <Card>
-        <CardHeader><CardTitle>Provider</CardTitle></CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between gap-3">
+          <CardTitle>Provider</CardTitle>
+          <label className="flex shrink-0 cursor-pointer items-center gap-2 text-xs text-muted-foreground">
+            {provider.is_active ? "Enabled" : "Disabled"}
+            <Switch
+              checked={Boolean(provider.is_active)}
+              onCheckedChange={() => void toggleProvider()}
+              disabled={togglingProvider}
+              aria-label={provider.is_active ? "Disable provider" : "Enable provider"}
+            />
+          </label>
+        </CardHeader>
         <CardContent className="space-y-5">
           <AvatarUpload value={avatar} sources={provider.avatar_sources} name={name} onChange={setAvatar} label="Provider avatar" onError={(message) => notifyError("Invalid avatar", message)} />
           <div className="grid gap-4 md:grid-cols-2">
@@ -986,7 +980,7 @@ export default function ProviderDetailPage({
 
       {activeTab === "credentials" && <>
       {(routableCredentials.length > 1 || provider.protocol === "codex" || provider.protocol === "antigravity") && <Card>
-        <CardHeader className="flex flex-row items-center justify-between gap-3"><div><CardTitle>Connection</CardTitle><p className="mt-1 text-sm text-muted-foreground">Routing and account status.</p></div><div className="flex flex-wrap justify-end gap-2">
+        <CardHeader className="flex flex-row items-center justify-between gap-3"><div><CardTitle>Connection</CardTitle><p className="mt-1 text-sm text-tertiary">Routing and account status.</p></div><div className="flex flex-wrap justify-end gap-2">
             {(provider.protocol === "codex" || provider.protocol === "antigravity") && <>
               <Button variant="outline" onClick={addOAuthAccount} disabled={credentialAction}><LoginIcon className="size-4" />{credentialAction ? "Connecting..." : "Connect account"}</Button>
               {credentials.some((credential) => (credential.kind === "codex" || credential.kind === "antigravity") && (credential.account_id || credential.email)) && <Button variant="outline" onClick={() => setLogoutOpen(true)} disabled={authAction !== null}><LogoutIcon className="size-4" />Log out</Button>}
@@ -1012,7 +1006,7 @@ export default function ProviderDetailPage({
                     {provider.credential_mode === "round_robin"
                       ? "Round robin"
                       : "Fixed credential"}
-                    <ChevronDown className="size-4 text-muted-foreground" />
+                    <ChevronDown className="size-4 text-tertiary" />
                   </DropdownMenuTrigger>
                   <DropdownMenuContent className="min-w-[var(--anchor-width)]">
                     <DropdownMenuGroup>
@@ -1058,7 +1052,7 @@ export default function ProviderDetailPage({
                         routableCredentials[0]?.label ??
                         "No credential"}
                     </span>
-                    <ChevronDown className="size-4 text-muted-foreground" />
+                    <ChevronDown className="size-4 text-tertiary" />
                   </DropdownMenuTrigger>
                   <DropdownMenuContent className="min-w-[var(--anchor-width)]">
                     <DropdownMenuGroup>
@@ -1082,7 +1076,7 @@ export default function ProviderDetailPage({
                               <span className="block truncate">
                                 {credential.label}
                               </span>
-                              <span className="block truncate font-mono text-[10px] text-muted-foreground">
+                              <span className="block truncate font-mono text-[10px] text-tertiary">
                                 {credential.email ||
                                   credential.account_id ||
                                   credential.masked_secret ||
@@ -1096,7 +1090,7 @@ export default function ProviderDetailPage({
                   </DropdownMenuContent>
                 </DropdownMenu>
               </div>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-tertiary">
                 {provider.credential_mode === "round_robin"
                   ? `Requests rotate across ${routableCredentials.length} active credentials, selecting the least recently used.`
                   : "Every request uses the selected credential. If it becomes unavailable, the backend falls back to another active credential."}
@@ -1106,7 +1100,7 @@ export default function ProviderDetailPage({
           {(provider.protocol === "codex" || provider.protocol === "antigravity") && (
             <div className="space-y-2">
               <Label>Connected accounts</Label>
-              <div className="space-y-2 rounded-md border bg-muted/40 p-3 text-sm">
+              <div className="space-y-2 rounded-lg border border-border bg-background/60 p-3 text-sm">
                 {credentials.filter(
                   (credential) =>
                     (credential.kind === "codex" ||
@@ -1126,7 +1120,7 @@ export default function ProviderDetailPage({
                         className="flex items-center justify-between gap-3"
                       >
                         <span>{credential.label}</span>
-                        <span className="font-mono text-xs text-muted-foreground">
+                        <span className="font-mono text-xs text-tertiary">
                           {credential.kind === "antigravity"
                             ? credential.id
                             : credential.account_id || credential.project_id}
@@ -1134,7 +1128,7 @@ export default function ProviderDetailPage({
                       </div>
                     ))
                 ) : (
-                  <span className="text-muted-foreground">
+                  <span className="text-tertiary">
                     No account connected
                   </span>
                 )}
@@ -1145,13 +1139,13 @@ export default function ProviderDetailPage({
       </Card>}
 
       {provider.protocol !== "codex" && provider.protocol !== "antigravity" && <Card id="provider-credentials">
-        <CardHeader><CardTitle>Credentials</CardTitle><p className="text-sm text-muted-foreground">Manage encrypted credentials and access tokens.</p></CardHeader>
+        <CardHeader><CardTitle>Credentials</CardTitle><p className="text-sm text-tertiary">Manage encrypted credentials and access tokens.</p></CardHeader>
         <CardContent className="space-y-3">
           {provider.protocol === "openfree" ? (
-            <div className="space-y-3 rounded-md border bg-muted/30 p-3">
+            <div className="space-y-3 rounded-lg border border-border bg-background/60 p-3">
               <div>
                 <Label htmlFor="openfree-detail-api-key">OpenCode Zen API key (required)</Label>
-                <p className="mt-1 text-xs text-muted-foreground">
+                <p className="mt-1 text-xs text-tertiary">
                   {credentials.find((credential) => credential.kind === "openfree")?.masked_secret
                     ? `Saved encrypted (${credentials.find((credential) => credential.kind === "openfree")?.masked_secret}). Enter a new key to replace it.`
                     : "No OpenCode Zen API key is saved. Add one before using this provider."}
@@ -1173,7 +1167,7 @@ export default function ProviderDetailPage({
                   {savingOpenfreeApiKey ? "Signing in..." : "Save key and sign in"}
                 </Button>
               </div>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-tertiary">
                 KloveRouter stores this required key encrypted and passes it to the OpenCode CLI for requests. If <code>expect</code> is installed on the KloveRouter host, the button also runs <code>opencode auth login opencode --method key</code> and saves the login in an app-managed OpenCode profile.
               </p>
             </div>
@@ -1182,7 +1176,7 @@ export default function ProviderDetailPage({
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <Label>ChatGPT cookie credentials</Label>
-                  <p className="text-xs text-muted-foreground">Netscape cookies.txt files are validated and stored encrypted. Cookie contents are never displayed.</p>
+                  <p className="text-xs text-tertiary">Netscape cookies.txt files are validated and stored encrypted. Cookie contents are never displayed.</p>
                 </div>
                 <Button variant="outline" size="sm" onClick={() => setShowAddKey((value) => !value)}>
                   {showAddKey ? <CloseCircle className="size-4" /> : <Add className="size-4" />}
@@ -1191,16 +1185,16 @@ export default function ProviderDetailPage({
               </div>
               <div className="space-y-2">
                 {credentials.filter((credential) => credential.kind === "chatgpt").map((credential) => renderCredentialRow(credential, "credential"))}
-                {!credentials.some((credential) => credential.kind === "chatgpt") && <div className="text-xs text-muted-foreground">No cookie credentials configured.</div>}
+                {!credentials.some((credential) => credential.kind === "chatgpt") && <div className="text-xs text-tertiary">No cookie credentials configured.</div>}
               </div>
-              {showAddKey && <div className="grid gap-2 rounded-md border border-dashed p-3 md:grid-cols-[1fr_1.5fr_auto]"><Input ref={newKeyLabelRef} placeholder="Credential label (optional)" /><Input ref={cookieFileRef} type="file" accept=".txt,text/plain" aria-label="ChatGPT cookies.txt file" /><Button onClick={uploadChatGptCookies} disabled={addingKey}>{addingKey ? <LoaderCircle className="size-4 animate-spin" /> : <><Add className="size-4" /> Upload cookies</>}</Button></div>}
+              {showAddKey && <div className="grid gap-2 rounded-lg border border-dashed border-border bg-background/60 p-3 md:grid-cols-[1fr_1.5fr_auto]"><Input ref={newKeyLabelRef} placeholder="Credential label (optional)" /><Input ref={cookieFileRef} type="file" accept=".txt,text/plain" aria-label="ChatGPT cookies.txt file" /><Button onClick={uploadChatGptCookies} disabled={addingKey}>{addingKey ? <LoaderCircle className="size-4 animate-spin" /> : <><Add className="size-4" /> Upload cookies</>}</Button></div>}
             </div>
           ) : provider.protocol === "freebuff" || provider.protocol === "qwen" || provider.protocol === "atomesus" || provider.protocol === "conol" ? (
             <div id="provider-credentials" className="space-y-3">
               <div className="flex items-center justify-between gap-3">
                 <div>
                    <Label>{provider.protocol === "conol" ? "Conol.ai credentials" : provider.protocol === "atomesus" ? "Atomesus tokens" : provider.protocol === "qwen" ? "Qwen auth codes" : "Freebuff auth codes"}</Label>
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-xs text-tertiary">
                      {provider.protocol === "conol" ? "Account ID and cookies are stored encrypted." : "Tokens are stored encrypted and rotated according to the selected routing strategy."}
                   </p>
                 </div>
@@ -1216,11 +1210,11 @@ export default function ProviderDetailPage({
               <div className="space-y-2">
                 {credentials.filter((credential) => credential.kind === "freebuff" || credential.kind === "qwen" || credential.kind === "atomesus" || credential.kind === "conol").map((credential) => renderCredentialRow(credential, provider.protocol === "conol" ? "credential" : "auth code"))}
                 {!credentials.some((credential) => credential.kind === "freebuff" || credential.kind === "qwen" || credential.kind === "atomesus" || credential.kind === "conol") && (
-                  <div className="text-xs text-muted-foreground">{provider.protocol === "conol" ? "No Conol credentials configured." : "No auth codes configured."}</div>
+                  <div className="text-xs text-tertiary">{provider.protocol === "conol" ? "No Conol credentials configured." : "No auth codes configured."}</div>
                 )}
               </div>
               {showAddKey && (
-                <div className="grid gap-2 rounded-md border border-dashed p-3 md:grid-cols-[1fr_1.5fr_auto]">
+                <div className="grid gap-2 rounded-lg border border-dashed border-border bg-background/60 p-3 md:grid-cols-[1fr_1.5fr_auto]">
                   <Input ref={newKeyLabelRef} placeholder={provider.protocol === "conol" ? "Credential label" : "Auth code label"} />
                   {provider.protocol === "conol" && <Input ref={newAccountIdRef} placeholder="Conol account_id" />}
                   <Input ref={newAuthCodeRef} type="password" placeholder={provider.protocol === "conol" ? "Paste complete Cookie header (hidden)" : provider.protocol === "atomesus" ? "Paste Atomesus bearer token" : provider.protocol === "qwen" ? "Paste Qwen auth token" : "Paste Freebuff auth code"} />
@@ -1256,13 +1250,13 @@ export default function ProviderDetailPage({
                     .filter((credential) => credential.kind === "api_key")
                     .map((credential) => renderCredentialRow(credential, "API key"))
                 ) : (
-                  <div className="text-xs text-muted-foreground">
+                  <div className="text-xs text-tertiary">
                     No API keys configured.
                   </div>
                 )}
               </div>
               {showAddKey && (
-                <div className="grid gap-2 rounded-md border border-dashed p-3 md:grid-cols-[1fr_1.5fr_auto]">
+                <div className="grid gap-2 rounded-lg border border-dashed border-border bg-background/60 p-3 md:grid-cols-[1fr_1.5fr_auto]">
                   <Input ref={newKeyLabelRef} placeholder="Key label" />
                   <Input
                     ref={newKeySecretRef}
@@ -1292,23 +1286,23 @@ export default function ProviderDetailPage({
         <CardHeader className="flex flex-row items-center justify-between py-(--card-spacing)">
           <CardTitle>
             Models{" "}
-            <span className="text-muted-foreground">({list.length})</span>
+            <span className="text-tertiary">({list.length})</span>
           </CardTitle>
           <div className="flex flex-wrap items-center justify-end gap-2">
             <div className="relative min-w-0 flex-1 sm:flex-none">
               <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input aria-label="Search models" placeholder="Search models" className="h-8 w-full border-none bg-muted pl-9 pr-9 sm:w-72 lg:w-96" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+              <Input aria-label="Search models" placeholder="Search models" className="w-full pl-9 pr-9 sm:w-72 lg:w-96" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
               <DropdownMenu open={filterOpen} onOpenChange={setFilterOpen}>
-                <DropdownMenuTrigger render={<Button variant="ghost" size="icon-xs" className={`absolute right-1 top-1/2 -translate-y-1/2 ${activeFilterCount ? "text-primary" : "text-muted-foreground"}`} aria-label="Filter models" title="Filter models" />}>
+                <DropdownMenuTrigger render={<Button variant="ghost" size="icon-xs" className={`absolute right-1 top-1/2 -translate-y-1/2 ${activeFilterCount ? "text-foreground" : "text-tertiary"}`} aria-label="Filter models" title="Filter models" />}>
                   <Filter className="size-4" />
-                  {activeFilterCount > 0 && <span className="absolute -right-1 -top-1 flex size-4 items-center justify-center rounded-full bg-primary text-[10px] text-primary-foreground">{activeFilterCount}</span>}
+                  {activeFilterCount > 0 && <span className="absolute -right-1 -top-1 flex size-4 items-center justify-center rounded-full bg-primary font-mono text-[10px] text-primary-foreground">{activeFilterCount}</span>}
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-64">
                   <DropdownMenuGroup>
                     <DropdownMenuLabel>Filter models</DropdownMenuLabel>
                     {([['free', 'Free'], ['active', 'Active'], ['manual', 'Manual'], ['synced', 'Synced'], ['capabilities', 'Capabilities present']] as const).map(([key, label]) => <DropdownMenuCheckboxItem key={key} checked={modelFilters[key]} onCheckedChange={(checked) => setModelFilters((current) => ({ ...current, [key]: checked === true }))}>{label}</DropdownMenuCheckboxItem>)}
                   </DropdownMenuGroup>
-                  {contextBounds.max > contextBounds.min && <div className="space-y-3 px-2 py-2"><p className="text-xs font-medium">Context window</p><label className="block text-xs text-muted-foreground">Min: {formatTokenLimit(minContext ?? contextBounds.min)}<input aria-label="Minimum context window" type="range" min={contextBounds.min} max={contextBounds.max} value={minContext ?? contextBounds.min} onChange={(event) => setMinContext(Number(event.target.value) === contextBounds.min ? null : Number(event.target.value))} className="mt-1 w-full accent-primary" /></label><label className="block text-xs text-muted-foreground">Max: {formatTokenLimit(maxContext ?? contextBounds.max)}<input aria-label="Maximum context window" type="range" min={contextBounds.min} max={contextBounds.max} value={maxContext ?? contextBounds.max} onChange={(event) => setMaxContext(Number(event.target.value) === contextBounds.max ? null : Number(event.target.value))} className="mt-1 w-full accent-primary" /></label></div>}
+                  {contextBounds.max > contextBounds.min && <div className="space-y-3 px-2 py-2"><p className="text-xs font-medium">Context window</p><label className="block text-xs text-tertiary">Min: {formatTokenLimit(minContext ?? contextBounds.min)}<input aria-label="Minimum context window" type="range" min={contextBounds.min} max={contextBounds.max} value={minContext ?? contextBounds.min} onChange={(event) => setMinContext(Number(event.target.value) === contextBounds.min ? null : Number(event.target.value))} className="mt-1 w-full accent-primary" /></label><label className="block text-xs text-tertiary">Max: {formatTokenLimit(maxContext ?? contextBounds.max)}<input aria-label="Maximum context window" type="range" min={contextBounds.min} max={contextBounds.max} value={maxContext ?? contextBounds.max} onChange={(event) => setMaxContext(Number(event.target.value) === contextBounds.max ? null : Number(event.target.value))} className="mt-1 w-full accent-primary" /></label></div>}
                   {activeFilterCount > 0 && <Button variant="ghost" size="sm" className="mt-1 w-full" onClick={clearFilters}>Clear filters</Button>}
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -1318,16 +1312,8 @@ export default function ProviderDetailPage({
             <Button variant="default" size="sm" onClick={() => setAddOpen(true)}>Add model</Button>
           </div>
         </CardHeader>
-        <Tabs
-          tabs={([ ["all", "All"], ["chat", "Chat"], ["image", "Image"], ["tts", "Text to speech"], ["video", "Video"] ] as const).map(([id, label]) => ({ id, label: `${label} (${modelCategoryCounts[id] ?? 0})` }))}
-          active={modelCategory}
-          onChange={(value) => setModelCategory(value as ModelCategory | "all")}
-          ariaLabel="Filter provider models by type"
-          className="overflow-x-auto px-3"
-        />
-        <Separator />
         {filteredList.length === 0 ? (
-          <div className="p-10 text-center text-sm text-muted-foreground">
+          <div className="m-4 rounded-xl border border-dashed border-border bg-background/60 py-10 text-center text-sm text-tertiary">
             {list.length === 0
               ? "No models found. Sync the provider or add one manually."
               : activeFilterCount > 0
@@ -1336,17 +1322,17 @@ export default function ProviderDetailPage({
           </div>
         ) : (
           <>
-            <div className="space-y-3 p-4 md:hidden">
+            <div className="space-y-3 p-3 md:hidden">
               {filteredList.map((model) => {
                 const fullId = modelPublicId({ ...model, provider_name: provider.name });
                 const canTest = modelCategories(model).includes("chat");
-                return <div key={model.id} className="min-w-0 rounded-lg border border-border/60 p-3">
+                return <div key={model.id} className="min-w-0 rounded-lg border border-border bg-card p-3">
                   <div className="flex min-w-0 items-start justify-between gap-3">
-                    <div className="min-w-0"><p className="break-all font-mono text-xs">{fullId}</p><p className="mt-1 truncate text-sm font-medium">{model.display_name || "Unnamed model"}</p><ModelMetadataBadges model={model} /></div>
+                    <div className="min-w-0"><p className="break-all font-mono text-xs">{fullId}</p><div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1"><p className="min-w-0 truncate text-sm font-medium">{model.display_name || "Unnamed model"}</p><ModelCapabilityBadges capabilities={model.capabilities} contextWindow={model.context_window} /></div></div>
                     <Badge variant={model.is_manual ? "outline" : "secondary"}>{model.is_manual ? "Manual" : "Synced"}</Badge>
                   </div>
-                  <div className="mt-3 flex items-center justify-between gap-2 border-t border-border/60 pt-3">
-                    {provider.protocol === "qwen" && model.is_active === 0 && !model.is_manual ? <Badge variant="outline">Not supported</Badge> : <label className="flex items-center gap-2 text-xs text-muted-foreground"><Switch checked={model.is_active === 1} aria-label={`${modelDisplayId(model)} active`} onCheckedChange={async () => { const updated = await modelsApi.toggle(model.id); invalidateModels(providerId); setList((items) => items.map((item) => item.id === model.id ? { ...item, is_active: updated.is_active } : item)); }} />Active</label>}
+                  <div className="mt-3 flex items-center justify-between gap-2 border-t border-border pt-3">
+                    {provider.protocol === "qwen" && model.is_active === 0 && !model.is_manual ? <Badge variant="outline">Not supported</Badge> : <label className="flex items-center gap-2 text-xs text-tertiary"><Switch checked={model.is_active === 1} aria-label={`${modelDisplayId(model)} active`} onCheckedChange={async () => { const updated = await modelsApi.toggle(model.id); invalidateModels(providerId); setList((items) => items.map((item) => item.id === model.id ? { ...item, is_active: updated.is_active } : item)); }} />Active</label>}
                     <div className="flex gap-1">
                       <Button size="icon" variant="ghost" aria-label={`Copy ${modelDisplayId(model)}`} onClick={() => copy(fullId)}><Copy className="size-4" /></Button>
                       {canTest && <Button size="icon" variant="ghost" aria-label={`Test ${modelDisplayId(model)}`} onClick={() => testModel(model.id)} disabled={testingId === model.id}>{testingId === model.id ? <LoaderCircle className="size-4 animate-spin" /> : <PlayCircleLine className="size-4" />}</Button>}
@@ -1357,8 +1343,7 @@ export default function ProviderDetailPage({
                 </div>;
               })}
             </div>
-            <div className="hidden overflow-x-auto md:block">
-          <Table>
+            <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Public ID</TableHead>
@@ -1398,21 +1383,25 @@ export default function ProviderDetailPage({
                     </div>
                   </TableCell>
                   <TableCell>
-                    <div>
-                      {model.display_name || (
-                        <span className="text-muted-foreground">—</span>
-                      )}
-                      <ModelMetadataBadges model={model} />
+                    <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                      <span className="min-w-0 truncate">
+                        {model.display_name || (
+                          <span className="text-tertiary">—</span>
+                        )}
+                      </span>
+                      <ModelCapabilityBadges capabilities={model.capabilities} contextWindow={model.context_window} />
                     </div>
                   </TableCell>
                   <TableCell>
-                    <Badge variant={model.is_manual ? "outline" : "secondary"}>
-                      {model.is_manual ? "Manual" : "Auto-synced"}
-                    </Badge>
+                    {model.is_manual ? (
+                      <Badge variant="outline"><Pencil className="size-3" />Added manually</Badge>
+                    ) : (
+                      <Badge variant="secondary"><RefreshCw className="size-3" />Synced</Badge>
+                    )}
                   </TableCell>
                   <TableCell>
                     {provider.protocol === "qwen" && model.is_active === 0 && !model.is_manual ? (
-                      <Badge variant="outline" className="text-muted-foreground">Not supported</Badge>
+                      <Badge variant="outline" className="text-tertiary">Not supported</Badge>
                     ) : (
                       <Switch
                         checked={model.is_active === 1}
@@ -1435,7 +1424,7 @@ export default function ProviderDetailPage({
                     <div className="flex justify-center gap-1">
                       {modelCategories(model).includes("chat") && (testResult[model.id] === "success" ? (
                         <span className="flex size-7 items-center justify-center">
-                          <Check className="block size-5 text-green-500" />
+                          <Check className="block size-5 text-success" />
                         </span>
                       ) : testResult[model.id] === "error" ? (
                         <span className="flex size-7 items-center justify-center">
@@ -1498,19 +1487,18 @@ export default function ProviderDetailPage({
                 </TableRow>
               ))}
             </TableBody>
-          </Table>
-            </div>
+            </Table>
           </>
         )}
       </Card>
       </>}
       {activeTab === "headers" && <Card>
-        <CardHeader><CardTitle>Custom headers</CardTitle><p className="text-sm text-muted-foreground">Headers sent with requests to this provider. Authentication and protocol headers stay managed separately.</p></CardHeader>
+        <CardHeader><CardTitle>Custom headers</CardTitle><p className="text-sm text-tertiary">Headers sent with requests to this provider. Authentication and protocol headers stay managed separately.</p></CardHeader>
         <CardContent className="space-y-4">
-          {requiresOpenCodeSession && <div className="grid gap-2 rounded-md border border-primary/20 bg-primary/5 p-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)_auto]"><div className="flex items-center rounded-md border bg-background px-3 text-sm font-mono text-foreground">x-opencode-session</div><div className="flex min-h-9 items-center rounded-md border bg-muted/50 px-3 text-sm text-muted-foreground">Generated automatically per conversation</div><Badge variant="secondary" className="min-h-9 justify-center">Required</Badge><div className="flex items-center rounded-md border bg-background px-3 text-sm font-mono text-foreground">X-Session-ID</div><div className="flex min-h-9 items-center rounded-md border bg-muted/50 px-3 text-sm text-muted-foreground">Same session ID, sent automatically</div><Badge variant="secondary" className="min-h-9 justify-center">Required</Badge><p className="text-xs text-muted-foreground sm:col-span-3">Sent automatically to OpenCode. These protected headers cannot be edited or removed.</p></div>}
+          {requiresOpenCodeSession && <div className="grid gap-2 rounded-lg border border-border bg-background/60 p-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)_auto]"><div className="flex items-center rounded-lg border border-border bg-background px-3 text-sm font-mono text-foreground">x-opencode-session</div><div className="flex min-h-9 items-center rounded-lg border border-border bg-surface px-3 text-sm text-tertiary">Generated automatically per conversation</div><Badge variant="secondary" className="min-h-9 justify-center">Required</Badge><div className="flex items-center rounded-lg border border-border bg-background px-3 text-sm font-mono text-foreground">X-Session-ID</div><div className="flex min-h-9 items-center rounded-lg border border-border bg-surface px-3 text-sm text-tertiary">Same session ID, sent automatically</div><Badge variant="secondary" className="min-h-9 justify-center">Required</Badge><p className="text-xs text-tertiary sm:col-span-3">Sent automatically to OpenCode. These protected headers cannot be edited or removed.</p></div>}
           {customHeaderRows.map((row) => <div key={row.id} className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)_auto]"><Input aria-label="Header name" placeholder="Header name" autoComplete="off" value={row.name} onChange={(event) => setCustomHeaderRows((rows) => rows.map((item) => item.id === row.id ? { ...item, name: event.target.value } : item))} /><Input aria-label="Header value" placeholder="Value" autoComplete="new-password" value={row.value} onChange={(event) => setCustomHeaderRows((rows) => rows.map((item) => item.id === row.id ? { ...item, value: event.target.value } : item))} /><Button type="button" variant="ghost" size="icon" aria-label={`Remove ${row.name || "header"}`} onClick={() => setCustomHeaderRows((rows) => rows.filter((item) => item.id !== row.id))}><Trash2 className="size-4" /></Button></div>)}
-          {!customHeaderRows.length && <div className="rounded-lg border border-dashed p-6 text-center"><p className="text-sm font-medium">No custom headers</p><p className="mt-1 text-xs text-muted-foreground">Add headers required by this provider's gateway.</p></div>}
-          <div className="flex flex-wrap items-center justify-between gap-3"><p className="text-xs text-muted-foreground">Values are encrypted at rest. Authorization/protocol headers are managed separately. OpenCode receives a stable session ID per conversation.</p><Button type="button" variant="outline" onClick={addCustomHeader}><Add className="size-4" />Add header</Button></div>
+          {!customHeaderRows.length && <div className="rounded-xl border border-dashed border-border bg-background/60 py-10 text-center"><p className="text-sm font-medium text-foreground">No custom headers</p><p className="mt-1 text-xs text-tertiary">Add headers required by this provider's gateway.</p></div>}
+          <div className="flex flex-wrap items-center justify-between gap-3"><p className="text-xs text-tertiary">Values are encrypted at rest. Authorization/protocol headers are managed separately. OpenCode receives a stable session ID per conversation.</p><Button type="button" variant="outline" onClick={addCustomHeader}><Add className="size-4" />Add header</Button></div>
         </CardContent>
       </Card>}
       <SyncModelsModal
@@ -1547,12 +1535,12 @@ export default function ProviderDetailPage({
                 <button
                   key={credential.id}
                   type="button"
-                  className={`flex w-full items-center justify-between rounded-md border p-3 text-left text-sm ${logoutCredentialId === credential.id ? "border-primary bg-muted" : "hover:bg-muted/50"}`}
+                  className={`flex w-full items-center justify-between rounded-lg border p-3 text-left text-sm transition-colors ${logoutCredentialId === credential.id ? "border-border-strong bg-accent" : "border-border hover:bg-accent"}`}
                   onClick={() => setLogoutCredentialId(credential.id)}
                 >
                   <span>
                     <span className="block">{credential.label}</span>
-                    <span className="font-mono text-xs text-muted-foreground">
+                    <span className="font-mono text-xs text-tertiary">
                       {credential.kind === "antigravity"
                         ? credential.id
                         : credential.account_id || credential.project_id}
@@ -1601,7 +1589,7 @@ export default function ProviderDetailPage({
                   href={manualOAuth.authUrl}
                   target="_blank"
                   rel="noreferrer"
-                  className="text-xs font-medium text-primary underline underline-offset-4"
+                  className="text-xs font-medium text-accent-blue underline underline-offset-4"
                 >
                   Open authorization page
                 </a>

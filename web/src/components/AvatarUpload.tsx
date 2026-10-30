@@ -57,23 +57,23 @@ export default function AvatarUpload({
         accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml,image/x-icon"
         onChange={select}
       />
-      <div className={`flex size-16 shrink-0 items-center justify-center overflow-hidden bg-muted/70 ${fallback === "user" ? "rounded-full" : "rounded-xl"}`}>
+      <div className={`flex size-16 shrink-0 items-center justify-center overflow-hidden border border-border bg-surface ${fallback === "user" ? "rounded-full" : "rounded-lg"}`}>
         {value || hasDetected ? (
           <DisplayAvatar
             name={name || "Avatar"}
             src={value ?? detected[0]}
             sources={value ? detected : detected.slice(1)}
             fallback={fallback}
-            className={`size-16 object-contain ${fallback === "user" ? "rounded-full" : "rounded-xl"}`}
+            className={`size-16 object-contain ${fallback === "user" ? "rounded-full" : "rounded-lg"}`}
           />
         ) : (
-            <RiImageAddLine className="size-6 text-muted-foreground" />
+            <RiImageAddLine className="size-6 text-tertiary" />
         )}
       </div>
       <div className="min-w-0 flex-1 space-y-2">
         <div>
-          <div className="text-sm font-medium">{label}</div>
-          <p className="mt-0.5 text-xs text-muted-foreground">
+          <div className="text-sm font-medium text-foreground">{label}</div>
+          <p className="mt-0.5 text-xs text-tertiary">
             {value ? "Custom image" : hasDetected ? "Using detected provider icon" : "Choose an image or use the provider initials"}
             <span className="block">PNG, JPEG, WebP, GIF, SVG or ICO · up to 25 MB</span>
           </p>

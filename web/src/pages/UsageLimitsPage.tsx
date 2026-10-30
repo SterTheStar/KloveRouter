@@ -46,16 +46,16 @@ function UsageWindow({
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-3 text-sm">
-        <span>{title}</span>
-        <span className="font-medium">{used.toFixed(0)}% used</span>
+        <span className="text-foreground">{title}</span>
+        <span className="font-medium text-foreground tabular-nums">{used.toFixed(0)}% used</span>
       </div>
-      <div className="h-2 overflow-hidden rounded-full bg-muted">
+      <div className="h-2 overflow-hidden rounded-full bg-overlay">
         <div
           className="h-full rounded-full bg-primary transition-all"
           style={{ width: `${used}%` }}
         />
       </div>
-      <div className="text-xs text-muted-foreground">
+      <div className="text-xs text-tertiary">
         {windowLabel(value)} · {resetLabel(value?.reset_at)}
       </div>
     </div>
@@ -74,13 +74,13 @@ function FreebuffUsageSummary({ usage }: { usage: any }) {
     <div className="space-y-5">
       <div className="space-y-2">
         <div className="flex items-center justify-between gap-3 text-sm">
-          <span>Shared Freebuff account limit</span>
-          <span className="font-medium">{hasRateLimit ? `${Math.max(0, remaining).toFixed(1)} remaining` : "Quota data pending"}</span>
+          <span className="text-foreground">Shared Freebuff account limit</span>
+          <span className="font-medium text-foreground tabular-nums">{hasRateLimit ? `${Math.max(0, remaining).toFixed(1)} remaining` : "Quota data pending"}</span>
         </div>
-        <div className="h-2 overflow-hidden rounded-full bg-muted">
+        <div className="h-2 overflow-hidden rounded-full bg-overlay">
           <div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${used}%` }} />
         </div>
-        <div className="text-xs text-muted-foreground">
+        <div className="text-xs text-tertiary">
           {hasRateLimit
             ? `${recentCount.toFixed(1)} / ${limit} used`
             : "Quota counters unavailable"}
@@ -224,35 +224,35 @@ function AntigravityQuotaSummary({ quotas }: { quotas: AntigravityQuota[] }) {
               }
             >
               <div className="flex items-center justify-between gap-3 text-sm">
-                <span>{family.label}</span>
-                <span className="font-medium">{family.used}% used</span>
+                <span className="text-foreground">{family.label}</span>
+                <span className="font-medium text-foreground tabular-nums">{family.used}% used</span>
               </div>
-              <div className="h-2 overflow-hidden rounded-full bg-muted">
+              <div className="h-2 overflow-hidden rounded-full bg-overlay">
                 <div
                   className={`h-full rounded-full ${family.color} transition-all`}
                   style={{ width: `${family.used}%` }}
                 />
               </div>
-              <div className="text-xs text-muted-foreground">
+              <div className="text-xs text-tertiary">
                 Weekly limits · {family.resetLabel}
               </div>
             </TooltipTrigger>
             <TooltipContent
               side="top"
-              className="w-fit max-w-[min(420px,calc(100vw-2rem))] whitespace-normal p-3"
+              className="w-fit max-w-[min(420px,calc(100vw-2rem))] whitespace-normal rounded-xl border border-border bg-card p-3 text-foreground shadow-[0px_4px_16px_0px_rgba(0,0,0,0.05)]"
             >
               <div className="w-fit max-w-full space-y-2 overflow-hidden">
                 <div className="flex items-center gap-2">
                   <span
                     className={`size-2 shrink-0 rounded-full ${family.color}`}
                   />
-                  <span className="text-xs font-semibold">{family.label}</span>
+                  <span className="text-xs font-medium text-foreground">{family.label}</span>
                 </div>
-                <div className="text-xs text-muted-foreground">
+                <div className="text-xs text-tertiary">
                   {family.used}% used · {Math.round(family.remaining * 100)}%
                   remaining
                 </div>
-                <div className="border-t border-border pt-2 text-xs text-muted-foreground">
+                <div className="border-t border-border pt-2 text-xs text-tertiary">
                   <div className="max-h-24 overflow-y-auto break-all">
                     Models:{" "}
                     {[
@@ -413,7 +413,7 @@ export default function UsageLimitsPage() {
   if (loading)
     return (
       <div className="flex justify-center p-12">
-        <LoaderCircle className="size-5 animate-spin text-muted-foreground" />
+        <LoaderCircle className="size-5 animate-spin text-tertiary" />
       </div>
     );
 
@@ -421,10 +421,10 @@ export default function UsageLimitsPage() {
     <div className="w-full space-y-6 p-6">
       <div className="flex items-center justify-between gap-4">
         <div>
-          <h1 className="font-heading text-2xl font-semibold tracking-tight">
+          <h1 className="font-heading text-2xl font-semibold tracking-tight text-foreground">
             Usage limits
           </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
+          <p className="mt-1 text-sm text-tertiary">
             OAuth account limits and reset credits.
           </p>
         </div>
@@ -447,8 +447,8 @@ export default function UsageLimitsPage() {
         </Alert>
       )}
       {!accounts.length ? (
-        <Card>
-          <CardContent className="p-10 text-center text-sm text-muted-foreground">
+        <Card className="border border-border shadow-none">
+          <CardContent className="p-10 text-center text-sm text-tertiary">
             No OAuth accounts connected.
           </CardContent>
         </Card>
@@ -456,23 +456,23 @@ export default function UsageLimitsPage() {
         <div className="grid gap-5 xl:grid-cols-2">
           {accounts.map(
             ({ provider, credential, usage, credits, antigravityQuota, freebuffUsage: freebuffData }) => (
-              <Card key={credential.id}>
+        <Card key={credential.id} className="border border-border shadow-none">
                 <CardHeader>
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex items-center gap-3">
                       <ProviderIcon name={provider.name} src={provider.avatar} fallbackLabel={credential.email || credential.label} className="size-11" />
                       <div>
-                        <CardTitle>
+                        <CardTitle className="text-foreground">
                           {provider.protocol === "antigravity"
                             ? credential.email || credential.label
                             : credential.label}
                         </CardTitle>
                         {provider.protocol === "freebuff" ? (
-                          <div className="text-xs text-muted-foreground">
+                          <div className="text-xs text-tertiary">
                             Session {freebuffData?.status ?? "none"} · Tier {freebuffData?.accessTier ?? freebuffData?.access_tier ?? "unknown"} · Country {freebuffData?.countryCode ?? freebuffData?.country_code ?? "unknown"}
                           </div>
                         ) : (
-                          <div className="text-xs text-muted-foreground">
+                          <div className="text-xs text-tertiary">
                             {accountIdentity(provider, credential)} ·{" "}
                             {provider.protocol === "antigravity"
                               ? "Antigravity account"
@@ -528,7 +528,7 @@ export default function UsageLimitsPage() {
                     antigravityQuota?.length ? (
                       <AntigravityQuotaSummary quotas={antigravityQuota} />
                     ) : (
-                      <div className="text-sm text-muted-foreground">
+                      <div className="text-sm text-tertiary">
                         No quota data returned.
                       </div>
                     )

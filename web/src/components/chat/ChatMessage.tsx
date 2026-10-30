@@ -68,7 +68,7 @@ function UserAttachments({
       {attachments.map((attachment) => (
         <div
           key={attachment.id}
-          className="flex max-w-44 items-center gap-1.5 rounded-lg border border-border/80 bg-card px-2 py-1 text-[11px] text-muted-foreground shadow-sm"
+          className="flex max-w-44 items-center gap-1.5 rounded-lg border border-border bg-card px-2 py-1 text-[11px] text-muted-foreground"
           title={attachment.name}
         >
           {attachment.kind === "image" && attachment.preview ? (
@@ -176,9 +176,9 @@ function ActionButton({
       onClick={onClick}
       title={title}
       aria-label={title}
-      className={`chat-action-button inline-flex size-7 items-center justify-center rounded-lg hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+      className={`chat-action-button inline-flex size-7 items-center justify-center rounded-lg hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
         destructive ? "hover:text-destructive" : "hover:text-foreground"
-      } text-muted-foreground`}
+      } text-tertiary`}
     >
       {children}
     </button>
@@ -240,7 +240,7 @@ export default function ChatMessageView({
       return (
         <div className="flex w-full flex-col items-end gap-2">
           <textarea
-            className="max-h-64 min-h-20 w-full max-w-[85%] resize-y rounded-2xl rounded-br-md border border-primary/40 bg-card px-4 py-2.5 text-sm leading-relaxed text-foreground outline-none focus:border-primary sm:max-w-[75%]"
+            className="max-h-64 min-h-20 w-full max-w-[85%] resize-y rounded-[24px] rounded-br-lg border border-foreground/25 bg-surface px-4 py-2.5 text-base leading-6 text-foreground outline-none focus:border-foreground/40 sm:max-w-[75%]"
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
             rows={4}
@@ -279,7 +279,7 @@ export default function ChatMessageView({
     return (
       <div className="group flex flex-col items-end">
         {text && (
-          <div className="chat-message-user chat-message-enter max-w-[85%] rounded-2xl rounded-br-md bg-primary px-4 py-2.5 text-sm leading-relaxed text-primary-foreground whitespace-pre-wrap sm:max-w-[75%]">
+          <div className="chat-message-user chat-message-enter max-w-[85%] rounded-[24px] rounded-br-lg bg-surface px-4 py-2.5 text-base leading-6 tracking-[-0.32px] text-foreground whitespace-pre-wrap sm:max-w-[75%]">
             {text}
           </div>
         )}
@@ -306,7 +306,7 @@ export default function ChatMessageView({
   const classified = message.error ? classifyChatError(message.error) : null;
 
   return (
-    <div className={`group min-w-0 max-w-full ${streaming ? "" : "chat-message-enter"}`}>
+    <div className={`group min-w-0 max-w-full text-base leading-6 tracking-[-0.32px] ${streaming ? "" : "chat-message-enter"}`}>
       {message.reasoning ? (
         <ThinkingBlock content={message.reasoning} streaming={streaming} />
       ) : null}
@@ -321,7 +321,7 @@ export default function ChatMessageView({
         </div>
       ) : null}
       {classified ? (
-        <div className="chat-error-panel mt-3 rounded-xl border border-destructive/25 bg-destructive/5 px-3.5 py-3 text-xs text-destructive shadow-sm" role="alert">
+        <div className="chat-error-panel mt-3 rounded-lg border border-destructive/25 bg-destructive/5 px-3.5 py-3 text-xs text-destructive" role="alert">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <p className="font-medium">{classified.title}</p>

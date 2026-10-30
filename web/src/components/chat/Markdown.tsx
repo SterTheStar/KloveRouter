@@ -10,7 +10,6 @@ import {
   RiArrowDownSLine,
   RiArrowUpSLine,
 } from "@remixicon/react";
-import { Button } from "@/components/ui/button";
 import { copyToClipboard } from "@/lib/clipboard";
 import { HtmlPreview } from "./HtmlPreview";
 
@@ -45,13 +44,13 @@ function CodeBlock({
     <div
       className={
         isMaximizedPreview
-          ? "fixed inset-[1%] z-50 flex flex-col overflow-hidden rounded-lg border bg-muted shadow-2xl dark:bg-muted/20"
-          : "my-3 overflow-hidden rounded-lg border bg-muted/40 dark:bg-muted/20"
+          ? "fixed inset-[1%] z-50 flex flex-col overflow-hidden rounded-xl border border-border bg-card shadow-[0px_4px_16px_0px_rgba(0,0,0,0.05)]"
+          : "my-3 overflow-hidden rounded-xl border border-border bg-card"
       }
     >
-      <div className="flex shrink-0 items-center justify-between border-b bg-muted py-1 pr-1 pl-3 dark:bg-muted">
+      <div className="flex h-10 shrink-0 items-center justify-between gap-2 border-b border-border bg-background/60 pr-1.5 pl-2">
         {isHtml ? (
-          <div className="flex items-center gap-1" role="tablist" aria-label="Codebox view">
+          <div className="flex items-center gap-0.5" role="tablist" aria-label="Codebox view">
             {(["code", "preview"] as const).map((tab) => (
               <button
                 key={tab}
@@ -59,10 +58,10 @@ function CodeBlock({
                 role="tab"
                 aria-selected={activeTab === tab}
                 onClick={() => setActiveTab(tab)}
-                className={`relative px-2.5 py-1 text-xs font-medium transition-colors after:absolute after:inset-x-1 after:-bottom-[5px] after:h-0.5 after:rounded-full after:transition-colors ${
+                className={`relative h-7 rounded-lg px-2.5 text-xs transition-colors ${
                   activeTab === tab
-                    ? "text-foreground after:bg-foreground"
-                    : "text-muted-foreground after:bg-transparent hover:text-foreground hover:after:bg-muted-foreground/40"
+                    ? "bg-overlay/70 font-medium text-foreground"
+                    : "text-tertiary hover:bg-accent hover:text-foreground"
                 }`}
               >
                 {tab === "code" ? "Code" : "Preview"}
@@ -70,20 +69,15 @@ function CodeBlock({
             ))}
           </div>
         ) : (
-          <span className="font-mono text-xs font-medium text-muted-foreground">
+          <span className="px-2 font-mono text-xs text-tertiary">
             {language || "code"}
           </span>
         )}
-        <div className="flex items-center gap-1">
-          {isHtml && (
-            <span className="mr-1 font-mono text-xs text-muted-foreground">{language}</span>
-          )}
+        <div className="flex items-center gap-0.5">
           {isHtml && activeTab === "preview" && (
-            <Button
+            <button
               type="button"
-              variant="ghost"
-              size="sm"
-              className="h-6 gap-1 px-1.5 text-xs text-muted-foreground"
+              className="flex h-7 items-center gap-1 rounded-lg px-2 text-xs text-tertiary transition-colors hover:bg-accent hover:text-foreground"
               onClick={() => setPreviewMaximized((current) => !current)}
               title={previewMaximized ? "Restore preview" : "Maximize preview"}
               aria-label={previewMaximized ? "Restore preview" : "Maximize preview"}
@@ -94,22 +88,20 @@ function CodeBlock({
                 <RiFullscreenLine className="size-3.5" />
               )}
               {previewMaximized ? "Restore" : "Maximize"}
-            </Button>
+            </button>
           )}
-          <Button
+          <button
             type="button"
-            variant="ghost"
-            size="sm"
-            className="h-6 gap-1 px-1.5 text-xs text-muted-foreground"
+            className="flex h-7 items-center gap-1 rounded-lg px-2 text-xs text-tertiary transition-colors hover:bg-accent hover:text-foreground"
             onClick={copy}
           >
             {copied ? (
-              <RiCheckLine className="size-3.5 text-green-500" />
+              <RiCheckLine className="size-3.5 text-success" />
             ) : (
               <RiClipboardLine className="size-3.5" />
             )}
             {copied ? "Copied" : "Copy"}
-          </Button>
+          </button>
         </div>
       </div>
       {activeTab === "preview" && isHtml ? (
@@ -126,16 +118,16 @@ function CodeBlock({
               expanded || streaming
                 ? "overflow-x-auto"
                 : "max-h-[16rem] overflow-hidden"
-            } p-3 font-mono text-[13px] leading-relaxed`}
+            } bg-background/60 p-3 font-mono text-[13px] leading-relaxed`}
           >
             {code}
           </pre>
           {isLongCode && !streaming && (
-            <div className="flex justify-center px-3 py-1.5">
+            <div className="flex justify-center bg-background/60 px-3 py-1.5">
               <button
                 type="button"
                 onClick={() => setExpanded((current) => !current)}
-                className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground"
+                className="inline-flex h-7 items-center gap-1 rounded-lg px-2 text-xs text-tertiary transition-colors hover:text-foreground"
               >
                 {expanded ? (
                   <RiArrowUpSLine className="size-4" />
@@ -230,7 +222,7 @@ export const Markdown = memo(function Markdown({
   streaming?: boolean;
 }) {
   return (
-    <div className="min-w-0 space-y-2.5 text-sm leading-relaxed text-foreground [&_*:last-child]:mb-0">
+    <div className="min-w-0 space-y-3 text-base leading-6 tracking-[-0.32px] text-foreground [&_*:last-child]:mb-0">
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{

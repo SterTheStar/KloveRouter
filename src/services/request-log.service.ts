@@ -12,6 +12,8 @@ export interface RequestLog {
   requester_name: string | null;
   credential_label: string | null;
   credential_identity: string | null;
+  credential_kind: string | null;
+  api_key_prefix: string | null;
   status: RequestLogStatus;
   status_code: number | null;
   tokens_prompt: number;
@@ -104,13 +106,14 @@ export const requestLogService = {
     modelName: string;
     clientIp?: string | null;
     requesterName?: string | null;
+    apiKeyPrefix?: string | null;
     requestDetails?: unknown;
     streaming?: boolean;
   }) {
     const id = requestId();
     getDb()
       .query(
-        "INSERT INTO request_logs (id, provider_id, provider_name, model_name, client_ip, requester_name, request_details, streaming) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO request_logs (id, provider_id, provider_name, model_name, client_ip, requester_name, api_key_prefix, request_details, streaming) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
       )
       .run(
         id,
@@ -119,6 +122,7 @@ export const requestLogService = {
         input.modelName,
         input.clientIp ?? null,
         input.requesterName ?? null,
+        input.apiKeyPrefix ?? null,
         serializeDetail(input.requestDetails),
         input.streaming ? 1 : 0,
       );
@@ -140,6 +144,7 @@ export const requestLogService = {
   setCredential(
     id: string,
     credential: {
+      kind?: string | null;
       label?: string | null;
       account_id?: string | null;
       email?: string | null;
@@ -153,9 +158,9 @@ export const requestLogService = {
       null;
     getDb()
       .query(
-        "UPDATE request_logs SET credential_label = ?, credential_identity = ? WHERE id = ?",
+        "UPDATE request_logs SET credential_label = ?, credential_identity = ?, credential_kind = ? WHERE id = ?",
       )
-      .run(credential.label ?? null, identity, id);
+      .run(credential.label ?? null, identity, credential.kind ?? null, id);
   },
 
   complete(
@@ -289,7 +294,7 @@ export const requestLogService = {
     const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
     const rows = db
       .query(
-        `SELECT id, provider_id, provider_name, model_name, client_ip, requester_name, credential_label, credential_identity, status, status_code, tokens_prompt, tokens_completion, tokens_cache_read, tokens_cache_write, tokens_total, estimated_cost_usd, tps, duration_ms, error_message, created_at, completed_at, streaming, streamed_chars, streamed_bytes, request_details, response_details FROM request_logs ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`,
+        `SELECT id, provider_id, provider_name, model_name, client_ip, requester_name, api_key_prefix, credential_label, credential_identity, credential_kind, status, status_code, tokens_prompt, tokens_completion, tokens_cache_read, tokens_cache_write, tokens_total, estimated_cost_usd, tps, duration_ms, error_message, created_at, completed_at, streaming, streamed_chars, streamed_bytes, request_details, response_details FROM request_logs ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`,
       )
       .all(...values, limit, offset) as (RequestLog & { request_details: string | null; response_details: string | null })[];
     for (const row of rows) {

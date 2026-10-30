@@ -63,7 +63,7 @@ export default function AddModelModal({
   const showOutputFixes = modelCategories({ model_id: modelId, display_name: displayName, capabilities: metadata.capabilities }).includes("chat");
   const tabs = modelFormTabsFor(showOutputFixes);
   useEffect(() => {
-    if (!showOutputFixes && activeTab === "output-fixes") setActiveTab("generation");
+    if (!showOutputFixes && activeTab === "output-fixes") setActiveTab("capabilities");
   }, [showOutputFixes, activeTab]);
   const close = () => {
     if (loading) return;
@@ -140,7 +140,7 @@ export default function AddModelModal({
           {activeTab === "general" && (
             <div className="space-y-5 py-1">
               <div>
-                <div className="text-sm font-medium">Model identity</div>
+                <div className="text-sm font-medium text-foreground">Model identity</div>
                 <p className="mt-1 text-xs text-muted-foreground">
                   Upstream identifier and friendly name shown in Klove.
                 </p>
@@ -149,7 +149,7 @@ export default function AddModelModal({
             <div className="min-w-0 space-y-2">
               <Label htmlFor="model-id">Model ID</Label>
               <Input
-                className="h-10 bg-muted/30 dark:bg-muted/30"
+                className="h-9"
                 id="model-id"
                 value={modelId}
                 onChange={(e) => {
@@ -163,13 +163,13 @@ export default function AddModelModal({
             </div>
             <div className="min-w-0 space-y-2">
               <Label htmlFor="model-pretty">Pretty ID (optional)</Label>
-              <Input className="h-10 bg-muted/30 dark:bg-muted/30" id="model-pretty" value={prettyId} onChange={(e) => setPrettyId(e.target.value)} placeholder="friendly-model" />
+              <Input className="h-9" id="model-pretty" value={prettyId} onChange={(e) => setPrettyId(e.target.value)} placeholder="friendly-model" />
               <p className="text-xs text-muted-foreground">Public ID: letters, numbers, dots, hyphens, underscores.</p>
             </div>
             <div className="min-w-0 space-y-2">
               <Label htmlFor="model-display">Display name</Label>
               <Input
-                className="h-10 bg-muted/30 dark:bg-muted/30"
+                className="h-9"
                 id="model-display"
                 value={displayName}
                 onChange={(e) => {
@@ -184,9 +184,6 @@ export default function AddModelModal({
           )}
           {activeTab === "capabilities" && (
             <ModelMetadataEditor value={metadata} onChange={setMetadata} />
-          )}
-          {activeTab === "generation" && (
-            <MediaSettingsEditor value={metadata} onChange={setMetadata} modelIdentity={`${modelId} ${displayName}`} />
           )}
           {activeTab === "output-fixes" && (
             <ThinkTagModeEditor
@@ -223,23 +220,21 @@ export default function AddModelModal({
 export function modelFormTabsFor(includeOutputFixes = true) {
   return [
   { id: "general", label: "General" },
-  { id: "generation", label: "Model type" },
   { id: "capabilities", label: "Capabilities" },
   ...(includeOutputFixes ? [{ id: "output-fixes", label: "Output fixes" }] : []),
   { id: "pricing", label: "Pricing" },
   ];
 }
 
-const capabilityLabels: Record<keyof ModelCapabilities, string> = {
+const mediaCapabilityKeys = ["image_generation", "text_to_speech", "video_generation"] as const;
+
+const capabilityLabels: Record<Exclude<keyof ModelCapabilities, (typeof mediaCapabilityKeys)[number]>, string> = {
   reasoning: "Reasoning",
   tools: "Tools",
   vision: "Vision",
   audio_input: "Audio input",
   audio_output: "Audio output",
   video: "Video",
-  image_generation: "Image generation",
-  text_to_speech: "Text to speech",
-  video_generation: "Video generation",
   attachments: "Attachments",
   streaming: "Streaming",
   non_streaming: "Non-streaming",
@@ -256,9 +251,9 @@ export function emptyModelMetadata(): ModelMetadataInput {
       audio_input: null,
       audio_output: null,
       video: null,
-      image_generation: null,
-      text_to_speech: null,
-      video_generation: null,
+      image_generation: false,
+      text_to_speech: false,
+      video_generation: false,
       attachments: null,
       streaming: null,
       non_streaming: null,
@@ -337,7 +332,7 @@ export function ModelMetadataEditor({
   return (
     <div className="space-y-5 py-1">
       <div>
-        <div className="text-sm font-medium">Model metadata</div>
+        <div className="text-sm font-medium text-foreground">Model metadata</div>
         <p className="mt-1 text-xs text-muted-foreground">
           Limits, request modes, and reasoning options exposed to clients.
         </p>
@@ -360,13 +355,13 @@ export function ModelMetadataEditor({
           <p className="mt-1 text-xs text-muted-foreground">Click to cycle Unknown, Supported, and Unsupported.</p>
         </div>
         <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-          {(Object.keys(capabilityLabels) as (keyof ModelCapabilities)[]).filter((key) => !["image_generation", "text_to_speech", "video_generation"].includes(key)).map((key) => {
+          {(Object.keys(capabilityLabels) as Exclude<keyof ModelCapabilities, (typeof mediaCapabilityKeys)[number]>[]).map((key) => {
             const state = value.capabilities[key];
             return (
               <button
                 key={key}
                 type="button"
-                className={`flex items-center justify-between rounded-md border px-3 py-2 text-left text-sm transition-colors ${state === true ? "border-primary/50 bg-primary/10" : state === false ? "bg-muted/50 text-muted-foreground" : "border-dashed"}`}
+                className={`flex items-center justify-between rounded-lg border px-3 py-2 text-left text-sm transition-colors ${state === true ? "border-border-strong bg-accent" : state === false ? "border-border bg-surface text-tertiary" : "border-dashed border-border hover:bg-accent"}`}
                 onClick={() => setCapability(key)}
                 aria-label={`${capabilityLabels[key]}: ${state === null ? "unknown" : state ? "supported" : "unsupported"}`}
               >
@@ -386,7 +381,7 @@ export function ModelMetadataEditor({
           <Button type="button" variant="outline" size="sm" onClick={addEffort}>+ Add effort</Button>
         </div>
         {value.reasoning_efforts.map((effort, index) => (
-          <div key={index} className="grid gap-2 rounded-md border p-3 sm:grid-cols-[1fr_1fr_1fr_5.5rem_auto]">
+          <div key={index} className="grid gap-2 rounded-lg border border-border p-3 sm:grid-cols-[1fr_1fr_1fr_5.5rem_auto]">
             <Input aria-label="Effort" placeholder="Effort" value={effort.effort} onChange={(event) => updateEffort(index, "effort", event.target.value)} />
             <Input aria-label="Display name" placeholder="Display name" value={effort.display_name} onChange={(event) => updateEffort(index, "display_name", event.target.value)} />
             <Input aria-label="Upstream value" placeholder="Upstream value" value={effort.upstream_value} onChange={(event) => updateEffort(index, "upstream_value", event.target.value)} />
@@ -397,72 +392,10 @@ export function ModelMetadataEditor({
             </div>
           </div>
         ))}
-        {!value.reasoning_efforts.length && <p className="rounded-md border border-dashed p-3 text-xs text-muted-foreground">No reasoning efforts configured.</p>}
+        {!value.reasoning_efforts.length && <p className="rounded-lg border border-dashed border-border bg-background/60 p-3 text-xs text-tertiary">No reasoning efforts configured.</p>}
       </div>
     </div>
   );
-}
-
-export function MediaSettingsEditor({ value, onChange, modelIdentity = "" }: { value: ModelMetadataInput; onChange: (value: ModelMetadataInput) => void; modelIdentity?: string }) {
-  const generationKeys = ["image_generation", "text_to_speech", "video_generation"] as const;
-  const detectedTypes = modelCategories({ model_id: modelIdentity, capabilities: value.capabilities });
-  const updateCapability = (key: (typeof generationKeys)[number]) => {
-    const current = value.capabilities[key] ?? null;
-    const category = key === "image_generation" ? "image" : key === "text_to_speech" ? "tts" : "video";
-    const detected = current === null && detectedTypes.includes(category);
-    onChange({ ...value, capabilities: { ...value.capabilities, [key]: current === true || detected ? false : true } });
-  };
-  const selectChat = () => onChange({
-    ...value,
-    capabilities: {
-      ...value.capabilities,
-      image_generation: false,
-      text_to_speech: false,
-      video_generation: false,
-    },
-  });
-  const updateSetting = (section: "image" | "text_to_speech" | "video", key: string, raw: string) => {
-    const numeric = key === "speed" || key === "seconds";
-    const previous = value.media_settings ?? {};
-    const current = { ...(previous[section] ?? {}) } as Record<string, string | number | undefined>;
-    current[key] = raw === "" ? undefined : numeric ? Number(raw) : raw;
-    const media_settings = { ...previous, [section]: Object.fromEntries(Object.entries(current).filter(([, item]) => item !== undefined)) };
-    if (!Object.keys(media_settings[section] ?? {}).length) delete media_settings[section];
-    onChange({ ...value, media_settings });
-  };
-  const field = (section: "image" | "text_to_speech" | "video", key: string, label: string, placeholder: string, type = "text", min?: number, max?: number, step?: number) => {
-    const current = value.media_settings?.[section]?.[key as never] as string | number | undefined;
-    return <div key={key} className="space-y-1.5"><Label>{label}</Label><Input type={type} min={min} max={max} step={step} value={current ?? ""} placeholder={placeholder} onChange={(event) => updateSetting(section, key, event.target.value)} /></div>;
-  };
-  const modalityChoices = [
-    { title: "Image", key: "image_generation", category: "image", hint: "Image generation, edits, and variations" },
-    { title: "Text to speech", key: "text_to_speech", category: "tts", hint: "Speech output and audio format" },
-    { title: "Video", key: "video_generation", category: "video", hint: "Video generation jobs" },
-  ] as const;
-  const activeModalities = modalityChoices.filter(({ key, category }) => value.capabilities[key] === true || (value.capabilities[key] == null && detectedTypes.includes(category)));
-  const chatSelected = activeModalities.length === 0 && detectedTypes.includes("chat");
-  const configSection = (title: string, description: string, fields: React.ReactNode) => <section key={title} className="space-y-3 rounded-lg border p-4">
-    <div><h3 className="text-sm font-medium">{title}</h3><p className="mt-1 text-xs text-muted-foreground">{description}</p></div>
-    <div className="grid gap-3 sm:grid-cols-2">{fields}</div>
-  </section>;
-  return <div className="space-y-4 py-1">
-    <div><h3 className="text-sm font-medium">Supported generation types</h3><p className="mt-1 text-xs text-muted-foreground">Select only the modalities this model supports. Configuration fields appear only for enabled types.</p></div>
-    <div className="grid gap-2 sm:grid-cols-3">
-      {modalityChoices.map(({ key, title, hint }) => {
-        const state = value.capabilities[key] ?? null;
-        return <button key={key} type="button" onClick={() => updateCapability(key)} aria-pressed={state === true} aria-label={`${title}: ${state === null ? "unknown" : state ? "supported" : "unsupported"}`} className={`rounded-lg border p-3 text-left transition-colors ${state === true ? "border-primary/50 bg-primary/10" : state === false ? "bg-muted/30 text-muted-foreground" : "border-dashed text-muted-foreground"}`}>
-          <span className="flex items-center justify-between gap-2 text-sm font-medium"><span>{title}</span><span className="text-[10px] uppercase tracking-wide">{state === true ? "On" : state === false ? "Off" : "Auto"}</span></span>
-          <span className="mt-1 block text-xs opacity-80">{hint}</span>
-        </button>;
-      })}
-    </div>
-    {activeModalities.length ? <div className="space-y-3 border-t pt-4">
-      <div><h3 className="text-sm font-medium">Defaults for supported types</h3><p className="mt-1 text-xs text-muted-foreground">Defaults are applied only when the request does not include a value.</p></div>
-      {value.capabilities.image_generation === true && configSection("Image", "Image size, quality, and output format.", <>{field("image", "size", "Default size", "e.g. 1024x1024")}{field("image", "quality", "Default quality", "e.g. auto, high, standard")}{field("image", "output_format", "Output format", "e.g. png, jpeg, webp")}</>)}
-      {value.capabilities.text_to_speech === true && configSection("Text to speech", "Default voice, audio format, and speed.", <>{field("text_to_speech", "voice", "Default voice", "e.g. alloy")}{field("text_to_speech", "response_format", "Audio format", "e.g. mp3, wav, opus")}{field("text_to_speech", "speed", "Speed", "1", "number", 0.25, 4, 0.05)}</>)}
-      {value.capabilities.video_generation === true && configSection("Video", "Default frame size and duration.", <>{field("video", "size", "Default size", "e.g. 1280x720")}{field("video", "seconds", "Duration (seconds)", "e.g. 4", "number", 0.1, 600, 0.1)}</>)}
-    </div> : <p className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">No generation type is enabled. Choose Image, Text to speech, or Video above to configure only the matching options.</p>}
-  </div>;
 }
 
 const thinkTagModeOptions: {
@@ -499,7 +432,7 @@ export function ThinkTagModeEditor({
   return (
     <div className="space-y-4 py-1">
       <div>
-        <div className="text-sm font-medium">Think tag handling</div>
+        <div className="text-sm font-medium text-foreground">Think tag handling</div>
         <p className="mt-1 text-xs text-muted-foreground">
           How Klove should treat responses that omit the opening &lt;think&gt;
           tag.
@@ -513,10 +446,10 @@ export function ThinkTagModeEditor({
               key={option.value}
               type="button"
               onClick={() => onChange(option.value)}
-              className={`w-full rounded-md border p-3 text-left text-sm transition-colors ${selected ? "border-primary/50 bg-primary/10" : "border-dashed hover:bg-muted/50"}`}
+              className={`w-full rounded-lg border p-3 text-left text-sm transition-colors ${selected ? "border-border-strong bg-accent" : "border-dashed border-border hover:bg-accent"}`}
               aria-pressed={selected}
             >
-              <div className="font-medium">{option.title}</div>
+              <div className="font-medium text-foreground">{option.title}</div>
               <p className="mt-1 text-xs text-muted-foreground">
                 {option.description}
               </p>
@@ -525,8 +458,8 @@ export function ThinkTagModeEditor({
         })}
       </div>
       {value === "detect" && (
-        <div className="flex items-start gap-2 rounded-md border border-blue-500/30 bg-blue-500/10 p-3 text-xs text-muted-foreground">
-          <Info className="mt-0.5 h-4 w-4 shrink-0 text-blue-500" />
+        <div className="flex items-start gap-2 rounded-lg border border-accent-blue/30 bg-accent-blue/10 p-3 text-xs text-muted-foreground">
+          <Info className="mt-0.5 h-4 w-4 shrink-0 text-accent-blue" />
           <span>
             This mode waits for a tag before releasing content. If the model
             never emits one, streaming is buffered until the response ends.
@@ -534,8 +467,8 @@ export function ThinkTagModeEditor({
         </div>
       )}
       {value === "force" && (
-        <div className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-muted-foreground">
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+        <div className="flex items-start gap-2 rounded-lg border border-border bg-surface p-3 text-xs text-muted-foreground">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-foreground" />
           <span>
             <span className="font-medium text-foreground">Use with caution.</span>{" "}
             This mode always prefixes the first content and never inspects the
@@ -585,23 +518,23 @@ export function PricingEditor({
   return (
     <div className="min-w-0 space-y-5 py-1">
       <div>
-        <div className="text-sm font-medium">Pricing per 1M tokens</div>
+        <div className="text-sm font-medium text-foreground">Pricing per 1M tokens</div>
         <div className="mt-1 text-xs text-muted-foreground">
           Create a pricing tab for each input-token range. The closest range
           below the request size is applied.
         </div>
       </div>
-      <div className="flex min-w-0 items-center gap-2 overflow-x-auto border-b border-border/60 pb-2">
+      <div className="flex min-w-0 items-center gap-2 overflow-x-auto border-b border-border pb-2">
         {tiers.map((tier, index) => (
           <button
             key={index}
             type="button"
-            className={`shrink-0 rounded-md px-3 py-2 text-sm transition-colors ${index === selectedTier ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}
+            className={`shrink-0 rounded-lg px-3 py-2 text-sm transition-colors ${index === selectedTier ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-accent hover:text-foreground"}`}
             onClick={() => setActiveTier(index)}
           >
             Tier {index + 1}
             <span
-              className={`ml-1.5 text-xs ${index === selectedTier ? "text-primary-foreground/75" : "text-muted-foreground"}`}
+              className={`ml-1.5 font-mono text-xs ${index === selectedTier ? "text-primary-foreground/75" : "text-tertiary"}`}
             >
               {thresholdLabel(tier.threshold_tokens)}
             </span>
@@ -637,7 +570,7 @@ export function PricingEditor({
           </Button>
         </div>
         <Input
-          className="h-10 w-full bg-muted/30 dark:bg-muted/30"
+          className="w-full"
           type="number"
           min="0"
           value={currentTier.threshold_tokens}
@@ -693,11 +626,11 @@ function PriceField({
     <div className="min-w-0 space-y-2">
       <Label>{label}</Label>
       <div className="relative min-w-0">
-        <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm text-muted-foreground">
+        <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm text-tertiary">
           $
         </span>
         <Input
-          className="h-10 w-full bg-muted/30 pl-7 dark:bg-muted/30"
+          className="w-full pl-7"
           type="number"
           min="0"
           step="any"

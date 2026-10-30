@@ -20,7 +20,7 @@ function formatTokens(value: number | null) {
 function DetailRow({ label, value, title }: { label: string; value: string; title?: string }) {
   return (
     <div className="flex h-7 items-center justify-between gap-3 text-xs">
-      <span className="shrink-0 text-muted-foreground">{label}</span>
+      <span className="shrink-0 text-tertiary">{label}</span>
       <span className="min-w-0 truncate font-medium text-foreground" title={title ?? value}>{value}</span>
     </div>
   );
@@ -35,8 +35,8 @@ export default function ModelDetailsPane({ model, efforts, selectedEffort, onSel
     : "";
 
   return (
-    <section className="flex min-h-0 min-w-0 flex-col" aria-label="Model details and reasoning effort">
-      <div className="shrink-0 px-4 pt-4 pb-3">
+    <section className="flex min-h-0 min-w-0 flex-col bg-background/60" aria-label="Model details and reasoning effort">
+      <div className="shrink-0 border-b border-border px-4 pt-4 pb-3">
         <div className="flex min-w-0 items-center gap-2.5">
           {model && (
             <ProviderIcon
@@ -47,10 +47,10 @@ export default function ModelDetailsPane({ model, efforts, selectedEffort, onSel
             />
           )}
           <div className="min-w-0">
-            <h3 className="truncate font-heading text-sm font-medium text-foreground">
+            <h3 className="truncate text-sm font-medium text-foreground">
               {model?.display_name || (model ? modelDisplayId(model) : "No model selected")}
             </h3>
-            <p className="mt-0.5 truncate text-xs text-muted-foreground">
+            <p className="mt-0.5 truncate text-xs text-tertiary">
               {model?.provider_name || "Select a model to view its details"}
             </p>
           </div>
@@ -66,21 +66,21 @@ export default function ModelDetailsPane({ model, efforts, selectedEffort, onSel
               title={model.max_output_tokens_is_default ? "Automatic default; configure manually to override" : undefined}
             />
             {model.max_output_tokens_is_default && (
-              <p className="mt-1 text-[11px] text-muted-foreground">Automatic default; configure manually to override.</p>
+              <p className="mt-1 text-[11px] text-tertiary">Automatic default; configure manually to override.</p>
             )}
             <DetailRow label="Capabilities" value={capabilities || "—"} title={capabilities || "No capabilities reported"} />
           </div>
         )}
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col px-2 pb-3">
-        <div className="flex shrink-0 items-center justify-between gap-3 px-2 pb-2">
+      <div className="flex min-h-0 flex-1 flex-col px-1.5 pb-3">
+        <div className="flex shrink-0 items-center justify-between gap-3 px-2.5 pt-3 pb-2">
           <div>
-            <h3 className="font-heading text-sm font-medium text-foreground">Reasoning effort</h3>
-            <p className="mt-0.5 text-xs text-muted-foreground">Thinking depth</p>
+            <h3 className="text-xs font-medium text-tertiary">Reasoning effort</h3>
+            <p className="mt-0.5 text-xs text-tertiary/80">Thinking depth</p>
           </div>
           {efforts.length > 0 && (
-            <span className="rounded-md bg-muted px-1.5 py-0.5 text-[11px] tabular-nums text-muted-foreground">
+            <span className="rounded-md bg-accent px-1.5 py-0.5 text-[11px] tabular-nums text-tertiary">
               {efforts.length}
             </span>
           )}
@@ -88,27 +88,29 @@ export default function ModelDetailsPane({ model, efforts, selectedEffort, onSel
 
         <div className="min-h-0 flex-1 overflow-y-auto">
           {efforts.length > 0 ? (
-            efforts.map((item) => {
-              const selected = item.effort === selectedEffort?.effort;
-              return (
-                <button
-                  key={item.effort}
-                  type="button"
-                  className={`flex h-9 w-full items-center gap-2 rounded-lg px-2 text-left transition-colors hover:bg-muted ${selected ? "bg-accent text-accent-foreground" : ""}`}
-                  onClick={() => onSelectEffort(item.effort)}
-                  title={item.effort}
-                >
-                  <span className="min-w-0 flex-1 truncate text-sm">{item.display_name}</span>
-                  {item.is_default && (
-                    <span className="shrink-0 text-[10px] text-muted-foreground">Default</span>
-                  )}
-                  <span className="max-w-20 truncate text-[11px] text-muted-foreground">{item.effort}</span>
-                  {selected && <CheckLine className="size-4 shrink-0 text-primary" />}
-                </button>
-              );
-            })
+            <div className="flex flex-col gap-0.5">
+              {efforts.map((item) => {
+                const selected = item.effort === selectedEffort?.effort;
+                return (
+                  <button
+                    key={item.effort}
+                    type="button"
+                    className={`flex h-9 w-full items-center gap-2 rounded-lg px-2 text-left text-sm transition-colors ${selected ? "bg-accent text-foreground" : "hover:bg-accent/60"}`}
+                    onClick={() => onSelectEffort(item.effort)}
+                    title={item.effort}
+                  >
+                    <span className="min-w-0 flex-1 truncate">{item.display_name}</span>
+                    {item.is_default && (
+                      <span className="shrink-0 text-[10px] text-tertiary">Default</span>
+                    )}
+                    <span className="max-w-20 truncate text-[11px] text-tertiary">{item.effort}</span>
+                    {selected && <CheckLine className="size-4 shrink-0 text-foreground" />}
+                  </button>
+                );
+              })}
+            </div>
           ) : (
-            <div className="flex h-full min-h-24 items-center justify-center px-4 text-center text-sm text-muted-foreground">
+            <div className="flex h-full min-h-24 items-center justify-center px-4 text-center text-sm text-tertiary">
               No reasoning options
             </div>
           )}

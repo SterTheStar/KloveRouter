@@ -346,8 +346,10 @@ export interface RequestLog {
   model_name: string;
   client_ip: string | null;
   requester_name: string | null;
+  api_key_prefix?: string | null;
   credential_label: string | null;
   credential_identity: string | null;
+  credential_kind?: string | null;
   status: "pending" | "success" | "error";
   status_code: number | null;
   tokens_prompt: number;

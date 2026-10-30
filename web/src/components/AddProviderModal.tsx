@@ -497,13 +497,13 @@ export default function AddProviderModal({
                   key={type.id}
                   type="button"
                   disabled={unavailableProtocols.has(type.protocol)}
-                  className={`flex w-full items-center gap-4 rounded-lg border p-4 text-left transition-colors ${unavailableProtocols.has(type.protocol) ? "cursor-not-allowed opacity-60" : "hover:bg-muted/50"}`}
+                  className={`flex w-full items-center gap-4 rounded-lg border border-border bg-card p-4 text-left transition-colors ${unavailableProtocols.has(type.protocol) ? "cursor-not-allowed opacity-50" : "hover:bg-accent"}`}
                   onClick={() => selectType(type)}
                 >
                   <ProviderIcon name={type.name} src={type.logo} className={`size-9 ${type.id === "openai" ? "dark:invert" : ""}`} />
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
-                      <div className="font-medium">{type.name}</div>
+                      <div className="font-medium text-foreground">{type.name}</div>
                       {unavailableProtocols.has(type.protocol) && (
                         <Badge variant="destructive">Not working</Badge>
                       )}
@@ -512,14 +512,14 @@ export default function AddProviderModal({
                         <Badge variant="outline">OAuth</Badge>
                       )}
                     </div>
-                    <div className="text-xs text-muted-foreground">
+                    <div className="text-xs text-tertiary">
                       {type.description}
                     </div>
                   </div>
                 </button>
               ))}
               {filteredTypes.length === 0 && (
-                <div className="p-4 text-center text-sm text-muted-foreground">
+                <div className="rounded-xl border border-dashed border-border bg-background/60 py-10 text-center text-sm text-tertiary">
                   No provider types found.
                 </div>
               )}
@@ -583,7 +583,7 @@ export default function AddProviderModal({
                 />
               </div>
               {selectedType?.protocol === "openfree" && (
-                <div className="space-y-3 rounded-lg border p-3">
+                <div className="space-y-3 rounded-xl border border-border bg-background/60 p-3">
                   <Alert
                     variant={openfreeCliStatus?.warning && !openfreeCliStatus.path ? "destructive" : "default"}
                   >
@@ -594,7 +594,7 @@ export default function AddProviderModal({
                           ? <>
                               {`OpenCode CLI found${openfreeCliStatus.source ? ` (${openfreeCliStatus.source})` : ""}:`}
                               <br />
-                              <code className="break-all">{openfreeCliStatus.path}</code>
+                              <code className="break-all font-mono text-tertiary">{openfreeCliStatus.path}</code>
                             </>
                           : openfreeCliStatus
                             ? "No OpenCode CLI was found on the KloveRouter host. Enter its executable path below."
@@ -602,7 +602,7 @@ export default function AddProviderModal({
                       {openfreeCliStatus?.warning && <><br />{openfreeCliStatus.warning}</>}
                     </AlertDescription>
                   </Alert>
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-xs text-tertiary">
                     OpenFREE requires an OpenCode Zen API key. The key is stored encrypted and used for requests; the CLI login is also configured when the CLI and <code>expect</code> are available.
                   </p>
                   <div className="space-y-2">
@@ -615,7 +615,7 @@ export default function AddProviderModal({
                       autoComplete="off"
                       spellCheck={false}
                     />
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-xs text-tertiary">
                       Leave blank to use automatic detection. Saving a path applies it to the KloveRouter host.
                     </p>
                   </div>
@@ -638,14 +638,14 @@ export default function AddProviderModal({
                       Use automatic detection
                     </Button>
                   </div>
-                  <div className="space-y-2 border-t pt-3">
+                  <div className="space-y-2 border-t border-border pt-3">
                     <div className="space-y-1">
-                      <p className="text-sm font-medium">KloveRouter managed installation</p>
-                      <code className="block break-all text-xs text-muted-foreground">
+                      <p className="text-sm font-medium text-foreground">KloveRouter managed installation</p>
+                      <code className="block break-all font-mono text-xs text-tertiary">
                         {openfreeCliStatus?.managed_path ?? "Resolving the app data folder..."}
                       </code>
                       {openfreeCliStatus?.managed_installed && openfreeCliStatus.managed_version && (
-                        <p className="text-xs text-muted-foreground">
+                        <p className="text-xs text-tertiary">
                           Managed CLI version {openfreeCliStatus.managed_version} is installed.
                         </p>
                       )}
@@ -663,11 +663,11 @@ export default function AddProviderModal({
                           ? "Update managed CLI"
                           : "Install managed CLI"}
                     </Button>
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-xs text-tertiary">
                       Downloads the official platform package, verifies its integrity, and saves the CLI in this folder.
                     </p>
                   </div>
-                  <div className="space-y-2 border-t pt-3">
+                  <div className="space-y-2 border-t border-border pt-3">
                     <Label htmlFor="openfree-zen-api-key">OpenCode Zen API key (required)</Label>
                     <Input
                       id="openfree-zen-api-key"
@@ -678,7 +678,7 @@ export default function AddProviderModal({
                       placeholder="Paste your OpenCode Zen API key"
                       required
                     />
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-xs text-tertiary">
                       Saving this provider signs the CLI in through its API-key prompt when available and stores the key encrypted in KloveRouter.
                     </p>
                   </div>
@@ -716,7 +716,7 @@ export default function AddProviderModal({
                           onChange={(e) => setAuthCode(e.target.value)}
                           placeholder="Paste the Conol.ai cookie (kept hidden)"
                         />
-                        <p className="text-xs text-muted-foreground">Enter Account ID and cookie separately. Cookie stays hidden and is encrypted before storage.</p>
+                        <p className="text-xs text-tertiary">Enter Account ID and cookie separately. Cookie stays hidden and is encrypted before storage.</p>
                       </>
                     ) : (
                       <>
@@ -734,17 +734,17 @@ export default function AddProviderModal({
                           </div>
                         )}
                     {selectedType?.protocol === "chatgpt" ? (
-                      <div className="space-y-2 rounded-lg border border-dashed p-3 text-xs text-muted-foreground">
+                      <div className="space-y-2 rounded-xl border border-dashed border-border bg-background/60 p-3 text-xs text-tertiary">
                         <p className="font-medium text-foreground">ChatGPT cookies.txt</p>
                         <p>Export your own logged-in ChatGPT cookies in Netscape cookies.txt format. Only chatgpt.com and openai.com cookies are accepted and the resulting Cookie header is encrypted before storage.</p>
                       </div>
                     ) : (selectedType?.protocol === "freebuff" || selectedType?.protocol === "qwen" || selectedType?.protocol === "conol") && (
                       selectedType?.protocol === "conol" ? (
-                        <div className="space-y-3 rounded-lg border border-dashed p-3 text-xs text-muted-foreground">
+                        <div className="space-y-3 rounded-xl border border-dashed border-border bg-background/60 p-3 text-xs text-tertiary">
                           <p className="font-medium text-foreground">How to get your Conol.ai account and session cookie:</p>
                           <ol className="list-inside list-decimal space-y-1">
-                            <li>Go to <a href="https://conol.ai" target="_blank" rel="noreferrer" className="text-primary underline underline-offset-2">conol.ai</a> and log in</li>
-                            <li>Open DevTools (<kbd className="rounded border bg-muted px-1 font-mono">F12</kbd>) → <strong>Network</strong>, then reload the page</li>
+                            <li>Go to <a href="https://conol.ai" target="_blank" rel="noreferrer" className="font-medium text-accent-blue underline underline-offset-2">conol.ai</a> and log in</li>
+                            <li>Open DevTools (<kbd className="rounded-md border border-border bg-surface px-1 font-mono text-foreground">F12</kbd>) → <strong>Network</strong>, then reload the page</li>
                             <li>Open any request to <code>conol.ai</code>, find the <strong>Cookie</strong> request header, and copy its complete value</li>
                             <li>Copy and paste this code in the Console to get the Account ID:</li>
                           </ol>
@@ -760,11 +760,11 @@ export default function AddProviderModal({
                                   notifyError("Could not copy setup code", e.message);
                                 }
                               }}
-                              className="absolute right-1 top-1 rounded px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground hover:bg-muted-foreground/10 hover:text-foreground"
+                              className="absolute right-1 top-1 rounded-md border border-border bg-card px-1.5 py-0.5 text-[10px] font-medium text-tertiary hover:bg-accent hover:text-foreground"
                             >
                               Copy
                             </button>
-                            <pre className="overflow-x-auto rounded bg-muted p-2 pt-5 font-mono text-[11px] leading-relaxed">
+                            <pre className="overflow-x-auto rounded-lg border border-border bg-background/60 p-2 pt-5 font-mono text-[11px] leading-relaxed text-foreground">
 {`(()=>{
   if (!location.hostname.endsWith("conol.ai"))
     return console.error("Use this on conol.ai");
@@ -773,14 +773,14 @@ export default function AddProviderModal({
 })();`}
                             </pre>
                           </div>
-                          <p>Press <kbd className="rounded border bg-muted px-1 font-mono">Enter</kbd>, then paste the Account ID into the Account ID field and the complete cookie string into the Cookie field above.</p>
+                          <p>Press <kbd className="rounded-md border border-border bg-surface px-1 font-mono text-foreground">Enter</kbd>, then paste the Account ID into the Account ID field and the complete cookie string into the Cookie field above.</p>
                         </div>
                       ) : selectedType?.protocol === "qwen" ? (
-                        <div className="space-y-3 rounded-lg border border-dashed p-3 text-xs text-muted-foreground">
+                        <div className="space-y-3 rounded-xl border border-dashed border-border bg-background/60 p-3 text-xs text-tertiary">
                           <p className="font-medium text-foreground">How to get your Qwen token:</p>
                           <ol className="list-inside list-decimal space-y-1">
-                            <li>Go to <a href="https://chat.qwen.ai" target="_blank" rel="noreferrer" className="text-primary underline underline-offset-2">chat.qwen.ai</a> and log in</li>
-                            <li>Open browser DevTools (<kbd className="rounded border bg-muted px-1 font-mono">F12</kbd> → Console)</li>
+                            <li>Go to <a href="https://chat.qwen.ai" target="_blank" rel="noreferrer" className="font-medium text-accent-blue underline underline-offset-2">chat.qwen.ai</a> and log in</li>
+                            <li>Open browser DevTools (<kbd className="rounded-md border border-border bg-surface px-1 font-mono text-foreground">F12</kbd> → Console)</li>
                             <li>Copy and paste this code:</li>
                           </ol>
                           <div className="relative">
@@ -795,11 +795,11 @@ export default function AddProviderModal({
                                   notifyError("Could not copy setup code", e.message);
                                 }
                               }}
-                              className="absolute right-1 top-1 rounded px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground hover:bg-muted-foreground/10 hover:text-foreground"
+                              className="absolute right-1 top-1 rounded-md border border-border bg-card px-1.5 py-0.5 text-[10px] font-medium text-tertiary hover:bg-accent hover:text-foreground"
                             >
                               Copy
                             </button>
-                            <pre className="overflow-x-auto rounded bg-muted p-2 pt-5 font-mono text-[11px] leading-relaxed">
+                            <pre className="overflow-x-auto rounded-lg border border-border bg-background/60 p-2 pt-5 font-mono text-[11px] leading-relaxed text-foreground">
 {`javascript:(()=>{
   if (location.hostname !== "chat.qwen.ai")
     return alert("🚀 Use on chat.qwen.ai");
@@ -810,11 +810,11 @@ export default function AddProviderModal({
 })();`}
                             </pre>
                           </div>
-                          <p>Press <kbd className="rounded border bg-muted px-1 font-mono">Enter</kbd>, then copy the token that appears in the console and paste it above.</p>
-                          <p className="text-muted-foreground">The token is encrypted before being stored.</p>
+                          <p>Press <kbd className="rounded-md border border-border bg-surface px-1 font-mono text-foreground">Enter</kbd>, then copy the token that appears in the console and paste it above.</p>
+                          <p className="text-tertiary">The token is encrypted before being stored.</p>
                         </div>
                       ) : (
-                        <p className="text-xs text-muted-foreground">
+                        <p className="text-xs text-tertiary">
                           Use the auth code from your Freebuff account or CLI. It is encrypted before being stored.
                         </p>
                       )
@@ -824,7 +824,7 @@ export default function AddProviderModal({
                   </div>
                 )}
               {pendingOAuth && (
-                <div className="space-y-2 rounded-lg border border-dashed p-3">
+                <div className="space-y-2 rounded-xl border border-dashed border-border bg-background/60 p-3">
                   <div className="flex items-center justify-between gap-3">
                     <Label htmlFor="oauth-callback-url">
                       Complete OAuth manually
@@ -833,7 +833,7 @@ export default function AddProviderModal({
                       href={pendingOAuth.authUrl}
                       target="_blank"
                       rel="noreferrer"
-                      className="text-xs font-medium text-primary underline underline-offset-4"
+                      className="text-xs font-medium text-accent-blue underline underline-offset-4"
                     >
                       Open authorization page
                     </a>
@@ -845,7 +845,7 @@ export default function AddProviderModal({
                     onChange={(e) => setCallbackUrl(e.target.value)}
                     placeholder={`http://localhost:1455/${pendingOAuth.protocol === "codex" ? "auth" : "antigravity"}/callback?code=...&state=...`}
                   />
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-xs text-tertiary">
                     If the localhost page did not open, copy its complete URL
                     from the browser address bar and paste it here. The
                     automatic login remains active.

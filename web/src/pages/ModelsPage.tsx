@@ -8,6 +8,8 @@ import {
   RiPlayCircleLine as PlayCircleLine,
   RiCheckLine as CheckLine,
   RiCloseLine as CloseLine,
+  RiPencilLine as Pencil,
+  RiRefreshLine as RefreshCw,
 } from "@remixicon/react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -38,55 +40,10 @@ import ProviderIcon from "../components/ProviderIcon";
 import { modelDisplayId, modelPublicId } from "../lib/model-id";
 import { useQuery } from "../hooks/useQuery";
 import { invalidateModels, queryKeys } from "../lib/query-cache";
-import { Tabs } from "@/components/ui/tabs";
-import { modelCategories, modelCategoryBadge, type ModelCategory } from "../lib/model-modality";
+import { modelCategories, type ModelCategory } from "../lib/model-modality";
+import { ModelCapabilityBadges } from "../components/ModelCapabilities";
 
 type SourceFilter = "all" | "manual" | "synced";
-type ModalityFilter = "all" | ModelCategory;
-
-const metadataCapabilityLabels: Record<keyof ModelCapabilities, string> = {
-  reasoning: "Reasoning",
-  tools: "Tools",
-  vision: "Vision",
-  audio_input: "Audio input",
-  audio_output: "Audio output",
-  video: "Video",
-  image_generation: "Image generation",
-  text_to_speech: "Text to speech",
-  video_generation: "Video generation",
-  attachments: "Files",
-  streaming: "Streaming",
-  non_streaming: "Non-streaming",
-};
-
-function formatTokenLimit(value: number): string {
-  if (value >= 1_000_000) return `${value / 1_000_000}M`;
-  if (value >= 1_000) return `${value / 1_000}K`;
-  return value.toLocaleString();
-}
-
-function ModelMetadataBadges({ model }: { model: ModelWithProvider }) {
-  const supported = (
-    Object.keys(metadataCapabilityLabels) as (keyof ModelCapabilities)[]
-  ).filter((key) => !["image_generation", "text_to_speech", "video_generation"].includes(key) && model.capabilities?.[key] === true);
-  const modalities = modelCategories(model).filter((category) => category !== "chat");
-  if (model.context_window == null && !supported.length && !modalities.length) return null;
-  return (
-    <div className="mt-1 flex flex-wrap gap-1">
-      {model.context_window != null && (
-        <Badge variant="outline" className="font-mono text-[10px]">
-          {formatTokenLimit(model.context_window)} context
-        </Badge>
-      )}
-      {supported.map((key) => (
-        <Badge key={key} variant="secondary" className="text-[10px]">
-          {metadataCapabilityLabels[key]}
-        </Badge>
-      ))}
-      {modalities.map((category) => <Badge key={category} variant="secondary" className="text-[10px]">{modelCategoryBadge(category)}</Badge>)}
-    </div>
-  );
-}
 
 export default function ModelsPage() {
   const { success, error: notifyError } = useToast();
@@ -99,7 +56,6 @@ export default function ModelsPage() {
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>("all");
-  const [modalityFilter, setModalityFilter] = useState<ModalityFilter>("all");
   const [selectedProviders, setSelectedProviders] = useState<Set<string>>(
     new Set(),
   );
@@ -147,14 +103,13 @@ export default function ModelsPage() {
       result = result.filter((m) => m.is_manual === 0);
     }
 
-    if (modalityFilter !== "all") result = result.filter((model) => modelCategories(model).includes(modalityFilter));
 
        if (selectedProviders.size > 0) {
        result = result.filter((m) => selectedProviders.has(m.model_pool ? "Compound models" : m.provider_name));
     }
 
     return result;
-  }, [list, searchQuery, sourceFilter, modalityFilter, selectedProviders]);
+  }, [list, searchQuery, sourceFilter, selectedProviders]);
 
   const grouped = useMemo(() => {
     const groups: Record<string, ModelWithProvider[]> = {};
@@ -167,7 +122,6 @@ export default function ModelsPage() {
     }
     return groups;
   }, [filteredList]);
-  const modalityCounts = useMemo(() => Object.fromEntries((["all", "chat", "image", "tts", "video"] as const).map((category) => [category, category === "all" ? list.length : list.filter((model) => modelCategories(model).includes(category)).length])), [list]);
 
   const toggleCollapse = (name: string) => {
     setCollapsedProviders((prev) => {
@@ -225,7 +179,7 @@ export default function ModelsPage() {
   return (
     <div className="w-full space-y-6 p-6">
       <div className="flex items-center justify-between gap-4">
-        <h1 className="font-heading text-2xl font-semibold tracking-tight">
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground">
           Models
         </h1>
       </div>
@@ -238,10 +192,10 @@ export default function ModelsPage() {
 
       <div className="flex items-center gap-2">
         <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-tertiary" />
           <Input
             placeholder="Search models or providers..."
-            className="h-8 pl-9"
+            className="pl-9"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
@@ -270,7 +224,7 @@ export default function ModelsPage() {
                 checked={sourceFilter === "synced"}
                 onCheckedChange={() => setSourceFilter("synced")}
               >
-                Auto-synced
+                Synced
               </DropdownMenuCheckboxItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
@@ -286,7 +240,7 @@ export default function ModelsPage() {
                 </DropdownMenuCheckboxItem>
               ))}
               {providers.length === 0 && (
-                <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                <div className="px-2 py-1.5 text-xs text-tertiary">
                   No providers
                 </div>
               )}
@@ -295,33 +249,25 @@ export default function ModelsPage() {
         </DropdownMenu>
       </div>
 
-      <Tabs
-        tabs={([ ["all", "All"], ["chat", "Chat"], ["image", "Image"], ["tts", "Text to speech"], ["video", "Video"] ] as const).map(([id, label]) => ({ id, label: `${label} (${modalityCounts[id] ?? 0})` }))}
-        active={modalityFilter}
-        onChange={(value) => setModalityFilter(value as ModalityFilter)}
-        ariaLabel="Filter models by type"
-        className="overflow-x-auto"
-      />
-
       {list.length === 0 ? (
-        <div className="rounded-xl border border-dashed p-12 text-center">
-          <h2 className="font-heading text-lg font-medium">No active models</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
+        <div className="rounded-xl border border-border bg-background/60 py-10 text-center">
+          <h2 className="text-sm font-medium text-foreground">No active models</h2>
+          <p className="mt-1 text-xs text-tertiary">
             Models from active providers will appear here.
           </p>
         </div>
       ) : (
-        <Card className="overflow-hidden p-0 gap-0">
+        <Card variant="plain" className="gap-0 overflow-hidden border border-border p-0">
           <CardHeader className="flex flex-row items-center justify-between py-(--card-spacing)">
             <CardTitle>
               Active models{" "}
-              <span className="text-muted-foreground">
+              <span className="font-mono text-tertiary">
                 ({filteredList.length})
               </span>
             </CardTitle>
           </CardHeader>
           <Table>
-            <TableHeader>
+            <TableHeader className="bg-background/60 [&_th]:h-9 [&_th]:px-3 [&_th]:font-medium [&_th]:text-tertiary">
               <TableRow>
                 <TableHead>Public ID</TableHead>
                 <TableHead>Display name</TableHead>
@@ -337,10 +283,10 @@ export default function ModelsPage() {
                 return (
                   <React.Fragment key={providerName}>
                     <TableRow
-                      className="bg-muted/30 cursor-pointer"
+                      className="cursor-pointer bg-background/60"
                       onClick={() => toggleCollapse(providerName)}
                     >
-                      <TableCell colSpan={6} className="font-medium">
+                      <TableCell colSpan={6} className="px-3 py-2.5 text-sm font-medium">
                         <div className="flex items-center gap-2">
                           <Button
                             variant="ghost"
@@ -357,9 +303,9 @@ export default function ModelsPage() {
                               <ChevronDown className="size-4" />
                             )}
                           </Button>
-                          <ProviderIcon name={providerName} src={models[0].provider_avatar} sources={models[0].provider_avatar_sources} className="size-5 text-[10px]" />
+                          <ProviderIcon name={providerName} src={models[0].provider_avatar} sources={models[0].provider_avatar_sources} className="size-5 text-xs" />
                           {providerName}
-                          <span className="text-xs text-muted-foreground">
+                          <span className="ml-1 text-xs text-tertiary">
                             ({models.length})
                           </span>
                         </div>
@@ -373,36 +319,38 @@ export default function ModelsPage() {
                         const fullModelId = model.model_pool ? `pool/${model.pretty_id || model.model_id}` : modelPublicId(model);
                         return (
                           <TableRow key={model.id}>
-                            <TableCell className="font-mono text-xs">
+                            <TableCell className="px-3 py-2.5 font-mono text-xs">
                               {fullModelId}
                             </TableCell>
-                            <TableCell>
-                              <div>
-                                {model.display_name || (
-                                  <span className="text-muted-foreground">—</span>
-                                )}
-                                <ModelMetadataBadges model={model} />
+                            <TableCell className="px-3 py-2.5">
+                              <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                                <span className="min-w-0 truncate">
+                                  {model.display_name || (
+                                    <span className="text-tertiary">—</span>
+                                  )}
+                                </span>
+                                <ModelCapabilityBadges capabilities={model.capabilities} contextWindow={model.context_window} />
                               </div>
                             </TableCell>
-                            <TableCell>{model.model_pool ? "Compound model" : model.provider_name}</TableCell>
-                            <TableCell>
-                              <Badge
-                                variant={
-                                  model.is_manual ? "outline" : "secondary"
-                                }
-                              >
-                                {model.model_pool ? "Compound" : model.is_manual ? "Manual" : "Auto-synced"}
-                              </Badge>
+                            <TableCell className="px-3 py-2.5 text-sm">{model.model_pool ? "Compound model" : model.provider_name}</TableCell>
+                            <TableCell className="px-3 py-2.5">
+                              {model.model_pool ? (
+                                <Badge variant="secondary">Compound</Badge>
+                              ) : model.is_manual ? (
+                                <Badge variant="outline"><Pencil className="size-3" />Added manually</Badge>
+                              ) : (
+                                <Badge variant="secondary"><RefreshCw className="size-3" />Synced</Badge>
+                              )}
                             </TableCell>
-                            <TableCell className="font-mono text-xs">
+                            <TableCell className="px-3 py-2.5 font-mono text-xs">
                               {tps !== undefined && tps !== null
                                 ? tps.toFixed(1)
                                 : "—"}
                             </TableCell>
-                            <TableCell>
+                            <TableCell className="px-3 py-2.5">
                               <div className="flex h-7 items-center justify-center">
                                 {!canTest ? null : result === "success" ? (
-                                  <CheckLine className="block size-4 text-green-500" />
+                                  <CheckLine className="block size-4 text-success" />
                                 ) : result === "error" ? (
                                   <CloseLine className="block size-4 text-destructive" />
                                 ) : (

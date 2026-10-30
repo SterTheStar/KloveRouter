@@ -666,6 +666,7 @@ export const proxyPlugin = (app: Elysia) =>
               modelName: requestModel,
               clientIp: clientIp(request, headers),
               requesterName: apiKey.name,
+          apiKeyPrefix: apiKey.prefix,
               requestDetails: { method: request.method, url: "/v1/responses", headers, payload: body, stream: Boolean(body.stream) },
               streaming: Boolean(body.stream),
             });
@@ -985,6 +986,7 @@ export const proxyPlugin = (app: Elysia) =>
           modelName: parsed.modelId,
           clientIp: clientIp(request, headers, server as any),
           requesterName: apiKey.name,
+          apiKeyPrefix: apiKey.prefix,
           requestDetails: {
             method: request.method,
             url: new URL(request.url).pathname,

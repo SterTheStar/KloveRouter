@@ -340,7 +340,7 @@ export default function App() {
             {currentPage === "stats" && <StatsPage />}
             {currentPage === "usage" && <UsageLimitsPage />}
             {currentPage === "request-logs" && <RequestLogsPage />}
-            {currentPage === "docs" && <DocsPage />}
+            {currentPage === "docs" && <DocsPage onBack={() => handleNavigate("dashboard")} />}
             {currentPage === "keys" && <ApiKeysPage />}
             {currentPage === "settings" && (
               <SettingsPage

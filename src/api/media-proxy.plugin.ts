@@ -104,7 +104,7 @@ async function resolveMediaRoute(modelName: unknown, modality: "image_generation
   const credential = credentialService.select(provider.id, provider.credential_mode, provider.fixed_credential_id, sequence)
     || credentialService.select(provider.id, "round_robin", null, sequence);
   if (!credential) return { status: 503, error: apiError(`Provider "${provider.name}" has no active credential`, "server_error", "no_active_credential") } as const;
-  return { route: { provider, model, requestedModel: modelName, credential } as MediaRoute, gatewayKeyName: apiKey.name } as const;
+  return { route: { provider, model, requestedModel: modelName, credential } as MediaRoute, gatewayKeyName: apiKey.name, gatewayKeyPrefix: apiKey.prefix } as const;
 }
 
 function trackedResponse(upstream: Response, requestId: string, started: number, type: MediaType, completeOnEnd = true): Response {
@@ -168,6 +168,7 @@ async function proxyMediaRequest(input: {
   headers: Record<string, string | undefined>;
   set: { status?: number | string };
   gatewayKeyName: string;
+  gatewayKeyPrefix?: string | null;
   route: MediaRoute;
   mediaType: MediaType;
   resourcePath: string;
@@ -175,7 +176,7 @@ async function proxyMediaRequest(input: {
   query?: string;
   formData?: boolean;
 }) {
-  const { request, headers, set, gatewayKeyName, route, mediaType, resourcePath } = input;
+  const { request, headers, set, gatewayKeyName, gatewayKeyPrefix, route, mediaType, resourcePath } = input;
   const body = withMediaDefaults(input.body, route, mediaType);
   const contentType = headers["content-type"] ?? null;
   const requestLogId = requestLogService.start({
@@ -184,6 +185,7 @@ async function proxyMediaRequest(input: {
     modelName: route.model.model_id,
     clientIp: clientIp(request),
     requesterName: gatewayKeyName,
+    apiKeyPrefix: gatewayKeyPrefix,
     streaming: mediaType === "text-to-speech" || mediaType === "video-content",
     requestDetails: {
       method: input.method ?? request.method,
@@ -273,7 +275,7 @@ async function videoAction(context: any, action: "retrieve" | "content" | "cance
   const path = `videos/${encodeURIComponent(job.upstream_id)}${suffix}`;
   const method = action === "cancel" ? "POST" : action === "delete" ? "DELETE" : "GET";
   const mediaType: MediaType = action === "content" ? "video-content" : action === "cancel" ? "video-cancel" : action === "delete" ? "video-delete" : "video-status";
-  const result = await proxyMediaRequest({ request, headers, set, gatewayKeyName: apiKey.name, route, mediaType, resourcePath: path, method });
+  const result = await proxyMediaRequest({ request, headers, set, gatewayKeyName: apiKey.name, gatewayKeyPrefix: apiKey.prefix, route, mediaType, resourcePath: path, method });
   if ("error" in result) return result.error;
   if (action === "content") return trackedResponse(result.upstream, result.requestLogId, result.started, mediaType);
   if (!result.upstream.ok) return trackedResponse(result.upstream, result.requestLogId, result.started, mediaType);
@@ -298,7 +300,7 @@ export const mediaProxyPlugin = (app: Elysia) => app
     const resolved = await resolveMediaRoute(modelName, "image_generation", headers);
     if ("error" in resolved) { set.status = resolved.status ?? 400; return resolved.error; }
     if (typeof bodyValue(body, "prompt") !== "string" || !String(bodyValue(body, "prompt")).trim()) { set.status = 400; return apiError("prompt is required"); }
-    const result = await proxyMediaRequest({ request, body, headers, set, gatewayKeyName: resolved.gatewayKeyName, route: resolved.route, mediaType: "image-generation", resourcePath: "images/generations" });
+    const result = await proxyMediaRequest({ request, body, headers, set, gatewayKeyName: resolved.gatewayKeyName, gatewayKeyPrefix: resolved.gatewayKeyPrefix, route: resolved.route, mediaType: "image-generation", resourcePath: "images/generations" });
     if ("error" in result) return result.error;
     return trackedResponse(result.upstream, result.requestLogId, result.started, result.mediaType);
   }, { body: t.Any() })
@@ -308,7 +310,7 @@ export const mediaProxyPlugin = (app: Elysia) => app
     if ("error" in resolved) { set.status = resolved.status ?? 400; return resolved.error; }
     const contentType = headers["content-type"] ?? "";
     if (!contentType.includes("multipart/form-data")) { set.status = 400; return apiError("Image edits require multipart/form-data"); }
-    const result = await proxyMediaRequest({ request, body, headers, set, gatewayKeyName: resolved.gatewayKeyName, route: resolved.route, mediaType: "image-edit", resourcePath: "images/edits", formData: true });
+    const result = await proxyMediaRequest({ request, body, headers, set, gatewayKeyName: resolved.gatewayKeyName, gatewayKeyPrefix: resolved.gatewayKeyPrefix, route: resolved.route, mediaType: "image-edit", resourcePath: "images/edits", formData: true });
     if ("error" in result) return result.error;
     return trackedResponse(result.upstream, result.requestLogId, result.started, result.mediaType);
   }, { body: t.Any() })
@@ -318,7 +320,7 @@ export const mediaProxyPlugin = (app: Elysia) => app
     if ("error" in resolved) { set.status = resolved.status ?? 400; return resolved.error; }
     const contentType = headers["content-type"] ?? "";
     if (!contentType.includes("multipart/form-data")) { set.status = 400; return apiError("Image variations require multipart/form-data"); }
-    const result = await proxyMediaRequest({ request, body, headers, set, gatewayKeyName: resolved.gatewayKeyName, route: resolved.route, mediaType: "image-variation", resourcePath: "images/variations", formData: true });
+    const result = await proxyMediaRequest({ request, body, headers, set, gatewayKeyName: resolved.gatewayKeyName, gatewayKeyPrefix: resolved.gatewayKeyPrefix, route: resolved.route, mediaType: "image-variation", resourcePath: "images/variations", formData: true });
     if ("error" in result) return result.error;
     return trackedResponse(result.upstream, result.requestLogId, result.started, result.mediaType);
   }, { body: t.Any() })
@@ -327,7 +329,7 @@ export const mediaProxyPlugin = (app: Elysia) => app
     const resolved = await resolveMediaRoute(bodyValue(body, "model"), "text_to_speech", headers);
     if ("error" in resolved) { set.status = resolved.status ?? 400; return resolved.error; }
     if (typeof bodyValue(body, "input") !== "string" || !String(bodyValue(body, "input")).trim()) { set.status = 400; return apiError("input is required"); }
-    const result = await proxyMediaRequest({ request, body, headers, set, gatewayKeyName: resolved.gatewayKeyName, route: resolved.route, mediaType: "text-to-speech", resourcePath: "audio/speech" });
+    const result = await proxyMediaRequest({ request, body, headers, set, gatewayKeyName: resolved.gatewayKeyName, gatewayKeyPrefix: resolved.gatewayKeyPrefix, route: resolved.route, mediaType: "text-to-speech", resourcePath: "audio/speech" });
     if ("error" in result) return result.error;
     return trackedResponse(result.upstream, result.requestLogId, result.started, result.mediaType);
   }, { body: t.Any() })
@@ -337,7 +339,7 @@ export const mediaProxyPlugin = (app: Elysia) => app
     if ("error" in resolved) { set.status = resolved.status ?? 400; return resolved.error; }
     if (typeof bodyValue(body, "prompt") !== "string" || !String(bodyValue(body, "prompt")).trim()) { set.status = 400; return apiError("prompt is required"); }
     const isForm = (headers["content-type"] ?? "").includes("multipart/form-data");
-    const result = await proxyMediaRequest({ request, body, headers, set, gatewayKeyName: resolved.gatewayKeyName, route: resolved.route, mediaType: "video-generation", resourcePath: "videos", formData: isForm });
+    const result = await proxyMediaRequest({ request, body, headers, set, gatewayKeyName: resolved.gatewayKeyName, gatewayKeyPrefix: resolved.gatewayKeyPrefix, route: resolved.route, mediaType: "video-generation", resourcePath: "videos", formData: isForm });
     if ("error" in result) return result.error;
     if (!result.upstream.ok) return trackedResponse(result.upstream, result.requestLogId, result.started, result.mediaType);
     const response = await result.upstream.json().catch(() => null);
@@ -358,6 +360,7 @@ export const mediaProxyPlugin = (app: Elysia) => app
       modelName: "video list",
       clientIp: clientIp(request),
       requesterName: apiKey.name,
+      apiKeyPrefix: apiKey.prefix,
       requestDetails: { method: "GET", url: "/v1/videos", klove: { media_type: "video-list" } },
     });
     const limit = Math.min(Math.max(Number(query.limit) || 20, 1), 100);

@@ -2,11 +2,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   RiDeleteBinLine,
   RiRefreshLine,
-  RiTerminalLine,
   RiArrowDownSLine,
   RiArrowRightSLine,
 } from "@remixicon/react";
-import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 type LogEntry = {
@@ -129,18 +127,40 @@ export function HtmlPreview({
         srcDoc={srcDoc}
         className={fill ? "min-h-0 w-full flex-1 border-0 bg-white" : "h-[min(65vh,720px)] min-h-[28rem] w-full flex-1 border-0 bg-white"}
       />
-      <div className="shrink-0 border-t bg-muted/60 dark:bg-muted">
-        <div className="flex items-center gap-1 px-2 py-1">
-          <Button type="button" variant="ghost" size="sm" className="h-7 gap-1 px-2 text-xs" onClick={() => setTerminalOpen((open) => !open)} aria-expanded={terminalOpen} aria-controls="html-preview-terminal">
+      <div className="shrink-0 border-t border-border bg-background/60">
+        <div className="flex h-10 items-center gap-0.5 px-1.5">
+          <button
+            type="button"
+            className={`flex h-7 items-center gap-1 rounded-lg px-2 text-xs transition-colors hover:bg-accent hover:text-foreground ${terminalOpen ? "bg-overlay/70 font-medium text-foreground" : "text-tertiary"}`}
+            onClick={() => setTerminalOpen((open) => !open)}
+            aria-expanded={terminalOpen}
+            aria-controls="html-preview-terminal"
+          >
             {terminalOpen ? <RiArrowDownSLine className="size-3.5" /> : <RiArrowRightSLine className="size-3.5" />}
-            <RiTerminalLine className="size-3.5" /> Terminal
-          </Button>
-          <Button type="button" variant="ghost" size="sm" className="ml-auto h-7 gap-1 px-2 text-xs" onClick={() => setReloadKey((key) => key + 1)} aria-label="Reload preview"><RiRefreshLine className="size-3.5" /> Reload</Button>
-          {terminalOpen && <Button type="button" variant="ghost" size="sm" className="h-7 gap-1 px-2 text-xs" onClick={() => setLogs([])} aria-label="Clear terminal logs"><RiDeleteBinLine className="size-3.5" /> Clear</Button>}
+            Terminal
+          </button>
+          <button
+            type="button"
+            className="ml-auto flex h-7 items-center gap-1 rounded-lg px-2 text-xs text-tertiary transition-colors hover:bg-accent hover:text-foreground"
+            onClick={() => setReloadKey((key) => key + 1)}
+            aria-label="Reload preview"
+          >
+            <RiRefreshLine className="size-3.5" /> Reload
+          </button>
+          {terminalOpen && (
+            <button
+              type="button"
+              className="flex h-7 items-center gap-1 rounded-lg px-2 text-xs text-tertiary transition-colors hover:bg-accent hover:text-foreground"
+              onClick={() => setLogs([])}
+              aria-label="Clear terminal logs"
+            >
+              <RiDeleteBinLine className="size-3.5" /> Clear
+            </button>
+          )}
         </div>
-        {terminalOpen && <div id="html-preview-terminal" className="border-t p-2">
-          <div className="mb-2 max-h-40 overflow-auto rounded bg-black/90 p-2 font-mono text-xs text-white" aria-live="polite">
-            {logs.length === 0 ? <span className="text-white/50">No logs</span> : logs.map((log, index) => <div key={`${index}-${log.message}`} className={log.level === "error" || log.level === "runtime" ? "text-red-300" : log.level === "warn" ? "text-yellow-200" : "whitespace-pre-wrap"}><span className="mr-2 text-white/50">[{log.level}]</span>{log.message}</div>)}
+        {terminalOpen && <div id="html-preview-terminal" className="border-t border-border p-2">
+          <div className="mb-2 max-h-40 overflow-auto rounded-lg bg-[#0d0d0d] p-2 font-mono text-xs text-white" aria-live="polite">
+            {logs.length === 0 ? <span className="text-white/50">No logs</span> : logs.map((log, index) => <div key={`${index}-${log.message}`} className={log.level === "error" || log.level === "runtime" ? "text-[#ff9a9a]" : log.level === "warn" ? "text-[#ffcb8a]" : "whitespace-pre-wrap"}><span className="mr-2 text-white/50">[{log.level}]</span>{log.message}</div>)}
           </div>
         </div>}
       </div>

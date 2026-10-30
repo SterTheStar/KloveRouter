@@ -28,13 +28,13 @@ export default function ProviderCard({
   return (
     <Card
       size="sm"
-      className={`relative animate-in fade-in slide-in-from-bottom-2 transition-[opacity,transform,border-color] duration-300 hover:border-primary/50 ${!provider.is_active ? "opacity-60" : ""} ${isToggling ? "scale-[0.98] opacity-70" : ""}`}
+      className={`relative animate-in fade-in slide-in-from-bottom-2 border border-border transition-[opacity,transform,border-color] duration-300 hover:border-border-strong ${!provider.is_active ? "opacity-60" : ""} ${isToggling ? "scale-[0.98] opacity-70" : ""}`}
       aria-busy={isToggling}
     >
       <a
         href={pathForPage("provider-detail", provider.id)}
         aria-label={`Open ${provider.name}`}
-        className="absolute inset-0 z-0 rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="absolute inset-0 z-0 rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-border-strong"
         onClick={(event) => {
           if (!shouldHandleLinkClick(event)) return;
           event.preventDefault();
@@ -46,7 +46,7 @@ export default function ProviderCard({
           <div className="flex items-center gap-3">
             <ProviderIcon name={provider.name} src={provider.avatar} sources={provider.avatar_sources} className="size-12" />
             <div>
-              <div className="font-medium">{provider.name}</div>
+              <div className="font-medium text-foreground">{provider.name}</div>
               <Badge variant={provider.is_active ? "secondary" : "outline"}>
                 {provider.is_active ? "Enabled" : "Disabled"}
               </Badge>
@@ -64,7 +64,7 @@ export default function ProviderCard({
             />
             {isToggling ? (
               <LoaderCircle
-                className="size-4 animate-spin text-muted-foreground"
+                className="size-4 animate-spin text-tertiary"
                 aria-label="Updating provider"
               />
             ) : (

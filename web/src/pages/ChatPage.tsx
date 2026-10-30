@@ -530,10 +530,10 @@ export default function ChatPage({
       )}
 
       <div ref={messagesContainerRef} className="min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto flex min-h-full w-full max-w-4xl flex-col gap-5 px-6 pb-44 pt-6 sm:pb-48">
+        <div className="mx-auto flex min-h-full w-full max-w-[768px] flex-col gap-6 px-4 pb-20 pt-8 2xl:max-w-[854px]">
           {messages.length === 0 ? (
-            <div className="flex min-h-0 flex-1 items-center justify-center px-4 text-center">
-              <h2 className="chat-greeting-title text-4xl tracking-tight sm:text-5xl">
+            <div className="flex min-h-0 flex-1 items-center justify-center px-4 pb-24 text-center">
+              <h2 className="chat-greeting-title font-serif text-[32px] font-bold leading-10 tracking-[-0.192px] text-foreground sm:text-[40px]">
                 <span className="chat-greeting-hello" data-text="Hello,">Hello,</span>{" "}
                 <span className="chat-greeting-name">{username}</span>
               </h2>
@@ -565,7 +565,7 @@ export default function ChatPage({
               );
             })
           )}
-          <div ref={endRef} className="h-48 shrink-0" />
+          <div ref={endRef} className="h-12 shrink-0" />
         </div>
       </div>
 
@@ -573,7 +573,7 @@ export default function ChatPage({
         <Button
           type="button"
           size="icon"
-          className="chat-inline-notice absolute bottom-44 right-6 z-10 rounded-full shadow-lg"
+          className="chat-inline-notice absolute bottom-44 right-6 z-10 rounded-full border border-border shadow-[0px_4px_16px_0px_rgba(0,0,0,0.05)]"
           onClick={scrollToBottom}
           title="Jump to latest"
           aria-label="Jump to latest"
@@ -582,9 +582,9 @@ export default function ChatPage({
         </Button>
       )}
 
-      <div className="chat-composer-shell pointer-events-none absolute inset-x-0 bottom-0 z-20 px-3 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-12 sm:px-6">
+      <div className="chat-composer-shell pointer-events-none absolute inset-x-0 bottom-0 z-20 px-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-10">
         {attachmentNotice && (
-          <div className="chat-inline-notice mx-auto mb-2 flex w-fit max-w-[90%] items-start gap-2 rounded-xl border border-border bg-popover px-3 py-2 text-xs text-muted-foreground shadow-md" role="status" aria-live="polite">
+          <div className="chat-inline-notice mx-auto mb-2 flex w-fit max-w-[90%] items-start gap-2 rounded-lg border border-border bg-popover px-3 py-2 text-xs text-muted-foreground" role="status" aria-live="polite">
             <InfoLine className="mt-0.5 size-3.5 shrink-0 text-primary" />
             {attachmentNotice}
           </div>

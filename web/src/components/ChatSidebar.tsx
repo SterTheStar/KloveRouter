@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import {
-  RiAddLine as AddLine,
+  RiChatNewLine as NewChatLine,
   RiHome4Line as HomeLine,
   RiLayoutLeftLine as CollapseLine,
   RiSearchLine as SearchLine,
@@ -133,29 +133,49 @@ export default function ChatSidebar({
   if (collapsed && !mobileOpen) {
     return (
       <>
-        <button
-          type="button"
-          onClick={toggleCollapsed}
-          className="fixed left-3 top-3 z-40 flex size-9 items-center justify-center rounded-xl border border-border bg-sidebar text-sidebar-foreground shadow-lg hover:bg-sidebar-accent"
-          title="Expand chat sidebar"
-          aria-label="Expand chat sidebar"
-        >
-          <CollapseLine className="size-4" />
-        </button>
+        <aside className="flex h-svh w-14 shrink-0 flex-col items-center bg-sidebar py-2 text-sidebar-foreground">
+          <div className="mb-5 flex flex-col gap-1 px-1.5">
+            <button
+              type="button"
+              onClick={toggleCollapsed}
+              className="flex size-9 items-center justify-center rounded-lg text-sidebar-foreground transition-colors hover:bg-accent"
+              title="Expand chat sidebar"
+              aria-label="Expand chat sidebar"
+            >
+              <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" className="size-5" aria-hidden="true">
+                <path d="M5.6906 6 3.1651 1.6258A8 8 0 0 1 9.1106.0765L5.6906 6Z" fill="currentColor" />
+                <path d="M5.1133 9 1.6936 3.077A8 8 0 0 0 .0619 9h5.0514Z" fill="currentColor" />
+                <path d="M4.8964 15.3757A8 8 0 0 1 .5815 11h6.8411l-2.5262 4.3757Z" fill="currentColor" />
+                <path d="M8 16a8 8 0 0 1-1.1106-.0765L10.3094 10l2.5255 4.3742A8 8 0 0 1 8 16Z" fill="currentColor" />
+                <path d="M16 8a8 8 0 0 1-1.6936 4.9229L10.8868 7h5.0513c.0419.3276.0619.6614.0619 1Z" fill="currentColor" />
+                <path d="M11.1036.6243A8 8 0 0 1 15.4185 5H8.5774l2.5262-4.3757Z" fill="currentColor" />
+              </svg>
+            </button>
+          </div>
+          <div className="flex flex-col items-center gap-1">
+            <Button size="icon-sm" variant="ghost" onClick={onNew} className="rounded-lg" title="New chat" aria-label="New chat"><NewChatLine className="size-4" /></Button>
+            <Button size="icon-sm" variant="ghost" onClick={() => setCommandOpen(true)} className="rounded-lg" title="Search conversations" aria-label="Search conversations"><SearchLine className="size-4" /></Button>
+          </div>
+          <div className="mt-auto">
+            <button type="button" onClick={onBack} className="flex size-9 items-center justify-center rounded-lg transition-colors hover:bg-accent" title={profile.name} aria-label={profile.name}>
+              <DisplayAvatar name={profile.name} src={profile.avatar} fallback="user" className="size-7" />
+            </button>
+          </div>
+        </aside>
         {commandOpen && <ChatCommandPalette chats={chats} activeChatId={activeChatId} onSelect={onSelect} onClose={() => setCommandOpen(false)} />}
       </>
     );
   }
 
   return (
-    <aside className={`fixed inset-y-0 left-0 z-40 flex h-svh w-72 shrink-0 flex-col border-r bg-sidebar text-sidebar-foreground shadow-2xl transition-transform duration-200 md:sticky md:z-auto md:shadow-none ${mobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"}`}>
-      <div className="flex h-14 items-center justify-between px-3">
+    <aside className={`fixed inset-y-0 left-0 z-40 flex h-svh w-[238px] shrink-0 flex-col overflow-hidden bg-sidebar text-sm text-sidebar-foreground transition-transform duration-200 md:sticky md:z-auto ${mobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"}`}>
+      <div className="flex h-12 shrink-0 items-center justify-between px-3.5">
         <a href={pathForPage("dashboard")} onClick={(event) => {
           if (!shouldHandleLinkClick(event)) return;
           event.preventDefault();
           onBack();
-        }} className="flex min-w-0 items-center gap-2 px-1">
-          <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" className="size-6 text-foreground" aria-hidden="true">
+        }} className="flex min-w-0 items-center gap-1.5 rounded-lg px-1 py-1">
+          <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" className="size-5 text-foreground" aria-hidden="true">
             <path d="M5.6906 6 3.1651 1.6258A8 8 0 0 1 9.1106.0765L5.6906 6Z" fill="currentColor" />
             <path d="M5.1133 9 1.6936 3.077A8 8 0 0 0 .0619 9h5.0514Z" fill="currentColor" />
             <path d="M4.8964 15.3757A8 8 0 0 1 .5815 11h6.8411l-2.5262 4.3757Z" fill="currentColor" />
@@ -163,55 +183,67 @@ export default function ChatSidebar({
             <path d="M16 8a8 8 0 0 1-1.6936 4.9229L10.8868 7h5.0513c.0419.3276.0619.6614.0619 1Z" fill="currentColor" />
             <path d="M11.1036.6243A8 8 0 0 1 15.4185 5H8.5774l2.5262-4.3757Z" fill="currentColor" />
           </svg>
-          <span className="truncate text-lg" style={{ fontFamily: "'Playwrite NZ Basic', cursive" }}>Klove</span>
+          <span className="truncate text-[15px] font-medium">Klove</span>
         </a>
-        <div className="flex items-center gap-1">
-          <Button size="icon-sm" variant="ghost" render={<a href={pathForPage("dashboard")} />} onClick={(event) => {
+        <div className="flex items-center gap-0.5">
+          <Button size="icon-xs" variant="ghost" onClick={toggleCollapsed} className="rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground" title="Collapse sidebar" aria-label="Collapse sidebar"><CollapseLine className="size-4" /></Button>
+        </div>
+      </div>
+
+      <div className="mb-5 flex shrink-0 flex-col gap-1 px-1.5">
+        <a
+          href={pathForPage("dashboard")}
+          onClick={(event) => {
             if (!shouldHandleLinkClick(event)) return;
             event.preventDefault();
             onBack();
-          }} title="Return to Home" aria-label="Return to Home"><HomeLine className="size-4" /></Button>
-          <Button size="icon-sm" variant="ghost" onClick={() => setCommandOpen(true)} title="Search conversations" aria-label="Search conversations"><SearchLine className="size-4" /></Button>
-          <Button size="icon-sm" variant="ghost" onClick={toggleCollapsed} title="Collapse sidebar" aria-label="Collapse sidebar"><CollapseLine className="size-4" /></Button>
-        </div>
-      </div>
-      {commandOpen && <ChatCommandPalette chats={chats} activeChatId={activeChatId} onSelect={onSelect} onClose={() => setCommandOpen(false)} />}
-      <div className="px-3 pb-3">
-        <Button
-          size="sm"
-          variant="default"
-          className="h-9 w-full justify-start gap-2 rounded-lg bg-white px-2 text-sm text-slate-900 hover:bg-white/90 dark:bg-white dark:text-slate-900 dark:hover:bg-white/90"
-          onClick={onNew}
+          }}
+          className="flex w-full shrink-0 items-center gap-1.5 overflow-hidden rounded-lg py-2 pl-3 pr-3 text-start text-sm text-sidebar-foreground transition-colors hover:bg-accent"
         >
-          <AddLine className="size-4" />
-          New chat
-        </Button>
+          <HomeLine className="size-4 shrink-0" />
+          <span className="truncate">Home</span>
+        </a>
+        <button
+          type="button"
+          onClick={onNew}
+          className="flex w-full shrink-0 items-center gap-1.5 overflow-hidden rounded-lg py-2 pl-3 pr-3 text-start text-sm text-sidebar-foreground transition-colors hover:bg-accent"
+        >
+          <NewChatLine className="size-4 shrink-0" />
+          <span className="truncate">New chat</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setCommandOpen(true)}
+          className="flex w-full shrink-0 items-center gap-1.5 overflow-hidden rounded-lg py-2 pl-3 pr-3 text-start text-sm text-sidebar-foreground transition-colors hover:bg-accent"
+        >
+          <SearchLine className="size-4 shrink-0" />
+          <span className="truncate">Search</span>
+        </button>
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto px-2">
-        <div className="sticky top-0 z-10 flex h-9 shrink-0 items-center justify-between bg-sidebar px-2">
-          <h2 className="text-sm font-medium text-sidebar-foreground">Conversations</h2>
-          {chats.length > 0 && <span className="text-xs tabular-nums text-muted-foreground">{chats.length}</span>}
-        </div>
-        <div className="space-y-4 pb-3">
+
+      {commandOpen && <ChatCommandPalette chats={chats} activeChatId={activeChatId} onSelect={onSelect} onClose={() => setCommandOpen(false)} />}
+
+      <div className="min-h-0 flex-1 overflow-y-auto px-1.5">
+        <div className="space-y-3 pb-3">
           {chatGroups.map(([group, groupedChats]) => (
             <section key={group} aria-label={group}>
-              <h3 className="sticky top-9 z-[1] bg-sidebar px-2 pb-1.5 pt-2 text-xs font-medium text-muted-foreground">{group}</h3>
-              <div className="space-y-0.5">
+              <h3 className="px-3 pb-1 pt-2 text-xs font-medium text-tertiary">{group}</h3>
+              <div className="flex flex-col gap-0.5">
                 {groupedChats.map((chat) => (
-                  <div key={chat.id} className={`chat-sidebar-item group rounded-lg ${activeChatId === chat.id ? "bg-sidebar-accent" : "hover:bg-sidebar-accent/60"}`}>
+                  <div key={chat.id} className={`chat-sidebar-item group rounded-lg ${activeChatId === chat.id ? "bg-accent" : "hover:bg-accent/60"}`}>
                     {editing === chat.id ? (
                       <div className="flex items-center gap-1 px-2 py-1">
-                        <Input autoFocus value={title} onChange={(event) => setTitle(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void saveRename(chat.id); if (event.key === "Escape") setEditing(null); }} className="h-7 min-w-0" />
+                        <Input autoFocus value={title} onChange={(event) => setTitle(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void saveRename(chat.id); if (event.key === "Escape") setEditing(null); }} className="h-7 min-w-0 rounded-md" />
                         <Button size="icon-xs" variant="ghost" onClick={() => void saveRename(chat.id)}><CheckLine className="size-3.5" /></Button>
                       </div>
                     ) : (
-                      <div className="flex items-center gap-1 px-2 py-1">
+                      <div className="flex items-center gap-1 px-3 py-2">
                         <a href={pathForPage("chat", chat.id)} onClick={(event) => {
                           if (!shouldHandleLinkClick(event)) return;
                           event.preventDefault();
                           onSelect(chat.id);
-                        }} className="flex min-w-0 flex-1 items-center py-1.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60">
-                          <span className={`truncate text-sm ${generatingChats[chat.id] ? "chat-title-generating" : ""}`}>
+                        }} className="flex min-w-0 flex-1 items-center text-left text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60">
+                          <span className={`truncate ${generatingChats[chat.id] ? "chat-title-generating" : ""}`}>
                             {generatingChats[chat.id] ? "Generating title" : chat.title}
                           </span>
                         </a>
@@ -220,14 +252,14 @@ export default function ChatSidebar({
                             render={<Button
                               size="icon-xs"
                               variant="ghost"
-                              className="chat-sidebar-actions-trigger opacity-100 transition-opacity md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100"
+                              className="chat-sidebar-actions-trigger size-6 rounded-md text-muted-foreground opacity-100 transition-opacity md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100"
                               aria-label={`Actions for ${chat.title}`}
                               title="Conversation actions"
                             />}
                           >
-                            <MoreLine className="size-4" />
+                            <MoreLine className="size-3.5" />
                           </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="w-48">
+                          <DropdownMenuContent align="end" className="w-48 rounded-lg">
                             <DropdownMenuItem className="whitespace-nowrap" onClick={() => onExport(chat)}>
                               <DownloadLine />
                               Export as Markdown
@@ -255,13 +287,17 @@ export default function ChatSidebar({
               </div>
             </section>
           ))}
-          {chats.length === 0 && <p className="px-3 py-8 text-center text-xs text-muted-foreground">No conversations yet</p>}
+          {chats.length === 0 && <p className="px-3 py-8 text-center text-xs text-tertiary">No conversations yet</p>}
         </div>
       </div>
-      <div className="space-y-2 p-3">
-        <div className="flex items-center gap-2 rounded-xl bg-sidebar-accent/70 p-2.5">
-          <button type="button" onClick={onBack} className="flex min-w-0 flex-1 items-center gap-2 text-left"><DisplayAvatar name={profile.name} src={profile.avatar} fallback="user" className="size-8" /><span className="truncate text-sm">{profile.name}</span></button>
-          <Button size="icon-sm" variant="ghost" onClick={onLogout} title="Logout"><LogoutLine className="size-4" /></Button>
+
+      <div className="shrink-0 p-2">
+        <div className="flex items-center gap-2 rounded-lg border border-border bg-white p-1.5 dark:border-border dark:bg-card">
+          <button type="button" onClick={onBack} className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-1 py-0.5 text-left transition-colors hover:bg-accent">
+            <DisplayAvatar name={profile.name} src={profile.avatar} fallback="user" className="size-7" />
+            <span className="truncate text-sm">{profile.name}</span>
+          </button>
+          <Button size="icon-xs" variant="ghost" onClick={onLogout} className="rounded-md text-muted-foreground hover:text-foreground" title="Logout" aria-label="Logout"><LogoutLine className="size-4" /></Button>
         </div>
       </div>
     </aside>

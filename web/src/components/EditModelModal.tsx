@@ -17,7 +17,6 @@ import type { Model, ModelMetadataInput } from "../types";
 import { useToast } from "./ui/toast";
 import {
   emptyModelMetadata,
-  MediaSettingsEditor,
   ModelMetadataEditor,
   modelFormTabsFor,
   PricingEditor,
@@ -71,7 +70,7 @@ export default function EditModelModal({
     model?.pricing_source === "custom" && pricingEdited && pricingTiers.length === 0,
   );
   useEffect(() => {
-    if (!showOutputFixes && activeTab === "output-fixes") setActiveTab("generation");
+    if (!showOutputFixes && activeTab === "output-fixes") setActiveTab("capabilities");
   }, [showOutputFixes, activeTab]);
   useEffect(() => {
     if (model) {
@@ -218,16 +217,13 @@ export default function EditModelModal({
           {activeTab === "capabilities" && (
             <ModelMetadataEditor value={metadata} onChange={setMetadata} />
           )}
-          {activeTab === "generation" && (
-            <MediaSettingsEditor value={metadata} onChange={setMetadata} />
-          )}
           {activeTab === "output-fixes" && (
             <ThinkTagModeEditor
               value={thinkOpeningTagMode}
               onChange={setThinkOpeningTagMode}
             />
           )}
-          {activeTab === "pricing" && (
+          {activeTab === "pricing" && model && (
             <div className="space-y-4">
               <div className="flex items-start justify-between gap-6 border-b pb-3">
                 <div className="min-w-0 space-y-1">

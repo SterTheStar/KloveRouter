@@ -1,5 +1,6 @@
 import { useMemo, useState, type ReactNode } from "react";
 import {
+  RiArrowLeftLine as ArrowLeft,
   RiArrowRightLine as ArrowRight,
   RiCheckLine as Check,
   RiClipboardLine as Clipboard,
@@ -11,8 +12,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { copyToClipboard } from "@/lib/clipboard";
+import { navigateToRoute, routeFromPath, shouldHandleLinkClick } from "@/lib/navigation";
 
-type DocId = "overview" | "quickstart" | "auth" | "models" | "compound-models" | "chat" | "responses" | "messages" | "images" | "speech" | "videos" | "streaming" | "claude-code" | "codex" | "opencode";
+type DocId = "overview" | "quickstart" | "auth" | "models" | "compound-models" | "chat" | "responses" | "messages" | "streaming" | "claude-code" | "codex" | "opencode";
 type DocGroup = "Guide" | "API reference" | "Integrations";
 type DocItem = { id: DocId; title: string; group: DocGroup; description: string; keywords: string };
 
@@ -25,9 +27,6 @@ const docs: DocItem[] = [
   { id: "chat", title: "Chat Completions", group: "API reference", description: "OpenAI chat format", keywords: "POST messages tools stream sse" },
   { id: "responses", title: "Responses", group: "API reference", description: "OpenAI Responses format", keywords: "POST input output response" },
   { id: "messages", title: "Anthropic Messages", group: "API reference", description: "Anthropic-compatible messages", keywords: "POST anthropic claude system content" },
-  { id: "images", title: "Image generation", group: "API reference", description: "Generate, edit, and vary images", keywords: "POST images generations edits variations multipart" },
-  { id: "speech", title: "Text to speech", group: "API reference", description: "Generate audio from text", keywords: "POST audio speech voice mp3 bytes" },
-  { id: "videos", title: "Video generation", group: "API reference", description: "Create and manage video jobs", keywords: "POST GET DELETE videos status content cancel" },
   { id: "streaming", title: "Streaming and errors", group: "API reference", description: "SSE, passthrough, and error handling", keywords: "streaming sse chunks buffer event errors status" },
   { id: "claude-code", title: "Claude Code", group: "Integrations", description: "Connect Claude Code to Klove", keywords: "anthropic base url token env" },
   { id: "codex", title: "Codex CLI", group: "Integrations", description: "Configure a custom Codex provider", keywords: "openai config toml responses wire_api" },
@@ -142,48 +141,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }`,
   },
-  images: {
-    cURL: `curl "$KLOVE_BASE_URL/images/generations" \\
-  -H "Authorization: Bearer $KLOVE_API_KEY" \\
-  -H "Content-Type: application/json" \\
-  -d '{"model":"provider/image-model","prompt":"A glass observatory in the mountains"}'`,
-    "Node.js": `const baseURL = "{{KLOVE_API_BASE}}";
-const apiKey = process.env.KLOVE_API_KEY;
-const result = await fetch(baseURL + "/images/generations", {
-  method: "POST", headers: { Authorization: "Bearer " + apiKey, "Content-Type": "application/json" },
-  body: JSON.stringify({ model: "provider/image-model", prompt: "A glass observatory in the mountains" }),
-});
-console.log(await result.json());`,
-    Python: `import os
-import requests
-
-BASE_URL = "{{KLOVE_API_BASE}}"
-API_KEY = os.environ["KLOVE_API_KEY"]
-
-response = requests.post(
-    f"{BASE_URL}/images/generations",
-    headers={"Authorization": f"Bearer {API_KEY}"},
-    json={"model": "provider/image-model", "prompt": "A glass observatory in the mountains"},
-)
-response.raise_for_status()
-print(response.json())`,
-    Rust: `// Cargo.toml dependencies: reqwest = { version = "0.12", features = ["json"] }, serde_json = "1", tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
-use reqwest::Client;
-use serde_json::json;
-use std::env;
-
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let base = "{{KLOVE_API_BASE}}";
-    let key = env::var("KLOVE_API_KEY")?;
-    let response = Client::new().post(format!("{base}/images/generations"))
-        .bearer_auth(key)
-        .json(&json!({"model":"provider/image-model", "prompt":"A glass observatory in the mountains"}))
-        .send().await?.error_for_status()?;
-    println!("{}", response.text().await?);
-    Ok(())
-}`,
-  },
 };
 
 function CodeBlock({ code, language = "json", label }: { code: string; language?: string; label?: string }) {
@@ -199,7 +156,7 @@ function CodeBlock({ code, language = "json", label }: { code: string; language?
     .replaceAll('os.environ["KLOVE_BASE_URL"]', JSON.stringify(apiBase))
     .replaceAll('std::env::var("KLOVE_BASE_URL")?', JSON.stringify(apiBase));
   return <div className="overflow-hidden rounded-xl border border-border bg-card">
-    <div className="flex h-10 items-center justify-between border-b border-border bg-muted/30 px-3 text-xs text-muted-foreground">
+    <div className="flex h-10 items-center justify-between border-b border-border bg-background/60 px-3 text-xs text-tertiary">
       <span>{label ?? language}</span>
       <Button size="xs" variant="ghost" className="h-7 gap-1.5" onClick={() => { void copyToClipboard(displayCode).then(() => { setCopied(true); window.setTimeout(() => setCopied(false), 1200); }); }}>
         {copied ? <Check className="size-3.5" /> : <Clipboard className="size-3.5" />}{copied ? "Copied" : "Copy"}
@@ -212,35 +169,50 @@ function CodeBlock({ code, language = "json", label }: { code: string; language?
 function ExampleTabs({ sample, languages = ["cURL", "Node.js", "Python", "Rust"] }: { sample: keyof typeof codeSamples; languages?: string[] }) {
   const [language, setLanguage] = useState(languages[0]);
   return <div className="space-y-2">
-    <div className="flex flex-wrap gap-1 rounded-lg bg-muted/50 p-1">
-      {languages.map((name) => <button key={name} className={`rounded-md px-3 py-1.5 text-xs transition-colors ${language === name ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`} onClick={() => setLanguage(name)}>{name}</button>)}
+    <div className="flex flex-wrap gap-1 rounded-lg bg-surface p-1">
+      {languages.map((name) => <button key={name} className={`rounded-lg px-3 py-1.5 text-xs transition-colors ${language === name ? "bg-card text-foreground" : "text-muted-foreground hover:text-foreground"}`} onClick={() => setLanguage(name)}>{name}</button>)}
     </div>
     <CodeBlock code={codeSamples[sample][language]} language={language} />
   </div>;
 }
 
 function SectionTitle({ eyebrow, title, description }: { eyebrow: string; title: string; description: string }) {
-  return <div className="mb-7 space-y-2"><p className="text-xs font-semibold tracking-[0.08em] text-primary">{eyebrow}</p><h1 className="text-3xl font-semibold tracking-tight">{title}</h1><p className="max-w-3xl text-sm leading-6 text-muted-foreground">{description}</p></div>;
+  return <div className="mb-7 space-y-2"><p className="text-xs font-medium text-tertiary">{eyebrow}</p><h1 className="text-2xl font-semibold tracking-tight text-foreground">{title}</h1><p className="max-w-3xl text-sm leading-6 text-muted-foreground">{description}</p></div>;
 }
 
 function Endpoint({ method, path, description }: { method: string; path: string; description: string }) {
-  const color = method === "GET" ? "text-emerald-400" : method === "DELETE" ? "text-red-400" : "text-sky-400";
-  return <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border bg-card px-4 py-3"><Badge variant="outline" className={`font-mono ${color}`}>{method}</Badge><code className="text-sm font-medium">{path}</code><span className="ml-auto text-xs text-muted-foreground">{description}</span></div>;
+  const color = method === "GET" ? "text-success" : method === "DELETE" ? "text-destructive" : "text-accent-blue";
+  return <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-border bg-card px-4 py-3"><Badge variant="outline" className={`font-mono ${color}`}>{method}</Badge><code className="text-sm font-medium">{path}</code><span className="ml-auto text-xs text-tertiary">{description}</span></div>;
 }
 
 function Callout({ children }: { children: ReactNode }) {
-  return <div className="rounded-lg border border-primary/25 bg-primary/5 px-4 py-3 text-sm leading-6 text-muted-foreground">{children}</div>;
+  return <div className="rounded-lg border border-border bg-surface px-4 py-3 text-sm leading-6 text-muted-foreground">{children}</div>;
 }
 
-export default function DocsPage() {
-  const [active, setActive] = useState<DocId>("overview");
+function handleAppLink(event: React.MouseEvent<HTMLAnchorElement>) {
+  if (!shouldHandleLinkClick(event)) return;
+  const url = new URL((event.currentTarget as HTMLAnchorElement).href, window.location.origin);
+  if (url.origin !== window.location.origin) return;
+  event.preventDefault();
+  navigateToRoute(routeFromPath(url.pathname));
+}
+
+export default function DocsPage({ onBack }: { onBack: () => void }) {
+  const [active, setActive] = useState<DocId>(() => {
+    const hash = window.location.hash.replace(/^#/, "");
+    return docs.some((item) => item.id === hash) ? (hash as DocId) : "overview";
+  });
+  const selectDoc = (id: DocId) => {
+    setActive(id);
+    window.history.replaceState(null, "", `/docs#${id}`);
+  };
   const [search, setSearch] = useState("");
   const filtered = useMemo(() => docs.filter((item) => `${item.title} ${item.description} ${item.keywords}`.toLowerCase().includes(search.trim().toLowerCase())), [search]);
   const selected = docs.find((item) => item.id === active)!;
 
   return <div className="min-h-full bg-background">
     <div className="grid min-h-full w-full min-w-0 md:grid-cols-[280px_minmax(0,1fr)]">
-      <aside className="flex flex-col border-b bg-muted/10 p-4 md:sticky md:top-0 md:h-svh md:overflow-hidden md:border-b-0 md:border-r md:p-5">
+      <aside className="flex flex-col border-b border-border bg-surface p-4 md:sticky md:top-0 md:h-svh md:overflow-hidden md:border-b-0 md:border-r md:p-5">
         <div className="shrink-0">
         <div className="mb-6 px-2 pt-1">
           <div className="flex items-center gap-3">
@@ -252,26 +224,26 @@ export default function DocsPage() {
               <path d="M16 8C16 9.85659 15.3676 11.5655 14.3064 12.9229L10.8868 7H15.9381C15.979 7.32759 16 7.66141 16 8Z" fill="currentColor" />
               <path d="M11.1036 0.624326C13.0605 1.44877 14.6208 3.02927 15.4185 5H8.57735L11.1036 0.624326Z" fill="currentColor" />
             </svg>
-            <span className="text-xl font-semibold tracking-tight">Klove Docs</span>
+            <span className="text-xl font-semibold tracking-tight text-foreground">Klove Docs</span>
           </div>
         </div>
-        <div className="relative mb-5"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input aria-label="Search documentation" placeholder="Search docs..." className="h-10 pl-9" value={search} onChange={(event) => { const value = event.target.value; setSearch(value); const match = docs.find((item) => `${item.title} ${item.description} ${item.keywords}`.toLowerCase().includes(value.trim().toLowerCase())); if (match) setActive(match.id); }} /></div>
+        <div className="relative mb-5"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-tertiary" /><Input aria-label="Search documentation" placeholder="Search docs..." className="h-9 pl-9" value={search} onChange={(event) => { const value = event.target.value; setSearch(value); const match = docs.find((item) => `${item.title} ${item.description} ${item.keywords}`.toLowerCase().includes(value.trim().toLowerCase())); if (match) selectDoc(match.id); }} /></div>
         </div>
         <nav className="min-h-0 space-y-5 md:flex-1 md:overflow-y-auto md:overscroll-contain md:pr-1" aria-label="Documentation navigation">
           {(["Guide", "API reference", "Integrations"] as DocGroup[]).map((section) => {
             const items = filtered.filter((item) => item.group === section);
             if (!items.length) return null;
-            return <div key={section}><div className="mb-2 px-2 text-xs font-semibold tracking-wide text-muted-foreground">{section}</div><div className="space-y-0.5">{items.map((item) => <button key={item.id} onClick={() => setActive(item.id)} className={`group flex w-full items-center justify-between rounded-lg px-2.5 py-2.5 text-left text-sm font-medium transition-colors ${active === item.id ? "bg-primary/10 text-primary" : "text-foreground/80 hover:bg-muted"}`}><span>{item.title}</span>{active === item.id && <ArrowRight className="size-3.5 shrink-0" />}</button>)}</div></div>;
+            return <div key={section}><div className="mb-2 px-2 text-xs font-medium text-tertiary">{section}</div><div className="space-y-0.5">{items.map((item) => <button key={item.id} onClick={() => selectDoc(item.id)} className={`group flex w-full items-center justify-between rounded-lg px-2.5 py-2.5 text-left text-sm font-medium transition-colors ${active === item.id ? "bg-accent text-foreground" : "text-muted-foreground hover:bg-accent hover:text-foreground"}`}><span>{item.title}</span>{active === item.id && <ArrowRight className="size-3.5 shrink-0" />}</button>)}</div></div>;
           })}
           {!filtered.length && <div className="px-2 py-8 text-center text-sm text-muted-foreground">No documentation matches “{search}”.</div>}
         </nav>
-        <footer className="mt-6 shrink-0 border-t border-border/60 pt-3 md:mt-0">
+        <footer className="mt-6 shrink-0 border-t border-border pt-3 md:mt-0">
           <div className="flex h-9 items-center justify-between gap-2">
-            <a href="/providers" className="flex h-9 min-w-0 flex-1 items-center gap-2 rounded-lg px-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-              <span className="truncate">Open Klove Router</span>
-              <ArrowRight className="ml-auto size-4 shrink-0" />
-            </a>
-            <a href="/api-keys" aria-label="Open API Keys" title="API Keys" className="flex size-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+            <button type="button" onClick={onBack} className="flex h-9 min-w-0 flex-1 items-center gap-2 rounded-lg px-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong">
+              <ArrowLeft className="size-4 shrink-0" />
+              <span className="truncate">Back</span>
+            </button>
+            <a href="/api-keys" onClick={handleAppLink} aria-label="Open API Keys" title="API Keys" className="flex size-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong">
               <KeyIcon className="size-4" />
             </a>
           </div>
@@ -280,11 +252,11 @@ export default function DocsPage() {
       <article className="min-w-0 px-5 py-7 md:px-10 md:py-9 lg:px-14">
         <div className="mx-auto max-w-4xl">
           <header className="mb-8 flex flex-wrap items-center justify-between gap-3">
-            <div><h1 className="text-xl font-semibold tracking-tight">Developer documentation</h1><p className="mt-1 text-sm text-muted-foreground">API reference, integration guides, and working examples.</p></div>
+            <div><h1 className="text-2xl font-semibold tracking-tight text-foreground">Developer documentation</h1><p className="mt-1 text-sm text-tertiary">API reference, integration guides, and working examples.</p></div>
           </header>
-          <div className="mb-7 flex items-center gap-2 text-xs text-muted-foreground"><a href="/docs#overview" className="hover:text-foreground hover:underline">Docs</a><span>/</span><span>{selected.group}</span><span>/</span><span className="text-foreground">{selected.title}</span></div>
+          <div className="mb-7 flex items-center gap-2 text-xs text-tertiary"><a href="/docs#overview" onClick={(event) => { if (!shouldHandleLinkClick(event)) return; event.preventDefault(); selectDoc("overview"); }} className="hover:text-foreground hover:underline">Docs</a><span>/</span><span>{selected.group}</span><span>/</span><span className="text-foreground">{selected.title}</span></div>
           <div className="flex flex-col gap-5 [&>*]:!my-0">
-            <DocContent id={active} />
+            <DocContent id={active} onSelectDoc={selectDoc} />
           </div>
         </div>
       </article>
@@ -292,10 +264,10 @@ export default function DocsPage() {
   </div>;
 }
 
-function DocContent({ id }: { id: DocId }) {
+function DocContent({ id, onSelectDoc }: { id: DocId; onSelectDoc: (id: DocId) => void }) {
   switch (id) {
-    case "overview": return <><SectionTitle eyebrow="Klove Router" title="One API for your model providers" description="Klove Router exposes authenticated OpenAI-compatible chat, Responses, and media APIs, plus an Anthropic Messages endpoint. Chat requests can route to individual providers or compound models; media requests route to a direct provider model." /><div className="grid gap-3 sm:grid-cols-2">{[["Chat & tools", "Chat Completions with streaming, tool calls, and multimodal message content.", "chat"], ["Responses", "Responses API-compatible requests for clients built on the OpenAI Responses format.", "responses"], ["Anthropic Messages", "A Messages-compatible interface for Claude Code and Anthropic SDK clients.", "messages"], ["Media", "Image generation, image edits and variations, text-to-speech, and asynchronous video jobs.", "images"]].map(([title, body, target]) => <a key={title} href={`/docs#${target}`} className="group rounded-xl border bg-card p-4 transition-colors hover:border-primary/40 hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"><div className="mb-1 flex items-center justify-between font-medium">{title}<ArrowRight className="size-3.5 opacity-0 transition-opacity group-hover:opacity-100" /></div><p className="text-sm leading-6 text-muted-foreground">{body}</p></a>)}</div><h2 className="mb-3 mt-9 text-lg font-semibold">Endpoint reference</h2><div className="space-y-2"><Endpoint method="GET" path="/v1/models" description="List active provider and compound models" to="models" /><Endpoint method="POST" path="/v1/chat/completions" description="OpenAI Chat Completions" to="chat" /><Endpoint method="POST" path="/v1/responses" description="OpenAI Responses" to="responses" /><Endpoint method="POST" path="/v1/messages" description="Anthropic Messages" to="messages" /><Endpoint method="POST" path="/v1/images/generations" description="Generate images" to="images" /><Endpoint method="POST" path="/v1/images/edits" description="Edit images · multipart upload" to="images" /><Endpoint method="POST" path="/v1/images/variations" description="Image variations · multipart upload" to="images" /><Endpoint method="POST" path="/v1/audio/speech" description="Text-to-speech audio bytes" to="speech" /><Endpoint method="POST" path="/v1/videos" description="Create a video job" to="videos" /><Endpoint method="GET" path="/v1/videos" description="List Klove-created jobs" to="videos" /><Endpoint method="GET" path="/v1/videos/:id" description="Retrieve job status" to="videos" /><Endpoint method="GET" path="/v1/videos/:id/content" description="Download video content" to="videos" /><Endpoint method="POST" path="/v1/videos/:id/cancel" description="Cancel a job" to="videos" /><Endpoint method="DELETE" path="/v1/videos/:id" description="Delete a job" to="videos" /></div><div className="mt-7 space-y-3"><Callout>Media support depends on the selected active model and the upstream provider. Media routes require a direct <code>provider/model</code> ID; compound models are currently for chat-compatible routes.</Callout><Callout>Authenticated API requests appear in <a href="/request-logs" className="font-medium text-foreground underline underline-offset-4 hover:text-primary">Request Logs</a>. Text streams report delivered characters; speech and video content streams report delivered bytes.</Callout></div></>;
-    case "quickstart": return <><SectionTitle eyebrow="Guide" title="Make your first request" description="Use a gateway API key and a model ID returned by the catalog. Set the base URL to your Klove server, including /v1." /><Callout>Examples below use this Klove instance's base URL: <code>{window.location.origin}/v1</code>. Keep the API key in an environment variable and never ship it in browser code.</Callout><div className="mt-6"><ExampleTabs sample="quickstart" /></div><h2 className="mb-3 mt-8 text-lg font-semibold">What you need</h2><ul className="list-disc space-y-2 pl-5 text-sm leading-6 text-muted-foreground"><li>A gateway API key created on the <a href="/api-keys" className="text-foreground underline underline-offset-4 hover:text-primary">API Keys page</a>.</li><li>An active provider with an enabled model, or an enabled compound model.</li><li>The exact public model ID from <a href="/docs#models" className="text-foreground underline underline-offset-4 hover:text-primary"><code>GET /v1/models</code></a>.</li></ul></>;
+    case "overview": return <><SectionTitle eyebrow="Klove Router" title="One API for your model providers" description="Klove Router exposes authenticated OpenAI-compatible chat and Responses APIs, plus an Anthropic Messages endpoint. Chat requests can route to individual providers or compound models." /><div className="grid gap-3 sm:grid-cols-2">{[["Chat & tools", "Chat Completions with streaming, tool calls, and multimodal message content.", "chat"], ["Responses", "Responses API-compatible requests for clients built on the OpenAI Responses format.", "responses"], ["Anthropic Messages", "A Messages-compatible interface for Claude Code and Anthropic SDK clients.", "messages"]].map(([title, body, target]) => <a key={title} href={`/docs#${target}`} onClick={(event) => { if (!shouldHandleLinkClick(event)) return; event.preventDefault(); onSelectDoc(target as DocId); }} className="group rounded-xl border border-border bg-card p-4 transition-colors hover:border-border-strong hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong"><div className="mb-1 flex items-center justify-between font-medium text-foreground">{title}<ArrowRight className="size-3.5 opacity-0 transition-opacity group-hover:opacity-100" /></div><p className="text-sm leading-6 text-muted-foreground">{body}</p></a>)}</div><h2 className="mb-3 mt-9 text-lg font-semibold tracking-tight text-foreground">Endpoint reference</h2><div className="space-y-2"><Endpoint method="GET" path="/v1/models" description="List active provider and compound models" to="models" /><Endpoint method="POST" path="/v1/chat/completions" description="OpenAI Chat Completions" to="chat" /><Endpoint method="POST" path="/v1/responses" description="OpenAI Responses" to="responses" /><Endpoint method="POST" path="/v1/messages" description="Anthropic Messages" to="messages" /></div><div className="mt-7 space-y-3"><Callout>Compound models are available on the chat-compatible routes. Requests can target a single provider model or a compound model.</Callout><Callout>Authenticated API requests appear in <a href="/request-logs" onClick={handleAppLink} className="font-medium text-foreground underline underline-offset-4 hover:text-accent-blue">Request logs</a>. Text streams report delivered characters.</Callout></div></>;
+    case "quickstart": return <><SectionTitle eyebrow="Guide" title="Make your first request" description="Use a gateway API key and a model ID returned by the catalog. Set the base URL to your Klove server, including /v1." /><Callout>Examples below use this Klove instance's base URL: <code>{window.location.origin}/v1</code>. Keep the API key in an environment variable and never ship it in browser code.</Callout><div className="mt-6"><ExampleTabs sample="quickstart" /></div><h2 className="mb-3 mt-8 text-lg font-semibold tracking-tight text-foreground">What you need</h2><ul className="list-disc space-y-2 pl-5 text-sm leading-6 text-muted-foreground"><li>A gateway API key created on the <a href="/api-keys" onClick={handleAppLink} className="text-foreground underline underline-offset-4 hover:text-accent-blue">API Keys page</a>.</li><li>An active provider with an enabled model, or an enabled compound model.</li><li>The exact public model ID from <a href="/docs#models" className="text-foreground underline underline-offset-4 hover:text-accent-blue"><code>GET /v1/models</code></a>.</li></ul></>;
     case "auth": return <><SectionTitle eyebrow="Guide" title="Authentication" description="Authenticate requests with a Klove API key. The gateway validates the key before routing the request." /><div className="space-y-3"><p className="text-sm leading-6 text-muted-foreground">OpenAI-compatible endpoints accept the standard bearer token header. The Anthropic Messages endpoint also accepts the Anthropic <code>x-api-key</code> header; bearer authentication works through the gateway key verifier.</p><CodeBlock language="http" code={`Authorization: Bearer $KLOVE_API_KEY\nContent-Type: application/json`} /><p className="text-sm leading-6 text-muted-foreground">The OpenAI-compatible base URL for this instance is <code>{window.location.origin}/v1</code>. Use HTTPS and secret storage in deployed environments.</p><Callout>Missing or invalid keys return HTTP 401. Do not put secrets in source control, client-side bundles, or URLs.</Callout></div></>;
     case "models": return <>
       <SectionTitle eyebrow="API reference · GET" title="List available models" description="Fetch active models visible to the API key. Use the exact returned id as the model field in requests." />
@@ -324,8 +296,8 @@ function DocContent({ id }: { id: DocId }) {
     case "compound-models": return <><SectionTitle eyebrow="Guide" title="Compound model routing" description="A compound model exposes one stable pool ID and routes compatible chat requests to its configured provider models." /><CodeBlock language="bash" code={`curl "$KLOVE_BASE_URL/chat/completions" \\
   -H "Authorization: Bearer $KLOVE_API_KEY" \\
   -H "Content-Type: application/json" \\
-  -d '{"model":"pool/reliable-chat","messages":[{"role":"user","content":"Hello"}]}'`} /><h2 className="mb-3 mt-7 text-lg font-semibold">Strategies</h2><div className="grid gap-3 sm:grid-cols-2"><div className="rounded-xl border bg-card p-4"><h3 className="mb-1 font-medium">Priority</h3><p className="text-sm leading-6 text-muted-foreground">Members are attempted in configured order. A member's fallback setting controls whether the router may continue after an eligible failure.</p></div><div className="rounded-xl border bg-card p-4"><h3 className="mb-1 font-medium">Random</h3><p className="text-sm leading-6 text-muted-foreground">The router shuffles the member order for each request. Fallback settings still control whether it may try another member.</p></div></div><h2 className="mb-3 mt-7 text-lg font-semibold">Fallback behavior</h2><p className="mb-4 text-sm leading-6 text-muted-foreground">Fallback can proceed when an enabled member is incompatible with the request, the provider connection fails, or the upstream returns a retryable response such as 401, 403, 404, 408, 409, 425, 429, or 5xx. A failure from a member with fallback disabled ends the attempt. Requests stop falling back after output has started so the client does not receive mixed partial answers.</p><Callout>Compound models are available on <code>/v1/chat/completions</code>, <code>/v1/responses</code>, and <code>/v1/messages</code>. Image, speech, and video endpoints currently require a direct provider model ID.</Callout></>;
-    case "chat": return <><SectionTitle eyebrow="API reference · POST" title="Chat Completions" description="Send messages using the familiar OpenAI Chat Completions schema. Set stream to true to receive Server-Sent Events as the upstream produces output." /><Endpoint method="POST" path="/v1/chat/completions" description="application/json" /><h2 className="mb-3 mt-6 text-lg font-semibold">Request examples</h2><ExampleTabs sample="chat" /><h2 className="mb-3 mt-7 text-lg font-semibold">Non-streaming response</h2><CodeBlock language="json" code={`{
+  -d '{"model":"pool/reliable-chat","messages":[{"role":"user","content":"Hello"}]}'`} /><h2 className="mb-3 mt-7 text-lg font-semibold tracking-tight text-foreground">Strategies</h2><div className="grid gap-3 sm:grid-cols-2"><div className="rounded-xl border border-border bg-card p-4"><h3 className="mb-1 font-medium text-foreground">Priority</h3><p className="text-sm leading-6 text-muted-foreground">Members are attempted in configured order. A member's fallback setting controls whether the router may continue after an eligible failure.</p></div><div className="rounded-xl border border-border bg-card p-4"><h3 className="mb-1 font-medium text-foreground">Random</h3><p className="text-sm leading-6 text-muted-foreground">The router shuffles the member order for each request. Fallback settings still control whether it may try another member.</p></div></div><h2 className="mb-3 mt-7 text-lg font-semibold tracking-tight text-foreground">Fallback behavior</h2><p className="mb-4 text-sm leading-6 text-muted-foreground">Fallback can proceed when an enabled member is incompatible with the request, the provider connection fails, or the upstream returns a retryable response such as 401, 403, 404, 408, 409, 425, 429, or 5xx. A failure from a member with fallback disabled ends the attempt. Requests stop falling back after output has started so the client does not receive mixed partial answers.</p><Callout>Compound models are available on <code>/v1/chat/completions</code>, <code>/v1/responses</code>, and <code>/v1/messages</code>.</Callout></>;
+    case "chat": return <><SectionTitle eyebrow="API reference · POST" title="Chat Completions" description="Send messages using the familiar OpenAI Chat Completions schema. Set stream to true to receive Server-Sent Events as the upstream produces output." /><Endpoint method="POST" path="/v1/chat/completions" description="application/json" /><h2 className="mb-3 mt-6 text-lg font-semibold tracking-tight text-foreground">Request examples</h2><ExampleTabs sample="chat" /><h2 className="mb-3 mt-7 text-lg font-semibold tracking-tight text-foreground">Non-streaming response</h2><CodeBlock language="json" code={`{
   "id": "chatcmpl-...",
   "object": "chat.completion",
   "created": 1735689600,
@@ -342,7 +314,7 @@ function DocContent({ id }: { id: DocId }) {
   "model": "provider/model-id",
   "input": "Summarize the purpose of an API gateway.",
   "stream": false
-}`} /><h2 className="mb-3 mt-6 text-lg font-semibold">Response shape</h2><CodeBlock language="json" code={`{
+}`} /><h2 className="mb-3 mt-6 text-lg font-semibold tracking-tight text-foreground">Response shape</h2><CodeBlock language="json" code={`{
   "id": "resp_...",
   "object": "response",
   "status": "completed",
@@ -363,7 +335,7 @@ function DocContent({ id }: { id: DocId }) {
   "model": "provider/model-id",
   "max_tokens": 1024,
   "messages": [{ "role": "user", "content": "Hello" }]
-}`} /><h2 className="mb-3 mt-6 text-lg font-semibold">Response shape</h2><CodeBlock language="json" code={`{
+}`} /><h2 className="mb-3 mt-6 text-lg font-semibold tracking-tight text-foreground">Response shape</h2><CodeBlock language="json" code={`{
   "id": "msg_...",
   "type": "message",
   "role": "assistant",
@@ -377,72 +349,15 @@ function DocContent({ id }: { id: DocId }) {
     "cache_creation_input_tokens": 64
   }
 }`} /><p className="mt-4 text-sm leading-6 text-muted-foreground">Authentication supports <code>x-api-key</code> and bearer credentials. Streaming requests use Anthropic event framing. The response includes <code>cache_read_input_tokens</code> and <code>cache_creation_input_tokens</code>; these reflect upstream usage when the provider reports cache details. When cached input is reported, <code>input_tokens</code> counts the uncached input. Model capability differences still apply.</p></>;
-    case "images": return <><SectionTitle eyebrow="API reference · Images" title="Image generation and editing" description="The gateway exposes OpenAI-compatible image generation, edit, and variation routes. Requests use an active direct provider model whose image capability is not disabled." /><div className="space-y-2"><Endpoint method="POST" path="/v1/images/generations" description="JSON prompt request" /><Endpoint method="POST" path="/v1/images/edits" description="multipart/form-data upload" /><Endpoint method="POST" path="/v1/images/variations" description="multipart/form-data upload" /></div><h2 className="mb-3 mt-6 text-lg font-semibold">Generate an image</h2><ExampleTabs sample="images" /><h2 className="mb-3 mt-7 text-lg font-semibold">Edit and variation uploads</h2><CodeBlock language="bash" label="cURL · multipart/form-data" code={`curl "$KLOVE_BASE_URL/images/edits" \\
-  -H "Authorization: Bearer $KLOVE_API_KEY" \\
-  -F "model=provider/image-model" \\
-  -F "prompt=Add warm sunset light" \\
-  -F "image=@input.png"
-
-curl "$KLOVE_BASE_URL/images/variations" \\
-  -H "Authorization: Bearer $KLOVE_API_KEY" \\
-  -F "model=provider/image-model" \\
-  -F "image=@input.png"`} /><h2 className="mb-3 mt-7 text-lg font-semibold">Typical response</h2><CodeBlock language="json" code={`{
-  "created": 1735689600,
-  "data": [{ "url": "https://..." }]
-}`} /><p className="mt-4 text-sm leading-6 text-muted-foreground">Klove streams the upstream response through without reshaping the JSON. OpenAI-compatible providers commonly return a <code>data</code> array containing a URL or <code>b64_json</code>; fields and upload constraints depend on the provider. Media endpoints require a direct <code>provider/model</code> ID; compound models are not routed on these endpoints.</p></>;
-    case "speech": return <><SectionTitle eyebrow="API reference · Audio" title="Text to speech" description="Generate speech from text using an active direct provider model whose text-to-speech capability is not disabled. The response body is audio bytes, not a JSON envelope." /><Endpoint method="POST" path="/v1/audio/speech" description="application/json → provider audio bytes" /><CodeBlock language="json" code={`{
-  "model": "provider/tts-model",
-  "input": "Welcome to Klove Router.",
-  "voice": "alloy",
-  "response_format": "mp3"
-}`} /><CodeBlock language="bash" label="Save generated audio" code={`curl "$KLOVE_BASE_URL/audio/speech" \\
-  -H "Authorization: Bearer $KLOVE_API_KEY" \\
-  -H "Content-Type: application/json" \\
-  -d '{"model":"provider/tts-model","input":"Welcome to Klove Router.","voice":"alloy"}' \\
-  --output speech.mp3`} /><p className="mt-4 text-sm leading-6 text-muted-foreground">The gateway streams the upstream response body and content type through; save it to a file or consume it as a byte stream. Available voices, formats, and speed controls are provider-specific. Compound models are not routed on media endpoints.</p></>;
-    case "videos": return <><SectionTitle eyebrow="API reference · Video" title="Video generation jobs" description="Create a video job, poll its provider status, then download its content. Klove stores jobs created through this gateway and substitutes a Klove-owned ID in the response." /><div className="space-y-2"><Endpoint method="POST" path="/v1/videos" description="Create a job" /><Endpoint method="GET" path="/v1/videos" description="List Klove-created jobs · limit / after" /><Endpoint method="GET" path="/v1/videos/:id" description="Retrieve provider status" /><Endpoint method="GET" path="/v1/videos/:id/content" description="Download · optional variant query" /><Endpoint method="POST" path="/v1/videos/:id/cancel" description="Cancel job" /><Endpoint method="DELETE" path="/v1/videos/:id" description="Delete job" /></div><h2 className="mb-3 mt-6 text-lg font-semibold">Create a job</h2><CodeBlock language="bash" code={`curl "$KLOVE_BASE_URL/videos" \\
-  -H "Authorization: Bearer $KLOVE_API_KEY" \\
-  -H "Content-Type: application/json" \\
-  -d '{"model":"provider/video-model","prompt":"A slow aerial shot over a forest"}'`} /><h2 className="mb-3 mt-6 text-lg font-semibold">Poll and download</h2><CodeBlock language="bash" code={`# Use the id returned by POST /v1/videos.
-curl "$KLOVE_BASE_URL/videos/$VIDEO_ID" \\
-  -H "Authorization: Bearer $KLOVE_API_KEY"
-
-# Poll the status above until it is complete, then download the content.
-curl "$KLOVE_BASE_URL/videos/$VIDEO_ID/content" \\
-  -H "Authorization: Bearer $KLOVE_API_KEY" \\
-  --output generated.mp4
-
-# Optional: request a provider-specific content variant.
-curl "$KLOVE_BASE_URL/videos/$VIDEO_ID/content?variant=preview" \\
-  -H "Authorization: Bearer $KLOVE_API_KEY" \\
-  --output preview.mp4
-
-# List locally tracked jobs. The cursor is a Klove video ID.
-curl "$KLOVE_BASE_URL/videos?limit=20&after=$VIDEO_ID" \\
-  -H "Authorization: Bearer $KLOVE_API_KEY"
-
-# Optional job operations.
-curl -X POST "$KLOVE_BASE_URL/videos/$VIDEO_ID/cancel" \\
-  -H "Authorization: Bearer $KLOVE_API_KEY"
-curl -X DELETE "$KLOVE_BASE_URL/videos/$VIDEO_ID" \\
-  -H "Authorization: Bearer $KLOVE_API_KEY"`} /><h2 className="mb-3 mt-6 text-lg font-semibold">Create response</h2><CodeBlock language="json" code={`{
-  "id": "video_<klove-id>",
-  "status": "<provider status>",
-  "model": "provider/video-model"
-}`} /><h2 className="mb-3 mt-6 text-lg font-semibold">List response</h2><CodeBlock language="json" code={`{
-  "object": "list",
-  "data": [],
-  "has_more": false
-}`} /><p className="mt-4 text-sm leading-6 text-muted-foreground">The creation request may be JSON or multipart form data. Klove requires the upstream creation response to include an ID, stores its mapping, and returns the Klove ID. List pagination accepts <code>limit</code> (1–100, default 20) and <code>after</code> (a Klove video ID); the list only contains jobs created through Klove. Status values and available content variants depend on the provider.</p><Callout>Video requests require an active OpenAI-compatible provider/model and an upstream that implements the compatible video job routes. The gateway forwards provider errors and does not normalize video status names.</Callout></>;
-    case "streaming": return <><SectionTitle eyebrow="API reference" title="Streaming and errors" description="Chat, Responses, and Anthropic Messages can stream text as Server-Sent Events. Speech audio and video content are streamed as bytes, not SSE. Consume each response incrementally." /><h2 className="mb-3 text-lg font-semibold">OpenAI Chat stream</h2><CodeBlock language="text/event-stream" code={`data: {"choices":[{"delta":{"content":"Hello"},"index":0}]}
+    case "streaming": return <><SectionTitle eyebrow="API reference" title="Streaming and errors" description="Chat, Responses, and Anthropic Messages can stream text as Server-Sent Events. Responses are delivered as server-sent events; consume them incrementally." /><h2 className="mb-3 text-lg font-semibold tracking-tight text-foreground">OpenAI Chat stream</h2><CodeBlock language="text/event-stream" code={`data: {"choices":[{"delta":{"content":"Hello"},"index":0}]}
 
 data: {"choices":[{"delta":{"content":" there"},"index":0}]}
 
-data: [DONE]`} /><p className="mt-4 text-sm leading-6 text-muted-foreground">Set <code>stream: true</code> on <code>/v1/chat/completions</code>, <code>/v1/responses</code>, or <code>/v1/messages</code>. Audio and video content endpoints stream the provider response body. For best time-to-first-token, avoid middleware and reverse proxies that buffer response bodies; disable proxy buffering for these routes when applicable.</p><h2 className="mb-3 mt-7 text-lg font-semibold">Common status codes</h2><div className="space-y-2">{[["400", "Invalid request, missing required field, or incompatible endpoint."], ["401", "Missing or invalid Klove API key."], ["404", "Unknown model or video job."], ["429", "Upstream quota or throttling response; not a Klove-wide rate limit."], ["502", "Provider returned an invalid or unusable response."], ["503", "Provider, credential, or video job is temporarily unavailable."], ["5xx", "Gateway or upstream provider error."]].map(([code, text]) => <div key={code} className="flex gap-4 rounded-lg border bg-card px-4 py-3 text-sm"><code className="font-semibold text-primary">{code}</code><span className="text-muted-foreground">{text}</span></div>)}</div><Callout>Provider errors may be returned in the provider's native error envelope. Check the HTTP status and response body; do not assume every error uses one identical schema.</Callout></>;
+data: [DONE]`} /><p className="mt-4 text-sm leading-6 text-muted-foreground">Set <code>stream: true</code> on <code>/v1/chat/completions</code>, <code>/v1/responses</code>, or <code>/v1/messages</code>. For best time-to-first-token, avoid middleware and reverse proxies that buffer response bodies; disable proxy buffering for these routes when applicable.</p><h2 className="mb-3 mt-7 text-lg font-semibold tracking-tight text-foreground">Common status codes</h2><div className="space-y-2">{[["400", "Invalid request, missing required field, or incompatible endpoint."], ["401", "Missing or invalid Klove API key."], ["404", "Unknown model."], ["429", "Upstream quota or throttling response; not a Klove-wide rate limit."], ["502", "Provider returned an invalid or unusable response."], ["503", "Provider or credential is temporarily unavailable."], ["5xx", "Gateway or upstream provider error."]].map(([code, text]) => <div key={code} className="flex gap-4 rounded-lg border border-border bg-card px-4 py-3 text-sm"><code className="font-mono font-semibold text-foreground">{code}</code><span className="text-muted-foreground">{text}</span></div>)}</div><Callout>Provider errors may be returned in the provider's native error envelope. Check the HTTP status and response body; do not assume every error uses one identical schema.</Callout></>;
     case "claude-code": return <><SectionTitle eyebrow="Integration" title="Use Klove with Claude Code" description="Claude Code can connect through its Anthropic-compatible API configuration. Choose a model ID visible from Klove's model catalog." /><p className="mb-4 text-sm leading-6 text-muted-foreground">Set the gateway base URL and key in your shell. The value for <code>ANTHROPIC_BASE_URL</code> is the server root (without an extra <code>/v1</code>), because Claude Code appends the Anthropic API path.</p><CodeBlock language="bash" code={`export ANTHROPIC_BASE_URL="http://localhost:3000"
 export ANTHROPIC_AUTH_TOKEN="$KLOVE_API_KEY"
 export ANTHROPIC_MODEL="provider/model-id"
-claude`} /><Callout>Use the exact model ID supported by your gateway. Claude Code may send Anthropic-specific request fields; compatibility depends on the selected upstream model. See Anthropic's gateway guide for the current Claude Code environment settings.</Callout><a className="mt-4 inline-flex items-center gap-1 text-sm text-primary hover:underline" href="https://docs.anthropic.com/en/docs/claude-code/llm-gateway" target="_blank" rel="noreferrer">Claude Code gateway documentation <ExternalLink className="size-3.5" /></a></>;
+claude`} /><Callout>Use the exact model ID supported by your gateway. Claude Code may send Anthropic-specific request fields; compatibility depends on the selected upstream model. See Anthropic's gateway guide for the current Claude Code environment settings.</Callout><a className="mt-4 inline-flex items-center gap-1 text-sm text-accent-blue hover:underline" href="https://docs.anthropic.com/en/docs/claude-code/llm-gateway" target="_blank" rel="noreferrer">Claude Code gateway documentation <ExternalLink className="size-3.5" /></a></>;
     case "codex": return <><SectionTitle eyebrow="Integration" title="Use Klove with Codex CLI" description="Configure Codex CLI with a custom Responses-compatible model provider. The model must support the Responses API contract for the best compatibility." /><p className="mb-4 text-sm leading-6 text-muted-foreground">Add a custom provider to <code>~/.codex/config.toml</code>. For a local gateway, set the base URL to the Klove server's <code>/v1</code> endpoint.</p><CodeBlock language="toml" code={`model_provider = "klove"
 model = "provider/model-id"
 
@@ -452,7 +367,7 @@ base_url = "http://localhost:3000/v1"
 env_key = "KLOVE_API_KEY"
 wire_api = "responses"
 
-# Export KLOVE_API_KEY before launching Codex.`} /><Callout>Codex CLI configuration evolves. Confirm your installed CLI accepts the custom provider fields and Responses wire API. If your selected upstream only supports Chat Completions, Codex may not work with this configuration.</Callout><a className="mt-4 inline-flex items-center gap-1 text-sm text-primary hover:underline" href="https://developers.openai.com/codex/config-reference" target="_blank" rel="noreferrer">Codex configuration reference <ExternalLink className="size-3.5" /></a></>;
+# Export KLOVE_API_KEY before launching Codex.`} /><Callout>Codex CLI configuration evolves. Confirm your installed CLI accepts the custom provider fields and Responses wire API. If your selected upstream only supports Chat Completions, Codex may not work with this configuration.</Callout><a className="mt-4 inline-flex items-center gap-1 text-sm text-accent-blue hover:underline" href="https://developers.openai.com/codex/config-reference" target="_blank" rel="noreferrer">Codex configuration reference <ExternalLink className="size-3.5" /></a></>;
     case "opencode": return <><SectionTitle eyebrow="Integration" title="Use Klove with OpenCode" description="Define Klove as a custom OpenAI-compatible provider in OpenCode, then select one of the model IDs exposed by Klove." /><p className="mb-4 text-sm leading-6 text-muted-foreground">Add a provider entry to <code>opencode.json</code>. This configuration uses OpenCode's current custom OpenAI-compatible provider package and maps a short OpenCode model name to Klove's full public model ID.</p><CodeBlock language="json" code={`{
   "$schema": "https://opencode.ai/config.json",
   "model": "klove/chat",
@@ -467,6 +382,6 @@ wire_api = "responses"
       }
     }
   }
-}`} /><p className="mt-4 text-sm leading-6 text-muted-foreground">Export <code>KLOVE_API_KEY</code> before launching OpenCode. Replace <code>provider/model-id</code> with an ID returned by Klove. Verify the selected model's endpoint compatibility; this provider uses Chat Completions.</p><a className="mt-4 inline-flex items-center gap-1 text-sm text-primary hover:underline" href="https://opencode.ai/v2/docs/providers" target="_blank" rel="noreferrer">OpenCode provider documentation <ExternalLink className="size-3.5" /></a></>;
+}`} /><p className="mt-4 text-sm leading-6 text-muted-foreground">Export <code>KLOVE_API_KEY</code> before launching OpenCode. Replace <code>provider/model-id</code> with an ID returned by Klove. Verify the selected model's endpoint compatibility; this provider uses Chat Completions.</p><a className="mt-4 inline-flex items-center gap-1 text-sm text-accent-blue hover:underline" href="https://opencode.ai/v2/docs/providers" target="_blank" rel="noreferrer">OpenCode provider documentation <ExternalLink className="size-3.5" /></a></>;
   }
 }

@@ -112,9 +112,9 @@ function ChartTooltipContent({
   );
   if (!rows.length) return null;
   return (
-    <div className="rounded-lg border border-border bg-popover px-3 py-2 text-xs text-popover-foreground shadow-md">
+    <div className="rounded-lg border border-border bg-popover px-3 py-2 text-xs text-popover-foreground shadow-[0px_4px_16px_0px_rgba(0,0,0,0.05)]">
       {label !== undefined && (
-        <div className="mb-1.5 border-b border-border/60 pb-1 font-medium">
+        <div className="mb-1.5 border-b border-border pb-1 font-medium">
           {typeof label === "string" && /^\d{4}-\d{2}-\d{2}$/.test(label)
             ? formatDate(label)
             : label}
@@ -168,7 +168,7 @@ function ChartPanel({
 }) {
   return (
     <Card className={`overflow-hidden ${className}`}>
-      <CardHeader className="border-b">
+      <CardHeader className="border-b border-border">
         <CardTitle>{title}</CardTitle>
         <CardDescription>{description}</CardDescription>
         {action ? <CardAction>{action}</CardAction> : null}
@@ -272,10 +272,10 @@ function DonutChart({
           </PieChart>
         </ResponsiveContainer>
         <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center">
-          <span className="text-[11px] uppercase tracking-wide text-muted-foreground">
+          <span className="text-xs font-medium text-tertiary">
             {centerLabel}
           </span>
-          <span className="font-heading text-xl font-semibold tabular-nums">
+          <span className="font-heading text-xl font-semibold tracking-tight tabular-nums text-foreground">
             {format(total)}
           </span>
         </div>
@@ -296,14 +296,14 @@ function StatCard({ icon: Icon, title, value, sub }: StatCardData) {
   return (
     <Card className="gap-0">
       <CardContent className="flex flex-1 items-center gap-4">
-        <Icon className="size-9 shrink-0 text-muted-foreground" />
+        <Icon className="size-9 shrink-0 text-tertiary" />
         <div className="min-w-0">
-          <div className="truncate text-xs text-muted-foreground">{title}</div>
-          <div className="mt-0.5 font-heading text-2xl font-semibold tracking-tight tabular-nums">
+          <div className="truncate text-xs text-tertiary">{title}</div>
+          <div className="mt-0.5 font-heading text-2xl font-semibold tracking-tight tabular-nums text-foreground">
             {value}
           </div>
           {sub && (
-            <div className="truncate text-xs text-muted-foreground">{sub}</div>
+            <div className="truncate text-xs text-tertiary">{sub}</div>
           )}
         </div>
       </CardContent>
@@ -333,7 +333,7 @@ function TokenBreakdownTooltip({
         {children}
       </TooltipTrigger>
       <TooltipContent side="top" className="flex-col items-stretch gap-1 py-2">
-        <div className="text-[11px] font-medium text-muted-foreground">
+        <div className="text-xs font-medium text-tertiary">
           Token breakdown
         </div>
         {rows.map(({ label, value }) => (
@@ -383,12 +383,12 @@ function SortTh({
     )
   ) : null;
   return (
-    <th className="p-3 font-medium whitespace-nowrap">
+    <th className="px-3 py-2.5 whitespace-nowrap">
       <button
         type="button"
         onClick={() => onSort(k)}
         className={cn(
-          "flex w-full items-center gap-1 transition-colors hover:text-foreground",
+          "flex w-full items-center gap-1 text-xs font-medium text-tertiary transition-colors hover:text-foreground",
           align === "right" ? "justify-end" : "justify-start",
           active && "text-foreground",
         )}
@@ -577,7 +577,7 @@ export default function StatsPage() {
     <div className="w-full space-y-6 p-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="font-heading text-2xl font-semibold tracking-tight">
+          <h1 className="font-heading text-2xl font-semibold tracking-tight text-foreground">
             {activeTab === "status" ? "Provider status" : "Usage statistics"}
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -587,7 +587,7 @@ export default function StatsPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <div className="flex items-center rounded-lg bg-muted p-0.5">
+          <div className="flex items-center rounded-lg border border-border bg-surface p-0.5">
             {daysOptions.map(({ label, value }) => (
               <button
                 key={label}
@@ -595,8 +595,8 @@ export default function StatsPage() {
                 className={cn(
                   "h-7 rounded-md px-2.5 text-xs font-medium transition-colors",
                   days === value
-                    ? "bg-background text-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground",
+                    ? "bg-card text-foreground"
+                    : "text-tertiary hover:text-foreground",
                 )}
               >
                 {label}
@@ -641,12 +641,12 @@ export default function StatsPage() {
       {activeTab === "usage" && overview && (
         <>
           {overview.total_requests === 0 ? (
-            <div className="rounded-xl border border-dashed p-12 text-center">
-              <ChartLine className="mx-auto size-8 text-muted-foreground/60" />
-              <h2 className="mt-3 font-heading text-lg font-medium">
+            <div className="rounded-xl border border-dashed border-border bg-background/60 px-6 py-10 text-center">
+              <ChartLine className="mx-auto size-8 text-tertiary" />
+              <h2 className="mt-3 font-heading text-sm font-medium text-foreground">
                 No usage data yet
               </h2>
-              <p className="mt-1 text-sm text-muted-foreground">
+              <p className="mt-1 text-xs text-tertiary">
                 Token usage will appear here after you make requests through the
                 API proxy.
               </p>
@@ -671,7 +671,7 @@ export default function StatsPage() {
                   description="Token volume and estimated cost per day"
                   className="min-h-[22rem]"
                   action={
-                    <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                    <div className="flex items-center gap-4 text-xs text-tertiary">
                       <span className="flex items-center gap-1.5">
                         <span
                           className="size-2 rounded-full"
@@ -718,7 +718,7 @@ export default function StatsPage() {
                         <CartesianGrid
                           vertical={false}
                           strokeDasharray="4 4"
-                          className="stroke-border/60"
+                          className="stroke-border"
                         />
                         <XAxis
                           dataKey="date"
@@ -807,7 +807,7 @@ export default function StatsPage() {
                         <CartesianGrid
                           horizontal={false}
                           strokeDasharray="4 4"
-                          className="stroke-border/60"
+                          className="stroke-border"
                         />
                         <XAxis
                           type="number"
@@ -830,7 +830,7 @@ export default function StatsPage() {
                               formatters={{ tokens_total: formatNumber }}
                             />
                           }
-                          cursor={{ fill: "var(--muted)", opacity: 0.4 }}
+                          cursor={{ fill: "var(--accent)", opacity: 1 }}
                         />
                         <Bar
                           dataKey="tokens_total"
@@ -891,7 +891,7 @@ export default function StatsPage() {
                   <CardHeader className="py-(--card-spacing)">
                     <CardTitle>By model</CardTitle>
                     <CardAction>
-                      <span className="text-xs text-muted-foreground">
+                      <span className="text-xs text-tertiary">
                         {byModel.length} models
                       </span>
                     </CardAction>
@@ -899,7 +899,7 @@ export default function StatsPage() {
                   <div className="max-h-[30rem] overflow-auto">
                     <table className="w-full text-sm">
                       <thead>
-                        <tr className="border-y bg-muted/30 text-left text-xs text-muted-foreground">
+                        <tr className="border-y border-border bg-background/60 text-left">
                           <SortTh
                             label="Model"
                             k="model_name"
@@ -968,21 +968,21 @@ export default function StatsPage() {
                         {sortedModels.map((m) => (
                           <tr
                             key={m.model_id}
-                            className="border-b last:border-0 hover:bg-muted/30"
+                            className="border-b border-border last:border-0 hover:bg-accent/60"
                           >
                             <td
-                              className="max-w-56 truncate p-3 font-mono text-xs"
+                              className="max-w-56 truncate px-3 py-2.5 font-mono text-xs"
                               title={m.model_name}
                             >
                               {m.model_name}
                             </td>
-                            <td className="p-3 text-muted-foreground">
+                            <td className="px-3 py-2.5 text-muted-foreground">
                               {m.provider_name}
                             </td>
-                            <td className="p-3 text-right tabular-nums">
+                            <td className="px-3 py-2.5 text-right font-mono tabular-nums">
                               {formatNumber(m.requests)}
                             </td>
-                            <td className="p-3 text-right tabular-nums">
+                            <td className="px-3 py-2.5 text-right font-mono tabular-nums">
                               <TokenBreakdownTooltip
                                 prompt={m.tokens_prompt}
                                 completion={m.tokens_completion}
@@ -992,7 +992,7 @@ export default function StatsPage() {
                               </TokenBreakdownTooltip>
                             </td>
                             <td
-                              className="p-3 text-right tabular-nums text-muted-foreground"
+                              className="px-3 py-2.5 text-right tabular-nums text-muted-foreground"
                               title={
                                 m.tokens_total > 0
                                   ? `${((m.tokens_cache_read / m.tokens_total) * 100).toFixed(0)}% cached`
@@ -1001,27 +1001,27 @@ export default function StatsPage() {
                             >
                               {formatNumber(m.tokens_cache_read)}
                             </td>
-                            <td className="p-3 text-right font-medium tabular-nums">
+                            <td className="px-3 py-2.5 text-right font-medium tabular-nums">
                               {formatCost(m.estimated_cost_usd)}
                             </td>
-                            <td className="p-3 text-right tabular-nums">
+                            <td className="px-3 py-2.5 text-right tabular-nums">
                               {formatDuration(m.avg_duration_ms)}
                             </td>
-                            <td className="p-3 text-right font-mono text-xs tabular-nums">
+                            <td className="px-3 py-2.5 text-right font-mono text-xs tabular-nums">
                               {m.tps !== null ? m.tps.toFixed(1) : "—"}
                             </td>
                           </tr>
                         ))}
                       </tbody>
                       <tfoot>
-                        <tr className="border-t bg-muted/30 text-xs font-medium">
-                          <td className="p-3" colSpan={2}>
+                        <tr className="border-t border-border bg-background/60 text-xs font-medium">
+                          <td className="px-3 py-2.5" colSpan={2}>
                             Total · {byModel.length} models
                           </td>
-                          <td className="p-3 text-right tabular-nums">
+                          <td className="px-3 py-2.5 text-right font-mono tabular-nums">
                             {formatNumber(modelTotals.requests)}
                           </td>
-                          <td className="p-3 text-right tabular-nums">
+                          <td className="px-3 py-2.5 text-right font-mono tabular-nums">
                             <TokenBreakdownTooltip
                               prompt={modelTotals.prompt}
                               completion={modelTotals.completion}
@@ -1030,16 +1030,16 @@ export default function StatsPage() {
                               {formatNumber(modelTotals.tokens)}
                             </TokenBreakdownTooltip>
                           </td>
-                          <td className="p-3 text-right tabular-nums">
+                          <td className="px-3 py-2.5 text-right font-mono tabular-nums">
                             {formatNumber(modelTotals.cache)}
                           </td>
-                          <td className="p-3 text-right tabular-nums">
+                          <td className="px-3 py-2.5 text-right font-mono tabular-nums">
                             {formatCost(modelTotals.cost)}
                           </td>
-                          <td className="p-3 text-right tabular-nums">
+                          <td className="px-3 py-2.5 text-right font-mono tabular-nums">
                             {formatDuration(modelTotals.avgDuration)}
                           </td>
-                          <td className="p-3 text-right">—</td>
+                          <td className="px-3 py-2.5 text-right">—</td>
                         </tr>
                       </tfoot>
                     </table>

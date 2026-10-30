@@ -5,8 +5,10 @@
 @import "@fontsource-variable/geist";
 
 @theme inline {
-  --font-sans: "Inter Variable", sans-serif;
-  --font-heading: "Geist Variable", sans-serif;
+  --font-sans: "Geist Variable", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  --font-heading: "Geist Variable", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-serif: "Crimson Text", Georgia, serif;
+  --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -25,6 +27,12 @@
   --color-border: var(--border);
   --color-destructive: var(--destructive);
   --color-success: var(--success);
+  --color-placeholder: var(--placeholder);
+  --color-tertiary: var(--tertiary);
+  --color-surface: var(--surface);
+  --color-overlay: var(--overlay);
+  --color-accent-blue: var(--accent-blue);
+  --color-border-strong: var(--border-strong);
   --color-accent-foreground: var(--accent-foreground);
   --color-accent: var(--accent);
   --color-muted-foreground: var(--muted-foreground);
@@ -39,87 +47,100 @@
   --color-card: var(--card);
   --color-foreground: var(--foreground);
   --color-background: var(--background);
-  --radius-sm: calc(var(--radius) * 0.6);
-  --radius-md: calc(var(--radius) * 0.8);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) * 1.4);
-  --radius-2xl: calc(var(--radius) * 1.8);
-  --radius-3xl: calc(var(--radius) * 2.2);
-  --radius-4xl: calc(var(--radius) * 2.6);
+  --radius-xs: 0.125rem;
+  --radius-sm: 0.25rem;
+  --radius-md: 0.375rem;
+  --radius-lg: 0.5rem;
+  --radius-xl: 0.75rem;
+  --radius-2xl: 1rem;
+  --radius-3xl: 1.5rem;
+  --radius-4xl: 1.5rem;
 }
 
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  /* Light theme hierarchy: canvas < sidebar < controls < cards/popovers. */
-  --background: oklch(0.955 0.008 255);
-  --foreground: oklch(0.2 0.012 255);
-  --card: oklch(0.995 0.003 255);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(0.995 0.003 255);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.925 0.01 255);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.93 0.009 255);
-  --muted-foreground: oklch(0.48 0.012 255);
-  --accent: oklch(0.925 0.01 255);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --success: oklch(0.60 0.16 145);
-  --border: oklch(0.875 0.014 255);
-  --input: oklch(0.84 0.016 255);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.94 0.01 255);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.91 0.012 255);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.875 0.014 255);
-  --sidebar-ring: oklch(0.708 0 0);
+  /* z.ai palette: neutral greys, black primary, surface sidebar. */
+  --background: #f8f8f8;
+  --foreground: #0d0d0d;
+  --card: #ffffff;
+  --card-foreground: #0d0d0d;
+  --popover: #ffffff;
+  --popover-foreground: #0d0d0d;
+  --primary: #0d0d0d;
+  --primary-foreground: #ffffff;
+  --secondary: #f0f0f0;
+  --secondary-foreground: #0d0d0d;
+  --muted: #f0f0f0;
+  --muted-foreground: #5c5c5c;
+  --accent: #0d0d0d0d;
+  --accent-foreground: #0d0d0d;
+  --destructive: #e03131;
+  --success: #1e8a3e;
+  --border: #0d0d0d1a;
+  --border-strong: #0d0d0d26;
+  --input: #0d0d0d1a;
+  --ring: #0d0d0d33;
+  --placeholder: #adadad;
+  --tertiary: #888888;
+  --accent-blue: #0b7fff;
+  --surface: #f0f0f0;
+  --overlay: #e6e6e6;
+  --chart-1: #0d0d0d;
+  --chart-2: #5c5c5c;
+  --chart-3: #888888;
+  --chart-4: #adadad;
+  --chart-5: #d9d9d9;
+  --radius: 0.5rem;
+  --sidebar: #f0f0f0;
+  --sidebar-foreground: #0d0d0d;
+  --sidebar-primary: #0d0d0d;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #0d0d0d0d;
+  --sidebar-accent-foreground: #0d0d0d;
+  --sidebar-border: #0d0d0d1a;
+  --sidebar-ring: #0d0d0d33;
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --success: oklch(0.72 0.16 145);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --background: #161616;
+  --foreground: #f8f8f8;
+  --card: #2b2b2b;
+  --card-foreground: #f8f8f8;
+  --popover: #2b2b2b;
+  --popover-foreground: #f8f8f8;
+  --primary: #ffffff;
+  --primary-foreground: #000000;
+  --secondary: #202020;
+  --secondary-foreground: #f8f8f8;
+  --muted: #202020;
+  --muted-foreground: #adadad;
+  --accent: #ffffff1a;
+  --accent-foreground: #f8f8f8;
+  --destructive: #ff5c5c;
+  --success: #46bf72;
+  --border: #ffffff1a;
+  --border-strong: #ffffff26;
+  --input: #ffffff1a;
+  --ring: #ffffff33;
+  --placeholder: #474747;
+  --tertiary: #747474;
+  --accent-blue: #4099ff;
+  --surface: #202020;
+  --overlay: #363636;
+  --chart-1: #f8f8f8;
+  --chart-2: #adadad;
+  --chart-3: #747474;
+  --chart-4: #363636;
+  --chart-5: #2b2b2b;
+  --sidebar: #202020;
+  --sidebar-foreground: #f8f8f8;
+  --sidebar-primary: #ffffff;
+  --sidebar-primary-foreground: #000000;
+  --sidebar-accent: #ffffff1a;
+  --sidebar-accent-foreground: #f8f8f8;
+  --sidebar-border: #ffffff1a;
+  --sidebar-ring: #ffffff33;
 }
 
 .chat-greeting-title {
@@ -182,7 +203,7 @@
   background: linear-gradient(
     to top,
     var(--background) 0%,
-    color-mix(in oklch, var(--background) 88%, transparent) 48%,
+    color-mix(in srgb, var(--background) 88%, transparent) 48%,
     transparent 100%
   );
 }
@@ -203,13 +224,11 @@
 }
 
 .chat-message-user {
-  box-shadow: 0 1px 2px color-mix(in oklch, var(--foreground) 8%, transparent);
-  transition: box-shadow 180ms ease, transform 180ms ease;
+  transition: background-color 180ms ease;
 }
 
 .chat-message-user:hover {
-  box-shadow: 0 4px 14px color-mix(in oklch, var(--foreground) 10%, transparent);
-  transform: translateY(-1px);
+  background: color-mix(in srgb, var(--surface) 88%, var(--foreground) 6%);
 }
 
 .chat-composer-card {
@@ -217,22 +236,8 @@
 }
 
 .chat-composer-card:focus-within {
-  border-color: color-mix(in oklch, var(--ring) 62%, var(--border));
-  box-shadow: 0 8px 28px color-mix(in oklch, var(--foreground) 8%, transparent),
-    0 0 0 3px color-mix(in oklch, var(--ring) 12%, transparent);
-}
-
-.chat-send-button {
-  transition: transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 180ms ease;
-}
-
-.chat-send-button:not(:disabled):hover {
-  box-shadow: 0 4px 12px color-mix(in oklch, var(--primary) 24%, transparent);
-  transform: translateY(-1px) scale(1.04);
-}
-
-.chat-send-button:not(:disabled):active {
-  transform: scale(0.94);
+  border-color: var(--border-strong);
+  box-shadow: 0 4px 16px rgb(0 0 0 / 0.05);
 }
 
 .chat-inline-notice {
@@ -438,10 +443,10 @@
   }
 }
 
-/* Keep native scrollbars aligned with the active theme across every scrollable region. */
+/* z.ai scrollbars: minimal thumb, almost invisible until hovered. */
 :root {
-  --scrollbar-thumb: color-mix(in oklab, var(--muted-foreground) 34%, transparent);
-  --scrollbar-thumb-hover: color-mix(in oklab, var(--muted-foreground) 56%, transparent);
+  --scrollbar-thumb: var(--overlay);
+  --scrollbar-thumb-hover: var(--tertiary);
 }
 
 * {
@@ -450,8 +455,8 @@
 }
 
 *::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+  width: 8px;
+  height: 8px;
 }
 
 *::-webkit-scrollbar-track,
@@ -460,7 +465,7 @@
 }
 
 *::-webkit-scrollbar-thumb {
-  border: 3px solid transparent;
+  border: 2px solid transparent;
   border-radius: 999px;
   background: var(--scrollbar-thumb);
   background-clip: content-box;

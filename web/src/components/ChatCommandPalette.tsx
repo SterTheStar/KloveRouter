@@ -72,37 +72,37 @@ export default function ChatCommandPalette({
 
   return createPortal(
     <div className="fixed inset-0 z-[130] flex items-start justify-center bg-black/20 px-4 pt-[16vh] backdrop-blur-[2px]" onMouseDown={onClose}>
-      <div className="w-full max-w-2xl overflow-hidden rounded-2xl border border-border bg-popover text-popover-foreground shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>
-        <div className="flex items-center gap-2 border-b border-border px-4">
-          <Search className="size-4 shrink-0 text-muted-foreground" />
-          <input ref={inputRef} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search conversations and messages..." className="h-12 min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground" />
-          <kbd className="rounded-md bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">ESC</kbd>
+      <div className="w-full max-w-xl overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground shadow-[0px_4px_16px_0px_rgba(0,0,0,0.05)]" onMouseDown={(event) => event.stopPropagation()}>
+        <div className="flex items-center gap-2 border-b border-border px-3.5">
+          <Search className="size-4 shrink-0 text-tertiary" />
+          <input ref={inputRef} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search conversations and messages..." className="h-12 min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-placeholder" />
+          <kbd className="rounded-md border border-border px-1.5 py-0.5 text-[10px] text-tertiary">ESC</kbd>
         </div>
-        <div className="max-h-96 overflow-y-auto p-2">
+        <div className="max-h-96 overflow-y-auto p-1.5">
           {filtered.length > 0 && (
-            <p className="px-3 pb-1 pt-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground/70">Conversations</p>
+            <p className="px-2.5 pb-1 pt-2 text-xs font-medium text-tertiary">Conversations</p>
           )}
           {filtered.map((chat) => (
-            <button key={chat.id} type="button" onClick={() => { onSelect(chat.id); onClose(); }} className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left hover:bg-muted ${activeChatId === chat.id ? "bg-muted" : ""}`}>
-              <ChatLine className="size-4 shrink-0 text-muted-foreground" />
-              <span className="min-w-0 flex-1 truncate text-sm">{chat.title}</span>
-              {activeChatId === chat.id && <span className="text-xs text-primary">Active</span>}
+            <button key={chat.id} type="button" onClick={() => { onSelect(chat.id); onClose(); }} className={`flex h-9 w-full items-center gap-2 rounded-lg px-2.5 text-left text-sm transition-colors ${activeChatId === chat.id ? "bg-accent" : "hover:bg-accent/60"}`}>
+              <ChatLine className="size-4 shrink-0 text-tertiary" />
+              <span className="min-w-0 flex-1 truncate">{chat.title}</span>
+              {activeChatId === chat.id && <span className="shrink-0 text-[11px] text-tertiary">Active</span>}
             </button>
           ))}
           {messageHits.length > 0 && (
-            <p className="px-3 pb-1 pt-3 text-[11px] font-medium uppercase tracking-wide text-muted-foreground/70">Messages</p>
+            <p className="px-2.5 pb-1 pt-3 text-xs font-medium text-tertiary">Messages</p>
           )}
           {messageHits.map((hit) => (
             <button
               key={hit.message_id}
               type="button"
               onClick={() => { onSelect(hit.chat_id); onClose(); }}
-              className="flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left hover:bg-muted"
+              className="flex w-full items-start gap-2 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-accent/60"
             >
-              <MessageLine className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+              <MessageLine className="mt-0.5 size-4 shrink-0 text-tertiary" />
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm">{hit.title}</span>
-                <span className="mt-0.5 line-clamp-2 block text-xs text-muted-foreground">
+                <span className="mt-0.5 line-clamp-2 block text-xs text-tertiary">
                   {hit.role === "user" ? "You: " : "Assistant: "}
                   {hit.snippet}
                 </span>
@@ -110,10 +110,10 @@ export default function ChatCommandPalette({
             </button>
           ))}
           {messageSearchState === "loading" && (
-            <p className="px-3 py-3 text-xs text-muted-foreground">Searching messages…</p>
+            <p className="px-2.5 py-3 text-xs text-tertiary">Searching messages…</p>
           )}
           {filtered.length === 0 && messageHits.length === 0 && messageSearchState !== "loading" && (
-            <p className="px-3 py-8 text-center text-sm text-muted-foreground">No conversations found</p>
+            <p className="px-3 py-8 text-center text-sm text-tertiary">No conversations found</p>
           )}
         </div>
       </div>

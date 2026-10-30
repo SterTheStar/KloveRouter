@@ -9,7 +9,6 @@ import {
   RiVideoLine as VideoLine,
   RiFilePdf2Line as PdfLine,
 } from "@remixicon/react";
-import { Button } from "@/components/ui/button";
 import ModelSettingsMenu from "./ModelSettingsMenu";
 import ContextUsageIndicator from "./ContextUsageIndicator";
 import type {
@@ -70,8 +69,8 @@ export default function ChatComposer({
 
   return (
     <div className="px-0">
-      <div className="mx-auto w-full max-w-3xl">
-        <div className="chat-composer-card rounded-2xl border border-border bg-card px-4 pt-3.5 pb-3 shadow-sm">
+      <div className="mx-auto w-full max-w-[768px] 2xl:max-w-[854px]">
+        <div className="chat-composer-card flex w-full flex-col rounded-[24px] border border-border bg-card text-foreground shadow-[0px_4px_16px_0px_rgba(0,0,0,0.05)]">
           <input
             ref={fileInputRef}
             type="file"
@@ -84,53 +83,50 @@ export default function ChatComposer({
             }}
           />
           {attachments.length > 0 && (
-            <div className="mb-3 flex max-h-28 flex-wrap gap-2 overflow-y-auto px-1 py-0.5">
+            <div className="flex max-h-28 flex-wrap gap-2 overflow-y-auto px-3.5 pt-3">
               {attachments.map((attachment) => (
-                <div key={attachment.id} className="chat-inline-notice group relative flex max-w-full items-center gap-2 rounded-xl bg-muted/70 px-2 py-1.5 text-xs">
+                <div key={attachment.id} className="chat-inline-notice group relative flex max-w-full items-center gap-2 rounded-lg border border-border bg-background px-2 py-1.5 text-xs">
                   {attachment.kind === "image" && attachment.preview ? (
-                    <img src={attachment.preview} alt={`Preview: ${attachment.name}`} className="size-9 rounded-lg object-cover" />
-                  ) : attachment.kind === "audio" ? <AudioLine className="ml-1 size-4 shrink-0 text-muted-foreground" /> : attachment.kind === "video" ? <VideoLine className="ml-1 size-4 shrink-0 text-muted-foreground" /> : attachment.kind === "file" ? <PdfLine className="ml-1 size-4 shrink-0 text-muted-foreground" /> : <FileTextLine className="ml-1 size-4 shrink-0 text-muted-foreground" />}
+                    <img src={attachment.preview} alt={`Preview: ${attachment.name}`} className="size-8 rounded-md object-cover" />
+                  ) : attachment.kind === "audio" ? <AudioLine className="ml-1 size-4 shrink-0 text-tertiary" /> : attachment.kind === "video" ? <VideoLine className="ml-1 size-4 shrink-0 text-tertiary" /> : attachment.kind === "file" ? <PdfLine className="ml-1 size-4 shrink-0 text-tertiary" /> : <FileTextLine className="ml-1 size-4 shrink-0 text-tertiary" />}
                   <span className="max-w-40 truncate font-medium">{attachment.name}</span>
-                  <span className="shrink-0 text-[10px] text-muted-foreground">{attachment.kind === "image" ? "Image" : attachment.kind === "audio" ? "Audio" : attachment.kind === "video" ? "Video" : attachment.kind === "file" ? "PDF" : "Text"}</span>
                   <button
                     type="button"
-                    className="inline-flex size-6 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-background hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    className="inline-flex size-5 shrink-0 items-center justify-center rounded-full text-tertiary transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     onClick={() => onRemoveAttachment(attachment.id)}
                     aria-label={`Remove ${attachment.name}`}
                   >
-                    <CloseLine className="size-3.5" />
+                    <CloseLine className="size-3" />
                   </button>
                 </div>
               ))}
             </div>
           )}
-          <div className="px-1">
-              <textarea
-              className="block min-h-12 max-h-48 w-full resize-none overflow-y-auto bg-transparent p-0 text-[15px] leading-6 text-foreground outline-none placeholder:text-muted-foreground/60 disabled:cursor-not-allowed disabled:opacity-60"
-              placeholder="Write a message..."
+          <div className="relative overflow-hidden px-3.5 py-3">
+            <textarea
+              className="block min-h-[52px] w-full resize-none overflow-x-hidden bg-transparent p-0 text-base leading-6 tracking-[-0.32px] text-foreground outline-none placeholder:text-placeholder disabled:cursor-not-allowed disabled:opacity-60"
+              placeholder="Send a Message"
               value={value}
               onChange={(event) => onChange(event.target.value)}
               onKeyDown={onKeyDown}
               onPaste={onPaste}
               disabled={disabled || streaming}
-              rows={2}
+              rows={1}
               aria-label="Chat message"
             />
           </div>
-          <div className="mt-3 flex min-h-8 items-center justify-between gap-3">
-            <div className="flex min-w-0 flex-wrap items-center gap-2">
-              <Button
+          <div className="flex items-center justify-between gap-2 px-3.5 pb-3">
+            <div className="flex min-w-0 items-center gap-1.5">
+              <button
                 type="button"
-                variant="ghost"
-                size="icon-sm"
-                className="rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={streaming}
                 title="Add images, audio, video or files"
                 aria-label="Add images, audio, video or files"
+                className="flex size-[30px] shrink-0 items-center justify-center rounded-full border border-border bg-transparent p-1.5 text-tertiary transition-colors hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
               >
-                <AddLine className="size-[18px]" />
-              </Button>
+                <AddLine className="size-4" />
+              </button>
               <ContextUsageIndicator
                 contextWindow={contextWindow}
                 promptTokens={promptTokens}
@@ -150,29 +146,26 @@ export default function ChatComposer({
                 disabled={streaming}
               />
               {streaming ? (
-                <Button
+                <button
                   type="button"
-                  variant="destructive"
-                  size="icon"
-                  className="chat-send-button rounded-full"
                   onClick={() => onStop()}
                   title="Stop generating"
                   aria-label="Stop generating"
+                  className="flex size-[30px] shrink-0 items-center justify-center rounded-full border border-border bg-foreground p-2 text-background transition-opacity hover:opacity-80"
                 >
-                  <StopLine className="size-4" />
-                </Button>
+                  <StopLine className="size-3.5" />
+                </button>
               ) : (
-                <Button
+                <button
                   type="button"
-                  size="icon"
-                  className="chat-send-button rounded-full"
                   onClick={onSend}
                   disabled={!canSend}
                   title="Send message"
                   aria-label="Send message"
+                  className="flex size-[30px] shrink-0 items-center justify-center rounded-full border border-border bg-overlay p-2 text-foreground transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  <SendPlaneFill className="size-4" />
-                </Button>
+                  <SendPlaneFill className="size-3.5" />
+                </button>
               )}
             </div>
           </div>

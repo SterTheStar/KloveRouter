@@ -1,6 +1,8 @@
 import type { ModelCapabilities } from "../types";
 
-export type ModelCategory = "chat" | "image" | "tts" | "video";
+// Klove only exposes text chat models. Media categories are intentionally not
+// produced here so the UI never offers image, speech, or video surfaces.
+export type ModelCategory = "chat";
 export type CategorizedModel = {
   model_id?: string;
   id?: string;
@@ -10,24 +12,10 @@ export type CategorizedModel = {
 
 const categoryInfo: Record<ModelCategory, { label: string; shortLabel: string }> = {
   chat: { label: "Chat", shortLabel: "Chat" },
-  image: { label: "Image", shortLabel: "Image" },
-  tts: { label: "Text to speech", shortLabel: "TTS" },
-  video: { label: "Video", shortLabel: "Video" },
 };
 
-export function modelCategories(model: CategorizedModel): ModelCategory[] {
-  const identity = `${model.model_id ?? model.id ?? ""} ${model.display_name ?? ""}`.toLowerCase();
-  const capabilities = model.capabilities ?? {};
-  const image = capabilities.image_generation === true || (capabilities.image_generation !== false && /(?:\bimage(?:[-_ ]?(?:gen|generation|create))?\b|dall[-_ ]?e|gpt[-_ ]?image|\bimagen\b|\bflux\b|stable[-_ ]?diffusion|ideogram|recraft)/i.test(identity));
-  const tts = capabilities.text_to_speech === true || (capabilities.text_to_speech !== false && /(?:text[-_ ]?to[-_ ]?speech|\btts\b|speech[-_ ]?(?:generation|synthesis)|voice[-_ ]?(?:gen|generation)|voxtral[-_ ]?.*tts)/i.test(identity));
-  const video = capabilities.video_generation === true || (capabilities.video_generation !== false && /(?:\bvideo(?:[-_ ]?(?:gen|generation|create))?\b|\bsora\b|\bveo\b|runway|kling|seedance|hailuo|wan[-_ ]?video)/i.test(identity));
-  const result: ModelCategory[] = [];
-  if (!image && !tts && !video) result.push("chat");
-  else if (capabilities.reasoning === true || capabilities.tools === true || capabilities.vision === true) result.push("chat");
-  if (image) result.push("image");
-  if (tts) result.push("tts");
-  if (video) result.push("video");
-  return result;
+export function modelCategories(_model: CategorizedModel): ModelCategory[] {
+  return ["chat"];
 }
 
 export function modelCategoryLabel(category: ModelCategory) {

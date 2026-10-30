@@ -321,6 +321,8 @@ export function initSchema(db: Database): void {
       requester_name TEXT,
       credential_label TEXT,
       credential_identity TEXT,
+      credential_kind TEXT,
+      api_key_prefix TEXT,
       status TEXT NOT NULL DEFAULT 'pending',
       status_code INTEGER,
       tokens_prompt INTEGER NOT NULL DEFAULT 0,
@@ -359,6 +361,8 @@ export function initSchema(db: Database): void {
     ["streaming", "ALTER TABLE request_logs ADD COLUMN streaming INTEGER NOT NULL DEFAULT 0"],
     ["streamed_chars", "ALTER TABLE request_logs ADD COLUMN streamed_chars INTEGER NOT NULL DEFAULT 0"],
     ["streamed_bytes", "ALTER TABLE request_logs ADD COLUMN streamed_bytes INTEGER NOT NULL DEFAULT 0"],
+    ["credential_kind", "ALTER TABLE request_logs ADD COLUMN credential_kind TEXT"],
+    ["api_key_prefix", "ALTER TABLE request_logs ADD COLUMN api_key_prefix TEXT"],
   ] as const) {
     if (!requestLogCols.find((column) => column.name === name)) db.exec(sql);
   }

@@ -34,11 +34,11 @@ function priceLabel(pricing: CatalogPricing): string {
 function ModelSourceDetails({ model }: { model: SyncModelItem }) {
   return (
     <div className="space-y-1">
-      <p className="font-medium">Model details</p>
-      <p className="text-muted-foreground">{model.id}</p>
-      {model.is_free && <p>Free model</p>}
-      {model.is_existing && <p>Already configured</p>}
-      {model.pricing ? <>{model.pricing.rates.map((rate) => <p key={rate.field}>{rate.label}: {formatUsd(rate.display_usd)} / {rate.display_unit}</p>)}</> : <p>No LiteLLM catalog price found</p>}
+      <p className="font-medium text-foreground">Model details</p>
+      <p className="font-mono text-tertiary">{model.id}</p>
+      {model.is_free && <p className="text-success">Free model</p>}
+      {model.is_existing && <p className="text-muted-foreground">Already configured</p>}
+      {model.pricing ? <>{model.pricing.rates.map((rate) => <p key={rate.field} className="text-muted-foreground">{rate.label}: {formatUsd(rate.display_usd)} / {rate.display_unit}</p>)}</> : <p className="text-tertiary">No LiteLLM catalog price found</p>}
     </div>
   );
 }
@@ -74,7 +74,7 @@ export default function SyncModelsModal({
     const value = query.trim().toLowerCase();
     return items.filter((model) => (!value || `${model.id} ${model.display_name}`.toLowerCase().includes(value)) && (category === "all" || modelCategories(model).includes(category)));
   }, [items, query, category]);
-  const counts = useMemo(() => Object.fromEntries((["all", "chat", "image", "tts", "video"] as const).map((item) => [item, item === "all" ? items.length : items.filter((model) => modelCategories(model).includes(item)).length])), [items]);
+  const counts = useMemo(() => Object.fromEntries((["all", "chat"] as const).map((item) => [item, item === "all" ? items.length : items.filter((model) => modelCategories(model).includes(item)).length])), [items]);
   const selectable = visible.filter((model) =>
     (!freeOnly || model.is_free) && (!resetExisting || model.is_existing),
   );
@@ -123,24 +123,24 @@ export default function SyncModelsModal({
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="sm:max-w-2xl gap-2">
-          <DialogHeader>
-            <DialogTitle>Synchronize provider models</DialogTitle>
-            <DialogDescription>Select models by type. Existing models stay unchanged unless reset is enabled.</DialogDescription>
-          </DialogHeader>
-          <div role="tablist" aria-label="Model type" className="flex gap-1 overflow-x-auto border-b">
-            {([ ["all", "All"], ["chat", "Chat"], ["image", "Image"], ["tts", "Text to speech"], ["video", "Video"] ] as const).map(([value, label]) => <button key={value} type="button" role="tab" aria-selected={category === value} onClick={() => setCategory(value)} className={`shrink-0 border-b-2 px-3 py-2 text-sm ${category === value ? "border-foreground text-foreground" : "border-transparent text-muted-foreground"}`}>{label}<span className="ml-1 text-xs text-muted-foreground">{counts[value]}</span></button>)}
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="relative min-w-0 flex-1">
-              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                aria-label="Search models"
-                className="h-8 border-none bg-muted pl-9"
-                placeholder="Search models"
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-              />
+        <DialogContent className="gap-3 sm:max-w-2xl">
+        <DialogHeader className="pr-8">
+          <DialogTitle className="text-base font-semibold tracking-tight text-foreground">Synchronize provider models</DialogTitle>
+          <DialogDescription>Select models by type. Existing models stay unchanged unless reset is enabled.</DialogDescription>
+        </DialogHeader>
+        <div role="tablist" aria-label="Model type" className="flex gap-1 overflow-x-auto border-b border-border">
+          {([ ["all", "All"], ["chat", "Chat"] ] as const).map(([value, label]) => <button key={value} type="button" role="tab" aria-selected={category === value} onClick={() => setCategory(value)} className={`shrink-0 rounded-t-lg border-b-2 px-3 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong ${category === value ? "border-foreground font-medium text-foreground" : "border-transparent text-muted-foreground hover:bg-accent hover:text-foreground"}`}>{label}<span className="ml-1 text-xs text-tertiary">{counts[value]}</span></button>)}
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="relative min-w-0 flex-1">
+            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-tertiary" />
+            <Input
+              aria-label="Search models"
+              className="pl-9"
+              placeholder="Search models"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+            />
             </div>
             <Button
               variant="outline"
@@ -158,7 +158,7 @@ export default function SyncModelsModal({
               variant={freeOnly ? "secondary" : "outline"}
               size="sm"
               onClick={() => setFreeFilter(!freeOnly)}
-              className={freeOnly ? "text-primary" : "text-muted-foreground"}
+              className={freeOnly ? "text-foreground" : "text-muted-foreground"}
             >
               <Free className="size-4" />
               Free only
@@ -167,16 +167,16 @@ export default function SyncModelsModal({
               variant={resetExisting ? "secondary" : "outline"}
               size="sm"
               onClick={() => setExistingFilter(!resetExisting)}
-              className={resetExisting ? "text-amber-700 dark:text-amber-400" : "text-muted-foreground"}
+              className={resetExisting ? "text-destructive" : "text-muted-foreground"}
             >
               <Reset className="size-4" />
               Existing only
             </Button>
             <span className="ml-auto text-sm text-muted-foreground">
-              <strong className="font-medium text-foreground">{selected.size}</strong> selected of {selectable.length}
+              <strong className="font-mono font-medium text-foreground">{selected.size}</strong> selected of {selectable.length}
             </span>
           </div>
-          <div className="max-h-72 overflow-y-auto rounded-md border">
+          <div className="max-h-72 overflow-y-auto rounded-xl border border-border">
             {visible.map((model) => {
               const disabled = (freeOnly && !model.is_free) || (resetExisting && !model.is_existing);
               const checked = selected.has(model.id);
@@ -200,43 +200,43 @@ export default function SyncModelsModal({
                       toggle(model.id);
                     }
                   }}
-                  className={`flex w-full items-center gap-2 border-b px-2 py-1.5 text-left last:border-b-0 ${disabled ? "cursor-not-allowed bg-muted/30 opacity-45" : "cursor-pointer hover:bg-muted/50 focus-visible:bg-muted/50 focus-visible:outline-none"}`}
+                  className={`flex w-full items-center gap-2 border-b border-border px-3 py-2.5 text-left transition-colors last:border-b-0 ${disabled ? "cursor-not-allowed bg-background/60 opacity-50" : "cursor-pointer hover:bg-accent/60 focus-visible:bg-accent/60 focus-visible:outline-none"}`}
                 >
-                  <span className={`flex size-4 shrink-0 items-center justify-center rounded-sm border transition-colors ${checked ? "border-primary bg-primary text-primary-foreground" : "border-input bg-background"} ${disabled ? "border-muted-foreground/30 bg-muted" : ""}`}>
+                  <span className={`flex size-4 shrink-0 items-center justify-center rounded-md border transition-colors ${checked ? "border-primary bg-primary text-primary-foreground" : "border-border-strong bg-background"} ${disabled ? "border-border bg-surface" : ""}`}>
                     {checked && <Check className="size-3" />}
                   </span>
                   <span className="flex min-w-0 flex-1 flex-col gap-0.5 sm:flex-row sm:items-center sm:gap-3">
                     <span className="flex min-w-0 flex-1 items-baseline gap-2">
-                      <span className="shrink-0 truncate text-sm">{model.display_name}</span>
-                      <span className="hidden min-w-0 truncate font-mono text-[11px] text-muted-foreground sm:block">{model.id}</span>
+                      <span className="shrink-0 truncate text-sm font-medium text-foreground">{model.display_name}</span>
+                      <span className="hidden min-w-0 truncate font-mono text-[11px] text-tertiary sm:block">{model.id}</span>
                     </span>
                     <span className="flex min-w-0 items-center gap-1.5 sm:shrink-0">
                       <span className="flex shrink-0 items-center gap-1">
-                        {modelCategories(model).map((item) => <Badge key={item} variant="outline" className="px-1.5 py-0 text-[10px]">{modelCategoryBadge(item)}</Badge>)}
+                        {modelCategories(model).map((item) => <Badge key={item} variant="outline" className="border-border bg-overlay px-1.5 py-0 text-[10px] text-muted-foreground">{modelCategoryBadge(item)}</Badge>)}
                       </span>
-                      <span className="min-w-0 truncate text-xs text-muted-foreground sm:max-w-40" title={model.pricing ? priceLabel(model.pricing) : "No LiteLLM catalog price found"}>
+                      <span className="min-w-0 truncate text-xs text-tertiary sm:max-w-40" title={model.pricing ? priceLabel(model.pricing) : "No LiteLLM catalog price found"}>
                         {model.pricing ? priceLabel(model.pricing) : "No catalog price"}
                       </span>
                     </span>
                   </span>
                   <span className="flex shrink-0 items-center gap-1">
-                    {model.is_free && <Badge variant="secondary" className="px-1.5 py-0 text-[10px] text-green-700 dark:text-green-400">Free</Badge>}
-                    {model.is_existing && <Badge variant="outline" className="px-1.5 py-0 text-[10px]">Existing</Badge>}
+                    {model.is_free && <Badge variant="secondary" className="px-1.5 py-0 text-[10px] text-success">Free</Badge>}
+                    {model.is_existing && <Badge variant="outline" className="px-1.5 py-0 text-[10px] text-muted-foreground">Existing</Badge>}
                   </span>
                 </div>
               );
             })}
-            {!visible.length && <p className="p-6 text-center text-sm text-muted-foreground">No models found.</p>}
+            {!visible.length && <p className="px-3 py-10 text-center text-sm text-tertiary">No models found.</p>}
           </div>
           {resetExisting && (
-            <div className="rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-muted-foreground">
+            <div className="rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-xs text-destructive">
               Reset replaces provider metadata on selected existing models. Custom metadata can be lost.
             </div>
           )}
           <DialogFooter className="sm:items-center sm:justify-between">
-            <label className="mr-auto flex items-center gap-3 rounded-md border px-3 py-2 sm:max-w-[70%]">
+            <label className="mr-auto flex items-center gap-3 rounded-lg border border-border bg-background/60 px-3 py-2 sm:max-w-[70%]">
               <Switch checked={useLiteLLMPricing} onCheckedChange={setUseLiteLLMPricing} />
-              <span className="text-sm font-medium">Use LiteLLM pricing</span>
+              <span className="text-sm font-medium text-foreground">Use LiteLLM pricing</span>
             </label>
             <div className="flex shrink-0 items-center justify-end gap-2">
               <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
@@ -247,7 +247,7 @@ export default function SyncModelsModal({
       </Dialog>
       {hoveredModel && (
         <div
-          className="pointer-events-none fixed z-[100] rounded-lg border border-border bg-popover p-3 text-xs text-popover-foreground shadow-xl"
+          className="pointer-events-none fixed z-[100] rounded-xl border border-border bg-card p-3 text-xs text-foreground shadow-[0px_4px_16px_0px_rgba(0,0,0,0.05)]"
           style={{ left: pointer.x + 16, top: pointer.y + 16 }}
         >
           <ModelSourceDetails model={hoveredModel} />

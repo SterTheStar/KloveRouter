@@ -32,7 +32,7 @@ export default function SetupPage({
       </header>
       <div className="flex flex-1 items-center justify-center px-6 pb-10 sm:px-10">
         <section className="w-full max-w-[360px] text-center">
-          <h1 className="font-heading text-3xl font-semibold tracking-tight">Set up Klove</h1>
+          <h1 className="font-heading text-2xl font-semibold tracking-tight text-foreground">Set up Klove</h1>
           <p className="mt-2 text-sm leading-6 text-muted-foreground">Create your profile and secure admin password.</p>
           <form onSubmit={submit} className="mt-8 space-y-5 text-left">
             <div className="space-y-2"><Label htmlFor="name">Name</Label><Input id="name" value={name} onChange={(e) => setName(e.target.value)} required autoFocus /></div>

@@ -46,7 +46,7 @@ export default function DisplayAvatar({ name, src, sources, className, fallback 
     return (
       <span
         className={cn(
-          "flex h-full w-full shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground",
+          "flex h-full w-full shrink-0 items-center justify-center rounded-full bg-overlay text-tertiary",
           className,
         )}
       >
@@ -55,5 +55,5 @@ export default function DisplayAvatar({ name, src, sources, className, fallback 
     );
   }
 
-  return <span className={cn("text-lg font-medium text-muted-foreground", className)}>{initial}</span>;
+  return <span className={cn("text-lg font-medium text-foreground", className)}>{initial}</span>;
 }

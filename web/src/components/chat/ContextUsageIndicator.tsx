@@ -31,7 +31,7 @@ export default function ContextUsageIndicator({
     <Tooltip>
       <TooltipTrigger
         render={<span />}
-        className="inline-flex size-8 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
+        className="inline-flex size-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
         aria-label={hasContextLimit ? "Context usage" : "Context usage, limit not configured"}
       >
         <span
@@ -48,11 +48,11 @@ export default function ContextUsageIndicator({
               ? `${formatTokens(totalTokens)} / ${formatTokens(contextWindow!)} context tokens (${percentage.toFixed(1)}%)`
               : `${formatTokens(totalTokens)} context tokens used (limit not configured)`}
           </div>
-          <div className="text-muted-foreground">
+          <div className="text-tertiary">
             Input: {formatTokens(promptTokens)} · Output: {formatTokens(completionTokens)}
           </div>
           {(cacheReadTokens > 0 || cacheWriteTokens > 0) && (
-            <div className="text-muted-foreground">
+            <div className="text-tertiary">
               Cache: {formatTokens(cacheReadTokens)} read · {formatTokens(cacheWriteTokens)} write
             </div>
           )}

@@ -30,11 +30,11 @@ function Tabs({
           id={tab.id.endsWith("-tab") ? tab.id : `${tab.id}-tab`}
           onClick={() => onChange(tab.id)}
           className={cn(
-            "relative px-4 py-2 text-sm font-medium transition-colors",
+            "relative px-3 py-2 text-sm transition-colors",
             "after:absolute after:inset-x-2 after:bottom-0 after:h-0.5 after:rounded-full after:transition-colors",
             active === tab.id
-              ? "text-foreground after:bg-foreground"
-              : "text-muted-foreground hover:text-foreground after:bg-transparent",
+              ? "font-medium text-foreground after:bg-foreground"
+              : "text-tertiary hover:text-foreground after:bg-transparent",
           )}
         >
           {tab.label}

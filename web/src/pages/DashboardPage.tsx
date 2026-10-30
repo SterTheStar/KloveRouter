@@ -38,23 +38,23 @@ function ProviderSection({
     <section aria-labelledby={`${title.toLowerCase()}-providers-heading`}>
       <button
         type="button"
-        className="mb-3 flex items-center gap-2 rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+        className="mb-3 flex items-center gap-2 rounded-lg text-left outline-none focus-visible:ring-2 focus-visible:ring-border-strong"
         aria-expanded={!collapsed}
         aria-controls={`${title.toLowerCase()}-providers-grid`}
         onClick={() => setCollapsed((value) => !value)}
       >
         {collapsed ? (
-          <ChevronRight className="size-4 text-muted-foreground" />
+          <ChevronRight className="size-4 text-tertiary" />
         ) : (
-          <ChevronDown className="size-4 text-muted-foreground" />
+          <ChevronDown className="size-4 text-tertiary" />
         )}
         <h2
           id={`${title.toLowerCase()}-providers-heading`}
-          className="font-heading text-lg font-semibold"
+          className="font-heading text-base font-semibold tracking-tight text-foreground"
         >
           {title}
         </h2>
-        <span className="text-sm text-muted-foreground">({count})</span>
+        <span className="text-sm text-tertiary">({count})</span>
       </button>
       {!collapsed && (
         <div
@@ -134,13 +134,13 @@ export default function DashboardPage({
   if (loading)
     return (
       <div className="flex items-center justify-center p-12">
-        <LoaderCircle className="size-5 animate-spin text-muted-foreground" />
+        <LoaderCircle className="size-5 animate-spin text-tertiary" />
       </div>
     );
   return (
-    <div className="space-y-6 p-6">
+    <div className="w-full space-y-6 p-6">
       <div className="flex items-center justify-between gap-4">
-        <h1 className="font-heading text-2xl font-semibold tracking-tight">
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground">
           Providers
         </h1>
         <Button onClick={() => setAddOpen(true)}>
@@ -154,9 +154,9 @@ export default function DashboardPage({
         </Alert>
       )}
       {list.length === 0 ? (
-        <div className="rounded-xl border border-dashed p-12 text-center">
-          <h2 className="font-heading text-lg font-medium">No providers yet</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
+        <div className="rounded-xl border border-dashed border-border bg-background/60 px-6 py-10 text-center">
+          <h2 className="text-sm font-medium text-foreground">No providers yet</h2>
+          <p className="mt-1 text-xs text-tertiary">
             Connect your first provider to start routing requests.
           </p>
           <Button className="mt-5" onClick={() => setAddOpen(true)}>

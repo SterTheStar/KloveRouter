@@ -28,13 +28,13 @@ export default function ConfirmDialog({
   return (
     <Dialog open={open} onOpenChange={(value) => !value && onCancel()}>
       <DialogContent>
-        <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
-          <DialogDescription className="min-w-0 break-words [overflow-wrap:anywhere]">
+        <DialogHeader className="pr-8">
+          <DialogTitle className="text-base font-semibold tracking-tight text-foreground">{title}</DialogTitle>
+          <DialogDescription className="min-w-0 break-words text-sm text-muted-foreground [overflow-wrap:anywhere]">
             {message}
           </DialogDescription>
         </DialogHeader>
-        <DialogFooter>
+        <DialogFooter className="sm:justify-end">
           <Button variant="outline" onClick={onCancel} disabled={loading}>
             Cancel
           </Button>

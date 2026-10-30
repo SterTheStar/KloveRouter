@@ -155,31 +155,31 @@ export default function ApiKeysPage() {
   if (loading)
     return (
       <div className="flex justify-center p-12">
-        <LoaderCircle className="size-5 animate-spin text-muted-foreground" />
+        <LoaderCircle className="size-5 animate-spin text-tertiary" />
       </div>
     );
 
   return (
     <div className="w-full space-y-6 p-6">
-      <div className="flex items-center justify-between gap-4">
-        <h1 className="font-heading text-2xl font-semibold tracking-tight">
+      <header className="flex items-center justify-between gap-4">
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground">
           API keys
         </h1>
         <Button onClick={() => setCreateOpen(true)}>
           <Plus className="size-4" />
           Generate key
         </Button>
-      </div>
+      </header>
       {error && (
         <Alert variant="destructive">
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
       {keys.length === 0 ? (
-        <div className="rounded-xl border border-dashed p-12 text-center">
-          <KeyRound className="mx-auto size-8 text-muted-foreground" />
-          <h2 className="mt-3 font-heading text-lg font-medium">No API keys</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
+        <div className="rounded-xl border border-border bg-background/60 px-6 py-10 text-center">
+          <KeyRound className="mx-auto size-8 text-tertiary" />
+          <h2 className="mt-3 text-sm font-medium text-foreground">No API keys</h2>
+          <p className="mt-1 text-xs text-tertiary">
             Generate a key to use the Klove proxy.
           </p>
           <Button className="mt-5" onClick={() => setCreateOpen(true)}>
@@ -187,19 +187,19 @@ export default function ApiKeysPage() {
           </Button>
         </div>
       ) : (
-        <Card className="overflow-hidden p-0 gap-0">
+        <Card variant="plain" className="gap-0 overflow-hidden rounded-xl border border-border p-0">
           <CardHeader className="flex flex-row items-center justify-between py-(--card-spacing)">
-            <CardTitle>Active keys ({keys.length})</CardTitle>
+            <CardTitle className="text-sm font-medium tracking-tight text-foreground">Active keys ({keys.length})</CardTitle>
           </CardHeader>
           <Separator />
           <Table>
             <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>API key</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Created</TableHead>
-                <TableHead className="w-28">Actions</TableHead>
+              <TableRow className="bg-background/60 hover:bg-background/60">
+                <TableHead className="h-9 px-3 py-2 text-xs font-medium text-tertiary">Name</TableHead>
+                <TableHead className="h-9 px-3 py-2 text-xs font-medium text-tertiary">API key</TableHead>
+                <TableHead className="h-9 px-3 py-2 text-xs font-medium text-tertiary">Status</TableHead>
+                <TableHead className="h-9 px-3 py-2 text-xs font-medium text-tertiary">Created</TableHead>
+                <TableHead className="h-9 w-28 px-3 py-2 text-xs font-medium text-tertiary">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -207,8 +207,8 @@ export default function ApiKeysPage() {
                 const value = revealed[key.id];
                 return (
                   <TableRow key={key.id}>
-                    <TableCell className="font-medium">{key.name}</TableCell>
-                    <TableCell>
+                    <TableCell className="px-3 py-2.5 text-sm font-medium text-foreground">{key.name}</TableCell>
+                    <TableCell className="px-3 py-2.5">
                       <div className="relative max-w-sm">
                         <Input
                           value={value ?? key.prefix}
@@ -247,15 +247,15 @@ export default function ApiKeysPage() {
                         </div>
                       </div>
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="px-3 py-2.5">
                       <Badge variant={key.is_active ? "secondary" : "outline"}>
                         {key.is_active ? "Active" : "Inactive"}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
+                    <TableCell className="px-3 py-2.5 text-sm text-tertiary">
                       {new Date(key.created_at).toLocaleDateString()}
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="px-3 py-2.5">
                       <Tooltip>
                         <TooltipTrigger
                           render={
@@ -348,7 +348,7 @@ export default function ApiKeysPage() {
                   <Copy className="size-4" />
                 </Button>
               </div>
-              <p className="text-xs text-muted-foreground">{secret.warning}</p>
+              <p className="text-xs text-tertiary">{secret.warning}</p>
             </div>
           )}
           <DialogFooter>

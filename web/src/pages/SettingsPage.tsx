@@ -306,7 +306,7 @@ export default function SettingsPage({
 
   return (
     <div className="w-full space-y-6 p-6">
-      <h1 className="font-heading text-2xl font-semibold tracking-tight">
+      <h1 className="text-2xl font-semibold tracking-tight text-foreground">
         Settings
       </h1>
       <Tabs tabs={tabs} active={activeTab} onChange={setActiveTab} />
@@ -357,8 +357,8 @@ export default function SettingsPage({
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div>
-                    <div className="text-sm font-medium">Dark mode</div>
-                    <div className="text-xs text-muted-foreground">
+                    <div className="text-sm font-medium text-foreground">Dark mode</div>
+                    <div className="text-xs text-tertiary">
                       {darkMode
                         ? "Dark theme is enabled"
                         : "Light theme is enabled"}
@@ -390,18 +390,18 @@ export default function SettingsPage({
             <CardContent className="space-y-3">
               <div>
                 <Label htmlFor="chat-title-model">Title generation model</Label>
-                <p className="mt-1 text-xs text-muted-foreground">
+                <p className="mt-1 text-xs text-tertiary">
                   Choose which model creates titles for new conversations.
                 </p>
               </div>
-              <select id="chat-title-model" value={chatTitleModel} onChange={(event) => setChatTitleModel(event.target.value)} className="h-9 w-full rounded-md border border-border bg-popover px-3 text-sm text-popover-foreground">
+              <select id="chat-title-model" value={chatTitleModel} onChange={(event) => setChatTitleModel(event.target.value)} className="h-9 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground transition-colors outline-none hover:border-border-strong focus-visible:border-border-strong focus-visible:bg-card">
                 <option value="auto">Auto (active model)</option>
                 {chatTitleModels.map((model) => {
                   const id = model.model_pool ? `pool/${model.pretty_id || model.model_id}` : modelPublicId(model);
                   return <option key={id} value={id}>{model.display_name || modelDisplayId(model)} ({model.model_pool ? "Compound model" : model.provider_name})</option>;
                 })}
               </select>
-              <p className="text-xs text-muted-foreground">Titles are generated after the first message and never replace a custom title.</p>
+              <p className="text-xs text-tertiary">Titles are generated after the first message and never replace a custom title.</p>
             </CardContent>
           </Card>
 
@@ -413,7 +413,7 @@ export default function SettingsPage({
               <div className="flex items-center justify-between gap-4">
                 <div>
                   <Label htmlFor="persist-model-per-chat">Remember the model for each chat</Label>
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-xs text-tertiary">
                     Keep each conversation's last selected model instead of using one global model.
                   </p>
                 </div>
@@ -437,7 +437,7 @@ export default function SettingsPage({
               <PuzzleLine className="size-5" />
               <span>RTK (Rust Token Killer)</span>
               {rtkStatus?.installed && rtkStatus?.latestVersion && !rtkStatus?.updateAvailable && (
-                <span className="text-xs font-normal text-muted-foreground">
+                <span className="text-xs font-normal text-tertiary">
                   Latest: {rtkStatus.latestVersion} — up to date
                 </span>
               )}
@@ -446,12 +446,12 @@ export default function SettingsPage({
           <CardContent className="space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <RobotLine className="size-7 text-muted-foreground" />
+                <RobotLine className="size-7 text-tertiary" />
                 <div>
-                  <div className="text-sm font-medium">
+                  <div className="text-sm font-medium text-foreground">
                     {rtkStatus?.enabled ? "Enabled" : "Disabled"}
                   </div>
-                  <div className="text-xs text-muted-foreground">
+                  <div className="text-xs text-tertiary">
                     {rtkStatus?.installed
                       ? rtkStatus.version
                         ? `v${rtkStatus.version.replace(/^rtk\s*/, "")}`
@@ -481,7 +481,6 @@ export default function SettingsPage({
                     size="sm"
                     onClick={updateRtk}
                     disabled={rtkLoading}
-                    className="border-amber-500/50 text-amber-600 hover:bg-amber-500/10"
                   >
                     {rtkLoading ? (
                       <LoaderCircle className="size-4 animate-spin" />
@@ -502,7 +501,7 @@ export default function SettingsPage({
               <Separator />
             )}
             {rtkStatus?.platform && rtkStatus?.arch && (
-              <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-muted-foreground">
+              <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-tertiary">
                 <span>Platform: {rtkStatus.platform}-{rtkStatus.arch}</span>
                  <span>Mode: proxy tool output</span>
               </div>
@@ -515,7 +514,7 @@ export default function SettingsPage({
               <CavemanLine className="size-5" />
               <span>Caveman</span>
               {cavemanStatus?.installed && cavemanStatus?.latestVersion && !cavemanStatus?.updateAvailable && (
-                <span className="text-xs font-normal text-muted-foreground">
+                <span className="text-xs font-normal text-tertiary">
                   Latest: {cavemanStatus.latestVersion} — up to date
                 </span>
               )}
@@ -524,10 +523,10 @@ export default function SettingsPage({
           <CardContent className="space-y-4">
             <div className="flex items-center justify-between">
               <div>
-                <div className="text-sm font-medium">
+                <div className="text-sm font-medium text-foreground">
                   {cavemanStatus?.enabled ? "Enabled" : "Disabled"}
                 </div>
-                <div className="text-xs text-muted-foreground">
+                <div className="text-xs text-tertiary">
                   {cavemanStatus?.installed
                     ? cavemanStatus.version
                       ? `${cavemanStatus.version}`
@@ -556,7 +555,6 @@ export default function SettingsPage({
                     size="sm"
                     onClick={updateCaveman}
                     disabled={cavemanLoading}
-                    className="border-amber-500/50 text-amber-600 hover:bg-amber-500/10"
                   >
                     {cavemanLoading ? (
                       <LoaderCircle className="size-4 animate-spin" />
@@ -591,7 +589,7 @@ export default function SettingsPage({
                     ))}
                   </div>
                   {!cavemanStatus?.enabled && (
-                    <p className="text-xs text-muted-foreground">Enable Caveman to change level</p>
+                    <p className="text-xs text-tertiary">Enable Caveman to change level</p>
                   )}
                 </div>
               </>
@@ -607,15 +605,15 @@ export default function SettingsPage({
           </CardHeader>
           <CardContent className="space-y-4">
             {customSkillList.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No custom skills yet.</p>
+              <p className="text-sm text-tertiary">No custom skills yet.</p>
             ) : (
               customSkillList.map((skill) => (
-                <div key={skill.id} className="flex items-center justify-between rounded-lg border p-3">
+                <div key={skill.id} className="flex items-center justify-between rounded-lg border border-border bg-background/60 p-3 transition-colors hover:bg-accent/60">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium truncate">{skill.name}</span>
+                      <span className="truncate text-sm font-medium text-foreground">{skill.name}</span>
                       {skill.content && (
-                        <span className="text-xs text-muted-foreground truncate">
+                        <span className="truncate text-xs text-tertiary">
                           {skill.content.split('\n')[0]}
                         </span>
                       )}
@@ -643,7 +641,7 @@ export default function SettingsPage({
                       variant="ghost"
                       size="xs"
                       onClick={() => removeCustomSkill(skill.id)}
-                      className="text-destructive hover:text-destructive"
+                      className="text-destructive hover:bg-destructive/10 hover:text-destructive"
                     >
                       <RiDeleteBinLine className="size-3.5" />
                     </Button>
@@ -691,7 +689,7 @@ export default function SettingsPage({
             <div className="space-y-2">
               <Label htmlFor="current-password">Current password</Label>
               <div className="relative">
-                <LockPasswordLine className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                <LockPasswordLine className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-tertiary" />
                 <Input
                   id="current-password"
                   type="password"
@@ -704,7 +702,7 @@ export default function SettingsPage({
             <div className="space-y-2">
               <Label htmlFor="new-password">New password</Label>
               <div className="relative">
-                <LockPasswordLine className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                <LockPasswordLine className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-tertiary" />
                 <Input
                   id="new-password"
                   type="password"
@@ -713,14 +711,14 @@ export default function SettingsPage({
                   onChange={(e) => setNext(e.target.value)}
                 />
               </div>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-tertiary">
                 Minimum 4 characters.
               </p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="confirm-password">Confirm password</Label>
               <div className="relative">
-                <LockPasswordLine className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                <LockPasswordLine className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-tertiary" />
                 <Input
                   id="confirm-password"
                   type="password"
