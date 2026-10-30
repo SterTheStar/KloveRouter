@@ -292,7 +292,7 @@ export default function ChatSidebar({
       </div>
 
       <div className="shrink-0 p-2">
-        <div className="flex items-center gap-2 rounded-lg border border-border bg-white p-1.5 dark:border-border dark:bg-card">
+        <div className="flex items-center gap-2 rounded-lg border border-border bg-card p-1.5">
           <button type="button" onClick={onBack} className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-1 py-0.5 text-left transition-colors hover:bg-accent">
             <DisplayAvatar name={profile.name} src={profile.avatar} fallback="user" className="size-7" />
             <span className="truncate text-sm">{profile.name}</span>

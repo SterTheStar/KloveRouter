@@ -71,7 +71,7 @@ export default function ChatCommandPalette({
   }, [onClose]);
 
   return createPortal(
-    <div className="fixed inset-0 z-[130] flex items-start justify-center bg-black/20 px-4 pt-[16vh] backdrop-blur-[2px]" onMouseDown={onClose}>
+    <div className="fixed inset-0 z-[130] flex items-start justify-center bg-black/40 px-4 pt-[16vh] backdrop-blur-[2px] dark:bg-black/60" onMouseDown={onClose}>
       <div className="w-full max-w-xl overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground shadow-[0px_4px_16px_0px_rgba(0,0,0,0.05)]" onMouseDown={(event) => event.stopPropagation()}>
         <div className="flex items-center gap-2 border-b border-border px-3.5">
           <Search className="size-4 shrink-0 text-tertiary" />

@@ -186,7 +186,7 @@ export default function EditModelModal({
             <div className="min-w-0 space-y-2">
               <Label htmlFor="edit-model-id">Model ID</Label>
               <Input
-                className="h-10 bg-muted/30 dark:bg-muted/30"
+                className="h-9"
                 id="edit-model-id"
                 value={modelId}
                 onChange={(e) => {
@@ -199,12 +199,12 @@ export default function EditModelModal({
             </div>
             <div className="min-w-0 space-y-2">
               <Label htmlFor="edit-model-pretty">Pretty ID (optional)</Label>
-              <Input className="h-10 bg-muted/30 dark:bg-muted/30" id="edit-model-pretty" value={prettyId} onChange={(e) => setPrettyId(e.target.value)} placeholder="friendly-model" />
+              <Input className="h-9" id="edit-model-pretty" value={prettyId} onChange={(e) => setPrettyId(e.target.value)} placeholder="friendly-model" />
             </div>
             <div className="min-w-0 space-y-2">
               <Label htmlFor="edit-model-display">Display name</Label>
               <Input
-                className="h-10 bg-muted/30 dark:bg-muted/30"
+                className="h-9"
                 id="edit-model-display"
                 value={displayName}
                 onChange={(e) => {
