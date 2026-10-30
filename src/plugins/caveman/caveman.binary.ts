@@ -1,12 +1,13 @@
-import { existsSync, mkdirSync, readdirSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { config } from "../../config";
 import { logger } from "../../logger";
+import { CAVEMAN_LEVELS } from "./caveman.prompt";
 
 const SKILL_FILE = "SKILL.md";
-const FALLBACK_VERSION = "v1.9.1";
+const FALLBACK_VERSION = "v4.0.1";
 const DOWNLOAD_TIMEOUT_MS = 30_000;
 const MAX_ARCHIVE_BYTES = 25 * 1024 * 1024;
 const LATEST_VERSION_CACHE_MS = 10 * 60_000;
@@ -53,12 +54,16 @@ function validateArchive(archivePath: string): void {
   }
 }
 function extractTar(archivePath: string, destDir: string): void {
+  const args = ["-xzf", archivePath, "-C", destDir];
   try {
-    execFileSync("tar", ["--no-absolute-names", "-xzf", archivePath, "-C", destDir], { stdio: "pipe" });
+    execFileSync("tar", ["--no-absolute-names", ...args], { stdio: "pipe" });
   } catch (err: unknown) {
-    const stderr = (err as { stderr?: string })?.stderr ?? "";
-    if (/unrecognized option.*--no-absolute-names/.test(stderr)) {
-      execFileSync("tar", ["-xzf", archivePath, "-C", destDir], { stdio: "pipe" });
+    // Bun reports child stderr in `message`; GNU tar on some builds has no
+    // --no-absolute-names, so retry plainly (validateArchive already rejected
+    // absolute and traversal entries).
+    const detail = `${(err as { stderr?: string })?.stderr ?? ""}${(err as Error)?.message ?? ""}`;
+    if (/no-absolute-names/.test(detail)) {
+      execFileSync("tar", args, { stdio: "pipe" });
     } else {
       throw err;
     }
@@ -75,8 +80,10 @@ async function installFromArchive(archivePath: string, version: string): Promise
     extractTar(archivePath, staging);
     const root = readdirSync(staging).find((entry) => entry.startsWith("caveman-"));
     if (!root) throw new Error("Caveman archive has unexpected layout");
-    const source = join(staging, root, "skills", "caveman", SKILL_FILE);
-    const content = await readFile(source, "utf8");
+    const skillsDir = join(staging, root, "skills");
+    const source = join(skillsDir, "caveman", SKILL_FILE);
+    const raw = await readFile(source, "utf8");
+    const content = buildSkillContent(raw, (name) => join(skillsDir, name, SKILL_FILE));
     validateSkill(content);
     await writeFile(stagedSkill, content);
     await rename(stagedSkill, skillPath());
@@ -87,10 +94,50 @@ async function installFromArchive(archivePath: string, version: string): Promise
     await rm(staging, { recursive: true, force: true }).catch(() => {});
   }
 }
+/**
+ * Caveman up to v3 shipped every level as a row in the SKILL.md table. From v4
+ * the base file no longer lists levels: ultracave and megacave are separate
+ * skills. Normalize both shapes into one document with the level table, so the
+ * stored skill keeps a single contract for the app.
+ */
+export function buildSkillContent(base: string, readSkillFile: (name: string) => string): string {
+  if (CAVEMAN_LEVELS.every((level) => base.includes(`**${level}**`))) return base;
+  const promptFor = (name: string): string | null => {
+    try {
+      return toTablePrompt(readFileSync(readSkillFile(name), "utf8"));
+    } catch {
+      return null;
+    }
+  };
+  const body = promptFor("caveman") ?? toTablePrompt(base);
+  const ultra = promptFor("ultracave");
+  const wenyan = promptFor("megacave");
+  const rows: Array<[string, string | null]> = [
+    ["lite", body],
+    ["full", body],
+    ["ultra", ultra],
+    ["wenyan-lite", wenyan],
+    ["wenyan-full", wenyan],
+    ["wenyan-ultra", wenyan],
+  ];
+  if (rows.some(([, prompt]) => !prompt)) return base;
+  const table = ["| Level | Prompt |", "| --- | --- |", ...rows.map(([level, prompt]) => `| **${level}** | ${prompt} |`)].join("\n");
+  const withoutFrontMatter = base.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n/, "").trim();
+  return `${table}\n\n${withoutFrontMatter}\n`;
+}
+function toTablePrompt(skillContent: string): string {
+  return skillContent
+    .replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n/, "")
+    .replace(/^#\s+.+$/gm, "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .join(" ")
+    .replace(/\|/g, "\\|");
+}
 function validateSkill(content: string): void {
   if (!content.trim() || Buffer.byteLength(content, "utf8") > 2 * 1024 * 1024) throw new Error("Caveman SKILL.md is invalid");
-  const levels = ["lite", "full", "ultra", "wenyan-lite", "wenyan-full", "wenyan-ultra"];
-  if (levels.some((level) => !content.includes(`**${level}**`))) throw new Error("Caveman SKILL.md missing required levels");
+  if (CAVEMAN_LEVELS.some((level) => !content.includes(`**${level}**`))) throw new Error("Caveman SKILL.md missing required levels");
 }
 async function latestVersion(): Promise<string | null> {
   if (latestCache && latestCache.expiresAt > Date.now()) return latestCache.value;
