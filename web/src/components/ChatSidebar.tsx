@@ -168,14 +168,14 @@ export default function ChatSidebar({
   }
 
   return (
-    <aside className={`fixed inset-y-0 left-0 z-40 flex h-svh w-[238px] shrink-0 flex-col overflow-hidden bg-sidebar text-sm text-sidebar-foreground transition-transform duration-200 md:sticky md:z-auto ${mobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"}`}>
-      <div className="flex h-12 shrink-0 items-center justify-between px-3.5">
+    <aside className={`fixed inset-y-0 left-0 z-40 flex h-svh w-72 shrink-0 flex-col overflow-hidden bg-sidebar text-sm text-sidebar-foreground transition-transform duration-200 md:sticky md:z-auto ${mobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"}`}>
+      <div className="relative flex h-16 shrink-0 items-center justify-center gap-3 px-5">
         <a href={pathForPage("dashboard")} onClick={(event) => {
           if (!shouldHandleLinkClick(event)) return;
           event.preventDefault();
           onBack();
-        }} className="flex min-w-0 items-center gap-1.5 rounded-lg px-1 py-1">
-          <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" className="size-5 text-foreground" aria-hidden="true">
+        }} className="flex min-w-0 items-center gap-3 rounded-lg">
+          <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" className="size-8 text-foreground" aria-hidden="true">
             <path d="M5.6906 6 3.1651 1.6258A8 8 0 0 1 9.1106.0765L5.6906 6Z" fill="currentColor" />
             <path d="M5.1133 9 1.6936 3.077A8 8 0 0 0 .0619 9h5.0514Z" fill="currentColor" />
             <path d="M4.8964 15.3757A8 8 0 0 1 .5815 11h6.8411l-2.5262 4.3757Z" fill="currentColor" />
@@ -183,11 +183,9 @@ export default function ChatSidebar({
             <path d="M16 8a8 8 0 0 1-1.6936 4.9229L10.8868 7h5.0513c.0419.3276.0619.6614.0619 1Z" fill="currentColor" />
             <path d="M11.1036.6243A8 8 0 0 1 15.4185 5H8.5774l2.5262-4.3757Z" fill="currentColor" />
           </svg>
-          <span className="truncate text-[15px] font-medium">Klove</span>
+          <span className="truncate text-2xl font-semibold tracking-tight text-foreground" style={{ fontFamily: "'Playwrite NZ Basic', cursive" }}>Klove</span>
         </a>
-        <div className="flex items-center gap-0.5">
-          <Button size="icon-xs" variant="ghost" onClick={toggleCollapsed} className="rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground" title="Collapse sidebar" aria-label="Collapse sidebar"><CollapseLine className="size-4" /></Button>
-        </div>
+        <Button size="icon-sm" variant="ghost" onClick={toggleCollapsed} className="absolute right-3 rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground" title="Collapse sidebar" aria-label="Collapse sidebar"><CollapseLine className="size-4" /></Button>
       </div>
 
       <div className="mb-5 flex shrink-0 flex-col gap-1 px-1.5">
@@ -291,13 +289,13 @@ export default function ChatSidebar({
         </div>
       </div>
 
-      <div className="shrink-0 p-2">
-        <div className="flex items-center gap-2 rounded-lg bg-card p-1.5">
-          <button type="button" onClick={onBack} className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-1 py-0.5 text-left transition-colors hover:bg-accent">
-            <DisplayAvatar name={profile.name} src={profile.avatar} fallback="user" className="size-7" />
-            <span className="truncate text-sm">{profile.name}</span>
+      <div className="p-3">
+        <div className="flex items-center gap-2 rounded-lg bg-card p-2">
+          <button type="button" onClick={onBack} className="flex min-w-0 flex-1 items-center gap-2 rounded-lg p-1 text-left transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong">
+            <DisplayAvatar name={profile.name} src={profile.avatar} fallback="user" className="size-8 rounded-full object-cover" />
+            <span className="truncate text-sm font-medium text-foreground">{profile.name}</span>
           </button>
-          <Button size="icon-xs" variant="ghost" onClick={onLogout} className="rounded-md text-muted-foreground hover:text-foreground" title="Logout" aria-label="Logout"><LogoutLine className="size-4" /></Button>
+          <Button size="icon-sm" variant="ghost" className="shrink-0" onClick={onLogout} title="Logout" aria-label="Logout"><LogoutLine className="size-4" /></Button>
         </div>
       </div>
     </aside>
