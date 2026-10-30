@@ -64,7 +64,7 @@ export default function Sidebar({
   mobileOpen: boolean;
 }) {
   return (
-    <aside className={`fixed inset-y-0 left-0 z-40 flex h-svh w-72 shrink-0 flex-col border-r border-border bg-surface text-foreground transition-transform duration-200 md:sticky md:z-auto ${mobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"}`}>
+    <aside className={`fixed inset-y-0 left-0 z-40 flex h-svh w-72 shrink-0 flex-col bg-surface text-foreground transition-transform duration-200 md:sticky md:z-auto ${mobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"}`}>
       <div className="flex h-16 items-center justify-center gap-3 px-5">
         <svg
           viewBox="0 0 16 16"
@@ -134,7 +134,7 @@ export default function Sidebar({
       </nav>
       <div className="p-3">
         <BuyMeACoffeeButton />
-        <div className="flex items-center gap-2 rounded-lg border border-border bg-card p-2">
+        <div className="flex items-center gap-2 rounded-lg bg-card p-2">
           <button
             type="button"
             onClick={() => onNavigate("settings")}
