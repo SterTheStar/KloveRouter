@@ -7,14 +7,10 @@ import {
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { antigravity, codex, freebuff, perch, providers } from "../api/client";
 import type {
-  AntigravityQuota,
+  AntigravityQuotaBucket,
+  AntigravityUsage,
   CodexUsage,
   CodexUsageWindow,
   PerchUsage,
@@ -239,174 +235,144 @@ function PerchUsageSummary({ usage }: { usage: PerchUsage | null }) {
   );
 }
 
+const ARGON_NOTE =
+  "For paid Pro plans, Argon quota is separate. Higher Argon quota (included as part of the larger Gemini quota bucket) is available on Ultra plans.";
+
 function quotaTone(used: number) {
-  if (used >= 90)
-    return {
-      bar: "bg-red-500",
-      dot: "bg-red-500",
-      text: "text-red-600 dark:text-red-400",
-    };
-  if (used >= 70)
-    return {
-      bar: "bg-amber-500",
-      dot: "bg-amber-500",
-      text: "text-amber-600 dark:text-amber-400",
-    };
-  return {
-    bar: "bg-emerald-500",
-    dot: "bg-emerald-500",
-    text: "text-emerald-600 dark:text-emerald-400",
-  };
+  if (used >= 90) return "bg-red-500";
+  if (used >= 70) return "bg-amber-500";
+  return "bg-emerald-500";
 }
 
-const quotaPalette = [
-  "bg-blue-500",
-  "bg-indigo-500",
-  "bg-teal-500",
-  "bg-orange-500",
-  "bg-pink-500",
-  "bg-cyan-500",
-  "bg-violet-500",
-  "bg-lime-500",
-];
-
-function quotaColor(name: string) {
-  const normalized = name.toLowerCase();
-  if (normalized.includes("gemini")) return "bg-blue-500";
-  if (
-    normalized.includes("claude") ||
-    normalized.includes("anthropic") ||
-    normalized.includes("gpt")
-  )
-    return "bg-violet-500";
-  if (normalized.includes("image")) return "bg-pink-500";
-  let hash = 0;
-  for (const character of name)
-    hash = (hash * 31 + character.charCodeAt(0)) | 0;
-  return quotaPalette[Math.abs(hash) % quotaPalette.length];
+function windowTitle(bucket: AntigravityQuotaBucket) {
+  const window = `${bucket.window} ${bucket.bucket_id}`.toLowerCase();
+  if (window.includes("week") || window.includes("7d"))
+    return "Weekly Limit Remaining";
+  if (window.includes("5h") || window.includes("5-hour"))
+    return "Five Hour Limit Remaining";
+  return bucket.label || bucket.window || "Limit";
 }
 
-function quotaFamily(quota: AntigravityQuota) {
-  const value =
-    `${quota.group_name} ${quota.limit_name} ${quota.model_ids.join(" ")}`.toLowerCase();
-  return value.includes("gemini") ? "gemini" : "claude-gpt";
-}
-
-function quotaResetLabel(quotas: AntigravityQuota[]) {
-  const reset = quotas.find((quota) => quota.reset_at)?.reset_at;
-  const resetIn = quotas.find((quota) => quota.reset_in)?.reset_in;
-  if (reset) {
-    const date = new Date(reset);
-    if (!Number.isNaN(date.getTime())) return `Resets ${date.toLocaleString()}`;
-  }
-  return resetIn ? `Resets in ${resetIn}` : "Reset time unavailable";
-}
-
-function AntigravityQuotaSummary({ quotas }: { quotas: AntigravityQuota[] }) {
-  const isBlocked = (value: string) => {
-    const normalized = value.toLowerCase();
+function AntigravityQuotaBucketBar({
+  bucket,
+}: {
+  bucket: AntigravityQuotaBucket;
+}) {
+  if (bucket.disabled)
     return (
-      normalized === "chat_20706" ||
-      normalized === "chat_23310" ||
-      normalized.includes("tab_flash_lite_preview") ||
-      normalized.includes("tab_jump_flash_lite_preview") ||
-      normalized.includes("gemini-3.6-flash-tiered")
+      <div className="space-y-2">
+        <div className="text-sm text-foreground">{windowTitle(bucket)}</div>
+        <div className="text-xs text-tertiary">Not available on this plan</div>
+      </div>
     );
-  };
-  const visibleQuotas = quotas.filter(
-    (quota) =>
-      !isBlocked(quota.group_name) &&
-      !isBlocked(quota.limit_name) &&
-      !quota.model_ids.some(isBlocked),
+  if (bucket.unlimited)
+    return (
+      <div className="space-y-2">
+        <div className="text-sm text-foreground">{windowTitle(bucket)}</div>
+        <div className="text-xs text-tertiary">Unlimited on this account</div>
+      </div>
+    );
+  if (bucket.remaining_fraction === null)
+    return (
+      <div className="space-y-2">
+        <div className="text-sm text-foreground">{windowTitle(bucket)}</div>
+        <div className="text-xs text-tertiary">
+          {bucket.remaining_amount !== null
+            ? `${usageNumber(bucket.remaining_amount)} remaining`
+            : "Quota data unavailable"}
+        </div>
+      </div>
+    );
+  const remaining = Math.min(
+    100,
+    Math.max(0, (bucket.remaining_fraction ?? 0) * 100),
   );
-  const sorted = [...visibleQuotas].sort(
-    (a, b) => b.used_percent - a.used_percent,
-  );
-  const families = [
-    {
-      id: "gemini",
-      label: "Gemini",
-      quotas: sorted.filter((quota) => quotaFamily(quota) === "gemini"),
-      color: "bg-blue-500",
-    },
-    {
-      id: "claude-gpt",
-      label: "Claude / GPT",
-      quotas: sorted.filter((quota) => quotaFamily(quota) === "claude-gpt"),
-      color: "bg-violet-500",
-    },
-  ]
-    .filter((family) => family.quotas.length > 0)
-    .map((family) => {
-      const used = Math.max(
-        ...family.quotas.map((quota) => quota.used_percent),
-      );
-      const remaining = Math.min(
-        ...family.quotas.map((quota) => quota.remaining_fraction),
-      );
-      return {
-        ...family,
-        used,
-        remaining,
-        resetLabel: quotaResetLabel(family.quotas),
-      };
-    });
+  const tone = quotaTone(bucket.used_percent ?? 0);
+  const reset = bucket.reset_at ? new Date(bucket.reset_at) : null;
+  const resetLabel =
+    reset && !Number.isNaN(reset.getTime())
+      ? bucket.reset_in
+        ? `Refreshes in ${bucket.reset_in} (${reset.toLocaleString()})`
+        : `Refreshes ${reset.toLocaleString()}`
+      : bucket.reset_in
+        ? `Refreshes in ${bucket.reset_in}`
+        : "Quota available";
   return (
-    <div className="space-y-3">
-      <div className="space-y-5">
-        {families.map((family) => (
-          <Tooltip key={family.id}>
-            <TooltipTrigger
-              render={
-                <div
-                  className="space-y-2 cursor-help"
-                  aria-label={`${family.label}: ${family.used}% used`}
-                />
-              }
-            >
-              <div className="flex items-center justify-between gap-3 text-sm">
-                <span className="text-foreground">{family.label}</span>
-                <span className="font-medium text-foreground tabular-nums">{family.used}% used</span>
+    <div className="space-y-2">
+      <div className="flex items-center justify-between gap-3 text-sm">
+        <span className="text-foreground">{windowTitle(bucket)}</span>
+        <span className="font-medium text-foreground tabular-nums">
+          {remaining.toFixed(2)}% left
+        </span>
+      </div>
+      <div className="h-2 overflow-hidden rounded-full bg-overlay">
+        <div
+          className={`h-full rounded-full ${tone} transition-all`}
+          style={{ width: `${remaining}%` }}
+        />
+      </div>
+      <div className="text-xs text-tertiary">{resetLabel}</div>
+    </div>
+  );
+}
+
+function AntigravityQuotaSummary({ usage }: { usage: AntigravityUsage }) {
+  const groups = usage.groups.filter((group) => group.buckets.length > 0);
+  return (
+    <div className="space-y-5">
+      {groups.length === 0 && (
+        <div className="text-sm text-tertiary">
+          Antigravity returned no quota groups for this account.
+        </div>
+      )}
+      {groups.map((group) => {
+        const modelNames = [
+          ...new Set(
+            usage.models
+              .filter((model) => model.group_id === group.id)
+              .map((model) => model.display_name || model.model_id),
+          ),
+        ];
+        return (
+          <div key={group.group_name} className="space-y-3">
+            <div className="space-y-1">
+              <div className="text-sm font-medium text-foreground">
+                {group.group_name}
               </div>
-              <div className="h-2 overflow-hidden rounded-full bg-overlay">
-                <div
-                  className={`h-full rounded-full ${family.color} transition-all`}
-                  style={{ width: `${family.used}%` }}
-                />
-              </div>
-              <div className="text-xs text-tertiary">
-                Weekly limits · {family.resetLabel}
-              </div>
-            </TooltipTrigger>
-            <TooltipContent
-              side="top"
-              className="w-fit max-w-[min(420px,calc(100vw-2rem))] whitespace-normal rounded-xl border border-border bg-card p-3 text-foreground shadow-[0px_4px_16px_0px_rgba(0,0,0,0.05)]"
-            >
-              <div className="w-fit max-w-full space-y-2 overflow-hidden">
-                <div className="flex items-center gap-2">
-                  <span
-                    className={`size-2 shrink-0 rounded-full ${family.color}`}
+              {group.description && (
+                <div className="text-xs text-tertiary">{group.description}</div>
+              )}
+              {group.id === "argon" && (
+                <div className="text-xs text-tertiary">{ARGON_NOTE}</div>
+              )}
+            </div>
+            {group.available ? (
+              <div className="space-y-4">
+                {group.buckets.map((bucket) => (
+                  <AntigravityQuotaBucketBar
+                    key={bucket.bucket_id}
+                    bucket={bucket}
                   />
-                  <span className="text-xs font-medium text-foreground">{family.label}</span>
-                </div>
-                <div className="text-xs text-tertiary">
-                  {family.used}% used · {Math.round(family.remaining * 100)}%
-                  remaining
-                </div>
-                <div className="border-t border-border pt-2 text-xs text-tertiary">
-                  <div className="max-h-24 overflow-y-auto break-all">
-                    Models:{" "}
-                    {[
-                      ...new Set(
-                        family.quotas.flatMap((quota) => quota.model_ids),
-                      ),
-                    ].join(", ")}
-                  </div>
-                </div>
+                ))}
               </div>
-            </TooltipContent>
-          </Tooltip>
-        ))}
+            ) : (
+              <div className="text-xs text-tertiary">
+                Not available on this plan
+              </div>
+            )}
+            {modelNames.length > 0 && (
+              <div className="max-h-16 overflow-y-auto break-all text-xs text-tertiary">
+                Models: {modelNames.join(", ")}
+              </div>
+            )}
+          </div>
+        );
+      })}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-tertiary">
+        {usage.plan && <span>Plan: {usage.plan}</span>}
+        {usage.fetched_at && (
+          <span>Updated: {new Date(usage.fetched_at).toLocaleString()}</span>
+        )}
       </div>
     </div>
   );
@@ -429,7 +395,7 @@ export default function UsageLimitsPage() {
       credential: ProviderCredential;
       usage: CodexUsage | null;
       credits: any[];
-      antigravityQuota: AntigravityQuota[] | null;
+      antigravityQuota: AntigravityUsage | null;
       freebuffUsage: any | null;
       perchUsage: PerchUsage | null;
     }[]
@@ -703,8 +669,8 @@ export default function UsageLimitsPage() {
                     ) : provider.protocol === "perch" ? (
                       <PerchUsageSummary usage={perchData} />
                     ) : provider.protocol === "antigravity" ? (
-                    antigravityQuota?.length ? (
-                      <AntigravityQuotaSummary quotas={antigravityQuota} />
+                    antigravityQuota?.groups?.length ? (
+                      <AntigravityQuotaSummary usage={antigravityQuota} />
                     ) : (
                       <div className="text-sm text-tertiary">
                         No quota data returned.

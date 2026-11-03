@@ -435,7 +435,7 @@ export const modelService = {
        JOIN providers p ON p.id = m.provider_id
        WHERE m.provider_id = ?
          AND NOT (p.protocol = 'antigravity' AND lower(m.model_id) IN ('chat_20706', 'chat_23310', 'tab_flash_lite_preview', 'tab_jump_flash_lite_preview', 'tab_flash_lite_previewtab_jump_flash_lite_preview'))
-         AND NOT (p.protocol = 'antigravity' AND lower(m.model_id) LIKE '%gemini-3.6-flash-tiered%')
+         AND NOT (p.protocol = 'antigravity' AND lower(m.model_id) LIKE 'gemini-%' AND lower(m.model_id) LIKE '%-flash-tiered')
        ORDER BY m.model_id ASC`,
       )
       .all(providerId)
@@ -450,7 +450,7 @@ export const modelService = {
          JOIN providers p ON p.id = m.provider_id
          WHERE m.is_active = 1 AND p.is_active = 1
            AND NOT (p.protocol = 'antigravity' AND lower(m.model_id) IN ('chat_20706', 'chat_23310', 'tab_flash_lite_preview', 'tab_jump_flash_lite_preview', 'tab_flash_lite_previewtab_jump_flash_lite_preview'))
-           AND NOT (p.protocol = 'antigravity' AND lower(m.model_id) LIKE '%gemini-3.6-flash-tiered%')
+           AND NOT (p.protocol = 'antigravity' AND lower(m.model_id) LIKE 'gemini-%' AND lower(m.model_id) LIKE '%-flash-tiered')
          ORDER BY m.model_id ASC`,
       )
       .all()

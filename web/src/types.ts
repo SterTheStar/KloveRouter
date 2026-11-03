@@ -360,14 +360,40 @@ export interface PerchUsage {
   billing: unknown | null;
 }
 
-export interface AntigravityQuota {
-  group_name: string;
-  limit_name: string;
-  remaining_fraction: number;
-  used_percent: number;
+export interface AntigravityQuotaBucket {
+  bucket_id: string;
+  label: string;
+  window: string;
+  remaining_fraction: number | null;
+  remaining_amount: number | null;
+  used_percent: number | null;
+  disabled: boolean;
+  unlimited: boolean;
   reset_at: string | null;
   reset_in: string | null;
-  model_ids: string[];
+}
+
+export interface AntigravityQuotaGroup {
+  id: string;
+  group_name: string;
+  description: string | null;
+  available: boolean;
+  buckets: AntigravityQuotaBucket[];
+}
+
+export interface AntigravityUsage {
+  fetched_at: string;
+  plan: string | null;
+  groups: AntigravityQuotaGroup[];
+  models: {
+    model_id: string;
+    display_name: string | null;
+    group_id: string | null;
+    remaining_fraction: number | null;
+    used_percent: number | null;
+    reset_at: string | null;
+    reset_in: string | null;
+  }[];
 }
 
 export type Page =

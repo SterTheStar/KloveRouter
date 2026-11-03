@@ -13,7 +13,7 @@ export function isBlockedAntigravityModel(modelId: string): boolean {
     .replace(/^models\//, "");
   return (
     BLOCKED_EXACT.has(normalized) ||
-    normalized.includes("gemini-3.6-flash-tiered")
+    /^gemini-\d+(?:\.\d+)?-flash-tiered$/.test(normalized)
   );
 }
 

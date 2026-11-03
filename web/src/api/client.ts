@@ -290,7 +290,7 @@ export const antigravity = {
       body: JSON.stringify({ callback_url, credential_id }),
     }),
   usage: (credential_id: string) =>
-    request<import("../types").AntigravityQuota[]>(
+    request<import("../types").AntigravityUsage>(
       `/api/antigravity/usage?credential_id=${encodeURIComponent(credential_id)}`,
     ),
 };
