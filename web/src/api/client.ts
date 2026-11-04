@@ -464,6 +464,11 @@ export const stats = {
     request<import("../types").StatsHealth>(`/api/stats/health?days=${days ?? 0}`),
 };
 
+export type RequestLogStreamEvent =
+  | { type: "created"; log: import("../types").RequestLog }
+  | { type: "updated"; id: string; log: import("../types").RequestLog }
+  | { type: "cleared" };
+
 export const requestLogs = {
   list: (
     params: {
@@ -472,6 +477,8 @@ export const requestLogs = {
       status?: string;
       provider?: string;
       search?: string;
+      before?: string;
+      withTotal?: boolean;
     } = {},
   ) => {
     const query = new URLSearchParams(
@@ -481,10 +488,45 @@ export const requestLogs = {
     );
     return request<{
       data: import("../types").RequestLog[];
-      total: number;
+      total?: number;
       limit: number;
       offset: number;
     }>(`/api/request-logs?${query}`);
+  },
+  /**
+   * Subscribes to live log events. EventSource cannot carry an Authorization
+   * header, so this uses fetch + a streaming body reader instead.
+   */
+  stream: async (signal: AbortSignal, onEvent: (event: RequestLogStreamEvent) => void) => {
+    const res = await fetch(`${API_BASE}/api/request-logs/stream`, {
+      headers: { Accept: "text/event-stream", Authorization: `Bearer ${getToken() ?? ""}` },
+      signal,
+    });
+    if (!res.ok || !res.body) throw new Error(`Log stream failed: HTTP ${res.status}`);
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) return;
+      buffer += decoder.decode(value, { stream: true });
+      const frames = buffer.split("\n\n");
+      buffer = frames.pop() ?? "";
+      for (const frame of frames) {
+        let event = "message";
+        const data: string[] = [];
+        for (const line of frame.split("\n")) {
+          if (line.startsWith("event:")) event = line.slice(6).trim();
+          else if (line.startsWith("data:")) data.push(line.slice(5).trimStart());
+        }
+        if (!data.length) continue;
+        try {
+          onEvent({ type: event, ...JSON.parse(data.join("\n")) });
+        } catch {
+          // Ignore malformed frames rather than dropping the connection.
+        }
+      }
+    }
   },
   get: (id: string) =>
     request<import("../types").RequestLogDetails>(`/api/request-logs/${encodeURIComponent(id)}`),

@@ -351,6 +351,9 @@ export function initSchema(db: Database): void {
       ON request_logs(provider_id, model_name, created_at);
     CREATE INDEX IF NOT EXISTS idx_request_logs_status_created
       ON request_logs(status, created_at);
+    -- The logs page relies on ordering and cursor pagination by creation time.
+    CREATE INDEX IF NOT EXISTS idx_request_logs_created_at
+      ON request_logs(created_at DESC);
   `);
 
   const requestLogCols = db.query("PRAGMA table_info(request_logs)").all() as { name: string }[];

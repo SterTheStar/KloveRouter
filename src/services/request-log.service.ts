@@ -40,6 +40,39 @@ export interface RequestLogDetails extends RequestLog {
   error_details: unknown;
 }
 
+export type RequestLogEvent =
+  | { type: "created"; log: RequestLog }
+  | { type: "updated"; log: RequestLog }
+  | { type: "cleared" };
+
+type RequestLogListener = (event: RequestLogEvent) => void;
+const listeners = new Set<RequestLogListener>();
+
+function publish(event: RequestLogEvent) {
+  for (const listener of listeners) {
+    try { listener(event); } catch { /* A broken subscriber must never affect logging. */ }
+  }
+}
+
+/** Columns needed to render the request log table (details are loaded on demand). */
+const LIST_COLUMNS = "id, provider_id, provider_name, model_name, client_ip, requester_name, api_key_prefix, credential_label, credential_identity, credential_kind, status, status_code, tokens_prompt, tokens_completion, tokens_cache_read, tokens_cache_write, tokens_total, estimated_cost_usd, tps, duration_ms, error_message, created_at, completed_at, streaming, streamed_chars, streamed_bytes";
+
+const LIST_SQL = `SELECT ${LIST_COLUMNS},
+  CASE WHEN request_details IS NULL THEN NULL ELSE json_extract(request_details, '$.klove.media_type') END AS request_kind,
+  CASE WHEN response_details IS NULL THEN NULL ELSE json_extract(response_details, '$.output_bytes') END AS output_bytes
+FROM request_logs`;
+
+function hydrateRow(row: RequestLog & { request_kind: string | null; output_bytes: number | null }): RequestLog {
+  row.streaming = Boolean(row.streaming);
+  row.request_kind = typeof row.request_kind === "string" ? row.request_kind : null;
+  const bytes = Number(row.output_bytes);
+  row.output_bytes = Number.isFinite(bytes) ? bytes : (row.streamed_bytes ? Number(row.streamed_bytes) : null);
+  return row;
+}
+
+let lastCleanupAt = 0;
+const CLEANUP_INTERVAL_MS = 30_000;
+
 const SENSITIVE_KEY = /authorization|api[-_]?key|cookie|token|secret|password|credential|private[-_]?key|access[-_]?key/i;
 const MAX_DETAIL_BYTES = 64 * 1024;
 const TRUNCATION_MARKER = "[truncated]";
@@ -91,13 +124,58 @@ function requestId() {
   return `req_${stamp}_${crypto.randomUUID().replace(/-/g, "").slice(0, 8)}`;
 }
 
+function requireLog(id: string): RequestLog | null {
+  const row = getDb()
+    .query(`${LIST_SQL} WHERE id = ?`)
+    .get(id) as (RequestLog & { request_kind: string | null; output_bytes: number | null }) | null;
+  return row ? hydrateRow(row) : null;
+}
+
+/**
+ * Writes whose SQL embeds the detail bundles a client needs (request/response
+ * details) rebuild the list row from the values already in hand, avoiding an
+ * extra read just to publish the event.
+ */
+function publishFromWrite(id: string, requestDetails: string | null, responseDetails: string | null, fallback: RequestLog) {
+  try {
+    const request = requestDetails ? parseDetail(requestDetails) as any : null;
+    const response = responseDetails ? parseDetail(responseDetails) as any : null;
+    const outputBytes = Number(response?.output_bytes);
+    const log: RequestLog = {
+      ...fallback,
+      request_kind: typeof request?.klove?.media_type === "string" ? request.klove.media_type : null,
+      output_bytes: Number.isFinite(outputBytes) ? outputBytes : fallback.output_bytes ?? null,
+    };
+    publish({ type: "updated", log });
+  } catch {
+    const log = requireLog(id);
+    if (log) publish({ type: "updated", log });
+  }
+}
+
 export const requestLogService = {
-  cleanupStale() {
+  subscribe(listener: RequestLogListener) {
+    listeners.add(listener);
+    return () => { listeners.delete(listener); };
+  },
+
+  cleanupStale(force = false) {
+    const now = Date.now();
+    if (!force && now - lastCleanupAt < CLEANUP_INTERVAL_MS) return;
+    lastCleanupAt = now;
+    const stale = getDb()
+      .query("SELECT id FROM request_logs WHERE status = 'pending' AND created_at < datetime('now', '-30 minutes')")
+      .all() as { id: string }[];
+    if (!stale.length) return;
     getDb()
       .query(
         "UPDATE request_logs SET status = 'error', status_code = 499, error_message = 'Client disconnected or request timed out', completed_at = datetime('now') WHERE status = 'pending' AND created_at < datetime('now', '-30 minutes')",
       )
       .run();
+    for (const { id } of stale) {
+      const log = requireLog(id);
+      if (log) publish({ type: "updated", log });
+    }
   },
 
   start(input: {
@@ -126,18 +204,26 @@ export const requestLogService = {
         serializeDetail(input.requestDetails),
         input.streaming ? 1 : 0,
       );
+    try {
+      const log = requireLog(id);
+      if (log) publish({ type: "created", log });
+    } catch { /* Logging must never affect the request. */ }
     return id;
   },
 
   progress(id: string, streamedChars: number) {
     try {
       getDb().query("UPDATE request_logs SET streamed_chars = ? WHERE id = ? AND status = 'pending'").run(Math.max(0, Math.floor(streamedChars)), id);
+      const log = requireLog(id);
+      if (log && log.status === "pending") publish({ type: "updated", log });
     } catch { /* Logging must never affect the request. */ }
   },
 
   progressBytes(id: string, streamedBytes: number) {
     try {
       getDb().query("UPDATE request_logs SET streamed_bytes = ? WHERE id = ? AND status = 'pending'").run(Math.max(0, Math.floor(streamedBytes)), id);
+      const log = requireLog(id);
+      if (log && log.status === "pending") publish({ type: "updated", log });
     } catch { /* Logging must never affect the request. */ }
   },
 
@@ -186,10 +272,11 @@ export const requestLogService = {
     const cacheRead = input.cacheRead ?? 0;
     const cacheWrite = input.cacheWrite ?? 0;
     let cost = input.cost;
+    // Also supplies the point-of-write fields used to publish the update.
+    const request = db
+      .query("SELECT r.provider_id, r.provider_name, r.model_name, p.protocol, p.name AS name, p.base_url, m.use_litellm_pricing FROM request_logs r LEFT JOIN providers p ON p.id = r.provider_id LEFT JOIN models m ON m.provider_id = r.provider_id AND m.model_id = r.model_name WHERE r.id = ?")
+      .get(id) as { provider_id: string | null; provider_name: string | null; model_name: string; protocol: string | null; name: string | null; base_url: string | null; use_litellm_pricing: number | null } | null;
     if (cost === undefined && prompt + completion > 0) {
-      const request = db
-        .query("SELECT r.provider_id, r.model_name, p.protocol, p.name AS provider_name, p.base_url, m.use_litellm_pricing FROM request_logs r LEFT JOIN providers p ON p.id = r.provider_id LEFT JOIN models m ON m.provider_id = r.provider_id AND m.model_id = r.model_name WHERE r.id = ?")
-        .get(id) as { provider_id: string | null; model_name: string; protocol: string | null; provider_name: string | null; base_url: string | null; use_litellm_pricing: number | null } | null;
       const tier = request?.provider_id
         ? (db
             .query(
@@ -202,7 +289,7 @@ export const requestLogService = {
             cache_write_per_million: number;
           } | null)
         : null;
-      const catalogPrices = request?.protocol && request.use_litellm_pricing ? getLiteLLMPricing(request.protocol, request.model_name, `${request.provider_name ?? ""} ${request.base_url ?? ""}`) : null;
+      const catalogPrices = request?.protocol && request.use_litellm_pricing ? getLiteLLMPricing(request.protocol, request.model_name, `${request.name ?? ""} ${request.base_url ?? ""}`) : null;
       const prices = tier ?? (catalogPrices?.billing_unit === "token" ? catalogPrices : null);
       cost = prices
         ? (Math.max(0, prompt - cacheRead) * prices.input_per_million +
@@ -212,11 +299,14 @@ export const requestLogService = {
           1_000_000
         : 0;
     }
+    const status: RequestLogStatus = input.status ?? "success";
+    const statusCode = input.statusCode ?? 200;
+    const responseDetails = serializeDetail(input.responseDetails ?? { status_code: statusCode });
     db.query(
       "UPDATE request_logs SET status = ?, status_code = ?, tokens_prompt = ?, tokens_completion = ?, tokens_cache_read = ?, tokens_cache_write = ?, tokens_total = ?, estimated_cost_usd = ?, duration_ms = ?, tps = ?, error_message = ?, streaming = 0, response_details = COALESCE(?, response_details), error_details = COALESCE(?, error_details), completed_at = datetime('now') WHERE id = ? AND status = 'pending'",
     ).run(
-      input.status ?? "success",
-      input.statusCode ?? 200,
+      status,
+      statusCode,
       prompt,
       completion,
       cacheRead,
@@ -229,10 +319,46 @@ export const requestLogService = {
           ? completion / (input.durationMs / 1000)
           : null),
       typeof redactLogDetail(input.error) === "string" ? redactLogDetail(input.error) as string : input.error ? JSON.stringify(redactLogDetail(input.error)) : null,
-      serializeDetail(input.responseDetails ?? { status_code: input.statusCode ?? 200 }),
+      responseDetails,
       serializeDetail(input.errorDetails ?? (input.error ? { message: input.error } : null)),
       id,
     );
+    // Completing an already-finished row is a no-op; skip the event.
+    const { changed } = db.query("SELECT changes() AS changed").get() as { changed: number };
+    if (!changed) return;
+    try {
+      const stored = db.query("SELECT request_details, response_details FROM request_logs WHERE id = ?").get(id) as { request_details: string | null; response_details: string | null } | null;
+      if (!stored) return;
+      publishFromWrite(id, stored.request_details, stored.response_details, {
+        id,
+        provider_id: request?.provider_id ?? null,
+        provider_name: request?.provider_name ?? "",
+        model_name: request?.model_name ?? "",
+        client_ip: null,
+        requester_name: null,
+        credential_label: null,
+        credential_identity: null,
+        credential_kind: null,
+        api_key_prefix: null,
+        status,
+        status_code: statusCode,
+        tokens_prompt: prompt,
+        tokens_completion: completion,
+        tokens_cache_read: cacheRead,
+        tokens_cache_write: cacheWrite,
+        tokens_total: prompt + completion,
+        estimated_cost_usd: cost ?? 0,
+        tps:
+          input.tps ??
+          (input.durationMs && input.durationMs > 0 ? completion / (input.durationMs / 1000) : null),
+        duration_ms: input.durationMs ?? null,
+        error_message: typeof input.error === "string" ? input.error : input.error ? JSON.stringify(input.error) : null,
+        created_at: "",
+        completed_at: null,
+        streaming: false,
+        streamed_chars: 0,
+      });
+    } catch { /* Logging must never affect the request. */ }
   },
 
   captureResponse(id: string, response: { status?: number; headers?: Headers | Record<string, string | undefined>; contentType?: string | null; streaming?: boolean }) {
@@ -253,9 +379,17 @@ export const requestLogService = {
   },
 
   get(id: string): RequestLogDetails | null {
-    const row = getDb().query("SELECT * FROM request_logs WHERE id = ?").get(id) as (RequestLog & { request_details: string | null; response_details: string | null; error_details: string | null }) | null;
+    const db = getDb();
+    const row = db.query("SELECT * FROM request_logs WHERE id = ?").get(id) as (RequestLog & { request_details: string | null; response_details: string | null; error_details: string | null }) | null;
     if (!row) return null;
-    return { ...row, request_details: parseDetail(row.request_details), response_details: parseDetail(row.response_details), error_details: parseDetail(row.error_details) };
+    // Reuse the table projection so detail views expose the same derived fields.
+    const summary = db.query(`${LIST_SQL} WHERE id = ?`).get(id) as (RequestLog & { request_kind: string | null; output_bytes: number | null }) | null;
+    return {
+      ...(summary ? hydrateRow(summary) : { ...row, streaming: Boolean(row.streaming) }),
+      request_details: parseDetail(row.request_details),
+      response_details: parseDetail(row.response_details),
+      error_details: parseDetail(row.error_details),
+    };
   },
 
   list(
@@ -265,6 +399,10 @@ export const requestLogService = {
       status?: string;
       provider?: string;
       search?: string;
+      /** Keyset cursor: only return logs created strictly before this timestamp. */
+      before?: string;
+      /** Total row count is expensive on large tables; only compute it when asked. */
+      withTotal?: boolean;
     } = {},
   ) {
     const db = getDb();
@@ -291,31 +429,29 @@ export const requestLogService = {
       const search = `%${input.search}%`;
       values.push(search, search, search, search, search);
     }
+    if (input.before) {
+      clauses.push("created_at < ?");
+      values.push(input.before);
+    }
     const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
     const rows = db
       .query(
-        `SELECT id, provider_id, provider_name, model_name, client_ip, requester_name, api_key_prefix, credential_label, credential_identity, credential_kind, status, status_code, tokens_prompt, tokens_completion, tokens_cache_read, tokens_cache_write, tokens_total, estimated_cost_usd, tps, duration_ms, error_message, created_at, completed_at, streaming, streamed_chars, streamed_bytes, request_details, response_details FROM request_logs ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`,
+        `${LIST_SQL} ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`,
       )
-      .all(...values, limit, offset) as (RequestLog & { request_details: string | null; response_details: string | null })[];
-    for (const row of rows) {
-      row.streaming = Boolean(row.streaming);
-      const requestDetails = parseDetail(row.request_details) as any;
-      const responseDetails = parseDetail(row.response_details) as any;
-      row.request_kind = typeof requestDetails?.klove?.media_type === "string" ? requestDetails.klove.media_type : null;
-      row.output_bytes = Number.isFinite(Number(responseDetails?.output_bytes)) ? Number(responseDetails.output_bytes) : null;
-      if (row.output_bytes == null && row.streamed_bytes) row.output_bytes = row.streamed_bytes;
-      delete (row as any).request_details;
-      delete (row as any).response_details;
-    }
-    const total = (
-      db
-        .query(`SELECT COUNT(*) as count FROM request_logs ${where}`)
-        .get(...values) as { count: number }
-    ).count;
+      .all(...values, limit, offset) as (RequestLog & { request_kind: string | null; output_bytes: number | null })[];
+    for (const row of rows) hydrateRow(row);
+    const total = input.withTotal !== false
+      ? (db
+          .query(`SELECT COUNT(*) as count FROM request_logs ${where}`)
+          .get(...values) as { count: number }).count
+      : undefined;
     return { data: rows, total, limit, offset };
   },
 
   clear() {
-    return getDb().query("DELETE FROM request_logs").run().changes;
+    lastCleanupAt = 0;
+    const removed = getDb().query("DELETE FROM request_logs").run().changes;
+    publish({ type: "cleared" });
+    return removed;
   },
 };

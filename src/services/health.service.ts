@@ -116,7 +116,7 @@ function aggregate(rows: RequestRow[]): Aggregation {
   return { summary, groups, providers };
 }
 function requestAggregation(days: number): Aggregation {
-  const db = getDb(); requestLogService.cleanupStale(); const filter = periodFilter(days);
+  const db = getDb(); requestLogService.cleanupStale(true); const filter = periodFilter(days);
   const rows = db.query(`SELECT provider_id, provider_name, model_name, status, duration_ms, created_at, completed_at, error_message FROM request_logs WHERE status IN ('success', 'error')${filter.sql} ORDER BY created_at ASC`).all(...filter.args) as RequestRow[];
   return aggregate(rows);
 }
