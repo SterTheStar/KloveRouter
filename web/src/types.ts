@@ -511,14 +511,48 @@ export interface ChatAttachmentPreview {
   preview?: string;
 }
 
+/**
+ * Attachment as returned by the server: metadata plus a small thumbnail for
+ * images. Heavy payloads are fetched on demand (see `attachments` API).
+ */
+export interface ChatAttachmentMeta {
+  id: string;
+  name?: string;
+  kind: "image" | "text" | "audio" | "video" | "file";
+  mimeType?: string;
+  thumbnail?: string;
+  version?: string;
+  size?: number;
+  /** Inline payload for small text attachments. */
+  data_url?: string;
+}
+
+/** Loaded payload of one attachment, cached client-side by `version`. */
+export interface ChatAttachmentPayload {
+  data_url: string | null;
+  preview: string | null;
+  mimeType?: string | null;
+}
+
 export interface ChatMessage {
   id: string;
   role: "user" | "assistant";
   content: string | ChatContentPart[];
-  attachments?: ChatAttachmentPreview[];
+  attachments?: (ChatAttachmentPreview | ChatAttachmentMeta)[];
   reasoning?: string;
   stats?: ChatStats | null;
   error?: string | null;
+}
+
+/** Sidebar listing row (no message bodies). */
+export interface ChatSummary extends ChatSession {
+  message_count: number;
+}
+
+export interface ChatSessionHint {
+  id: string;
+  model: string;
+  updated_at: string;
 }
 
 export interface RtkStatus {

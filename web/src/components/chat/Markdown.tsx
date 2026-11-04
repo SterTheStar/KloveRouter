@@ -214,6 +214,14 @@ function fenceUnfencedHtml(content: string) {
   return result + content.slice(cursor);
 }
 
+const MARKDOWN_CACHE_MAX_CHARS = 12_000;
+const MARKDOWN_CACHE_ENTRIES = 40;
+/**
+ * Parsed output keyed by source text (insertion order = LRU-ish eviction).
+ * Only settled content is cached: streaming text changes on every paint.
+ */
+const markdownCache = new Map<string, ReactElement>();
+
 export const Markdown = memo(function Markdown({
   content,
   streaming = false,
@@ -221,7 +229,16 @@ export const Markdown = memo(function Markdown({
   content: string;
   streaming?: boolean;
 }) {
-  return (
+  // react-markdown re-parses the whole document on every render. Finished
+  // replies of reasonable size are cached by text, so re-renders triggered by
+  // neighbours (scroll markers, the streaming flag moving on) skip the parse.
+  const cacheable = !streaming && content.length <= MARKDOWN_CACHE_MAX_CHARS;
+  if (cacheable) {
+    const cached = markdownCache.get(content);
+    if (cached) return cached;
+  }
+
+  const rendered = (
     <div className="min-w-0 space-y-3 text-base leading-6 tracking-[-0.32px] text-foreground [&_*:last-child]:mb-0">
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
@@ -322,4 +339,12 @@ export const Markdown = memo(function Markdown({
       </ReactMarkdown>
     </div>
   );
+
+  if (cacheable) {
+    markdownCache.set(content, rendered);
+    if (markdownCache.size > MARKDOWN_CACHE_ENTRIES) {
+      markdownCache.delete(markdownCache.keys().next().value as string);
+    }
+  }
+  return rendered;
 });

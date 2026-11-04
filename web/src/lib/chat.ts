@@ -88,6 +88,10 @@ export interface ChatStreamHandlers {
   onStats: (stats: ChatStats) => void;
   onTitle: (title: { chat_id: string; title: string }) => void;
   onError: (message: string) => void;
+  /** A resumed response is actively producing output. */
+  onStreamStart?: () => void;
+  /** The response being watched has finished. */
+  onStreamEnd?: () => void;
 }
 
 function handleChunk(raw: string, handlers: ChatStreamHandlers): void {
@@ -128,6 +132,14 @@ function handleChunk(raw: string, handlers: ChatStreamHandlers): void {
   }
   if (chunk.type === "klove_chat_error") {
     handlers.onError(String(chunk.message ?? "Chat request failed"));
+    return;
+  }
+  if (chunk.type === "klove_chat_stream_start") {
+    handlers.onStreamStart?.();
+    return;
+  }
+  if (chunk.type === "klove_chat_stream_end") {
+    handlers.onStreamEnd?.();
     return;
   }
   if (chunk.type === "klove_chat_snapshot") {

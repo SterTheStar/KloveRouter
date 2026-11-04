@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ClipboardEvent, type KeyboardEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ClipboardEvent, type KeyboardEvent } from "react";
 import {
   RiLoader4Line as LoaderCircle,
   RiArrowDownLine as ArrowDownLine,
@@ -9,13 +9,15 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { chats as chatsApi } from "../api/client";
 import type {
+  ChatAttachmentMeta,
   ChatAttachmentPreview,
   ChatContentPart,
   ChatMessage,
+  ModelWithProvider,
 } from "../types";
 import { modelApiId } from "../lib/chat";
 import { effortOptions } from "../lib/chat-efforts";
-import ChatMessageView from "../components/chat/ChatMessage";
+import ChatMessages from "../components/chat/ChatMessages";
 import ChatComposer from "../components/chat/ChatComposer";
 import { useChatModels } from "../hooks/use-chat-models";
 import { useModelSelection } from "../hooks/use-model-selection";
@@ -94,6 +96,31 @@ export default function ChatPage({
   );
   const reasoningEffortOptions = effortOptions(selectedModelRecord);
 
+  // Stable across renders so message rows (memoized) only re-render when
+  // their own content changes.
+  const modelsById = useMemo(() => {
+    const map = new Map<string, ModelWithProvider>();
+    for (const model of modelList) {
+      map.set(
+        model.model_pool
+          ? `pool/${model.pretty_id || model.model_id}`
+          : modelApiId(model.provider_name, model.model_id, model.pretty_id),
+        model,
+      );
+    }
+    return map;
+  }, [modelList]);
+  const modelFor = useCallback(
+    (modelId: string | null | undefined) => (modelId ? modelsById.get(modelId) : undefined),
+    [modelsById],
+  );
+
+  // The message action buttons pass these down as props; reading the newest
+  // values through a ref keeps the callbacks stable so memoized rows are not
+  // re-rendered just because a token arrived.
+  const latest = useRef({ chatId, streaming, selectedModel, usage });
+  latest.current = { chatId, streaming, selectedModel, usage };
+
   useEffect(() => {
     if (!attachmentNotice) return;
     const timer = window.setTimeout(() => setAttachmentNotice(null), 8000);
@@ -131,35 +158,42 @@ export default function ChatPage({
     endRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
-  const buildUserContent = (
+  // Saved messages carry summaries (no payload). Text attachments keep their
+  // content inline (`data_url`); editing a message relies on that to resend
+  // it unchanged.
+  const buildUserContent = useCallback((
     text: string,
-    currentAttachments: ChatAttachmentPreview[],
+    currentAttachments: (ChatAttachmentPreview | ChatAttachmentMeta)[],
   ): ChatContentPart[] => {
+    const payload = (attachment: ChatAttachmentPreview | ChatAttachmentMeta) =>
+      "data" in attachment && typeof attachment.data === "string"
+        ? attachment.data
+        : (attachment as ChatAttachmentMeta).data_url;
     const textAttachments = currentAttachments
       .filter((attachment) => attachment.kind === "text")
-      .map(
-        (attachment) =>
-          `\n\n[Arquivo: ${attachment.name}]\n${attachment.data}`,
-      )
+      .map((attachment) => `\n\n[Arquivo: ${attachment.name ?? "file"}]\n${payload(attachment) ?? ""}`)
       .join("");
     const imageParts = currentAttachments
-      .filter((attachment) => attachment.kind === "image" && attachment.preview)
-      .map((attachment) => ({
-        type: "image_url" as const,
-        image_url: { url: attachment.preview! },
-      }));
+      .filter((attachment) => attachment.kind === "image")
+      .map((attachment) => ({ type: "image_url" as const, image_url: { url: (attachment as ChatAttachmentPreview).preview ?? (attachment as ChatAttachmentMeta).thumbnail ?? payload(attachment) ?? "" } }))
+      .filter((part) => part.image_url.url);
     const audioParts = currentAttachments
       .filter((attachment) => attachment.kind === "audio")
-      .map((attachment) => ({
-        type: "input_audio" as const,
-        input_audio: { data: attachment.data.split(",").at(-1) ?? attachment.data, format: attachment.mimeType.split("/").at(-1)?.replace("mpeg", "mp3") ?? "wav" },
-      }));
+      .map((attachment) => {
+        const data = payload(attachment) ?? "";
+        return {
+          type: "input_audio" as const,
+          input_audio: { data: data.split(",").at(-1) ?? data, format: (attachment.mimeType ?? "audio/wav").split("/").at(-1)?.replace("mpeg", "mp3") ?? "wav" },
+        };
+      })
+      .filter((part) => part.input_audio.data);
     const videoParts = currentAttachments
       .filter((attachment) => attachment.kind === "video")
       .map((attachment) => ({
         type: "input_video" as const,
-        video_url: { url: attachment.data },
-      }));
+        video_url: { url: payload(attachment) ?? "" },
+      }))
+      .filter((part) => part.video_url.url);
     return [
       ...(text || textAttachments
         ? [{ type: "text" as const, text: `${text}${textAttachments}`.trim() }]
@@ -169,11 +203,11 @@ export default function ChatPage({
       ...videoParts,
       ...currentAttachments.filter((attachment) => attachment.kind === "file").map((attachment) => ({
         type: "input_file" as const,
-        file_data: attachment.data,
-        filename: attachment.name,
+        file_data: payload(attachment) ?? "",
+        filename: attachment.name ?? "file",
       })),
     ];
-  };
+  }, []);
 
   const addFiles = async (files: File[] | FileList | null) => {
     if (!files?.length) return;
@@ -321,12 +355,16 @@ export default function ChatPage({
           ...(params.regenerate ? {} : { attachments: params.attachments }),
         },
         assistantMessageId: params.assistantMessageId,
-        usageFallback: usage,
+        usageFallback: latest.current.usage,
         onTitle,
+        checkpoint: params.chatId === latest.current.chatId
+          ? (content, reasoning) =>
+              void chatsApi.updateMessage(params.chatId, params.assistantMessageId, { content, reasoning, truncate_after: false }).catch(() => undefined)
+          : undefined,
       });
       clientStartedMessagesRef.current.delete(params.assistantMessageId);
     },
-    [onTitle, selectedModel, streamReply, usage],
+    [onTitle, selectedModel, streamReply],
   );
 
   const send = async () => {
@@ -384,7 +422,8 @@ export default function ChatPage({
     });
   };
 
-  const regenerate = async (messageId: string) => {
+  const regenerate = useCallback(async (messageId: string) => {
+    const { chatId, streaming, selectedModel } = latest.current;
     if (!chatId || streaming || !selectedModel) return;
     const index = messagesRef.current.findIndex((message) => message.id === messageId);
     if (index < 0 || messagesRef.current[index]?.role !== "assistant") return;
@@ -417,9 +456,10 @@ export default function ChatPage({
       setActionError(error?.message ?? "Could not regenerate the response");
       void chatsApi.get(chatId).then((result) => setMessageList(chatId, result.messages)).catch(() => undefined);
     }
-  };
+  }, [appendMessages, onChatActivity, runChat, setMessageList]);
 
-  const editMessage = async (messageId: string, newText: string) => {
+  const editMessage = useCallback(async (messageId: string, newText: string) => {
+    const { chatId, streaming, selectedModel } = latest.current;
     if (!chatId || streaming || !selectedModel) return;
     const index = messagesRef.current.findIndex((message) => message.id === messageId);
     if (index < 0 || messagesRef.current[index]?.role !== "user") return;
@@ -467,9 +507,10 @@ export default function ChatPage({
       setActionError(error?.message ?? "Could not resend the message");
       void chatsApi.get(chatId).then((result) => setMessageList(chatId, result.messages)).catch(() => undefined);
     }
-  };
+  }, [appendMessages, buildUserContent, onChatActivity, runChat, setMessageList]);
 
-  const deleteMessage = async (messageId: string) => {
+  const deleteMessage = useCallback(async (messageId: string) => {
+    const { chatId, streaming } = latest.current;
     if (!chatId || streaming) return;
     try {
       await chatsApi.deleteMessage(chatId, messageId);
@@ -479,7 +520,7 @@ export default function ChatPage({
     }
     setActionError(null);
     setMessageList(chatId, messagesRef.current.filter((message) => message.id !== messageId));
-  };
+  }, [setMessageList]);
 
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
@@ -493,19 +534,24 @@ export default function ChatPage({
     resumedMessagesRef.current.clear();
   }, [chatId]);
 
+  const lastMessage = messages.at(-1);
+  const lastMessageId = lastMessage?.id;
+  const lastMessageDone = Boolean(lastMessage && (lastMessage.stats || lastMessage.error));
   useEffect(() => {
-    if (!chatId || !messages.length) return;
-    const last = messages.at(-1);
-    const pending = [...messages].reverse().find(
-      (message) => message.role === "assistant" && !message.stats && !message.error,
-    );
-    if (!pending) return;
-    if (clientStartedMessagesRef.current.has(pending.id) || resumedMessagesRef.current.has(pending.id)) return;
-    resumedMessagesRef.current.add(pending.id);
-    void resumeGeneration(chatId, pending.id, selectedModel ?? "auto", onTitle).finally(() => {
-      if (!pending.stats && !pending.error) resumedMessagesRef.current.delete(pending.id);
+    if (!chatId || !messages.length || !lastMessageId || lastMessageDone) return;
+    // Only a reply that is not streaming in this view needs to be watched:
+    // it may be running in the background (another tab, or after leaving the
+    // chat). This replaces the former per-second full reload.
+    if (streaming) return;
+    if (clientStartedMessagesRef.current.has(lastMessageId) || resumedMessagesRef.current.has(lastMessageId)) return;
+    resumedMessagesRef.current.add(lastMessageId);
+    void resumeGeneration(chatId, lastMessageId, latest.current.selectedModel ?? "auto", onTitle, (content, reasoning) => {
+      // Keep the partial reply durable while it streams.
+      void chatsApi.updateMessage(chatId, lastMessageId, { content, reasoning, truncate_after: false }).catch(() => undefined);
+    }).finally(() => {
+      resumedMessagesRef.current.delete(lastMessageId);
     });
-  }, [chatId, messages.at(-1)?.id, messages.at(-1)?.stats, messages.at(-1)?.error, selectedModel, onTitle, resumeGeneration]);
+  }, [chatId, lastMessageId, lastMessageDone, messages.length, streaming, onTitle, resumeGeneration]);
 
   useEffect(() => {
     setInput("");
@@ -522,16 +568,19 @@ export default function ChatPage({
     return () => window.clearTimeout(timer);
   }, [actionError]);
 
-  if (loadingModels) {
-    return (
-      <div className="flex justify-center p-12">
-        <LoaderCircle className="size-5 animate-spin text-muted-foreground" />
-        <span className="sr-only">Loading models</span>
-      </div>
-    );
-  }
-
   const topError = actionError ?? modelSelectionError ?? modelsError;
+  const greeting = (
+    <div className="flex min-h-0 flex-1 items-center justify-center px-4 pb-24 text-center">
+      {loadingModels ? (
+        <LoaderCircle className="size-5 animate-spin text-muted-foreground" />
+      ) : (
+        <h2 className="chat-greeting-title font-serif text-[32px] font-bold leading-10 tracking-[-0.192px] text-foreground sm:text-[40px]">
+          <span className="chat-greeting-hello" data-text="Hello,">Hello,</span>{" "}
+          <span className="chat-greeting-name">{username}</span>
+        </h2>
+      )}
+    </div>
+  );
 
   return (
     <div className="relative flex h-svh min-h-0 flex-col overflow-hidden">
@@ -546,40 +595,16 @@ export default function ChatPage({
 
       <div ref={messagesContainerRef} className="min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto flex min-h-full w-full max-w-[768px] flex-col gap-6 px-4 pb-20 pt-8 2xl:max-w-[854px]">
-          {messages.length === 0 ? (
-            <div className="flex min-h-0 flex-1 items-center justify-center px-4 pb-24 text-center">
-              <h2 className="chat-greeting-title font-serif text-[32px] font-bold leading-10 tracking-[-0.192px] text-foreground sm:text-[40px]">
-                <span className="chat-greeting-hello" data-text="Hello,">Hello,</span>{" "}
-                <span className="chat-greeting-name">{username}</span>
-              </h2>
-            </div>
-          ) : (
-          messages.map((message, index) => {
-              const isLast = index === messages.length - 1;
-              const isStreamingMessage = streaming && isLast;
-              const statsModel = message.stats?.model
-                ? modelList.find(
-                    (candidate) =>
-                      (candidate.model_pool ? `pool/${candidate.pretty_id || candidate.model_id}` : modelApiId(candidate.provider_name, candidate.model_id, candidate.pretty_id)) === message.stats?.model,
-                  )
-                : undefined;
-              return (
-                <ChatMessageView
-                  key={message.id}
-                  message={message}
-                  model={statsModel}
-                  modelName={statsModel?.display_name ?? undefined}
-                  streaming={isStreamingMessage}
-                  canRegenerate={isLast && message.role === "assistant"}
-                  onRegenerate={
-                    message.role === "assistant" ? () => void regenerate(message.id) : undefined
-                  }
-                  onEdit={message.role === "user" ? (text) => void editMessage(message.id, text) : undefined}
-                  onDelete={() => void deleteMessage(message.id)}
-                />
-              );
-            })
-          )}
+          <ChatMessages
+            chatId={chatId ?? ""}
+            messages={messages}
+            streaming={streaming}
+            modelFor={modelFor}
+            onRegenerate={regenerate}
+            onEdit={editMessage}
+            onDelete={deleteMessage}
+            emptyState={greeting}
+          />
           <div ref={endRef} className="h-12 shrink-0" />
         </div>
       </div>

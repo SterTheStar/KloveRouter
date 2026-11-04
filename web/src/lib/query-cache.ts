@@ -94,6 +94,7 @@ export const queryKeys = {
   modelPoolModels: "model-pool-models",
   chats: "chats",
   chat: (id: string) => `chats:${id}`,
+  chatHints: "chat-hints",
 };
 
 export const invalidateProviders = (id?: string) => {
@@ -112,5 +113,6 @@ export const invalidateModelPools = () => {
 };
 export const invalidateChats = (id?: string) => {
   queryCache.invalidate(queryKeys.chats);
+  queryCache.invalidate(queryKeys.chatHints);
   if (id) queryCache.invalidate(queryKeys.chat(id));
 };

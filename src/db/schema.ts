@@ -2,6 +2,7 @@ import { Database } from "bun:sqlite";
 import { config } from "../config";
 import { encryptSecret } from "../services/secret.service";
 import { textContentOf } from "../services/chat-content";
+import { storeMessageAttachments, type ClientAttachment } from "../services/chat-attachments";
 
 function parseJsonColumn(value: string | null): unknown {
   if (!value) return "";
@@ -312,6 +313,24 @@ export function initSchema(db: Database): void {
     CREATE INDEX IF NOT EXISTS idx_chat_messages_chat_sequence
       ON chat_messages(chat_id, sequence);
 
+    -- Attachment payloads live outside the message JSON so listings never
+    -- load them. Each attachment is split into 1 MB components (1-based).
+    CREATE TABLE IF NOT EXISTS message_attachments (
+      message_id TEXT NOT NULL,
+      attachment_id TEXT NOT NULL,
+      position INTEGER NOT NULL DEFAULT 0,
+      component INTEGER NOT NULL,
+      kind TEXT NOT NULL,
+      name TEXT,
+      mime_type TEXT,
+      version TEXT,
+      size INTEGER,
+      chunks INTEGER NOT NULL DEFAULT 0,
+      data BLOB NOT NULL,
+      PRIMARY KEY (message_id, attachment_id, component),
+      FOREIGN KEY (message_id) REFERENCES chat_messages(id) ON DELETE CASCADE
+    );
+
     CREATE TABLE IF NOT EXISTS request_logs (
       id TEXT PRIMARY KEY,
       provider_id TEXT,
@@ -488,6 +507,26 @@ export function initSchema(db: Database): void {
   }[];
   if (!chatMessageCols.find((c) => c.name === "reasoning")) {
     db.exec("ALTER TABLE chat_messages ADD COLUMN reasoning TEXT");
+  }
+
+  // Move inline attachment payloads out of the message JSON. Rows still
+  // carrying full data URLs predate message_attachments and would otherwise
+  // keep shipping megabytes with every chat load. Idempotent: rewritten rows
+  // only keep metadata, so the LIKE scan stops matching them.
+  const legacyAttachments = db
+    .query("SELECT id, attachments FROM chat_messages WHERE attachments LIKE ?")
+    .all("%\"data\":\"data:%") as { id: string; attachments: string }[];
+  if (legacyAttachments.length) {
+    const update = db.query("UPDATE chat_messages SET attachments = ? WHERE id = ?");
+    db.transaction(() => {
+      for (const row of legacyAttachments) {
+        let parsed: unknown;
+        try { parsed = JSON.parse(row.attachments); } catch { continue; }
+        if (!Array.isArray(parsed)) continue;
+        const { summary } = storeMessageAttachments(db, row.id, parsed as ClientAttachment[]);
+        update.run(JSON.stringify(summary), row.id);
+      }
+    })();
   }
 
   // Full-text search over chat message content (panel chat search).

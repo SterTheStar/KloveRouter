@@ -121,6 +121,12 @@ function chatStatsStream(
       reasoning: assistantReasoning,
       ...(assistantError ? { error: assistantError } : {}),
     }, { index: false });
+    if (chatId) {
+      chatGenerationService.publish(chatId, assistantMessageId, {
+        reasoning: assistantReasoning,
+        content: typeof assistantContent === "string" ? assistantContent : "",
+      });
+    }
   };
 
   const emitStats = (controller?: ReadableStreamDefaultController) => {
@@ -554,14 +560,29 @@ export const chatControlPlugin = (app: Elysia) =>
       return new Response(new ReadableStream<Uint8Array>({
         async start(controller) {
           const encoder = new TextEncoder();
-          let content: any = initial.content ?? "";
-          let reasoning = initial.reasoning ?? "";
+          // Start from the output already streamed to the first viewer so a
+          // second connection renders the live response immediately.
+          const live = chatGenerationService.output(params.id, params.messageId);
+          let content: any = live?.content || initial.content || "";
+          let reasoning = live?.reasoning || initial.reasoning || "";
           let lastError: string | null = null;
           let statsSent = false;
+          let started = false;
           const send = (value: Record<string, unknown>) => {
             if (!closed) {
               try { controller.enqueue(encoder.encode(`data: ${JSON.stringify(value)}\n\n`)); }
               catch { closed = true; }
+            }
+          };
+          const sendStart = () => {
+            if (started) return;
+            started = true;
+            send({ type: "klove_chat_stream_start" });
+            if (reasoning) send({ type: "klove_chat_reasoning_snapshot", reasoning });
+            if (typeof content === "string" ? content.length > 0 : JSON.stringify(content) !== '""') {
+              send(typeof content === "string"
+                ? { type: "klove_chat_snapshot", content }
+                : { type: "klove_chat_snapshot", content });
             }
           };
           try {
@@ -596,10 +617,14 @@ export const chatControlPlugin = (app: Elysia) =>
                 send({ type: "klove_chat_error", message: message.error });
                 lastError = message.error;
               }
+              // Only announce an active stream once its first output exists,
+              // so viewers do not keep the spinner for finished responses.
+              if (active && !started && (reasoning || (typeof content === "string" ? content.length > 0 : true))) sendStart();
               if (message.stats && !statsSent) {
                 send({ type: "klove_stats", ...(message.stats as Record<string, unknown>) });
                 statsSent = true;
               }
+              if (!active) send({ type: "klove_chat_stream_end" });
               if (message.stats || !active) break;
               await new Promise((resolve) => setTimeout(resolve, 300));
             }
@@ -614,6 +639,7 @@ export const chatControlPlugin = (app: Elysia) =>
               catch { closed = true; }
             }
           } finally {
+            if (!closed) send({ type: "klove_chat_stream_end" });
             if (!closed) {
               closed = true;
               try { controller.close(); } catch { /* consumer disconnected */ }
@@ -630,7 +656,30 @@ export const chatControlPlugin = (app: Elysia) =>
       });
     },
     { params: t.Object({ id: t.String({ minLength: 1 }), messageId: t.String({ minLength: 1 }) }) },
-  ).post(
+  )
+  // Compact attachment payload for one message attachment, fetched on demand
+  // because listings only carry metadata and thumbnails.
+  .get(
+    "/api/chats/:id/messages/:messageId/attachments/:attachmentId",
+    ({ params, set }) => {
+      const attachment = chatService.getAttachment(params.id, params.messageId, params.attachmentId);
+      if (!attachment || !attachment.row) {
+        set.status = 404;
+        return { error: "Attachment not found" };
+      }
+      return {
+        id: attachment.row.id,
+        kind: attachment.row.kind,
+        name: attachment.row.name,
+        mimeType: attachment.row.mime_type,
+        version: attachment.row.version,
+        data_url: attachment.payload.data_url,
+        preview: attachment.payload.preview,
+      };
+    },
+    { params: t.Object({ id: t.String({ minLength: 1 }), messageId: t.String({ minLength: 1 }), attachmentId: t.String({ minLength: 1 }) }) },
+  )
+  .post(
     "/api/chats/:id/messages/:messageId/stop",
     ({ params, set }) => {
       const message = chatService.findMessageInChat(params.id, params.messageId);

@@ -27,6 +27,18 @@ describe("chatGenerationService", () => {
     chatGenerationService.finish("chat-a", "message-a");
     expect(chatGenerationService.isActive("chat-a", "message-a")).toBe(false);
   });
+
+  test("publishes the live output for viewers joining mid-stream", () => {
+    const controller = new AbortController();
+    chatGenerationService.start("chat-b", "message-b", controller);
+    expect(chatGenerationService.output("chat-b", "message-b")).toEqual({ reasoning: "", content: "" });
+    chatGenerationService.publish("chat-b", "message-b", { reasoning: "thinking", content: "partial" });
+    expect(chatGenerationService.output("chat-b", "message-b")).toEqual({ reasoning: "thinking", content: "partial" });
+    // Publishing after the end is a no-op instead of resurrecting the entry.
+    chatGenerationService.finish("chat-b", "message-b");
+    chatGenerationService.publish("chat-b", "message-b", { reasoning: "", content: "late" });
+    expect(chatGenerationService.output("chat-b", "message-b")).toBeUndefined();
+  });
 });
 
 describe("startTitleGeneration", () => {

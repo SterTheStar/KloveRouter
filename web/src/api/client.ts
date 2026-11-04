@@ -536,6 +536,22 @@ export const requestLogs = {
     }),
 };
 
+// Attachment payloads are not part of chat listings; they load on demand.
+export const attachments = {
+  get: (chatId: string, messageId: string, attachmentId: string) =>
+    request<{
+      id: string;
+      kind: string;
+      name: string | null;
+      mimeType: string | null;
+      version: string | null;
+      data_url: string | null;
+      preview: string | null;
+    }>(
+      `/api/chats/${encodeURIComponent(chatId)}/messages/${encodeURIComponent(messageId)}/attachments/${encodeURIComponent(attachmentId)}`,
+    ),
+};
+
 // Panel chat (streams OpenAI-compatible SSE via the panel JWT)
 export const chat = {
   completions: (
@@ -564,16 +580,26 @@ export const chat = {
 
 export const chats = {
   list: () => request<import("../types").ChatSession[]>("/api/chats"),
+  /** Sidebar listing: sessions plus message counts, without message bodies. */
+  listSummaries: () =>
+    request<import("../types").ChatSummary[]>("/api/chats?fields=summary"),
+  /** Model/updated_at of every chat, for resolving models without loading chats. */
+  hints: () => request<import("../types").ChatSessionHint[]>("/api/chats/hints"),
+  /** Models with a response currently streaming on the server. */
+  streaming: () =>
+    request<{ models: string[] }>("/api/chats/streaming"),
   create: (data: { title?: string; model?: string } = {}) =>
     request<import("../types").ChatSession>("/api/chats", {
       method: "POST",
       body: JSON.stringify(data),
     }),
-  get: (id: string) =>
+  get: (id: string, options: { since?: number } = {}) =>
     request<{
       session: import("../types").ChatSession;
       messages: import("../types").PersistedChatMessage[];
-    }>(`/api/chats/${id}`),
+    }>(
+      `/api/chats/${id}${options.since === undefined ? "" : `?since=${options.since}`}`,
+    ),
   update: (id: string, data: { title?: string; model?: string }) =>
     request<import("../types").ChatSession>(`/api/chats/${id}`, {
       method: "PATCH",
@@ -588,7 +614,7 @@ export const chats = {
   updateMessage: (
     chatId: string,
     messageId: string,
-    data: { content: unknown; attachments?: unknown[]; truncate_after?: boolean },
+    data: { content: unknown; attachments?: unknown[]; truncate_after?: boolean; reasoning?: string },
   ) =>
     request<import("../types").PersistedChatMessage>(
       `/api/chats/${chatId}/messages/${messageId}`,

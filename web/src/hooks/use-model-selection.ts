@@ -42,11 +42,28 @@ export function useModelSelection({
     localStorage.getItem(MODEL_STORAGE_KEY),
   );
   const [modelsByChat, setModelsByChat] = useState<Record<string, string>>({});
+  // Persisted model of every chat, so a chat's model is known before (or
+  // without) loading its messages.
+  const [sessionModels, setSessionModels] = useState<Record<string, string>>({});
   const [modelSelectionError, setModelSelectionError] = useState<string | null>(null);
   const [selectedReasoningEffort, setSelectedReasoningEffort] = useState<string | null>(null);
   const modelUpdateVersionsRef = useRef(new Map<string, number>());
   const pendingModelUpdatesRef = useRef(new Set<string>());
   const modelUpdateQueueRef = useRef(new Map<string, Promise<void>>());
+
+  useEffect(() => {
+    let cancelled = false;
+    queryCache
+      .getOrFetch(queryKeys.chatHints, 60_000, chatsApi.hints)
+      .then((hints) => {
+        if (cancelled) return;
+        setSessionModels(Object.fromEntries(hints.map((hint) => [hint.id, hint.model])));
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -81,6 +98,33 @@ export function useModelSelection({
       ),
     );
   }, [modelList, loadingModels, validModelIdsRef]);
+
+  // The model recorded for this chat in the database (may be stale/remapped).
+  const sessionModel = chatId ? sessionModels[chatId] : undefined;
+
+  useEffect(() => {
+    if (!persistModelPerChat || !chatId || !sessionModel || pendingModelUpdatesRef.current.has(chatId)) return;
+    const validIds = validModelIdsRef.current;
+    if (!validIds.size) return;
+    const resolved = resolveChatModel(sessionModel, [], globalModel, validIds);
+    if (!resolved) return;
+    setModelsByChat((previous) => (previous[chatId] === resolved ? previous : { ...previous, [chatId]: resolved }));
+    if (!validIds.has(sessionModel)) {
+      // Persist the remapped id so the next load (and the proxy) sees it.
+      pendingModelUpdatesRef.current.add(chatId);
+      const version = modelUpdateVersionsRef.current.get(chatId) ?? 0;
+      void chatsApi.update(chatId, { model: resolved })
+        .then(() => {
+          if ((modelUpdateVersionsRef.current.get(chatId) ?? 0) !== version) return;
+          pendingModelUpdatesRef.current.delete(chatId);
+          setSessionModels((previous) => ({ ...previous, [chatId]: resolved }));
+          queryCache.invalidate(queryKeys.chatHints);
+        })
+        .catch(() => {
+          if ((modelUpdateVersionsRef.current.get(chatId) ?? 0) === version) pendingModelUpdatesRef.current.delete(chatId);
+        });
+    }
+  }, [chatId, globalModel, persistModelPerChat, sessionModel, validModelIdsRef]);
 
   const selectedModel =
     persistModelPerChat && chatId
@@ -192,6 +236,7 @@ export function useModelSelection({
         validModelIdsRef.current,
       );
       if (!resolvedModel) return;
+      setSessionModels((previous) => (previous[targetChatId] === sessionModel ? previous : { ...previous, [targetChatId]: sessionModel }));
       setModelsByChat((previous) => ({ ...previous, [targetChatId]: resolvedModel }));
       if (!validModelIdsRef.current.has(sessionModel)) {
         pendingModelUpdatesRef.current.add(targetChatId);

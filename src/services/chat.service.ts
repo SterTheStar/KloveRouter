@@ -1,5 +1,14 @@
 import { getDb } from "../db/connection";
 import { textContentOf } from "./chat-content";
+import {
+  listMessageAttachments,
+  loadAttachment,
+  storeMessageAttachments,
+  summarizeAttachment,
+  type AttachmentMeta,
+  type ClientAttachment,
+} from "./chat-attachments";
+import { providerPrefix } from "./provider.service";
 
 export type ChatRole = "user" | "assistant";
 
@@ -22,6 +31,18 @@ export interface ChatMessage {
   error: string | null;
   sequence: number;
   created_at: string;
+}
+
+/** Sidebar listing row: no timestamps of the message bodies, just what it shows. */
+export interface ChatSummary extends ChatSession {
+  message_count: number;
+}
+
+/** Cheap identity fields used when deciding which model an existing chat ran. */
+export interface ChatSessionHint {
+  id: string;
+  model: string;
+  updated_at: string;
 }
 
 export interface ChatSearchResult {
@@ -48,12 +69,13 @@ function normalizeTitle(title: string | undefined, fallback = "New chat") {
 }
 
 function rowToMessage(row: any): ChatMessage {
+  const stored = parseJson<AttachmentMeta[]>(row.attachments, []);
   return {
     id: row.id,
     chat_id: row.chat_id,
     role: row.role,
     content: parseJson(row.content, row.content),
-    attachments: parseJson(row.attachments, []),
+    attachments: listMessageAttachments(getDb(), row.id, stored),
     reasoning: row.reasoning ?? undefined,
     stats: parseJson(row.stats, null),
     error: row.error ?? null,
@@ -69,17 +91,44 @@ export const chatService = {
       .all() as ChatSession[];
   },
 
+  /** Sidebar listing with message counts, without loading any message body. */
+  listSummaries(): ChatSummary[] {
+    return getDb()
+      .query(
+        `SELECT s.*, (SELECT COUNT(*) FROM chat_messages m WHERE m.chat_id = s.id) AS message_count
+         FROM chat_sessions s
+         ORDER BY julianday(s.updated_at) DESC, julianday(s.created_at) DESC, s.id ASC`,
+      )
+      .all() as ChatSummary[];
+  },
+
+  /** Per-chat model/updated_at only: enough for model resolution and cache checks. */
+  listHints(): ChatSessionHint[] {
+    return getDb()
+      .query("SELECT id, model, updated_at FROM chat_sessions")
+      .all() as ChatSessionHint[];
+  },
+
   findById(id: string): ChatSession | null {
     return (getDb().query("SELECT * FROM chat_sessions WHERE id = ?").get(id) as ChatSession | null) ?? null;
   },
 
-  get(id: string): { session: ChatSession; messages: ChatMessage[] } | null {
+  get(id: string, options: { since?: number } = {}): { session: ChatSession; messages: ChatMessage[] } | null {
     const session = this.findById(id);
     if (!session) return null;
-    const rows = getDb()
-      .query("SELECT * FROM chat_messages WHERE chat_id = ? ORDER BY sequence ASC")
-      .all(id);
+    const rows = options.since === undefined
+      ? getDb().query("SELECT * FROM chat_messages WHERE chat_id = ? ORDER BY sequence ASC").all(id)
+      : getDb().query("SELECT * FROM chat_messages WHERE chat_id = ? AND sequence >= ? ORDER BY sequence ASC").all(id, options.since);
     return { session, messages: (rows as any[]).map(rowToMessage) };
+  },
+
+  /** One attachment payload, verified to belong to the chat. */
+  getAttachment(chatId: string, messageId: string, attachmentId: string) {
+    const owner = getDb()
+      .query("SELECT 1 AS ok FROM chat_messages WHERE chat_id = ? AND id = ?")
+      .get(chatId, messageId);
+    if (!owner) return null;
+    return loadAttachment(getDb(), messageId, attachmentId);
   },
 
   create(input: { title?: string; model?: string } = {}): ChatSession {
@@ -143,18 +192,25 @@ export const chatService = {
    */
   updateMessageContent(
     id: string,
-    input: { content?: unknown; attachments?: unknown[]; truncateAfter?: boolean },
+    input: { content?: unknown; attachments?: unknown[]; truncateAfter?: boolean; reasoning?: string },
   ): ChatMessage | null {
     const db = getDb();
     const current = db.query("SELECT * FROM chat_messages WHERE id = ?").get(id) as any;
     if (!current) return null;
-    db.query("UPDATE chat_messages SET content = ?, attachments = ? WHERE id = ?").run(
+    let attachments: string | null = current.attachments ?? null;
+    if (input.attachments === null) {
+      attachments = null;
+      db.query("DELETE FROM message_attachments WHERE message_id = ?").run(id);
+    } else if (input.attachments !== undefined) {
+      // Clients edit from the summary form (no payload); attachments that are
+      // still listed keep their stored payload, so media is not lost.
+      const { summary } = storeMessageAttachments(db, id, input.attachments as ClientAttachment[]);
+      attachments = JSON.stringify(summary);
+    }
+    db.query("UPDATE chat_messages SET content = ?, attachments = ?, reasoning = ? WHERE id = ?").run(
       JSON.stringify(input.content === undefined ? parseJson(current.content, current.content) : input.content ?? ""),
-      input.attachments === undefined
-        ? current.attachments
-        : input.attachments === null
-          ? null
-          : JSON.stringify(input.attachments),
+      attachments,
+      input.reasoning === undefined ? current.reasoning : input.reasoning || null,
       id,
     );
     if (input.truncateAfter) {
@@ -232,19 +288,25 @@ export const chatService = {
     const next = db
       .query("SELECT COALESCE(MAX(sequence), -1) + 1 AS sequence FROM chat_messages WHERE chat_id = ?")
       .get(input.chatId) as { sequence: number };
-    db.query(
-      "INSERT INTO chat_messages (id, chat_id, role, content, attachments, reasoning, stats, error, sequence) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-    ).run(
-      id,
-      input.chatId,
-      input.role,
-      JSON.stringify(input.content ?? ""),
-      input.attachments?.length ? JSON.stringify(input.attachments) : null,
-      input.reasoning ?? null,
-      input.stats ? JSON.stringify(input.stats) : null,
-      input.error ?? null,
-      next.sequence,
-    );
+    db.transaction(() => {
+      db.query(
+        "INSERT INTO chat_messages (id, chat_id, role, content, attachments, reasoning, stats, error, sequence) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      ).run(
+        id,
+        input.chatId,
+        input.role,
+        JSON.stringify(input.content ?? ""),
+        null,
+        input.reasoning ?? null,
+        input.stats ? JSON.stringify(input.stats) : null,
+        input.error ?? null,
+        next.sequence,
+      );
+      if (input.attachments?.length) {
+        const { summary } = storeMessageAttachments(db, id, input.attachments as ClientAttachment[]);
+        db.query("UPDATE chat_messages SET attachments = ? WHERE id = ?").run(JSON.stringify(summary), id);
+      }
+    })();
     db.query("UPDATE chat_sessions SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?").run(input.chatId);
     const created = rowToMessage(db.query("SELECT * FROM chat_messages WHERE id = ?").get(id));
     if (created) this.indexMessage(created);

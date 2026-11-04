@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { memo, useEffect, useState } from "react";
 import {
   RiArrowDownSLine as ChevronDown,
   RiArrowRightSLine as ChevronRight,
@@ -9,14 +9,16 @@ import {
   RiEditLine as EditLine,
   RiDeleteBinLine as DeleteBinLine,
   RiCloseLine as CloseLine,
+  RiImageLine as ImageLine,
   RiMusic2Line as AudioLine,
   RiVideoLine as VideoLine,
   RiFilePdf2Line as PdfLine,
 } from "@remixicon/react";
 import { Button } from "@/components/ui/button";
-import type { ChatMessage, ModelWithProvider } from "../../types";
+import type { ChatAttachmentMeta, ChatMessage, ModelWithProvider } from "../../types";
 import { classifyChatError } from "../../lib/chat-errors";
 import { formatDuration, formatTokens, formatTps } from "../../lib/chat";
+import { useAttachmentPayload } from "../../hooks/use-attachment-payload";
 import { Markdown } from "./Markdown";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 
@@ -63,26 +65,90 @@ function ModelTooltip({ model }: { model: ModelWithProvider }) {
   );
 }
 
+/**
+ * Image attachment: the list carries only a thumbnail, so the full picture is
+ * fetched when it is opened and kept until it is closed again.
+ */
+function ImageAttachment({
+  chatId,
+  messageId,
+  attachment,
+}: {
+  chatId: string;
+  messageId: string;
+  attachment: ChatAttachmentMeta;
+}) {
+  const [open, setOpen] = useState(false);
+  const { url, loading } = useAttachmentPayload(chatId, messageId, attachment, open);
+  const thumb = attachment.thumbnail ?? null;
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="group/image relative overflow-hidden rounded-lg border border-border bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong"
+        title={attachment.name}
+        aria-label={`Show ${attachment.name ?? "image"}`}
+      >
+        {thumb ? (
+          <img src={thumb} alt={attachment.name ?? ""} className="max-h-56 max-w-full object-cover" />
+        ) : (
+          <span className="flex h-20 w-40 items-center justify-center gap-1.5 text-[11px] text-muted-foreground">
+            <ImageLine className="size-4" /> {attachment.name}
+          </span>
+        )}
+        <span className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/40 text-xs font-medium text-white opacity-0 transition-opacity group-hover/image:opacity-100">
+          {loading ? "Loading…" : "View"}
+        </span>
+      </button>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => setOpen(false)}
+      className="overflow-hidden rounded-lg border border-border bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong"
+      title="Collapse image"
+      aria-label="Collapse image"
+    >
+      {thumb && (loading || !url) ? (
+        <img src={thumb} alt={attachment.name ?? ""} className="max-h-56 max-w-full object-cover opacity-60" />
+      ) : url ? (
+        <img src={url} alt={attachment.name ?? ""} className="max-h-[28rem] max-w-full object-contain" />
+      ) : (
+        <span className="flex h-20 w-40 items-center justify-center text-[11px] text-muted-foreground">
+          {loading ? "Loading…" : "Image unavailable"}
+        </span>
+      )}
+    </button>
+  );
+}
+
 function UserAttachments({
+  chatId,
+  messageId,
   attachments,
 }: {
+  chatId: string;
+  messageId: string;
   attachments: NonNullable<ChatMessage["attachments"]>;
 }) {
   return (
     <div className="mt-1.5 flex max-w-[85%] flex-wrap justify-end gap-1.5 sm:max-w-[75%]">
-      {attachments.map((attachment) => (
+      {attachments.map((attachment) => {
+        const meta = attachment as ChatAttachmentMeta;
+        if (meta.kind === "image") {
+          return <ImageAttachment key={meta.id} chatId={chatId} messageId={messageId} attachment={meta} />;
+        }
+        return (
         <div
-          key={attachment.id}
+          key={meta.id}
           className="flex max-w-44 items-center gap-1.5 rounded-lg border border-border bg-card px-2 py-1 text-[11px] text-muted-foreground"
-          title={attachment.name}
+          title={meta.name}
         >
-          {attachment.kind === "image" && attachment.preview ? (
-            <img
-              src={attachment.preview}
-              alt=""
-              className="size-5 shrink-0 rounded object-cover"
-            />
-          ) : attachment.kind === "audio" ? (
+          {attachment.kind === "audio" ? (
             <AudioLine className="size-4 shrink-0 text-muted-foreground" />
           ) : attachment.kind === "video" ? (
             <VideoLine className="size-4 shrink-0 text-muted-foreground" />
@@ -93,9 +159,10 @@ function UserAttachments({
               TXT
             </span>
           )}
-          <span className="truncate">{attachment.name}</span>
+          <span className="truncate">{meta.name}</span>
         </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -199,8 +266,9 @@ function messageRawText(content: ChatMessage["content"]): string {
     .join("\n");
 }
 
-export default function ChatMessageView({
+function ChatMessageView({
   message,
+  chatId,
   streaming,
   modelName,
   model,
@@ -210,6 +278,8 @@ export default function ChatMessageView({
   onDelete,
 }: {
   message: ChatMessage;
+  /** Needed to fetch attachment payloads on demand. */
+  chatId: string;
   streaming?: boolean;
   modelName?: string;
   model?: ModelWithProvider;
@@ -289,7 +359,7 @@ export default function ChatMessageView({
           </div>
         )}
         {message.attachments?.length ? (
-          <UserAttachments attachments={message.attachments} />
+          <UserAttachments chatId={chatId} messageId={message.id} attachments={message.attachments} />
         ) : null}
         {!streaming && onEdit && (
           <div className="mt-1 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
@@ -376,3 +446,29 @@ export default function ChatMessageView({
     </div>
   );
 }
+
+type ChatMessageViewProps = Parameters<typeof ChatMessageView>[0];
+
+/**
+ * Callbacks close over the message id ("onEdit" ⇒ "onEdit:<id>") or are plain
+ * wrappers, so a callback whose shape is unchanged still counts as equal.
+ * Without this, every re-render of the conversation rebuilt every row.
+ */
+function callbackSignature(value: unknown): string {
+  if (typeof value !== "function") return "";
+  return `${value.name}:${value.length}:${value.toString().slice(0, 400)}`;
+}
+
+function sameMessageView(previous: ChatMessageViewProps, next: ChatMessageViewProps) {
+  return previous.message === next.message
+    && previous.chatId === next.chatId
+    && previous.streaming === next.streaming
+    && previous.modelName === next.modelName
+    && previous.model === next.model
+    && previous.canRegenerate === next.canRegenerate
+    && callbackSignature(previous.onRegenerate) === callbackSignature(next.onRegenerate)
+    && callbackSignature(previous.onEdit) === callbackSignature(next.onEdit)
+    && callbackSignature(previous.onDelete) === callbackSignature(next.onDelete);
+}
+
+export default memo(ChatMessageView, sameMessageView);

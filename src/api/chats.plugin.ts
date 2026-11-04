@@ -9,9 +9,27 @@ async function waitForChatGeneration(chatId: string) {
 
 const chatIdParams = t.Object({ id: t.String({ minLength: 1 }) });
 
+/** Routing ids of the models that have a response in flight right now. */
+function liveGeneratingModels(): string[] {
+  return chatService
+    .listHints()
+    .filter((chat) => chat.model && chatGenerationService.activeMessageIds(chat.id).length > 0)
+    .map((chat) => chat.model);
+}
+
 export const chatsPlugin = (app: Elysia) =>
   app
-    .get("/api/chats", () => chatService.list())
+    // `fields=summary` (sidebar) returns counts only and skips message bodies.
+    .get(
+      "/api/chats",
+      ({ query }) => (query.fields === "summary" ? chatService.listSummaries() : chatService.list()),
+      { query: t.Object({ fields: t.Optional(t.String()) }) },
+    )
+    // Compact model hints for every chat: lets the client resolve models for
+    // conversations it has not loaded yet, so opening one needs no big fetch.
+    .get("/api/chats/hints", () => chatService.listHints())
+    // Chats with a response streaming in the background.
+    .get("/api/chats/streaming", () => ({ models: liveGeneratingModels() }))
     .get(
       "/api/chats/search",
       ({ query }) => chatService.search(query.q ?? ""),
@@ -29,6 +47,7 @@ export const chatsPlugin = (app: Elysia) =>
           content: body.content,
           attachments: body.attachments,
           truncateAfter: body.truncate_after,
+          reasoning: body.reasoning,
         });
         if (!updated || updated.chat_id !== params.id) {
           set.status = 404;
@@ -42,6 +61,7 @@ export const chatsPlugin = (app: Elysia) =>
           content: t.Any(),
           attachments: t.Optional(t.Array(t.Any())),
           truncate_after: t.Optional(t.Boolean()),
+          reasoning: t.Optional(t.String()),
         }),
       },
     )
@@ -66,15 +86,21 @@ export const chatsPlugin = (app: Elysia) =>
     )
     .get(
       "/api/chats/:id",
-      ({ params, set }) => {
-        const chat = chatService.get(params.id);
+      ({ params, query, set }) => {
+        // `since` reloads only the tail (messages that changed during a
+        // stream) instead of the whole conversation.
+        const since = query.since === undefined ? undefined : Number(query.since);
+        const chat = chatService.get(params.id, Number.isFinite(since) ? { since: since as number } : {});
         if (!chat) {
           set.status = 404;
           return { error: "Chat not found" };
         }
         return chat;
       },
-      { params: chatIdParams },
+      {
+        params: chatIdParams,
+        query: t.Object({ since: t.Optional(t.String()) }),
+      },
     )
     .patch(
       "/api/chats/:id",

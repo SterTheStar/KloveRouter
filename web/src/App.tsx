@@ -126,7 +126,10 @@ export default function App() {
 
   useEffect(() => {
     if (!isAuth || currentPage !== "chat") return;
-    queryCache.getOrFetch(queryKeys.chats, 5_000, chatsApi.list).then((list) => {
+    // The sidebar only needs titles/counts; model hints let the chat resolve
+    // per-chat models without loading conversations the user never opened.
+    void queryCache.getOrFetch(queryKeys.chatHints, 60_000, chatsApi.hints).catch(() => undefined);
+    queryCache.getOrFetch(queryKeys.chats, 5_000, chatsApi.listSummaries).then((list) => {
       const sorted = sortChats(list);
       setChatSessions(sorted);
       const requestedChat = route.chatId;
@@ -321,7 +324,7 @@ export default function App() {
                 onChatCreated={(id) => {
                   handleNavigate("chat", id);
                   invalidateChats(id);
-                  queryCache.getOrFetch(queryKeys.chats, 5_000, chatsApi.list).then((list) => {
+                  queryCache.getOrFetch(queryKeys.chats, 5_000, chatsApi.listSummaries).then((list) => {
                     const created = list.find((chat) => chat.id === id);
                     setChatSessions(sortChats(created ? [created, ...list.filter((chat) => chat.id !== id)] : list));
                   }).catch(() => undefined);
