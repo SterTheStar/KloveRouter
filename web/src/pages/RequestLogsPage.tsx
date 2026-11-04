@@ -20,7 +20,6 @@ import {
   RiPlugLine as KindIcon,
 } from "@remixicon/react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -314,7 +313,6 @@ export default function RequestLogsPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [hasMore, setHasMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [live, setLive] = useState(true);
   const [pendingNew, setPendingNew] = useState(0);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [clearing, setClearing] = useState(false);
@@ -397,7 +395,6 @@ export default function RequestLogsPage() {
       } catch {
         if (stopped || controller.signal.aborted) return;
       }
-      if (!stopped) setLive(false);
       // Server closed the stream; reconnect while the page is mounted.
       if (!stopped && !controller.signal.aborted) {
         retryTimer = window.setTimeout(connect, 3000);
@@ -427,7 +424,6 @@ export default function RequestLogsPage() {
     if (isFirstPage) {
       pendingNewRef.current = 0;
       setRefreshing(true);
-      setLive(true);
       setPendingNew(0);
       if (!logs.length) setLoading(true);
     } else {
@@ -616,16 +612,6 @@ export default function RequestLogsPage() {
           <CardTitle className="text-base font-medium tracking-tight text-foreground">
             All requests{" "}
             <span className="font-mono text-tertiary">({total ?? "…"})</span>
-            {live ? (
-              <Badge variant="outline" className="ml-2 gap-1 text-[10px] font-medium">
-                <span className="size-1.5 rounded-full bg-success" />
-                Live
-              </Badge>
-            ) : (
-              <Badge variant="outline" className="ml-2 text-[10px] font-medium text-tertiary">
-                Live updates paused
-              </Badge>
-            )}
             {refreshing && (
               <LoaderCircle
                 className="ml-2 inline size-3.5 animate-spin text-tertiary"
