@@ -94,7 +94,7 @@ function DeepAIUsageSummary({ usage }: { usage: any | null }) {
               ? "Balance or grant data unavailable."
               : "Theos allowance is not enabled for this account."}
           {refresh ? ` · Frees up ${refresh}` : ""}
-          {Number.isFinite(credits) ? ` · ${usageNumber(credits)} credits remaining` : ""}
+          {Number.isFinite(credits) ? ` · ${usageNumber(credits)} DeepAI credits` : ""}
         </div>
       </div>
       {usage.summary && (
@@ -686,12 +686,15 @@ export default function UsageLimitsPage() {
                               </>
                             ) : (
                               <>
-                                {accountIdentity(provider, credential)} ·{" "}
-                                {provider.protocol === "antigravity"
-                                  ? "Antigravity account"
-                                  : provider.protocol === "deepai"
-                                    ? deepaiData?.summary?.plan ?? "DeepAI account"
-                                    : usage?.plan_type ?? "Codex OAuth account"}
+                                {provider.protocol === "deepai" && deepaiData?.summary?.username
+                                  ? `DeepAI Code · ${deepaiData.summary.plan ?? "free"}`
+                                  : `${accountIdentity(provider, credential)} · ${
+                                      provider.protocol === "antigravity"
+                                        ? "Antigravity account"
+                                        : provider.protocol === "deepai"
+                                          ? deepaiData?.summary?.plan ?? "DeepAI account"
+                                          : usage?.plan_type ?? "Codex OAuth account"
+                                    }`}
                               </>
                             )}
                           </div>
