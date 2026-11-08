@@ -406,9 +406,9 @@ export const modelsPlugin = (app: Elysia) =>
             // per-request "0", all per-second tiers "0", or not premier when
             // the catalog carries no price fields (same rule as the app).
             const available = (await deepaiModels()).map((model) => ({
+              ...model,
               id: model.id,
               display_name: model.name,
-              ...model,
               is_free:
                 model.theosPerRequest !== undefined
                   ? Number(model.theosPerRequest) === 0

@@ -150,3 +150,18 @@ export async function deepaiRequest(body: Record<string, any>, model: string, ap
 }
 
 export function deepaiCatalogCache() { return catalog; }
+
+export async function deepaiTest(model: string, apiKey: string): Promise<any> {
+  const response = await deepaiRequest(
+    { model, messages: [{ role: "user", content: "Say 'ok' and nothing else." }], max_tokens: 10, stream: false },
+    model,
+    apiKey,
+    "chat/completions",
+  );
+  const data = await response.json().catch(() => null);
+  if (!response.ok) {
+    const message = data?.error?.message ?? `DeepAI returned HTTP ${response.status}`;
+    throw Object.assign(new Error(message), { status: response.status, body: data });
+  }
+  return data;
+}
