@@ -217,7 +217,7 @@ export default function EditModelModal({
             </div>
           )}
           {activeTab === "capabilities" && (
-            <ModelMetadataEditor value={metadata} onChange={setMetadata} />
+            <ModelMetadataEditor value={metadata} onChange={setMetadata} source={model?.metadata_source} />
           )}
           {activeTab === "generation" && (
             <MediaSettingsEditor value={metadata} onChange={setMetadata} modelIdentity={`${modelId} ${displayName}`} />

@@ -17,11 +17,12 @@ describe("multimodal request validation", () => {
     ] }] }, model)).not.toThrow();
   });
 
-  test("rejects images for models without vision", () => {
-    expect(() => validateModelRequest(
+  test("forwards images to models without vision metadata, warning instead of blocking", () => {
+    const warnings = validateModelRequest(
       { messages: [{ role: "user", content: [{ type: "image_url", image_url: { url: "https://example.com/a.png" } }] }] },
       { ...model, capabilities: { ...model.capabilities, vision: false } },
-    )).toThrow("does not support images");
+    );
+    expect(warnings.some((warning) => warning.includes("images"))).toBe(true);
   });
 
   test("parses base64 image metadata", () => {
@@ -45,7 +46,8 @@ describe("multimodal request validation", () => {
     ] }] };
     const capable = { ...model, capabilities: { ...model.capabilities, audio_input: true, video: true, attachments: true } };
     expect(() => validateMultimodalRequest(request, capable)).not.toThrow();
-    expect(() => validateMultimodalRequest(request, { ...capable, capabilities: { ...capable.capabilities, audio_input: false } })).toThrow("does not support audio");
+    const warnings = validateMultimodalRequest(request, { ...capable, capabilities: { ...capable.capabilities, audio_input: false } });
+    expect(warnings.some((warning) => warning.includes("audio"))).toBe(true);
   });
 
   test("rejects malformed audio and insecure media URLs", () => {

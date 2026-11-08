@@ -16,7 +16,7 @@ import { logger } from "../logger";
 import { antigravityResponses } from "../integrations/antigravity";
 import { isBlockedAntigravityModel } from "../integrations/antigravity";
 import { requestLogService } from "../services/request-log.service";
-import { modelPoolService, poolSlugFromModelId, poolTokenLimitError, routeModelPool, validatePoolMemberCompatibility } from "../services/model-pool.service";
+import { modelPoolService, poolSlugFromModelId, poolTokenLimitError, routeModelPool, poolRequestIncompatibility } from "../services/model-pool.service";
 import { openAIStreamResponse } from "./openai-stream";
 import { openAICompletionFromSse } from "./openai-completion";
 import { freebuffResponses } from "../integrations/freebuff";
@@ -25,6 +25,7 @@ import { cleanQwenStream, extractQwenContent, qwenResponses } from "../integrati
 import { atomesusResponses } from "../integrations/atomesus";
 import { conolContent, conolModelMetadataFromId, conolResponses } from "../integrations/conol";
 import { perchResponses } from "../integrations/perch";
+import { deepaiModels, deepaiRequest } from "../integrations/deepai";
 import {
   chatgptResponses,
   chatgptStreamToOpenAI,
@@ -50,6 +51,7 @@ import { config } from "../config";
 import { assertSafeRemoteUrl } from "../services/ssrf";
 import { isOpenAICompatibleProtocol } from "../services/provider-appearance";
 import { opencodeSessionId, upstreamProviderHeaders } from "../services/provider-headers";
+import { clientIp } from "../services/request-ip";
 import { validateChatCompletionRequest } from "./openai-request";
 import { normalizeToolDefinitions, normalizeToolName } from "./tool-names";
 import {
@@ -211,14 +213,81 @@ function safeErrorDetail(value: unknown, depth = 0): unknown {
   return typeof value === "string" && value.length > 4000 ? `${value.slice(0, 4000)}…` : value;
 }
 
-function errorMessage(error: unknown, fallback = "Provider request failed") {
+function errorMessage(error: unknown, fallback = "Provider request failed"): string {
   const value = (error as any)?.body ?? (error as any)?.error ?? error;
   const nested = (value as any)?.error;
+  const cause = (error as any) instanceof Error ? (error as any).cause : (value as any)?.cause;
+  const causeMessage = cause ? errorMessage(cause, "") : "";
   const message =
     (typeof nested === "object" ? nested?.message : nested) ??
     (value as any)?.message ??
-    (error as any)?.message;
-  return typeof message === "string" && message ? message : fallback;
+    (error as any)?.message ??
+    causeMessage;
+  if (typeof message === "string" && message) return message;
+  if (typeof value === "string" && value) return value;
+  try {
+    const serialized = JSON.stringify(value);
+    if (serialized && serialized !== "{}" && serialized !== "null") return serialized.slice(0, 800);
+  } catch { /* Unserializable error value. */ }
+  return fallback;
+}
+
+function scrubSecrets(text: string): string {
+  return text
+    .replace(/Bearer\s+[A-Za-z0-9._~+/-]+=*/gi, "Bearer [redacted]")
+    .replace(/\b(sk|pk|key|token|secret|password)[-_][A-Za-z0-9_-]{6,}/gi, "$1-[redacted]");
+}
+
+type RejectionContext = {
+  request: Request;
+  headers: Record<string, string | undefined>;
+  server?: { requestIP?: (request: Request) => { address?: string } | null } | null;
+};
+
+/**
+ * Log a request the proxy rejected before any provider was called, with the
+ * exact reason (arrived empty, bad key, unknown model...). Never throws —
+ * rejection logging must not affect the response.
+ */
+function logProxyRejection(
+  ctx: RejectionContext,
+  input: {
+    providerId?: string | null;
+    providerName?: string | null;
+    modelName?: string | null;
+    statusCode: number;
+    error: string;
+    errorDetails?: unknown;
+    requesterName?: string | null;
+    apiKeyPrefix?: string | null;
+    streaming?: boolean;
+    payload?: unknown;
+  },
+) {
+  const url = (() => { try { return new URL(ctx.request.url).pathname; } catch { return ctx.request.url; } })();
+  const requestDetails = {
+    method: ctx.request.method,
+    url,
+    headers: ctx.headers,
+    payload: input.payload,
+    stream: input.streaming,
+    klove: { rejected: true },
+  };
+  try {
+    requestLogService.logRejection({
+      providerId: input.providerId ?? null,
+      providerName: input.providerName ?? null,
+      modelName: input.modelName ?? null,
+      statusCode: input.statusCode,
+      error: scrubSecrets(input.error),
+      errorDetails: input.errorDetails,
+      clientIp: clientIp(ctx.request, ctx.headers, ctx.server),
+      requesterName: input.requesterName ?? null,
+      apiKeyPrefix: input.apiKeyPrefix ?? null,
+      requestDetails,
+      streaming: input.streaming,
+    });
+  } catch { /* Rejection logging must never affect the response. */ }
 }
 
 export function proxyErrorBody(error: unknown, fallback = "Provider request failed"): { error: Record<string, unknown> } {
@@ -248,7 +317,8 @@ function failureStatus(failures: unknown[], fallback = 502) {
   const statuses = failures.map((failure) => errorStatus(failure)).filter((status): status is number => status !== undefined && status >= 400 && status <= 599);
   if (statuses.length) return statuses.at(-1)!;
   if (failures.length && failures.every(isQuotaError)) return 429;
-  const match = failures.map((failure) => String(failure).match(/(?:HTTP|status|failed\s*\()\s*(4\d\d|5\d\d)/i)?.[1]).find(Boolean);
+  const text = failures.map((failure) => (typeof failure === "string" ? failure : errorMessage(failure, ""))).join(" ");
+  const match = text.match(/(?:HTTP|status|failed\s*\()?\s*(4\d\d|5\d\d)/i)?.[1];
   return match ? Number(match) : fallback;
 }
 
@@ -309,25 +379,6 @@ function tokenDetails(usage: any) {
         0,
     ),
   };
-}
-
-function clientIp(
-  request: Request,
-  headers: Record<string, string | undefined>,
-  server?: { requestIP?: (request: Request) => { address?: string } | null },
-) {
-  const direct = server?.requestIP?.(request)?.address;
-  const trusted = Boolean(direct && config.trustedProxyIps.has(direct));
-  if (trusted) {
-    return (
-      headers["x-forwarded-for"]?.split(",")[0]?.trim() ||
-      headers["x-real-ip"] ||
-      request.headers.get("cf-connecting-ip") ||
-      direct ||
-      "unknown"
-    );
-  }
-  return direct || "unknown";
 }
 
 function streamingHeaders(headers?: HeadersInit) {
@@ -412,7 +463,13 @@ export function recordSseUsageResponse(
           try {
             const data = JSON.parse(raw);
             if (data.error) {
-              streamError = new Error(typeof data.error === "string" ? data.error : data.error.message ?? "Upstream stream failed");
+              const raw = data.error;
+              const msg = typeof raw === "string" ? raw : raw?.message ?? "Upstream stream failed";
+              let detail = msg;
+              if (typeof raw === "object") {
+                try { detail = `${msg} — ${scrubSecrets(JSON.stringify(raw)).slice(0, 500)}`; } catch { /* keep msg */ }
+              }
+              streamError = new Error(detail);
               return;
             }
             const usage = data.usage ?? data.response?.usage ?? data.response?.response?.usage;
@@ -488,7 +545,9 @@ export const proxyPlugin = (app: Elysia) =>
   app
     .onError(({ error, set, request }) => {
       const pathname = new URL(request.url).pathname;
+      const headers = Object.fromEntries(request.headers.entries());
       if (pathname === "/v1/messages") {
+        logProxyRejection({ request, headers }, { statusCode: proxyErrorStatus(error, 500), error: errorMessage(error, "Internal proxy error"), errorDetails: error, modelName: null, providerName: null });
         set.status = proxyErrorStatus(error, 500);
         return {
           type: "error",
@@ -499,13 +558,15 @@ export const proxyPlugin = (app: Elysia) =>
         };
       }
       if (pathname === "/v1/chat/completions" || pathname === "/v1/responses") {
+        logProxyRejection({ request, headers }, { statusCode: proxyErrorStatus(error, 500), error: errorMessage(error, "Internal proxy error"), errorDetails: error, modelName: null, providerName: null });
         set.status = proxyErrorStatus(error, 500);
         return proxyErrorBody(error, "Internal proxy error");
       }
     })
-    .get("/v1/models", async ({ set, headers }) => {
+    .get("/v1/models", async ({ set, headers, request, server }) => {
       const apiKey = await verifyApiKey(headers);
       if (!apiKey) {
+        logProxyRejection({ request, headers, server }, { statusCode: 401, error: "Valid API key required", modelName: "(models list)", providerName: "(unauthenticated)" });
         set.status = 401;
         return { error: "Unauthorized", message: "Valid API key required" };
       }
@@ -555,13 +616,21 @@ export const proxyPlugin = (app: Elysia) =>
     })
     .post(
       "/v1/messages",
-      async ({ body, set, headers, request }) => {
-        if (!body || typeof body !== "object" || typeof body.model !== "string" || !Array.isArray(body.messages) || typeof body.max_tokens !== "number") {
+      async ({ body, set, headers, request, server }) => {
+        const modelNameHint = typeof body?.model === "string" ? body.model : null;
+        if (!body || typeof body !== "object" || typeof body.model !== "string" || !Array.isArray(body.messages) || !body.messages.length || typeof body.max_tokens !== "number") {
+          const reason = !body || typeof body !== "object" ? "Request body must be a JSON object"
+            : typeof body.model !== "string" || !body.model.trim() ? "model is required and must be a string"
+            : !Array.isArray(body.messages) ? "messages must be an array"
+            : !body.messages.length ? "messages must contain at least one message"
+            : "max_tokens is required and must be a number";
+          logProxyRejection({ request, headers, server }, { statusCode: 400, error: reason, modelName: modelNameHint, payload: body, streaming: Boolean((body as any)?.stream) });
           set.status = 400;
           return { type: "error", error: { type: "invalid_request_error", message: "model, messages, and max_tokens are required" } };
         }
         const apiKey = await verifyApiKey(headers);
         if (!apiKey) {
+          logProxyRejection({ request, headers, server }, { statusCode: 401, error: "Valid API key required", providerName: "(unauthenticated)", modelName: modelNameHint, payload: body, streaming: Boolean((body as any)?.stream) });
           set.status = 401;
           return { type: "error", error: { type: "authentication_error", message: "Valid API key required" } };
         }
@@ -569,6 +638,7 @@ export const proxyPlugin = (app: Elysia) =>
         try {
           chatBody = requestToChat("anthropic", body);
         } catch (error: any) {
+          logProxyRejection({ request, headers, server }, { statusCode: 400, error: error?.message ?? "Unsupported Anthropic request", errorDetails: error, modelName: modelNameHint, payload: body, streaming: Boolean((body as any)?.stream) });
           set.status = 400;
           return { type: "error", error: { type: "invalid_request_error", message: error?.message ?? "Unsupported Anthropic request" } };
         }
@@ -577,15 +647,20 @@ export const proxyPlugin = (app: Elysia) =>
         if (poolSlug) {
           const candidates = modelPoolService.routeCandidates(poolSlug);
           if (!candidates?.length) {
+            logProxyRejection({ request, headers, server }, { statusCode: 503, error: `Compound model "${poolSlug}" is unavailable`, providerName: "compound", modelName: model, payload: body, streaming: Boolean((body as any)?.stream) });
             set.status = 503;
             return { type: "error", error: { type: "api_error", message: `Compound model "${poolSlug}" is unavailable` } };
           }
-          const response = await routeModelPool(poolSlug, chatBody, headers.authorization ?? `Bearer ${headers["x-api-key"]}`, request.signal, async (input, init) => fetch(input, { ...init, headers: { ...(init?.headers as Record<string, string>), "X-Klove-Model-Pool-Attempt": "true" } }));
-          if (!response.ok) { set.status = response.status; const error = await response.json().catch(() => null) as any; return { type: "error", error: { type: error?.error?.type ?? "api_error", message: error?.error?.message ?? error?.message ?? "Provider request failed" } }; }
+          const selfIp = clientIp(request, headers, server as any);
+          const response = await routeModelPool(poolSlug, chatBody, headers.authorization ?? `Bearer ${headers["x-api-key"]}`, request.signal, async (input, init) => fetch(input, { ...init, headers: { ...(init?.headers as Record<string, string>), "X-Klove-Model-Pool-Attempt": "true", "x-forwarded-for": selfIp } }));
+          if (!response.ok) {
+            logProxyRejection({ request, headers, server }, { statusCode: response.status, error: `Compound model "${poolSlug}" failed with HTTP ${response.status}`, providerName: "compound", modelName: model, payload: body, streaming: Boolean((body as any)?.stream) });
+            set.status = response.status; const error = await response.json().catch(() => null) as any; return { type: "error", error: { type: error?.error?.type ?? "api_error", message: error?.error?.message ?? error?.message ?? "Provider request failed" } }; }
           if (body.stream) return convertStream("chat_completions", "anthropic", response, model);
           try {
             return chatCompletionToAnthropic(await response.json());
           } catch (error: any) {
+            logProxyRejection({ request, headers, server }, { statusCode: 502, error: error?.message ?? "Response conversion failed", errorDetails: error, providerName: "compound", modelName: model, payload: body });
             set.status = 502;
             return { type: "error", error: { type: "api_error", message: error?.message ?? "Response conversion failed" } };
           }
@@ -595,9 +670,10 @@ export const proxyPlugin = (app: Elysia) =>
         if (request.signal.aborted) abortUpstream();
         else request.signal.addEventListener("abort", abortUpstream, { once: true });
         try {
+          const selfIp = clientIp(request, headers, server as any);
           const chatResponse = await fetch(`http://127.0.0.1:${config.port}/v1/chat/completions`, {
             method: "POST",
-            headers: { Authorization: headers.authorization ?? `Bearer ${headers["x-api-key"]}`, "Content-Type": "application/json", Accept: body.stream ? "text/event-stream" : "application/json" },
+            headers: { Authorization: headers.authorization ?? `Bearer ${headers["x-api-key"]}`, "Content-Type": "application/json", Accept: body.stream ? "text/event-stream" : "application/json", "x-forwarded-for": selfIp },
             body: JSON.stringify(chatBody),
             signal: abort.signal,
           });
@@ -612,11 +688,13 @@ export const proxyPlugin = (app: Elysia) =>
           try {
             return chatCompletionToAnthropic(await chatResponse.json());
           } catch (error: any) {
+            logProxyRejection({ request, headers, server }, { statusCode: 502, error: error?.message ?? "Response conversion failed", errorDetails: error, providerName: "(internal)", modelName: modelNameHint, payload: body });
             set.status = 502;
             return { type: "error", error: { type: "api_error", message: error?.message ?? "Response conversion failed" } };
           }
         } catch (error: any) {
           if (request.signal.aborted) throw error;
+          logProxyRejection({ request, headers, server }, { statusCode: 502, error: error?.message ?? "Proxy request failed", errorDetails: error, providerName: "(internal)", modelName: modelNameHint, payload: body, streaming: Boolean((body as any)?.stream) });
           set.status = 502;
           return { type: "error", error: { type: "api_error", message: error?.message ?? "Proxy request failed" } };
         }
@@ -625,20 +703,34 @@ export const proxyPlugin = (app: Elysia) =>
     )
     .post(
       "/v1/responses",
-      async ({ body, set, headers, request }) => {
-        if (!body || typeof body !== "object" || typeof body.model !== "string" || body.input === undefined) {
+      async ({ body, set, headers, request, server }) => {
+        const modelNameHint = typeof body?.model === "string" ? body.model : null;
+        const payloadHint = typeof body === "object" && body !== null ? body : undefined;
+        const streamHint = Boolean((body as any)?.stream);
+        const inputValue = (body as any)?.input;
+        const inputValid = inputValue !== undefined &&
+          !(Array.isArray(inputValue) && inputValue.length === 0) &&
+          !(typeof inputValue === "string" && inputValue.trim() === "");
+        if (!body || typeof body !== "object" || typeof body.model !== "string" || !modelNameHint?.trim() || !inputValid) {
+          const reason = !body || typeof body !== "object" ? "Request body must be a JSON object"
+            : typeof body.model !== "string" || !body.model.trim() ? "model is required and must be a non-empty string"
+            : inputValue === undefined ? "input is required"
+            : Array.isArray(inputValue) && inputValue.length === 0 ? "input must contain at least one item"
+            : "input is required";
+          logProxyRejection({ request, headers, server }, { statusCode: 400, error: reason, modelName: modelNameHint, payload: payloadHint, streaming: streamHint });
           set.status = 400;
           return {
             error: {
-              message: "model and input are required",
+              message: reason,
               type: "invalid_request_error",
-              param: body?.model ? "input" : "model",
+              param: !(body as any)?.model || typeof (body as any)?.model !== "string" ? "model" : "input",
               code: null,
             },
           };
         }
         const apiKey = await verifyApiKey(headers);
         if (!apiKey) {
+          logProxyRejection({ request, headers, server }, { statusCode: 401, error: "Valid API key required", providerName: "(unauthenticated)", modelName: modelNameHint, payload: payloadHint, streaming: streamHint });
           set.status = 401;
           return { error: { message: "Valid API key required", type: "authentication_error", code: null } };
         }
@@ -648,15 +740,18 @@ export const proxyPlugin = (app: Elysia) =>
           if (provider?.protocol === "openai-responses" && provider.is_active) {
             const modelRecord = modelService.findByPublicId(provider.id, parsedModel.modelId);
             if (!modelRecord || !modelRecord.is_active) {
+              logProxyRejection({ request, headers, server }, { statusCode: 404, error: `No active model "${parsedModel.modelId}" is configured for provider "${provider.name}"`, providerId: provider.id, providerName: provider.name, modelName: parsedModel.modelId, payload: body, streaming: streamHint, apiKeyPrefix: apiKey.prefix, requesterName: apiKey.name });
               set.status = 404;
               return { error: { message: `No active model "${parsedModel.modelId}" is configured for provider "${provider.name}"`, type: "invalid_request_error", code: "model_not_found" } };
             }
             const requestModel = modelRecord.model_id;
             const canonicalBody = requestToChat("responses", body);
+            let validationWarnings: string[] = [];
             try {
-              validateModelRequest(canonicalBody, modelRecord);
+              validationWarnings = validateModelRequest(canonicalBody, modelRecord);
               applyResolvedReasoning(canonicalBody, modelRecord);
             } catch (error: any) {
+              logProxyRejection({ request, headers, server }, { statusCode: 400, error: error?.message ?? "Invalid model request", errorDetails: error, providerId: provider.id, providerName: provider.name, modelName: requestModel, payload: body, streaming: streamHint, apiKeyPrefix: apiKey.prefix, requesterName: apiKey.name });
               set.status = 400;
               return { error: { message: error.message, type: "invalid_request_error", code: null } };
             }
@@ -669,6 +764,7 @@ export const proxyPlugin = (app: Elysia) =>
             const providerCredential = credentialService.select(provider.id, provider.credential_mode, provider.fixed_credential_id)
               || credentialService.select(provider.id, provider.credential_mode === "failover" ? "failover" : "round_robin");
             if (!providerCredential) {
+              logProxyRejection({ request, headers, server }, { statusCode: 503, error: "No active provider credential", providerId: provider.id, providerName: provider.name, modelName: requestModel, payload: body, streaming: streamHint, apiKeyPrefix: apiKey.prefix, requesterName: apiKey.name });
               set.status = 503;
               return { error: { message: "No active provider credential", type: "server_error", code: "no_active_credential" } };
             }
@@ -676,10 +772,10 @@ export const proxyPlugin = (app: Elysia) =>
               providerId: provider.id,
               providerName: provider.name,
               modelName: requestModel,
-              clientIp: clientIp(request, headers),
+              clientIp: clientIp(request, headers, server as any),
               requesterName: apiKey.name,
           apiKeyPrefix: apiKey.prefix,
-              requestDetails: { method: request.method, url: "/v1/responses", headers, payload: body, stream: Boolean(body.stream) },
+              requestDetails: { method: request.method, url: "/v1/responses", headers, payload: body, stream: Boolean(body.stream), ...(validationWarnings.length ? { klove: { warnings: validationWarnings } } : {}) },
               streaming: Boolean(body.stream),
             });
             const incomingSession = (headers["x-opencode-session"] ?? headers["x-session-id"]);
@@ -698,6 +794,7 @@ export const proxyPlugin = (app: Elysia) =>
               body: JSON.stringify(convertedRequest),
               signal: upstreamController.signal,
             });
+            requestLogService.captureResponse(requestLogId, { status: upstream.status, headers: upstream.headers, contentType: upstream.headers.get("content-type"), streaming: streamHint });
             if (!upstream.ok) {
               set.status = upstream.status;
               const failureBody = await upstream.json().catch(() => null);
@@ -713,6 +810,7 @@ export const proxyPlugin = (app: Elysia) =>
               credentialService.clearCooldown(providerCredential.id);
             }, started, (error) => {
               credentialService.markError(providerCredential.id, error.message);
+              requestLogService.captureError(requestLogId, error);
               requestLogService.complete(requestLogId, { status: "error", statusCode: 502, error: error.message });
             }, { messages: canonicalBody.messages, model: requestModel, provider: provider.name, onProgress: (chars) => requestLogService.progress(requestLogId, chars) });
             const result = await upstream.json();
@@ -730,6 +828,7 @@ export const proxyPlugin = (app: Elysia) =>
         try {
           chatBody = requestToChat("responses", body);
         } catch (error: any) {
+          logProxyRejection({ request, headers, server }, { statusCode: 400, error: error?.message ?? "Unsupported Responses request", errorDetails: error, modelName: modelNameHint, payload: body, streaming: streamHint, apiKeyPrefix: apiKey.prefix, requesterName: apiKey.name });
           set.status = 400;
           return { error: { message: error?.message ?? "Unsupported Responses request", type: "invalid_request_error", code: null } };
         }
@@ -742,6 +841,7 @@ export const proxyPlugin = (app: Elysia) =>
           try { validateModelRequest(chatBody, selectedModel); }
           catch (error: any) {
             if (!(error instanceof ModelRequestError) && !(error instanceof MultimodalRequestError)) throw error;
+            logProxyRejection({ request, headers, server }, { statusCode: 400, error: error.message, errorDetails: error, providerId: selectedProvider?.id, providerName: selectedProvider?.name, modelName: selectedModel.model_id, payload: body, streaming: streamHint, apiKeyPrefix: apiKey.prefix, requesterName: apiKey.name });
             set.status = 400;
             return { error: { message: error.message, type: "invalid_request_error", code: null } };
           }
@@ -750,25 +850,32 @@ export const proxyPlugin = (app: Elysia) =>
         if (poolSlug) {
           const candidates = modelPoolService.routeCandidates(poolSlug);
           if (!candidates?.length) {
+            logProxyRejection({ request, headers, server }, { statusCode: 503, error: `Pool "${poolSlug}" is inactive or has no active members`, providerName: "compound", modelName: modelNameHint, payload: body, streaming: streamHint, apiKeyPrefix: apiKey.prefix, requesterName: apiKey.name });
             set.status = 503;
             return { error: { message: `Pool "${poolSlug}" is inactive or has no active members`, type: "server_error", code: "compound_model_unavailable" } };
           }
           const poolConfig = modelPoolService.findBySlug(poolSlug)!;
-          const incompatibility = validatePoolMemberCompatibility(candidates.map((candidate) => candidate.model), chatBody);
+          // Protocol facts (Conol is text-only) and explicit reasoning-effort
+          // mismatches stay hard failures; capability metadata does not block.
+          const incompatibility = poolRequestIncompatibility(candidates.map((candidate) => candidate.model), chatBody);
           if (incompatibility) {
+            logProxyRejection({ request, headers, server }, { statusCode: 400, error: incompatibility, providerName: "compound", modelName: modelNameHint, payload: body, streaming: streamHint, apiKeyPrefix: apiKey.prefix, requesterName: apiKey.name });
             set.status = 400;
-            return { error: { message: incompatibility, type: "invalid_request_error", code: "unsupported_modality" } };
+            return { error: { message: incompatibility, type: "invalid_request_error", code: "incompatible_pool_request" } };
           }
           const tokenLimitError = poolTokenLimitError(poolConfig, chatBody);
           if (tokenLimitError && tokenLimitError.startsWith("Estimated input")) {
+            logProxyRejection({ request, headers, server }, { statusCode: 400, error: tokenLimitError, providerName: "compound", modelName: modelNameHint, payload: body, streaming: streamHint, apiKeyPrefix: apiKey.prefix, requesterName: apiKey.name });
             set.status = 400;
             return { error: { message: tokenLimitError, type: "invalid_request_error", code: "compound_input_limit_exceeded" } };
           }
+          const selfIp = clientIp(request, headers, server as any);
           const poolResponse = await routeModelPool(poolSlug, chatBody, headers.authorization!, request.signal, async (input, init) => fetch(input, {
             ...init,
-            headers: { ...(init?.headers as Record<string, string>), "X-Klove-Model-Pool-Attempt": "true" },
+            headers: { ...(init?.headers as Record<string, string>), "X-Klove-Model-Pool-Attempt": "true", "x-forwarded-for": selfIp },
           }));
           if (!poolResponse.ok) {
+            logProxyRejection({ request, headers, server }, { statusCode: poolResponse.status, error: `Compound model "${poolSlug}" failed with HTTP ${poolResponse.status}`, providerName: "compound", modelName: modelNameHint, payload: body, streaming: streamHint, apiKeyPrefix: apiKey.prefix, requesterName: apiKey.name });
             set.status = poolResponse.status;
             return proxyErrorBody({ status: poolResponse.status, body: await poolResponse.json().catch(() => null) });
           }
@@ -776,6 +883,7 @@ export const proxyPlugin = (app: Elysia) =>
           try {
             return convertChatCompletionToResponse(await poolResponse.json());
           } catch (error: any) {
+            logProxyRejection({ request, headers, server }, { statusCode: 502, error: error?.message ?? "Response conversion failed", errorDetails: error, providerName: "compound", modelName: modelNameHint, payload: body });
             set.status = 502;
             return { error: { message: error?.message ?? "Response conversion failed", type: "server_error", code: null } };
           }
@@ -783,6 +891,7 @@ export const proxyPlugin = (app: Elysia) =>
         const parsedTarget = parseModelName(body.model);
         const targetProvider = parsedTarget ? providerService.findByName(parsedTarget.providerName) : null;
         if (targetProvider?.protocol === "openai-responses") {
+          logProxyRejection({ request, headers, server }, { statusCode: 400, error: "OpenAI Responses providers require requests to /v1/responses", providerName: targetProvider?.name, modelName: modelNameHint, payload: body, apiKeyPrefix: apiKey.prefix, requesterName: apiKey.name });
           set.status = 400;
           return { error: { message: "OpenAI Responses providers require requests to /v1/responses", type: "invalid_request_error", code: "incompatible_endpoint" } };
         }
@@ -790,9 +899,10 @@ export const proxyPlugin = (app: Elysia) =>
         const abortUpstream = () => upstreamController.abort(request.signal.reason);
         if (request.signal.aborted) abortUpstream();
         else request.signal.addEventListener("abort", abortUpstream, { once: true });
+        const selfIp = clientIp(request, headers, server as any);
         const chatResponse = await fetch(`http://127.0.0.1:${config.port}/v1/chat/completions`, {
           method: "POST",
-          headers: { Authorization: headers.authorization ?? `Bearer ${headers["x-api-key"]}`, "Content-Type": "application/json", Accept: body.stream ? "text/event-stream" : "application/json" },
+          headers: { Authorization: headers.authorization ?? `Bearer ${headers["x-api-key"]}`, "Content-Type": "application/json", Accept: body.stream ? "text/event-stream" : "application/json", "x-forwarded-for": selfIp },
           body: JSON.stringify(chatBody),
           signal: upstreamController.signal,
         });
@@ -813,6 +923,7 @@ export const proxyPlugin = (app: Elysia) =>
           if (provider?.protocol === "openai-responses") {
             await chatResponse.body?.cancel();
             const error = new Error("Requests using Responses-only providers must be sent to /v1/responses");
+            logProxyRejection({ request, headers, server }, { statusCode: 400, error: error.message, errorDetails: error, providerName: provider?.name, modelName: modelNameHint, payload: body });
             set.status = 400;
             return proxyErrorBody(error, "Incompatible endpoint");
           }
@@ -821,6 +932,7 @@ export const proxyPlugin = (app: Elysia) =>
         try {
           return convertChatCompletionToResponse(await chatResponse.json());
         } catch (error: any) {
+          logProxyRejection({ request, headers, server }, { statusCode: 502, error: error?.message ?? "Response conversion failed", errorDetails: error, providerName: "(internal)", modelName: modelNameHint, payload: body });
           set.status = 502;
           return { error: { message: error?.message ?? "Response conversion failed", type: "server_error", code: null } };
         }
@@ -830,8 +942,11 @@ export const proxyPlugin = (app: Elysia) =>
     .post(
       "/v1/chat/completions",
       async ({ body, set, headers, request, server }) => {
+        const modelNameHint = typeof body?.model === "string" ? body.model : null;
+        const streamHint = Boolean((body as any)?.stream);
         const validationError = validateChatCompletionRequest(body);
         if (validationError) {
+          logProxyRejection({ request, headers, server }, { statusCode: 400, error: validationError, modelName: modelNameHint, payload: body, streaming: streamHint });
           set.status = 400;
           return {
             error: {
@@ -844,6 +959,7 @@ export const proxyPlugin = (app: Elysia) =>
         }
         const apiKey = await verifyApiKey(headers);
         if (!apiKey) {
+          logProxyRejection({ request, headers, server }, { statusCode: 401, error: "Valid API key required", providerName: "(unauthenticated)", modelName: modelNameHint, payload: body, streaming: streamHint });
           set.status = 401;
           return { error: "Unauthorized", message: "Valid API key required" };
         }
@@ -877,6 +993,7 @@ export const proxyPlugin = (app: Elysia) =>
         // Parse providername/modelname
         const parsed = parseModelName(body.model);
         if (!parsed) {
+          logProxyRejection({ request, headers, server }, { statusCode: 400, error: "Invalid model format", modelName: modelNameHint, payload: body, streaming: streamHint, apiKeyPrefix: apiKey.prefix, requesterName: apiKey.name });
           set.status = 400;
           return {
             error: "Invalid model format",
@@ -886,6 +1003,7 @@ export const proxyPlugin = (app: Elysia) =>
         }
         const selectedProvider = providerService.findByName(parsed.providerName);
         if (selectedProvider?.protocol === "openai-responses") {
+          logProxyRejection({ request, headers, server }, { statusCode: 400, error: `Provider "${selectedProvider.name}" uses the Responses API. Send this request to /v1/responses.`, providerName: selectedProvider.name, modelName: modelNameHint, payload: body, streaming: streamHint, apiKeyPrefix: apiKey.prefix, requesterName: apiKey.name });
           set.status = 400;
           return { error: "Incompatible API endpoint", message: `Provider "${selectedProvider.name}" uses the Responses API. Send this request to /v1/responses.` };
         }
@@ -894,22 +1012,24 @@ export const proxyPlugin = (app: Elysia) =>
         if (poolSlug) {
           const candidates = modelPoolService.routeCandidates(poolSlug);
           if (!candidates?.length) {
+            logProxyRejection({ request, headers, server }, { statusCode: 503, error: `Pool "${poolSlug}" is inactive or has no active member models`, providerName: "compound", modelName: modelNameHint, payload: body, streaming: streamHint, apiKeyPrefix: apiKey.prefix, requesterName: apiKey.name });
             set.status = 503;
             return { error: "Compound model unavailable", message: `Pool "${poolSlug}" is inactive or has no active member models` };
           }
           const poolConfig = modelPoolService.findBySlug(poolSlug)!;
           const tokenLimitError = poolTokenLimitError(poolConfig, body);
           if (tokenLimitError && tokenLimitError.startsWith("Estimated input")) {
+            logProxyRejection({ request, headers, server }, { statusCode: 400, error: tokenLimitError, providerName: "compound", modelName: modelNameHint, payload: body, streaming: streamHint, apiKeyPrefix: apiKey.prefix, requesterName: apiKey.name });
             set.status = 400;
             return { error: "Compound model input token limit exceeded", message: tokenLimitError };
           }
+          const selfIp = clientIp(request, headers, server as any);
           const response = await routeModelPool(poolSlug, body, headers.authorization!, request.signal, async (input, init) => fetch(input, {
             ...init,
-            headers: { ...(init?.headers as Record<string, string>), "X-Klove-Model-Pool-Attempt": "true" },
+            headers: { ...(init?.headers as Record<string, string>), "X-Klove-Model-Pool-Attempt": "true", "x-forwarded-for": selfIp },
           }));
-          if (response.headers.get("X-Klove-Model-Pool-Attempt") === "true" && !response.ok) {
-            set.status = response.status;
-            return response;
+          if (!response.ok) {
+            logProxyRejection({ request, headers, server }, { statusCode: response.status, error: `Compound model "${poolSlug}" failed with HTTP ${response.status}`, providerName: "compound", modelName: modelNameHint, payload: body, streaming: streamHint, apiKeyPrefix: apiKey.prefix, requesterName: apiKey.name });
           }
           set.status = response.status;
           return response;
@@ -918,6 +1038,7 @@ export const proxyPlugin = (app: Elysia) =>
         // Find provider
         const provider = providerService.findByName(parsed.providerName);
         if (!provider || !provider.is_active) {
+          logProxyRejection({ request, headers, server }, { statusCode: 404, error: `No active provider named "${parsed.providerName}"`, providerName: parsed.providerName, modelName: parsed.modelId, payload: body, streaming: streamHint, apiKeyPrefix: apiKey.prefix, requesterName: apiKey.name });
           set.status = 404;
           return {
             error: "Provider not found or inactive",
@@ -927,6 +1048,7 @@ export const proxyPlugin = (app: Elysia) =>
 
         const modelRecord = modelService.findByPublicId(provider.id, parsed.modelId);
         if (!modelRecord || !modelRecord.is_active) {
+          logProxyRejection({ request, headers, server }, { statusCode: 404, error: `No active model "${parsed.modelId}" is configured for provider "${provider.name}"`, providerId: provider.id, providerName: provider.name, modelName: parsed.modelId, payload: body, streaming: streamHint, apiKeyPrefix: apiKey.prefix, requesterName: apiKey.name });
           set.status = 404;
           return {
             error: "Model not found or inactive",
@@ -945,10 +1067,12 @@ export const proxyPlugin = (app: Elysia) =>
             response,
             modelRecord.think_opening_tag_mode,
           );
+        let capabilityWarnings: string[] = [];
         try {
-          validateModelRequest(body, modelRecord);
+          capabilityWarnings = validateModelRequest(body, modelRecord);
         } catch (error) {
           if (!(error instanceof ModelRequestError) && !(error instanceof MultimodalRequestError)) throw error;
+          logProxyRejection({ request, headers, server }, { statusCode: 400, error: error.message, errorDetails: error, providerId: provider.id, providerName: provider.name, modelName: parsed.modelId, payload: body, streaming: streamHint, apiKeyPrefix: apiKey.prefix, requesterName: apiKey.name });
           set.status = 400;
           return { error: "Invalid model request", message: error.message };
         }
@@ -957,6 +1081,7 @@ export const proxyPlugin = (app: Elysia) =>
             applyResolvedReasoning(body, modelRecord);
           } catch (error) {
             if (!(error instanceof ReasoningRequestError)) throw error;
+            logProxyRejection({ request, headers, server }, { statusCode: 400, error: error.message, errorDetails: error, providerId: provider.id, providerName: provider.name, modelName: parsed.modelId, payload: body, streaming: streamHint, apiKeyPrefix: apiKey.prefix, requesterName: apiKey.name });
             set.status = 400;
             return { error: "Invalid reasoning effort", message: error.message };
           }
@@ -972,10 +1097,12 @@ export const proxyPlugin = (app: Elysia) =>
             Array.isArray(message.content) && message.content.some((part: any) => part?.type !== "text" && part?.type !== "input_text"),
           );
           if (unsupported) {
+            logProxyRejection({ request, headers, server }, { statusCode: 400, error: "Conol supports text messages only; tools and images are not supported.", providerId: provider.id, providerName: provider.name, modelName: parsed.modelId, payload: body, streaming: streamHint, apiKeyPrefix: apiKey.prefix, requesterName: apiKey.name });
             set.status = 400;
             return { error: "Invalid Conol request", message: "Conol supports text messages only; tools and images are not supported." };
           }
           if (body.messages.some((message: any) => !conolContent(message.content) && message.role === "user")) {
+            logProxyRejection({ request, headers, server }, { statusCode: 400, error: "Conol requires at least one user text message.", providerId: provider.id, providerName: provider.name, modelName: parsed.modelId, payload: body, streaming: streamHint, apiKeyPrefix: apiKey.prefix, requesterName: apiKey.name });
             set.status = 400;
             return { error: "Invalid Conol request", message: "Conol requires at least one user text message." };
           }
@@ -985,6 +1112,7 @@ export const proxyPlugin = (app: Elysia) =>
           provider.protocol === "antigravity" &&
           isBlockedAntigravityModel(parsed.modelId)
         ) {
+          logProxyRejection({ request, headers, server }, { statusCode: 403, error: `Model "${parsed.modelId}" is not available through Antigravity`, providerId: provider.id, providerName: provider.name, modelName: parsed.modelId, payload: body, streaming: streamHint, apiKeyPrefix: apiKey.prefix, requesterName: apiKey.name });
           set.status = 403;
           return {
             error: "Model blocked",
@@ -1005,6 +1133,7 @@ export const proxyPlugin = (app: Elysia) =>
             headers,
             payload: body,
             stream: Boolean(body.stream),
+            ...(capabilityWarnings.length ? { klove: { warnings: capabilityWarnings } } : {}),
           },
           streaming: Boolean(body.stream),
         });
@@ -1064,6 +1193,59 @@ export const proxyPlugin = (app: Elysia) =>
           reasoning_effort: body.reasoning_effort ?? body.reasoning?.effort,
         });
 
+        if (provider.protocol === "deepai") {
+          const started = performance.now();
+          const apiModel = (await deepaiModels().catch(() => [])).find((entry) => entry.id === parsed.modelId);
+          const useResponses = apiModel?.api === "openai-responses";
+          const deepaiBody = useResponses
+            ? requestFromChat("responses", { ...body, model: parsed.modelId, stream: Boolean(body.stream) })
+            : { ...payload, stream_options: body.stream ? { ...(body.stream_options ?? {}), include_usage: true } : body.stream_options };
+          try {
+            const upstream = await deepaiRequest(deepaiBody, parsed.modelId, credential?.secret ?? "", useResponses ? "responses" : "chat/completions", request.signal);
+            requestLogService.captureResponse(requestLogId, { status: upstream.status, headers: upstream.headers, contentType: upstream.headers.get("content-type"), streaming: Boolean(body.stream) });
+            if (!upstream.ok) {
+              const data = await upstream.json().catch(() => null);
+              const error = Object.assign(new Error(data?.error?.message ?? `DeepAI returned HTTP ${upstream.status}`), { status: upstream.status, body: data });
+              requestLogService.captureError(requestLogId, error);
+              requestLogService.complete(requestLogId, { status: "error", statusCode: upstream.status, error: error.message });
+              set.status = upstream.status;
+              return { error: "DeepAI request failed", message: error.message };
+            }
+            const credentialId = credential?.id;
+            if (body.stream) {
+              const stream = useResponses
+                ? convertStream("responses", "chat_completions", upstream, parsed.modelId, () => undefined)
+                : upstream;
+              return recordSseUsageResponse(fixThinkTagStream(stream), (promptTokens, completionTokens, durationMs, generationDurationMs, details) => {
+                const usage = usageService.record(provider.id, modelRecord.id, parsed.modelId, promptTokens, completionTokens, durationMs, generationDurationMs, details);
+                requestLogService.complete(requestLogId, { promptTokens, completionTokens, cacheRead: details?.cacheRead, cacheWrite: details?.cacheWrite, cost: usage.estimated_cost_usd, durationMs });
+                if (credentialId) credentialService.clearError(credentialId);
+              }, started, (error) => {
+                if (credentialId) credentialService.markError(credentialId, error.message);
+                requestLogService.captureError(requestLogId, error);
+                requestLogService.complete(requestLogId, { status: "error", statusCode: 502, error: error.message });
+              }, { messages: body.messages, model: parsed.modelId, provider: provider.name, onProgress: (chars) => requestLogService.progress(requestLogId, chars) });
+            }
+            let completion: any = await upstream.json();
+            if (useResponses) completion = convertResponse("responses", "chat_completions", completion);
+            const durationMs = Math.round(performance.now() - started);
+            const details = tokenDetails(completion.usage);
+            const promptTokens = Number(completion.usage?.prompt_tokens ?? 0) || countMessages(body.messages, { model: parsed.modelId, provider: provider.name });
+            const completionTokens = Number(completion.usage?.completion_tokens ?? 0) || countCompletion(completion.choices?.[0]?.message?.content ?? "", { model: parsed.modelId, provider: provider.name });
+            const usage = usageService.record(provider.id, modelRecord.id, parsed.modelId, promptTokens, completionTokens, durationMs, durationMs, details);
+            requestLogService.complete(requestLogId, { promptTokens, completionTokens, cacheRead: details.cacheRead, cacheWrite: details.cacheWrite, cost: usage.estimated_cost_usd, durationMs });
+            if (credentialId) credentialService.clearError(credentialId);
+            return fixThinkTag(completion);
+          } catch (error: any) {
+            requestLogService.captureError(requestLogId, error);
+            if (credential) credentialService.markError(credential.id, error.message);
+            const statusCode = Number(error.status) || failureStatus([error]);
+            requestLogService.complete(requestLogId, { status: "error", statusCode, error: error.message });
+            set.status = statusCode;
+            return { error: "DeepAI request failed", message: error.message };
+          }
+        }
+
         if (provider.protocol === "openai-responses") {
           const attempted = new Set<string>();
           const failures: unknown[] = [];
@@ -1105,6 +1287,7 @@ export const proxyPlugin = (app: Elysia) =>
                   credentialService.clearCooldown(credentialId);
                 }, start, (error) => {
                   credentialService.markError(credentialId, error.message);
+                  requestLogService.captureError(requestLogId, error);
                   requestLogService.complete(requestLogId, { status: "error", statusCode: 502, error: error.message });
                 }, { messages: body.messages, model: parsed.modelId, provider: provider.name });
               }
@@ -1157,6 +1340,7 @@ export const proxyPlugin = (app: Elysia) =>
                 },
                 onError: (error, stats) => {
                   credentialService.markError(credentialId, error.message);
+                  requestLogService.captureError(requestLogId, error);
                   requestLogService.complete(requestLogId, { status: "error", statusCode: 502, promptTokens: stats.promptTokens, completionTokens: stats.completionTokens, cacheRead: stats.cacheRead, cacheWrite: stats.cacheWrite, durationMs: stats.durationMs, error: error.message });
                 },
                 onCancel: (stats) => requestLogService.complete(requestLogId, { status: "error", statusCode: 499, promptTokens: stats.promptTokens, completionTokens: stats.completionTokens, cacheRead: stats.cacheRead, cacheWrite: stats.cacheWrite, durationMs: stats.durationMs, error: "Client disconnected" }),
@@ -1423,6 +1607,7 @@ export const proxyPlugin = (app: Elysia) =>
                  start,
                  (error) => {
                    credentialService.markError(credentialId, error.message);
+                   requestLogService.captureError(requestLogId, error);
                    requestLogService.complete(requestLogId, {
                      status: "error",
                      statusCode: 502,
@@ -1550,6 +1735,7 @@ export const proxyPlugin = (app: Elysia) =>
                  start,
                  (error) => {
                    credentialService.markError(credentialId, error.message);
+                   requestLogService.captureError(requestLogId, error);
                    requestLogService.complete(requestLogId, {
                      status: "error",
                      statusCode: 502,
@@ -1683,6 +1869,7 @@ export const proxyPlugin = (app: Elysia) =>
               if (credential) credentialService.clearError(credential.id);
             }, start, (error) => {
               if (credential) credentialService.markError(credential.id, error.message);
+              requestLogService.captureError(requestLogId, error);
               requestLogService.complete(requestLogId, { status: "error", statusCode: 502, error: error.message });
             }, { messages: body.messages, model: parsed.modelId, provider: provider.name, onProgress: (chars) => requestLogService.progress(requestLogId, chars) });
           } catch (error: any) {
@@ -1839,6 +2026,7 @@ export const proxyPlugin = (app: Elysia) =>
                 credentialService.clearCooldown(credentialId);
               }, start, (error) => {
                 credentialService.markError(credentialId, error.message);
+                requestLogService.captureError(requestLogId, error);
                 requestLogService.complete(requestLogId, { status: "error", statusCode: 502, error: error.message });
               }, { messages: body.messages, model: parsed.modelId, provider: provider.name, onProgress: (chars) => requestLogService.progress(requestLogId, chars) });
             } catch (error: any) {
@@ -1889,6 +2077,7 @@ export const proxyPlugin = (app: Elysia) =>
                 credentialService.clearCooldown(credentialId);
               }, start, (error) => {
                 credentialService.markError(credentialId, error.message);
+                requestLogService.captureError(requestLogId, error);
                 requestLogService.complete(requestLogId, { status: "error", statusCode: 502, error: error.message });
               }, { messages: body.messages, model: parsed.modelId, provider: provider.name, onProgress: (chars) => requestLogService.progress(requestLogId, chars) });
             } catch (error: any) {
@@ -2125,6 +2314,7 @@ export const proxyPlugin = (app: Elysia) =>
                 },
                 onError: (error, stats) => {
                   credentialService.markError(credentialId, error.message);
+                  requestLogService.captureError(requestLogId, error);
                   requestLogService.complete(requestLogId, {
                     status: "error",
                     statusCode: 502,

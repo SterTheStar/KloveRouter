@@ -36,6 +36,22 @@ function hasSemanticDelta(chunk: any) {
   });
 }
 
+// Upstream providers sometimes emit an in-band SSE error event mid-stream
+// instead of failing the HTTP request. Surface it like a thrown error so the
+// request is logged as failed with the real reason, not as a partial success.
+function chunkError(chunk: any): Error | null {
+  const raw = chunk?.error;
+  if (!raw) return null;
+  const msg = typeof raw === "string" ? raw : (typeof raw?.message === "string" ? raw.message : "Upstream stream error");
+  let detail = msg;
+  if (typeof raw === "object") {
+    try {
+      detail = `${msg} — ${JSON.stringify(raw).replace(/Bearer\s+[A-Za-z0-9._~+/-]+=*/gi, "Bearer [redacted]").slice(0, 500)}`;
+    } catch { /* keep msg */ }
+  }
+  return new Error(detail);
+}
+
 export function openAIStreamResponse(
   stream: OpenAIChunkStream,
   options: OpenAIStreamOptions,
@@ -113,9 +129,12 @@ export function openAIStreamResponse(
         void (async () => {
           try {
             iterator = stream[Symbol.asyncIterator]();
+            let upstreamFailure: Error | null = null;
             while (true) {
               const { done, value: chunk } = await iterator.next();
               if (done || cancelled) break;
+              const inBandError = chunkError(chunk);
+              if (inBandError) { upstreamFailure = inBandError; break; }
               if (hasSemanticDelta(chunk)) firstTokenAt ??= now();
               for (const choice of chunk.choices ?? []) {
                 const delta = choice?.delta;
@@ -157,9 +176,15 @@ export function openAIStreamResponse(
             }
             if (!cancelled) {
               settled = true;
-              enqueue("data: [DONE]\n\n");
-              const finalStats = stats();
-              notify("complete", () => options.onComplete(finalStats));
+              if (upstreamFailure) {
+                enqueue(`data: ${JSON.stringify({ error: { message: upstreamFailure.message.slice(0, 2000) } })}\n\n`);
+                enqueue("data: [DONE]\n\n");
+                notify("error", () => options.onError(upstreamFailure, stats()));
+              } else {
+                enqueue("data: [DONE]\n\n");
+                const finalStats = stats();
+                notify("complete", () => options.onComplete(finalStats));
+              }
             }
           } catch (error: any) {
             if (!cancelled) {

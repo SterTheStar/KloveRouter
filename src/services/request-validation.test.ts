@@ -55,19 +55,17 @@ describe("metadata-backed request validation", () => {
     })).not.toThrow();
   });
 
-  test("enforces explicitly false tools while unknown metadata stays permissive", () => {
-    expect(() =>
-      validateModelRequest(
-        { messages: [], tools: [] },
-        { ...model, capabilities: { ...model.capabilities, tools: false } },
-      ),
-    ).toThrow("does not support tools or functions");
-    expect(() =>
-      validateModelRequest(
-        { messages: [], functions: [] },
-        { ...model, capabilities: { ...model.capabilities, tools: false } },
-      ),
-    ).toThrow("does not support tools or functions");
+  test("forwards explicit tools mismatch with a warning instead of blocking", () => {
+    const warnings = validateModelRequest(
+      { messages: [], tools: [] },
+      { ...model, capabilities: { ...model.capabilities, tools: false } },
+    );
+    expect(warnings.some((warning) => warning.includes("tools"))).toBe(true);
+    const functionWarnings = validateModelRequest(
+      { messages: [], functions: [] },
+      { ...model, capabilities: { ...model.capabilities, tools: false } },
+    );
+    expect(functionWarnings.some((warning) => warning.includes("tools"))).toBe(true);
     expect(() =>
       validateModelRequest(
         { messages: [], tools: [{}], max_tokens: 100000 },
@@ -93,9 +91,10 @@ describe("metadata-backed request validation", () => {
     expect(estimateRequestTextTokens(body)).toBe(60);
     expect(() => validateModelRequest(body, model)).not.toThrow();
     body.messages[0].content = "a".repeat(205);
-    expect(() => validateModelRequest(body, model)).toThrow(
-      "estimated 61 input tokens + 40 requested output tokens = 101",
-    );
-    expect(() => validateModelRequest(body, model)).toThrow("not truncated");
+    // Estimated overflow is forwarded with a warning instead of blocking:
+    // the provider is the source of truth for its context window.
+    expect(() => validateModelRequest(body, model)).not.toThrow();
+    const warnings = validateModelRequest(body, model);
+    expect(warnings.some((warning) => warning.includes("context window"))).toBe(true);
   });
 });

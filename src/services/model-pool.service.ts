@@ -54,37 +54,35 @@ export function validatePoolGenerationOptions(pool: Pick<ModelPool, "strategy" |
   return null;
 }
 
-export function validatePoolMemberCompatibility(
+function contentPartsOf(body: { messages?: any[] }) {
+  return body.messages?.flatMap((message) => Array.isArray(message?.content) ? message.content : []) ?? [];
+}
+
+const MEDIA_PART_TYPES = new Set(["image_url", "input_image", "image", "input_audio", "audio_url", "audio", "video_url", "input_video", "video", "file", "input_file"]);
+
+export function requestHasMediaParts(body: { messages?: any[]; input?: any[] }): boolean {
+  const messageParts = contentPartsOf(body);
+  const inputParts = Array.isArray(body.input) ? body.input : [];
+  return [...messageParts, ...inputParts].some((part: any) => MEDIA_PART_TYPES.has(part?.type));
+}
+
+/**
+ * Hard routing failures only: protocol facts (Conol is text-only) and explicit
+ * reasoning effort no member supports. Capability metadata mismatches are NOT
+ * blocking — the member is attempted and the upstream decides.
+ */
+export function poolRequestIncompatibility(
   members: ModelWithProvider[],
-  body: { stream?: boolean; tools?: unknown; messages?: any[]; reasoning_effort?: string },
-) {
-  const contentParts = body.messages?.flatMap((message) => Array.isArray(message?.content) ? message.content : [] ) ?? [];
-  if (contentParts.some((part: any) => part?.type === "file" || part?.type === "input_file")) {
-    if (members.every((model) => model.capabilities?.attachments === false)) return "No active member supports file attachments";
-  }
-  if (body.stream === true && members.every((model) => model.capabilities?.streaming === false)) {
-    return "No active member supports streaming for this request";
-  }
-  if (Array.isArray(body.tools) && body.tools.length && members.every((model) => model.capabilities?.tools === false)) {
-    return "No active member supports tools required by this request";
-  }
-  const hasImage = contentParts.some((part: any) => ["image_url", "input_image", "image"].includes(part?.type));
-  const hasAudio = contentParts.some((part: any) => ["input_audio", "audio_url", "audio"].includes(part?.type));
-  const hasVideo = contentParts.some((part: any) => ["video_url", "input_video", "video"].includes(part?.type));
-  const hasFile = contentParts.some((part: any) => part?.type === "input_file" || part?.type === "file");
-  if (hasImage && members.every((model) => model.capabilities?.vision === false)) return "No active member supports image input in this request";
-  if (hasAudio && members.every((model) => model.capabilities?.audio_input === false)) return "No active member supports audio input in this request";
-  if (hasVideo && members.every((model) => model.capabilities?.video === false)) return "No active member supports video input in this request";
-  if (hasFile && members.every((model) => model.capabilities?.attachments === false)) return "No active member supports file attachments";
-  const hasUnsupportedConol = members.some((model) =>
-    (model as ModelWithProvider & { provider_protocol?: string }).provider_protocol === "conol",
-  );
-  if (hasUnsupportedConol && members.length === 1 &&
-    ((Array.isArray(body.tools) && body.tools.length > 0) || hasImage || hasAudio || hasVideo)) {
-    return "A Conol model only supports text requests without tools or media";
+  body: { tools?: unknown; messages?: any[]; input?: any[]; reasoning_effort?: string },
+): string | null {
+  const hasTools = Array.isArray(body.tools) && body.tools.length > 0;
+  if (members.length === 1) {
+    const sole = members[0] as ModelWithProvider & { provider_protocol?: string };
+    if (sole.provider_protocol === "conol" && (hasTools || requestHasMediaParts(body)))
+      return "A Conol model only supports text requests without tools or media";
   }
   if (typeof body.reasoning_effort === "string" && body.reasoning_effort) {
-    const capable = members.filter((model) => model.reasoning_efforts.some((effort) => effort.effort === body.reasoning_effort));
+    const capable = members.filter((model) => (model.reasoning_efforts ?? []).some((effort) => effort.effort === body.reasoning_effort));
     if (!capable.length) return `No pool member supports reasoning effort "${body.reasoning_effort}"`;
   }
   return null;
@@ -116,9 +114,14 @@ export function validatePoolTokenLimits(
 }
 
 export function resolvePoolCapabilities(members: ModelWithProvider[]) {
+  // Unknown is preserved, never collapsed into "unsupported": when every member
+  // is unknown the pool reports unknown, and any mix without universal support
+  // is also reported as unknown (the runtime forwards anyway).
   const field = (key: keyof ModelWithProvider["capabilities"]) => {
     const values = members.map((member) => member.capabilities[key]);
-    return values.every((value) => value === true) ? true : values.some((value) => value === true) ? null : false;
+    if (values.length && values.every((value) => value === true)) return true;
+    if (values.length && values.every((value) => value === false)) return false;
+    return null;
   };
   return {
     reasoning: field("reasoning"),
@@ -169,15 +172,10 @@ export async function routeModelPool(
     const limiter = poolConfig.output_limiter_ids.map((id) => poolConfig.members.find((member) => member.id === id)?.display_name ?? id).join(", ");
     failures.push(`Requested output of ${requestedOutput} exceeds effective cap ${limits.outputLimit}; forwarding capped request (${limiter || "pool limit"})`);
   }
+  const hasMedia = requestHasMediaParts(body as any);
   for (const { model } of candidates) {
     const modelName = providerModelPublicId(model.provider_name, model);
     const memberConfig = poolConfig.members.find((member) => member.id === model.id)!;
-    const memberIncompatibility = validatePoolMemberCompatibility([model], body);
-    if (memberIncompatibility) {
-      failures.push(`${modelName}: ${memberIncompatibility}`);
-      if (!memberConfig.fallback) return Response.json({ error: "Compound model member failed", message: failures.at(-1) }, { status: 400 });
-      continue;
-    }
     try {
       if (signal?.aborted) throw signal.reason ?? new DOMException("Request aborted", "AbortError");
       const effectiveOutput = limits.outputLimit === null
@@ -292,7 +290,12 @@ export async function routeModelPool(
       }
       lastResponse = response;
       if (response.status === 499) return response;
-      const recoverable = memberConfig.fallback && ([401, 403, 404, 408, 409, 425, 429].includes(response.status) || response.status >= 500);
+      // A 400 triggered by a media payload on a fallback member usually means the
+      // provider rejected the modality, so failing over to the next member is the
+      // configured intent of the compound model. Plain 400 validation failures of
+      // otherwise-media-free requests are returned as-is.
+      const mediaRejection = response.status === 400 && hasMedia;
+      const recoverable = memberConfig.fallback && ([401, 403, 404, 408, 409, 425, 429].includes(response.status) || response.status >= 500 || mediaRejection);
       if (!recoverable) return response;
       const payload = await response.clone().text().catch(() => response.statusText);
       failures.push(`${modelName} (${response.status}): ${payload.slice(0, 400)}`);

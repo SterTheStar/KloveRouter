@@ -74,8 +74,13 @@ let lastCleanupAt = 0;
 const CLEANUP_INTERVAL_MS = 30_000;
 
 const SENSITIVE_KEY = /authorization|api[-_]?key|cookie|token|secret|password|credential|private[-_]?key|access[-_]?key/i;
+const VALUE_SECRET = /\b(Bearer\s+[A-Za-z0-9._~+/-]+=*|sk-[A-Za-z0-9_-]{8,}|rk-[A-Za-z0-9_-]{8,}|gsk_[A-Za-z0-9_-]{8,}|xox[baprs]-[A-Za-z0-9-]{8,})/gi;
 const MAX_DETAIL_BYTES = 64 * 1024;
 const TRUNCATION_MARKER = "[truncated]";
+
+export function scrubSensitiveValues(text: string): string {
+  return text.replace(VALUE_SECRET, "[redacted]");
+}
 
 function limitString(value: string, max = MAX_DETAIL_BYTES): string {
   if (value.length <= max) return value;
@@ -85,7 +90,7 @@ function limitString(value: string, max = MAX_DETAIL_BYTES): string {
 
 export function redactLogDetail(value: unknown, depth = 0): unknown {
   if (depth > 6) return "[truncated]";
-  if (typeof value === "string") return limitString(value);
+  if (typeof value === "string") return limitString(scrubSensitiveValues(value));
   if (typeof value === "bigint") return String(value);
   if (Array.isArray(value)) return value.slice(0, 100).map((item) => redactLogDetail(item, depth + 1));
   if (value && typeof value === "object") {
@@ -114,6 +119,37 @@ function serializeDetail(value: unknown): string | null {
 function parseDetail(value: string | null): unknown {
   if (!value) return null;
   try { return JSON.parse(value); } catch { return value; }
+}
+
+/**
+ * Normalize any thrown value into a plain, JSON-safe object so the stored
+ * error_details keep the *real* reason (upstream status, parsed body, headers,
+ * codes, cause chain) instead of just `{ name, message, stack }`. Nested values
+ * still go through redactLogDetail/serializeDetail for secret scrubbing.
+ */
+function normalizeErrorForDetails(error: unknown, depth = 0): unknown {
+  if (depth > 4) return "[truncated]";
+  if (error instanceof Headers) return Object.fromEntries(error.entries());
+  if (error instanceof Error) {
+    const plain: Record<string, unknown> = {
+      name: error.name,
+      message: error.message,
+    };
+    if (error.stack) plain.stack = error.stack;
+    for (const key of Object.keys(error as unknown as Record<string, unknown>)) {
+      if (key === "name" || key === "message") continue;
+      try {
+        plain[key] = normalizeErrorForDetails((error as unknown as Record<string, unknown>)[key], depth + 1);
+      } catch {
+        plain[key] = "[unavailable]";
+      }
+    }
+    if (error.cause !== undefined && !("cause" in plain)) {
+      plain.cause = normalizeErrorForDetails(error.cause, depth + 1);
+    }
+    return plain;
+  }
+  return error;
 }
 
 function requestId() {
@@ -274,8 +310,8 @@ export const requestLogService = {
     let cost = input.cost;
     // Also supplies the point-of-write fields used to publish the update.
     const request = db
-      .query("SELECT r.provider_id, r.provider_name, r.model_name, p.protocol, p.name AS name, p.base_url, m.use_litellm_pricing FROM request_logs r LEFT JOIN providers p ON p.id = r.provider_id LEFT JOIN models m ON m.provider_id = r.provider_id AND m.model_id = r.model_name WHERE r.id = ?")
-      .get(id) as { provider_id: string | null; provider_name: string | null; model_name: string; protocol: string | null; name: string | null; base_url: string | null; use_litellm_pricing: number | null } | null;
+      .query("SELECT r.provider_id, r.provider_name, r.model_name, p.protocol, p.name AS name, p.base_url, m.use_litellm_pricing, r.error_details FROM request_logs r LEFT JOIN providers p ON p.id = r.provider_id LEFT JOIN models m ON m.provider_id = r.provider_id AND m.model_id = r.model_name WHERE r.id = ?")
+      .get(id) as { provider_id: string | null; provider_name: string | null; model_name: string; protocol: string | null; name: string | null; base_url: string | null; use_litellm_pricing: number | null; error_details: string | null } | null;
     if (cost === undefined && prompt + completion > 0) {
       const tier = request?.provider_id
         ? (db
@@ -302,8 +338,18 @@ export const requestLogService = {
     const status: RequestLogStatus = input.status ?? "success";
     const statusCode = input.statusCode ?? 200;
     const responseDetails = serializeDetail(input.responseDetails ?? { status_code: statusCode });
+    // Keep the rich error details captureError stored (upstream body/status/codes)
+    // instead of clobbering them with a bare { message }.
+    let errorDetails: string | null;
+    if (input.errorDetails !== undefined) {
+      errorDetails = serializeDetail(normalizeErrorForDetails(input.errorDetails));
+    } else if (input.error) {
+      errorDetails = request?.error_details ?? serializeDetail({ message: input.error });
+    } else {
+      errorDetails = null;
+    }
     db.query(
-      "UPDATE request_logs SET status = ?, status_code = ?, tokens_prompt = ?, tokens_completion = ?, tokens_cache_read = ?, tokens_cache_write = ?, tokens_total = ?, estimated_cost_usd = ?, duration_ms = ?, tps = ?, error_message = ?, streaming = 0, response_details = COALESCE(?, response_details), error_details = COALESCE(?, error_details), completed_at = datetime('now') WHERE id = ? AND status = 'pending'",
+      "UPDATE request_logs SET status = ?, status_code = ?, tokens_prompt = ?, tokens_completion = ?, tokens_cache_read = ?, tokens_cache_write = ?, tokens_total = ?, estimated_cost_usd = ?, duration_ms = ?, tps = ?, error_message = ?, response_details = COALESCE(?, response_details), error_details = COALESCE(?, error_details), completed_at = datetime('now') WHERE id = ? AND status = 'pending'",
     ).run(
       status,
       statusCode,
@@ -320,14 +366,14 @@ export const requestLogService = {
           : null),
       typeof redactLogDetail(input.error) === "string" ? redactLogDetail(input.error) as string : input.error ? JSON.stringify(redactLogDetail(input.error)) : null,
       responseDetails,
-      serializeDetail(input.errorDetails ?? (input.error ? { message: input.error } : null)),
+      errorDetails,
       id,
     );
     // Completing an already-finished row is a no-op; skip the event.
     const { changed } = db.query("SELECT changes() AS changed").get() as { changed: number };
     if (!changed) return;
     try {
-      const stored = db.query("SELECT request_details, response_details FROM request_logs WHERE id = ?").get(id) as { request_details: string | null; response_details: string | null } | null;
+      const stored = db.query("SELECT request_details, response_details, streaming FROM request_logs WHERE id = ?").get(id) as { request_details: string | null; response_details: string | null; streaming: number | null } | null;
       if (!stored) return;
       publishFromWrite(id, stored.request_details, stored.response_details, {
         id,
@@ -355,7 +401,7 @@ export const requestLogService = {
         error_message: typeof input.error === "string" ? input.error : input.error ? JSON.stringify(input.error) : null,
         created_at: "",
         completed_at: null,
-        streaming: false,
+        streaming: Boolean(stored.streaming),
         streamed_chars: 0,
       });
     } catch { /* Logging must never affect the request. */ }
@@ -374,8 +420,72 @@ export const requestLogService = {
   captureError(id: string, error: unknown) {
     try {
       getDb().query("UPDATE request_logs SET error_details = ? WHERE id = ?")
-        .run(serializeDetail(error instanceof Error ? { name: error.name, message: error.message, stack: error.stack } : error), id);
+        .run(serializeDetail(normalizeErrorForDetails(error)), id);
     } catch { /* Logging must never affect the request. */ }
+  },
+
+  /**
+   * One-shot record for requests rejected before reaching a provider (invalid
+   * body, bad API key, unknown provider/model, exhausted credentials, incompatible
+   * requests...). Writes a completed error row so the panel can show *why* the
+   * request failed, including ones that arrived empty.
+   */
+  logRejection(input: {
+    providerId?: string | null;
+    providerName?: string | null;
+    modelName?: string | null;
+    statusCode: number;
+    error: string;
+    errorDetails?: unknown;
+    clientIp?: string | null;
+    requesterName?: string | null;
+    apiKeyPrefix?: string | null;
+    requestDetails?: unknown;
+    streaming?: boolean;
+    durationMs?: number | null;
+  }): string | null {
+    try {
+      const id = requestId();
+      const clamp = (value: string | null | undefined, max = 200) => {
+        const text = (value ?? "").trim();
+        return text ? text.slice(0, max) : null;
+      };
+      const providerName = clamp(input.providerName) ?? "(unrouted)";
+      const modelName = clamp(input.modelName) ?? "(unknown model)";
+      const error = clamp(input.error, 4000) ?? "Request rejected";
+      const normalizedDetails = input.errorDetails !== undefined ? normalizeErrorForDetails(input.errorDetails) : undefined;
+      const errorDetails =
+        normalizedDetails !== undefined
+          ? { message: error, ...(typeof normalizedDetails === "object" && normalizedDetails !== null && !Array.isArray(normalizedDetails) ? normalizedDetails as Record<string, unknown> : { detail: normalizedDetails }), rejected: true }
+          : { message: error, rejected: true };
+      getDb()
+        .query(
+          "INSERT INTO request_logs (id, provider_id, provider_name, model_name, client_ip, requester_name, api_key_prefix, status, status_code, error_message, request_details, response_details, error_details, streaming, duration_ms, completed_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'error', ?, ?, ?, ?, ?, ?, ?, datetime('now'))",
+        )
+        .run(
+          id,
+          input.providerId ?? null,
+          providerName,
+          modelName,
+          input.clientIp ?? null,
+          input.requesterName ?? null,
+          input.apiKeyPrefix ?? null,
+          input.statusCode,
+          error,
+          serializeDetail(input.requestDetails),
+          serializeDetail({ status_code: input.statusCode, rejected: true }),
+          serializeDetail(normalizeErrorForDetails(errorDetails)),
+          input.streaming ? 1 : 0,
+          input.durationMs ?? null,
+        );
+      try {
+        const log = requireLog(id);
+        if (log) publish({ type: "created", log });
+      } catch { /* Logging must never affect the request. */ }
+      return id;
+    } catch {
+      return null;
+    }
   },
 
   get(id: string): RequestLogDetails | null {

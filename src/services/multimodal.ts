@@ -31,17 +31,37 @@ function capabilityForType(type: string): keyof Model["capabilities"] | null {
   return null;
 }
 
+const capabilityNames: Partial<Record<keyof Model["capabilities"], string>> = {
+  vision: "images",
+  video: "video",
+  audio_input: "audio",
+  audio_output: "audio output",
+  attachments: "file attachments",
+};
+
+/**
+ * Capability metadata is user-editable and frequently stale, so a mismatch is
+ * never a hard block: the request is forwarded and the upstream decides. We
+ * collect human-readable warnings instead to attach to the request log.
+ * Structural problems (size, URL safety, malformed parts) still throw
+ * MultimodalRequestError because forwarding them is pointless or unsafe.
+ */
+function capabilityWarning(capability: keyof Model["capabilities"], model: Model): string | null {
+  if (model.capabilities[capability] !== false) return null;
+  const name = capabilityNames[capability] ?? String(capability);
+  return `Model "${model.model_id}" metadata indicates no support for ${name}; forwarding to the provider anyway`;
+}
+
 function mediaSource(part: any): string | null {
   const value = part?.image_url?.url ?? part?.image_url ?? part?.audio_url?.url ?? part?.audio_url ?? part?.video_url?.url ?? part?.video_url ?? part?.url ?? part?.file_data;
   return typeof value === "string" ? value : null;
 }
 
-function validateMediaPart(part: any, model: Model): void {
+function validateMediaPart(part: any, model: Model, warnings: string[]): void {
   const capability = capabilityForType(part.type);
-  if (!capability) return;
-  if (model.capabilities[capability] === false) {
-    const name = capability === "vision" ? "images" : capability === "audio_input" ? "audio" : capability === "video" ? "video" : "file attachments";
-    throw new MultimodalRequestError(`Model "${model.model_id}" does not support ${name}`);
+  if (capability) {
+    const warning = capabilityWarning(capability, model);
+    if (warning) warnings.push(warning);
   }
   const file = part.file ?? part;
   const source = mediaSource(part) ?? (typeof file.file_data === "string" ? file.file_data : null);
@@ -105,13 +125,22 @@ function dataImageInfo(source: string) {
   return { mimeType: match[1].toLowerCase(), data: match[2], bytes };
 }
 
-export function validateMultimodalRequest(body: any, model: Model): void {
+/**
+ * Structural validation only. Capability mismatches are reported as warnings
+ * (forwarded anyway) instead of throwing; structural problems throw
+ * MultimodalRequestError. Returns the list of warnings for the request log.
+ */
+export function validateMultimodalRequest(body: any, model: Model): string[] {
+  const warnings: string[] = [];
   const requestedModalities = Array.isArray(body?.modalities) ? body.modalities.map(String) : [];
-  if (requestedModalities.includes("audio") && model.capabilities.audio_output === false)
-    throw new MultimodalRequestError(`Model "${model.model_id}" does not support audio output`);
+  if (requestedModalities.includes("audio")) {
+    const warning = capabilityWarning("audio_output", model);
+    if (warning) warnings.push(warning);
+  }
   const parts = (body?.messages ?? []).flatMap((message: any) => multimodalParts(message?.content));
-  for (const part of parts) validateMediaPart(part, model);
-  for (const message of body?.input ?? []) if (message && typeof message === "object") validateMediaPart(message, model);
+  for (const part of parts) validateMediaPart(part, model, warnings);
+  for (const message of body?.input ?? []) if (message && typeof message === "object") validateMediaPart(message, model, warnings);
+  return [...new Set(warnings)];
 }
 
 export function openAIImageUrl(part: any): string | null {

@@ -14,6 +14,7 @@ import { perchValidate } from "../integrations/perch";
 import { credentialKindForProtocol, validateCredential } from "../services/credential-validation";
 import type { ProviderProtocol } from "../services/provider-appearance";
 import { anthropicEndpoint } from "../clients/anthropic";
+import { deepaiAuthService, deepaiModels, deepaiUsage } from "../integrations/deepai";
 import { serializeProvider } from "./serializers";
 
 export const providersPlugin = (app: Elysia) =>
@@ -21,6 +22,23 @@ export const providersPlugin = (app: Elysia) =>
     .get("/api/providers", () => {
       return providerService.findAll().map((provider) => serializeProvider(provider));
     })
+    .post("/api/deepai/login", ({ body, set }) => {
+      try { return deepaiAuthService.startLogin(body.credential_id); }
+      catch (error: any) { set.status = 400; return { error: error.message }; }
+    }, { body: t.Object({ credential_id: t.String({ minLength: 1 }) }) })
+    .post("/api/deepai/login/complete", async ({ body, set }) => {
+      try { return await deepaiAuthService.completeLogin(body.credential_id, body.code, body.state); }
+      catch (error: any) { set.status = 400; return { error: error.message }; }
+    }, { body: t.Object({ credential_id: t.String({ minLength: 1 }), code: t.String({ minLength: 1, maxLength: 4096 }), state: t.String({ minLength: 1, maxLength: 256 }) }) })
+    .get("/api/deepai/usage", ({ query, set }) => {
+      const credential = query.credential_id ? credentialService.findById(query.credential_id) : null;
+      const provider = credential ? providerService.findById(credential.provider_id) : null;
+      if (!credential || !provider || provider.protocol !== "deepai" || credential.kind !== "api_key" || !credential.secret) {
+        set.status = 404;
+        return { error: "DeepAI credential not found" };
+      }
+      return deepaiUsage(credential.secret);
+    }, { query: t.Object({ credential_id: t.String({ minLength: 1 }) }) })
     .post(
       "/api/providers/validate-credential",
       async ({ body, set }) => {
@@ -28,7 +46,7 @@ export const providersPlugin = (app: Elysia) =>
         const secret = body.api_key ?? body.auth_code ?? body.secret;
         try {
           const kind = credentialKindForProtocol(protocol);
-          validateCredential(protocol, kind, secret, { accountId: body.account_id, allowIncompleteOAuth: protocol !== "conol" });
+          validateCredential(protocol, kind, secret, { accountId: body.account_id, allowIncompleteOAuth: protocol === "deepai" || protocol !== "conol" });
           const provider = {
             id: "validation",
             name: "validation",
@@ -53,6 +71,11 @@ export const providersPlugin = (app: Elysia) =>
           } else if (protocol === "qwen") {
             const models = await qwenModels(credential, provider.base_url);
             if (!models.length) throw new Error("Qwen returned no models");
+          } else if (protocol === "deepai" && secret) {
+            const models = await deepaiModels();
+            if (!models.length) throw new Error("DeepAI returned no models");
+          } else if (protocol === "deepai") {
+            return { valid: true, verified: false, message: "Sign in with DeepAI Code to connect and validate this account." };
           } else if (isOpenAICompatibleProtocol(protocol) || protocol === "anthropic") {
             const url = protocol === "anthropic"
               ? anthropicEndpoint(provider as any, "models")
@@ -78,7 +101,7 @@ export const providersPlugin = (app: Elysia) =>
       {
         body: t.Object({
           base_url: t.String({ minLength: 1 }),
-           protocol: t.Optional(t.Union([t.Literal("openai"), t.Literal("openai-responses"), t.Literal("anthropic"), t.Literal("codex"), t.Literal("chatgpt"), t.Literal("antigravity"), t.Literal("freebuff"), t.Literal("qwen"), t.Literal("atomesus"), t.Literal("conol"), t.Literal("perch"), t.Literal("openfree")])),
+           protocol: t.Optional(t.Union([t.Literal("openai"), t.Literal("openai-responses"), t.Literal("anthropic"), t.Literal("codex"), t.Literal("chatgpt"), t.Literal("antigravity"), t.Literal("freebuff"), t.Literal("qwen"), t.Literal("atomesus"), t.Literal("conol"), t.Literal("perch"), t.Literal("openfree"), t.Literal("deepai")])),
           api_key: t.Optional(t.String()),
           auth_code: t.Optional(t.String()),
           secret: t.Optional(t.String()),
@@ -160,6 +183,7 @@ export const providersPlugin = (app: Elysia) =>
               t.Literal("conol"),
               t.Literal("perch"),
               t.Literal("openfree"),
+              t.Literal("deepai"),
             ]),
           ),
           credential_mode: t.Optional(
@@ -221,6 +245,7 @@ export const providersPlugin = (app: Elysia) =>
               t.Literal("conol"),
               t.Literal("perch"),
               t.Literal("openfree"),
+              t.Literal("deepai"),
             ]),
           ),
           credential_mode: t.Optional(

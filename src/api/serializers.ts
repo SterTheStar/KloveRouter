@@ -54,6 +54,7 @@ export function serializeModel(model: Model) {
     pricing_tiers: model.pricing_tiers,
     pricing_source: model.pricing_source,
     catalog_pricing: model.catalog_pricing,
+    metadata_source: model.metadata_source ?? null,
   };
 }
 

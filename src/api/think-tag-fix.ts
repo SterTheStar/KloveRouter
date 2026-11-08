@@ -224,7 +224,10 @@ export class ThinkTagChunkFixer {
   private makeDelta(choice: any, channel: "content" | "reasoning_content", value: string) {
     const delta = { ...choice.delta };
     if (channel === "reasoning_content") {
-      delta.reasoning_content = value;
+      // Merge any upstream reasoning carried on this delta so it survives
+      // when the content is re-tagged as an explicit think block.
+      const kept = typeof choice.delta.reasoning_content === "string" ? choice.delta.reasoning_content : "";
+      delta.reasoning_content = kept + value;
       delete delta.content;
     } else {
       delta.content = value;

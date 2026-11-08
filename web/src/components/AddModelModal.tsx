@@ -17,6 +17,7 @@ import { Tabs } from "@/components/ui/tabs";
 import { models } from "../api/client";
 import { useToast } from "./ui/toast";
 import type {
+  MetadataSource,
   ModelCapabilities,
   ModelMetadataInput,
   PricingTier,
@@ -331,10 +332,19 @@ export function emptyModelMetadata(): ModelMetadataInput {
 export function ModelMetadataEditor({
   value,
   onChange,
+  source,
 }: {
   value: ModelMetadataInput;
   onChange: (value: ModelMetadataInput) => void;
+  source?: MetadataSource | null;
 }) {
+  const litellmValues = [
+    source?.context_window,
+    source?.max_output_tokens,
+    source?.reasoning_efforts,
+    ...Object.values(source?.capabilities ?? {}),
+  ].filter(Boolean);
+  const hasLiteLLM = litellmValues.includes("litellm");
   const setLimit = (
     field: "context_window" | "max_output_tokens",
     raw: string,
@@ -402,6 +412,11 @@ export function ModelMetadataEditor({
         <p className="mt-1 text-xs text-muted-foreground">
           Limits, request modes, and reasoning options exposed to clients.
         </p>
+        {hasLiteLLM && (
+          <p className="mt-2 rounded-lg border border-dashed border-border bg-background/60 p-2 text-[11px] text-tertiary">
+            Some values come from the LiteLLM catalog because the provider does not declare its own. Editing a field here saves it as a manual override.
+          </p>
+        )}
       </div>
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-2">

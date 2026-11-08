@@ -199,19 +199,62 @@ export async function refreshLiteLLMPricing(options: { force?: boolean; fetcher?
   return inFlight;
 }
 
-/** Finds provider-specific pricing for an exact upstream model id. */
-export function getLiteLLMPricing(protocol: ProviderProtocol, modelId: string, providerHint?: string): LiteLLMPricing | null {
+/** Finds the catalog entry for an exact upstream model id, preferring the provider variant that matches the hint. Returns null on ambiguity. */
+export function findCatalogEntry(protocol: ProviderProtocol, modelId: string, providerHint?: string): { key: string; entry: CatalogEntry; provider: string; price: LiteLLMPricing | null } | null {
   if (!catalog) return null;
   const model = modelId.trim().replace(/^googleantigravity\//i, "").replace(/^models\//i, "");
   const preferredProviders = catalogProviders(protocol, providerHint);
   const exact = catalogIndex.get(model) ?? [];
   if (!exact.length) return null;
   const preferred = exact.filter(({ provider }) => preferredProviders.includes(provider));
-  if (preferred.length === 1) return preferred[0]!.price;
+  if (preferred.length === 1) return preferred[0]!;
   const hinted = exact.filter(({ provider }) => providerHintMatches(provider, providerHint));
-  if (hinted.length === 1) return hinted[0]!.price;
+  if (hinted.length === 1) return hinted[0]!;
   if (preferred.length > 1 || hinted.length > 1 || exact.length > 1) return null;
-  return exact[0]!.price;
+  return exact[0]!;
+}
+
+/** Finds provider-specific pricing for an exact upstream model id. */
+export function getLiteLLMPricing(protocol: ProviderProtocol, modelId: string, providerHint?: string): LiteLLMPricing | null {
+  return findCatalogEntry(protocol, modelId, providerHint)?.price ?? null;
+}
+
+const asNumber = (value: unknown): number | undefined => {
+  const parsed = typeof value === "string" ? Number(value) : value;
+  return typeof parsed === "number" && Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : undefined;
+};
+const asBoolean = (value: unknown): boolean | undefined => (typeof value === "boolean" ? value : undefined);
+const asStringArray = (value: unknown): string[] | undefined =>
+  Array.isArray(value) ? value.filter((item): item is string => typeof item === "string").map((item) => item.toLowerCase()) : undefined;
+
+export interface CatalogModelInfo {
+  maxInputTokens?: number;
+  maxOutputTokens?: number;
+  supportsVision?: boolean;
+  supportsFunctionCalling?: boolean;
+  supportsReasoning?: boolean;
+  supportsNativeStreaming?: boolean;
+  supportsPdfInput?: boolean;
+  supportedModalities?: string[];
+  supportedOutputModalities?: string[];
+}
+
+/** Extracts declared limits and capabilities from a LiteLLM catalog entry (provider-agnostic, unambiguous matches only). */
+export function getLiteLLMModelInfo(protocol: ProviderProtocol, modelId: string, providerHint?: string): CatalogModelInfo | null {
+  const found = findCatalogEntry(protocol, modelId, providerHint);
+  if (!found) return null;
+  const entry = found.entry;
+  return {
+    maxInputTokens: asNumber(entry.max_input_tokens ?? entry.max_tokens),
+    maxOutputTokens: asNumber(entry.max_output_tokens),
+    supportsVision: asBoolean(entry.supports_vision),
+    supportsFunctionCalling: asBoolean(entry.supports_function_calling),
+    supportsReasoning: asBoolean(entry.supports_reasoning),
+    supportsNativeStreaming: asBoolean(entry.supports_native_streaming),
+    supportsPdfInput: asBoolean(entry.supports_pdf_input),
+    supportedModalities: asStringArray(entry.supported_modalities),
+    supportedOutputModalities: asStringArray(entry.supported_output_modalities),
+  };
 }
 
 export function liteLLMPricingStatus(): { available: boolean; refreshed_at: number | null } {

@@ -198,7 +198,7 @@ export const providerService = {
     validateCredential(protocol, kind, protocol === "codex" || protocol === "antigravity" ? undefined : input.api_key, {
       accountId: input.account_id,
       allowIncompleteOAuth: protocol === "codex" || protocol === "antigravity" || protocol === "chatgpt",
-      allowEmptySecret: protocol !== "openfree",
+      allowEmptySecret: protocol !== "openfree" && protocol !== "deepai",
     });
     const id = crypto.randomUUID();
     const encryptedApiKey = input.api_key
@@ -238,9 +238,11 @@ export const providerService = {
                  ? "Conol cookie"
                : protocol === "perch"
                  ? "Perch session"
-               : protocol === "openfree"
-                 ? "OpenCode Zen account"
-               : "Default API key",
+                : protocol === "openfree"
+                  ? "OpenCode Zen account"
+        : protocol === "deepai"
+          ? "DeepAI Code account"
+                : "Default API key",
       protocol === "codex"
         ? "codex"
         : protocol === "chatgpt"
@@ -294,11 +296,11 @@ export const providerService = {
       }
       if (automatic && input.protocol !== undefined) {
         validateCredential(protocol, automatic.kind, secret, {
-          allowEmptySecret: protocol === "perch",
+          allowEmptySecret: protocol === "perch" || protocol === "deepai",
         });
       } else {
         validateCredential(protocol, expectedKind, secret, {
-          allowEmptySecret: protocol === "perch",
+          allowEmptySecret: protocol === "perch" || protocol === "deepai",
         });
       }
     }

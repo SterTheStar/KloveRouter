@@ -34,7 +34,8 @@ import {
   DropdownMenuGroup,
 } from "@/components/ui/dropdown-menu";
 import { models, stats } from "../api/client";
-import type { ModelCapabilities, ModelWithProvider } from "../types";
+import type { MetadataSource, ModelCapabilities, ModelWithProvider } from "../types";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "../components/ui/toast";
 import ProviderIcon from "../components/ProviderIcon";
 import { modelDisplayId, modelPublicId } from "../lib/model-id";
@@ -44,6 +45,12 @@ import { modelCategories, type ModelCategory } from "../lib/model-modality";
 import { ModelCapabilityBadges } from "../components/ModelCapabilities";
 
 type SourceFilter = "all" | "manual" | "synced";
+
+function litellmSourced(source?: MetadataSource | null): boolean {
+  if (!source) return false;
+  return source.context_window === "litellm" || source.max_output_tokens === "litellm" || source.reasoning_efforts === "litellm"
+    || Object.values(source.capabilities ?? {}).includes("litellm");
+}
 
 export default function ModelsPage() {
   const { success, error: notifyError } = useToast();
@@ -329,6 +336,18 @@ export default function ModelsPage() {
                                     <span className="text-tertiary">—</span>
                                   )}
                                 </span>
+                                {litellmSourced(model.metadata_source) && (
+                                  <Tooltip>
+                                    <TooltipTrigger
+                                      render={<span />}
+                                      className="inline-flex h-5 items-center rounded-md border border-border px-1.5 text-[10px] font-medium text-tertiary"
+                                      aria-label="Some limits or capabilities come from the LiteLLM catalog"
+                                    >
+                                      LiteLLM
+                                    </TooltipTrigger>
+                                    <TooltipContent>Some limits or capabilities come from the LiteLLM catalog because the provider does not declare its own.</TooltipContent>
+                                  </Tooltip>
+                                )}
                                 <ModelCapabilityBadges capabilities={model.capabilities} contextWindow={model.context_window} />
                               </div>
                             </TableCell>

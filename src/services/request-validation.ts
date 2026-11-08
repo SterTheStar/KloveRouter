@@ -63,8 +63,15 @@ export function estimateRequestTextTokens(body: any): number {
   return Math.ceil(characters / 4);
 }
 
-export function validateModelRequest(body: any, model: Model): void {
-  validateMultimodalRequest(body, model);
+/**
+ * Validates explicit, user-supplied hard limits (output token budget
+ * conflicts / configured maximum). Anything inferred from editable capability
+ * metadata or a char-based estimate is returned as a warning and forwarded:
+ * the provider is the source of truth for what the model accepts.
+ * Throws ModelRequestError only for the hard-limit cases.
+ */
+export function validateModelRequest(body: any, model: Model): string[] {
+  const warnings = validateMultimodalRequest(body, model);
   const output = resolveRequestedOutputTokens(body);
   if (
     output.value !== undefined &&
@@ -78,16 +85,16 @@ export function validateModelRequest(body: any, model: Model): void {
     model.capabilities.tools === false &&
     (body?.tools !== undefined || body?.functions !== undefined)
   )
-    throw new ModelRequestError(
-      `Model "${model.model_id}" does not support tools or functions`,
-    );
+    warnings.push(`Model "${model.model_id}" metadata indicates no support for tools/functions; forwarding to the provider anyway`);
 
-  if (model.context_window === null) return;
-  const inputEstimate = estimateRequestTextTokens(body);
-  const requestedOutput = output.value ?? 0;
-  const totalEstimate = inputEstimate + requestedOutput;
-  if (totalEstimate > model.context_window)
-    throw new ModelRequestError(
-      `Request clearly exceeds model "${model.model_id}" context window: estimated ${inputEstimate} input tokens + ${requestedOutput} requested output tokens = ${totalEstimate}, maximum ${model.context_window}. Request was not truncated.`,
-    );
+  if (model.context_window !== null) {
+    const inputEstimate = estimateRequestTextTokens(body);
+    const requestedOutput = output.value ?? 0;
+    const totalEstimate = inputEstimate + requestedOutput;
+    if (totalEstimate > model.context_window)
+      warnings.push(
+        `Request may exceed model "${model.model_id}" context window: estimated ${inputEstimate} input tokens + ${requestedOutput} requested output tokens = ${totalEstimate}, maximum ${model.context_window}. Forwarding to the provider anyway — the estimate uses 4 characters per token and does not count images.`,
+      );
+  }
+  return [...new Set(warnings)];
 }

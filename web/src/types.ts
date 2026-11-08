@@ -5,7 +5,7 @@ export interface Provider {
   avatar: string | null;
   avatar_sources: string[];
   avatar_override?: string | null;
-  protocol: "openai" | "openai-responses" | "anthropic" | "codex" | "chatgpt" | "antigravity" | "freebuff" | "qwen" | "atomesus" | "conol" | "perch" | "openfree";
+  protocol: "openai" | "openai-responses" | "anthropic" | "codex" | "chatgpt" | "antigravity" | "freebuff" | "qwen" | "atomesus" | "conol" | "perch" | "openfree" | "deepai";
   is_active: number;
   created_at: string;
   updated_at: string;
@@ -72,6 +72,15 @@ export interface Model {
   pricing_source?: "custom" | "litellm" | null;
   catalog_pricing?: CatalogPricing | null;
   media_settings?: MediaModelSettings;
+  metadata_source?: MetadataSource | null;
+}
+
+export type MetadataSourceTag = "provider" | "litellm" | "manual";
+export interface MetadataSource {
+  context_window?: MetadataSourceTag | "unknown";
+  max_output_tokens?: MetadataSourceTag | "unknown";
+  capabilities?: Partial<Record<keyof ModelCapabilities, MetadataSourceTag>>;
+  reasoning_efforts?: MetadataSourceTag | "unknown";
 }
 
 export interface ModelCapabilities {

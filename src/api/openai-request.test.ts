@@ -5,7 +5,7 @@ describe("validateChatCompletionRequest", () => {
   test("accepts a valid OpenAI chat request", () => {
     expect(validateChatCompletionRequest({
       model: "provider/model",
-      messages: [],
+      messages: [{ role: "user", content: "hi" }],
     })).toBeNull();
   });
 
@@ -18,9 +18,33 @@ describe("validateChatCompletionRequest", () => {
       { model: "provider/model" },
       { model: "provider/model", messages: {} },
     ]) {
-      expect(validateChatCompletionRequest(body)).toBe(
-        "model and messages are required",
-      );
+      expect(validateChatCompletionRequest(body)).toMatch(/model|messages|object/);
     }
+  });
+
+  test("rejects an empty messages array with a specific reason", () => {
+    expect(validateChatCompletionRequest({
+      model: "provider/model",
+      messages: [],
+    })).toBe("messages must contain at least one message");
+  });
+
+  test("rejects messages without a role or with malformed content", () => {
+    expect(validateChatCompletionRequest({
+      model: "provider/model",
+      messages: [{}],
+    })).toBe("messages[0].role is required and must be a string");
+    expect(validateChatCompletionRequest({
+      model: "provider/model",
+      messages: [{ role: "user" }],
+    })).toBe("messages[0].content must be a string or content parts array");
+    expect(validateChatCompletionRequest({
+      model: "provider/model",
+      messages: ["nope"],
+    })).toBe("messages[0] must be an object");
+    expect(validateChatCompletionRequest({
+      model: "provider/model",
+      messages: [{ role: "assistant", tool_calls: [{ function: { name: "x" } }] }],
+    })).toBeNull();
   });
 });

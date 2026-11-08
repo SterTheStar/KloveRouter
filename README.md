@@ -15,6 +15,8 @@
 
 Klove gives applications one API and one admin panel for multiple AI providers. Route OpenAI-compatible, Responses, and Anthropic Messages requests; manage provider credentials and models; and inspect request activity, token usage, and estimated costs.
 
+DeepAI Code provider supports browser sign-in with a loopback callback, encrypted account credentials, lane 4 model discovery, Chat Completions and Responses, Theos check-in, usage limits, session affinity, and `session_busy` retries. Add a DeepAI Code provider and use **Sign in with DeepAI Code** on its credential page. If browser loopback is unavailable, paste the callback URL into the login dialog.
+
 Compound models expose a stable `pool/<id>` model that routes across selected provider models. Choose priority fallback or random selection, set member fallback behavior, and configure token limits.
 
 ## Integrations
@@ -136,7 +138,7 @@ OpenAI-compatible image endpoints are available at `/v1/images/generations`, `/v
 - Application data is stored in SQLite at `DB_PATH`.
 - Provider secrets and OAuth tokens are encrypted before they are stored.
 - Public API responses do not expose provider credentials.
-- Request logs include operational metadata, token counts, account labels, and client IP addresses. Prompt and completion bodies are not stored in request logs; media prompt/input values are redacted and only their character count is retained.
+- Request logs include operational metadata, token counts, account labels, client IP addresses, and the request payload with credential keys redacted. Requests rejected by the proxy (invalid body, bad API key, unknown model, over-limit requests...) are also logged with the exact reason and the payload received. Media prompt/input values are redacted and only their character count is retained.
 - `.env` files and the `data/` directory are excluded from Git.
 
 Back up the SQLite database and its encryption key together.

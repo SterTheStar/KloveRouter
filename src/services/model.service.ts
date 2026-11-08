@@ -5,15 +5,11 @@ import type { ProviderProtocol } from "./provider-appearance";
 import { publicAvatar } from "./avatar.service";
 import { getLiteLLMPricing } from "./litellm-pricing";
 import type { LiteLLMPricing } from "./litellm-pricing";
+import type { ModelMetadataSource, MetadataSourceTag } from "./model-metadata";
+
 
 export type ThinkOpeningTagMode = "off" | "detect" | "force";
 export type MaxOutputTokensSource = "auto" | "api" | "manual";
-
-export function automaticMaxOutputTokens(contextWindow: number | null | undefined): number {
-  return contextWindow != null && contextWindow <= 131_072
-    ? Math.floor(contextWindow / 2)
-    : 128_000;
-}
 
 const thinkOpeningTagModes: ThinkOpeningTagMode[] = ["off", "detect", "force"];
 
@@ -36,6 +32,7 @@ export interface Model {
   fix_missing_think_opening_tag: boolean;
   capabilities: ModelCapabilities;
   reasoning_efforts: ReasoningEffort[];
+  metadata_source?: ModelMetadataSource | null;
   pricing_tiers?: PricingTier[];
   pricing_source?: "custom" | "litellm" | null;
   catalog_pricing?: LiteLLMPricing | null;
@@ -84,6 +81,7 @@ export interface ModelMetadataInput {
   capabilities?: Partial<ModelCapabilities>;
   reasoning_efforts?: ReasoningEffort[];
   media_settings?: MediaModelSettings;
+  metadata_source?: ModelMetadataSource;
 }
 
 export interface PricingTier {
@@ -232,21 +230,48 @@ function validateMetadata(input: ModelMetadataInput): void {
   }
 }
 
+const tagRank = (tag: MetadataSourceTag | "unknown" | undefined): number =>
+  tag === "manual" ? 100 : tag === "provider" ? 80 : tag === "litellm" ? 40 : 0;
+
+/** provider/manual always win; the catalog fallback only fills absent values or refreshes its own. */
+const keepExistingScalar = (
+  incomingValue: number | null | undefined,
+  incomingTag: MetadataSourceTag | "unknown" | undefined,
+  existingTag: MetadataSourceTag | "unknown" | undefined,
+) => incomingValue !== undefined && incomingTag === "litellm" && tagRank(existingTag) > tagRank("litellm");
+
+const keepExistingCapability = (
+  incomingValue: boolean | null | undefined,
+  incomingTag: MetadataSourceTag | undefined,
+  existingTag: MetadataSourceTag | undefined,
+) => incomingValue !== undefined && incomingTag === "litellm" && tagRank(existingTag) > tagRank("litellm");
+
 function saveMetadata(modelId: string, input: ModelMetadataInput): void {
   const db = getDb();
   validateMetadata(input);
+
+  // Provenance of the existing row drives the provider > manual > litellm precedence
+  // for values the catalog fills but never overwrites.
+  const existingSourceRow = db.query("SELECT metadata_source FROM models WHERE id = ?").get(modelId) as { metadata_source: string | null } | null;
+  let existingSource: ModelMetadataSource | null = null;
+  try {
+    existingSource = existingSourceRow?.metadata_source ? JSON.parse(existingSourceRow.metadata_source) : null;
+  } catch {
+    existingSource = null;
+  }
+  const incomingSource = input.metadata_source ?? {};
+  const existingCapsRow = db.query("SELECT " + capabilityKeys.join(", ") + " FROM model_capabilities WHERE model_id = ?").get(modelId) as Record<(typeof capabilityKeys)[number], number | null> | null;
+
   const scalarUpdates: string[] = [];
   const scalarValues: Array<number | null | string> = [];
-  if (input.context_window !== undefined) {
+  if (input.context_window !== undefined && !keepExistingScalar(input.context_window, incomingSource.context_window, existingSource?.context_window)) {
     scalarUpdates.push("context_window = ?");
     scalarValues.push(input.context_window);
   }
-  if (input.max_output_tokens !== undefined) {
-    const effectiveMax = input.max_output_tokens == null
-      ? automaticMaxOutputTokens(input.context_window ?? (db.query("SELECT context_window FROM models WHERE id = ?").get(modelId) as { context_window: number | null } | null)?.context_window)
-      : input.max_output_tokens;
+  if (input.max_output_tokens !== undefined && !keepExistingScalar(input.max_output_tokens, incomingSource.max_output_tokens, existingSource?.max_output_tokens)) {
+    // Never fabricated: a missing limit stays unknown (NULL) instead of a made-up number.
     scalarUpdates.push("max_output_tokens = ?");
-    scalarValues.push(effectiveMax);
+    scalarValues.push(input.max_output_tokens);
     scalarUpdates.push("max_output_tokens_source = ?");
     scalarValues.push(input.max_output_tokens == null ? "auto" : input.max_output_tokens_source ?? "manual");
   }
@@ -257,26 +282,48 @@ function saveMetadata(modelId: string, input: ModelMetadataInput): void {
   if (scalarUpdates.length)
     db.query(`UPDATE models SET ${scalarUpdates.join(", ")} WHERE id = ?`).run(...scalarValues, modelId);
 
+  // Merge recorded provenance with whatever the caller provides. Tags for a key
+  // survive when its stored value is deliberately kept (catalog losing to manual/provider).
+  const mergedSource: ModelMetadataSource = { capabilities: { ...(existingSource?.capabilities ?? {}) } };
+  if (incomingSource.context_window !== undefined)
+    mergedSource.context_window = keepExistingScalar(input.context_window, incomingSource.context_window, existingSource?.context_window) ? existingSource?.context_window : incomingSource.context_window;
+  if (incomingSource.max_output_tokens !== undefined)
+    mergedSource.max_output_tokens = keepExistingScalar(input.max_output_tokens, incomingSource.max_output_tokens, existingSource?.max_output_tokens) ? existingSource?.max_output_tokens : incomingSource.max_output_tokens;
+  if (incomingSource.reasoning_efforts !== undefined)
+    mergedSource.reasoning_efforts = incomingSource.reasoning_efforts;
+
   if (input.capabilities !== undefined) {
-    const existing = db.query("SELECT * FROM model_capabilities WHERE model_id = ?").get(modelId) as
-      | (Record<string, number | null> & { model_id: string })
-      | null;
+    const incomingCaps = incomingSource.capabilities ?? {};
+    const mergedCapSources = { ...(existingSource?.capabilities ?? {}) };
     const values = capabilityKeys.map((key) => {
       const value = input.capabilities?.[key];
-      if (value === undefined) return existing?.[key] ?? null;
+      if (value === undefined) return existingCapsRow?.[key] ?? null;
+      const incomingTag = incomingCaps[key];
+      if (keepExistingCapability(value, incomingTag, existingSource?.capabilities?.[key])) {
+        mergedCapSources[key] = existingSource!.capabilities![key];
+        return existingCapsRow?.[key] ?? null;
+      }
+      mergedCapSources[key] = incomingTag ?? "manual";
       return value === null ? null : value ? 1 : 0;
     });
+    for (const key of capabilityKeys) {
+      if (input.capabilities?.[key] !== undefined) mergedSource.capabilities![key] = mergedCapSources[key];
+    }
     db.query(`INSERT INTO model_capabilities (model_id, ${capabilityKeys.join(", ")})
       VALUES (${Array(capabilityKeys.length + 1).fill("?").join(", ")})
       ON CONFLICT(model_id) DO UPDATE SET ${capabilityKeys.map((key) => `${key} = excluded.${key}`).join(", ")}`)
       .run(modelId, ...values);
   }
   if (input.reasoning_efforts !== undefined) {
+    // Efforts only get replaced wholesale; the catalog provides none of its own.
+    mergedSource.reasoning_efforts = incomingSource.reasoning_efforts ?? "manual";
     db.query("DELETE FROM model_reasoning_efforts WHERE model_id = ?").run(modelId);
     for (const effort of input.reasoning_efforts)
       db.query("INSERT INTO model_reasoning_efforts (id, model_id, effort, display_name, upstream_value, sort_order, is_default) VALUES (?, ?, ?, ?, ?, ?, ?)")
         .run(crypto.randomUUID(), modelId, effort.effort.trim(), effort.display_name.trim(), effort.upstream_value.trim(), effort.sort_order, effort.is_default ? 1 : 0);
   }
+  if (input.metadata_source !== undefined || input.capabilities !== undefined || input.reasoning_efforts !== undefined)
+    db.query("UPDATE models SET metadata_source = ? WHERE id = ?").run(JSON.stringify(mergedSource), modelId);
 }
 
 function seedMissingMetadata(modelId: string, input: ModelMetadataInput): void {
@@ -308,16 +355,15 @@ function seedMissingMetadata(modelId: string, input: ModelMetadataInput): void {
 
 function refreshSyncedMetadata(modelId: string, input: ModelMetadataInput): void {
   const db = getDb();
-  const existing = db.query("SELECT context_window, max_output_tokens_source FROM models WHERE id = ?").get(modelId) as { context_window: number | null; max_output_tokens_source: MaxOutputTokensSource };
-  const context = input.context_window ?? existing.context_window;
+  const existing = db.query("SELECT max_output_tokens_source FROM models WHERE id = ?").get(modelId) as { max_output_tokens_source: MaxOutputTokensSource };
   if (existing.max_output_tokens_source === "manual") {
     saveMetadata(modelId, { ...input, max_output_tokens: undefined });
     return;
   }
   saveMetadata(modelId, {
     ...input,
-    max_output_tokens: input.max_output_tokens ?? automaticMaxOutputTokens(context),
-    max_output_tokens_source: input.max_output_tokens != null ? "api" : "auto",
+    max_output_tokens: input.max_output_tokens ?? undefined,
+    max_output_tokens_source: input.max_output_tokens != null ? "api" : undefined,
   });
 }
 
@@ -375,13 +421,21 @@ function hydrate(model: Model | null): Model | null {
     .query("SELECT reasoning, tools, vision, audio_input, audio_output, video, image_generation, text_to_speech, video_generation, attachments, streaming, non_streaming FROM model_capabilities WHERE model_id = ?")
     .get(model.id) as Record<(typeof capabilityKeys)[number], number | null> | null;
   const source = model.max_output_tokens_source ?? (model.is_manual ? "manual" : "api");
-  const maxOutput = model.max_output_tokens ?? automaticMaxOutputTokens(model.context_window);
+  let metadata_source: ModelMetadataSource | null = null;
+  try {
+    metadata_source = (model as Model & { metadata_source?: string | null }).metadata_source
+      ? JSON.parse((model as Model & { metadata_source?: string | null }).metadata_source!) as ModelMetadataSource
+      : null;
+  } catch {
+    metadata_source = null;
+  }
   return {
     ...model,
     media_settings: (() => { try { return model.media_settings ? JSON.parse(model.media_settings as unknown as string) : {}; } catch { return {}; } })(),
     context_window: model.context_window ?? null,
-    max_output_tokens: maxOutput,
+    max_output_tokens: model.max_output_tokens,
     max_output_tokens_source: source,
+    metadata_source,
     max_output_tokens_is_default: source === "auto",
     think_opening_tag_mode: model.think_opening_tag_mode,
     fix_missing_think_opening_tag: model.think_opening_tag_mode !== "off",
@@ -589,7 +643,7 @@ export const modelService = {
     const pricingTiers = input.pricing_tiers;
     db.transaction(() => {
       db.query(
-        "UPDATE models SET pretty_id = ?, display_name = ?, is_manual = 0, is_active = ?, use_litellm_pricing = ?, context_window = NULL, max_output_tokens = NULL, max_output_tokens_source = 'auto', media_settings = NULL, updated_at = datetime('now') WHERE id = ?",
+        "UPDATE models SET pretty_id = ?, display_name = ?, is_manual = 0, is_active = ?, use_litellm_pricing = ?, context_window = NULL, max_output_tokens = NULL, max_output_tokens_source = 'auto', media_settings = NULL, metadata_source = '{}', updated_at = datetime('now') WHERE id = ?",
       ).run(
         requestedPrettyId ?? existing.pretty_id,
         input.display_name?.trim() || generateDisplayName(input.model_id),
@@ -696,7 +750,19 @@ export const modelService = {
     }
     db.transaction(() => {
       savePricing(id, input.pricing_tiers);
-      saveMetadata(id, input);
+      const source: ModelMetadataSource = {};
+      const capabilitySources: Partial<Record<keyof Model["capabilities"], "manual">> = {};
+      if (input.context_window !== undefined) source.context_window = "manual";
+      if (input.max_output_tokens !== undefined) source.max_output_tokens = "manual";
+      if (input.reasoning_efforts !== undefined) source.reasoning_efforts = "manual";
+      if (input.capabilities) {
+        for (const key of Object.keys(input.capabilities)) {
+          if (input.capabilities[key as keyof Model["capabilities"]] !== undefined)
+            capabilitySources[key as keyof Model["capabilities"]] = "manual";
+        }
+        if (Object.keys(capabilitySources).length) source.capabilities = capabilitySources;
+      }
+      saveMetadata(id, { ...input, ...(Object.keys(source).length ? { metadata_source: source } : {}) });
       if (updates.length) {
         values.push(id);
         db.query(`UPDATE models SET ${updates.join(", ")} WHERE id = ?`).run(...values);

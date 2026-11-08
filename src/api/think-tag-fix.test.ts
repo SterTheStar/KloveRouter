@@ -122,21 +122,33 @@ describe("missing think opening tag fix", () => {
 
   test("buffers fragmented tags independently per choice and preserves fields in detect mode", async () => {
     const source = (async function* () {
-      yield chunk(0, "reason");
-      yield chunk(1, "<thi");
-      yield chunk(0, "ing</thi", { reasoning_content: "kept" });
-      yield chunk(1, "nk>ok");
-      yield chunk(0, "nk>answer");
+      yield chunk(0, "<thi");
+      yield chunk(1, "plain");
+      yield chunk(0, "nk>reason</think>answer", { reasoning_content: "kept" });
+      yield chunk(1, " text");
       yield { ...chunk(0, undefined, { tool_calls: [{ index: 0 }] }), usage: { total_tokens: 9 } };
     })();
     const output = await collect(fixThinkTagAsyncIterable(source, "detect"));
 
     expect(contentOf(output, 0)).toBe("answer");
-    expect(reasoningOf(output, 0)).toBe("kept<think>reasoning</think>");
-    expect(contentOf(output, 1)).toBe("<think>ok");
-    expect(output.some((item) => item.usage?.total_tokens === 9)).toBe(true);
-    expect(output.some((item) => item.choices?.[0]?.delta?.reasoning_content === "kept")).toBe(true);
+    expect(reasoningOf(output, 0)).toBe("kept<think>reason</think>");
+    expect(contentOf(output, 1)).toBe("plain text");
+    expect(reasoningOf(output, 1)).toBe("");
     expect(output.some((item) => item.choices?.[0]?.delta?.tool_calls)).toBe(true);
+    expect(output.some((item) => item.usage?.total_tokens === 9)).toBe(true);
+  });
+
+  test("streams plain text through without waiting for the stream to end in detect mode", async () => {
+    const source = (async function* () {
+      yield chunk(0, "reason");
+      yield chunk(0, "ing</think>answer");
+    })();
+    const output = await collect(fixThinkTagAsyncIterable(source, "detect"));
+
+    // An orphan closing tag is not re-classified (that would require holding
+    // back the whole response), so plain text streams immediately.
+    expect(contentOf(output, 0)).toBe("reasoning</think>answer");
+    expect(reasoningOf(output, 0)).toBe("");
   });
 
   test("flushes original content when the stream ends undecided in detect mode", async () => {
@@ -243,8 +255,8 @@ describe("missing think opening tag fix", () => {
 
   test("SSE wrapper preserves errors, finish reasons, usage, DONE, and headers", async () => {
     const input = [
-      `data: ${JSON.stringify(chunk(0, "reason"))}\n\n`,
-      `data: ${JSON.stringify(chunk(0, "ing</think>answer"))}\n\n`,
+      `data: ${JSON.stringify(chunk(0, "<thi"))}\n\n`,
+      `data: ${JSON.stringify(chunk(0, "nk>reason</think>answer"))}\n\n`,
       `data: ${JSON.stringify({ choices: [{ index: 0, delta: {}, finish_reason: "stop" }], usage: { total_tokens: 4 } })}\n\n`,
       `data: ${JSON.stringify({ error: { message: "late" } })}\n\n`,
       "data: [DONE]\n\n",
@@ -260,7 +272,7 @@ describe("missing think opening tag fix", () => {
 
     expect(response.status).toBe(206);
     expect(response.headers.get("x-test")).toBe("yes");
-    expect(text).toContain('"reasoning_content":"<think>reasoning</think>"');
+    expect(text).toContain('"reasoning_content":"<think>reason</think>"');
     expect(text).toContain('"content":"answer"');
     expect(text).toContain('"finish_reason":"stop"');
     expect(text).toContain('"total_tokens":4');

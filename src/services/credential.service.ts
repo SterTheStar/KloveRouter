@@ -102,7 +102,9 @@ export const credentialService = {
     if (!credential) return null;
     return {
       authenticated:
-        credential.kind === "chatgpt" ||
+        credential.kind === "api_key"
+          ? Boolean(credential.secret)
+          : credential.kind === "chatgpt" ||
         credential.kind === "conol" ||
         credential.kind === "openfree"
           ? Boolean(credential.secret)
@@ -314,9 +316,11 @@ export const credentialService = {
                  ? `${alias}.kind = 'conol' AND ${alias}.secret IS NOT NULL AND ${alias}.account_id IS NOT NULL`
                : provider?.protocol === "perch"
                  ? `${alias}.kind = 'perch'`
-               : provider?.protocol === "openfree"
-                 ? `${alias}.kind = 'openfree' AND ${alias}.secret IS NOT NULL`
-               : `${alias}.kind = 'api_key' AND (${alias}.secret IS NOT NULL OR NOT EXISTS (SELECT 1 FROM provider_credentials configured WHERE configured.provider_id = ${alias}.provider_id AND configured.kind = 'api_key' AND configured.is_active = 1 AND configured.secret IS NOT NULL))`;
+                : provider?.protocol === "openfree"
+                  ? `${alias}.kind = 'openfree' AND ${alias}.secret IS NOT NULL`
+                : provider?.protocol === "deepai"
+                  ? `${alias}.kind = 'api_key' AND ${alias}.secret IS NOT NULL`
+                : `${alias}.kind = 'api_key' AND (${alias}.secret IS NOT NULL OR NOT EXISTS (SELECT 1 FROM provider_credentials configured WHERE configured.provider_id = ${alias}.provider_id AND configured.kind = 'api_key' AND configured.is_active = 1 AND configured.secret IS NOT NULL))`;
     if (mode === "fixed" && fixedId) {
       const raw = db
         .query(

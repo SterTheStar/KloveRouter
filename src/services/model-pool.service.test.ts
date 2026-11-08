@@ -2,7 +2,7 @@ process.env.DB_PATH = ":memory:";
 
 import { beforeEach, describe, expect, test } from "bun:test";
 import { getDb } from "../db/connection";
-import { formatPoolRequestError, modelPoolService, poolEffectiveLimits, poolSlugFromModelId, routeModelPool, validatePoolMemberCompatibility, validatePoolTokenLimits } from "./model-pool.service";
+import { formatPoolRequestError, modelPoolService, poolEffectiveLimits, poolSlugFromModelId, routeModelPool, poolRequestIncompatibility, validatePoolTokenLimits } from "./model-pool.service";
 
 const db = getDb();
 
@@ -205,20 +205,55 @@ describe("compound model availability follows members", () => {
 });
 
 describe("model pool routing", () => {
-  test("reports compatibility errors only if no member can satisfy request features", () => {
-    const pool = modelPoolService.create(input());
-    const members = modelPoolService.findForRouting(pool.slug)!.map(({ model }) => model);
-    expect(validatePoolMemberCompatibility(members, { stream: true, tools: [{ type: "function" }] })).toBeNull();
-    expect(validatePoolMemberCompatibility(members.slice(1), { stream: true, tools: [{ type: "function" }] })).toContain("No active member supports tools");
+  test("forwards capability-mismatched requests to members instead of blocking them", async () => {
+    modelPoolService.create(input());
+    const attempted: string[] = [];
+    const response = await routeModelPool(
+      "reliable-chat",
+      { model: "pool/reliable-chat", messages: [{ role: "user", content: [{ type: "image_url", image_url: { url: "https://example.com/a.png" } }] }], stream: false },
+      "Bearer test",
+      undefined,
+      async (_url, init) => {
+        const requestBody = JSON.parse(String(init?.body));
+        attempted.push(requestBody.model);
+        return Response.json({ id: "ok", choices: [{ message: { role: "assistant", content: "done" } }] });
+      },
+    );
+    expect(response.ok).toBe(true);
+    expect(attempted).toEqual(["providerone/one"]);
   });
 
-  test("requires audio and video capable members when those inputs are present", () => {
+  test("fails over to the next member when the primary rejects media input with a 400", async () => {
+    modelPoolService.create(input());
+    const attempted: string[] = [];
+    const response = await routeModelPool(
+      "reliable-chat",
+      { model: "pool/reliable-chat", messages: [{ role: "user", content: [{ type: "image_url", image_url: { url: "https://example.com/a.png" } }] }], stream: false },
+      "Bearer test",
+      undefined,
+      async (_url, init) => {
+        const requestBody = JSON.parse(String(init?.body));
+        attempted.push(requestBody.model);
+        if (attempted.length === 1) return Response.json({ error: { message: "model does not support images" } }, { status: 400 });
+        return Response.json({ id: "ok", choices: [{ message: { role: "assistant", content: "vision answer" } }] });
+      },
+    );
+    expect(response.ok).toBe(true);
+    expect(attempted).toEqual(["providerone/one", "providertwo/two"]);
+  });
+
+  test("rejects only protocol facts and unsupported reasoning efforts", () => {
+    const conolMember: any = { capabilities: { tools: true }, reasoning_efforts: [], provider_protocol: "conol" };
+    expect(poolRequestIncompatibility([conolMember], { tools: [{ type: "function" }] })).toContain("Conol");
+    expect(poolRequestIncompatibility([conolMember], { messages: [{ role: "user", content: [{ type: "image_url", image_url: { url: "https://example.com/a.png" } }] }] })).toContain("Conol");
+    expect(poolRequestIncompatibility([conolMember], { messages: [{ role: "user", content: "hello" }] })).toBeNull();
     const members: any[] = [
-      { capabilities: { audio_input: false, video: false, vision: true, tools: true } },
-      { capabilities: { audio_input: false, video: false, vision: true, tools: true } },
+      { capabilities: { tools: true }, reasoning_efforts: [{ effort: "low" }] },
+      { capabilities: { tools: true }, reasoning_efforts: [{ effort: "high" }] },
     ];
-    expect(validatePoolMemberCompatibility(members, { messages: [{ role: "user", content: [{ type: "input_audio", input_audio: { data: "YWJj", format: "wav" } }] }] })).toContain("No active member supports audio input");
-    expect(validatePoolMemberCompatibility(members, { messages: [{ role: "user", content: [{ type: "video_url", video_url: { url: "https://example.com/clip.mp4" } }] }] })).toContain("No active member supports video input");
+    expect(poolRequestIncompatibility(members, { reasoning_effort: "xhigh" })).toContain("xhigh");
+    expect(poolRequestIncompatibility(members, { reasoning_effort: "low" })).toBeNull();
+    expect(poolRequestIncompatibility(members, { tools: [{ type: "function" }] })).toBeNull();
   });
 
   test("retries with the next priority model after a retryable upstream failure", async () => {
@@ -234,8 +269,22 @@ describe("model pool routing", () => {
     expect(attempted).toEqual(["providerone/one", "providertwo/two"]);
   });
 
-  test("does not fall through on authentication errors", async () => {
+  test("fails over on authentication errors when the member allows fallback", async () => {
+    // Compound routing treats a member's 401 as that member's credential
+    // failure: fallback members are attempted in priority order (see 6f8261e).
     modelPoolService.create(input());
+    let calls = 0;
+    const response = await routeModelPool("reliable-chat", { model: "pool/reliable-chat", messages: [] }, "Bearer test", undefined, async () => {
+      calls++;
+      return Response.json({ error: "unauthorized" }, { status: 401 });
+    });
+    expect(response.status).toBe(401);
+    expect(calls).toBe(2);
+    expect(await response.json()).toMatchObject({ error: "Compound model failed" });
+  });
+
+  test("returns the authentication error directly when fallback is disabled", async () => {
+    modelPoolService.create(input({ members: [{ model_id: "m1", priority: 0, fallback: false }, { model_id: "m2", priority: 1, fallback: true }] }));
     let calls = 0;
     const response = await routeModelPool("reliable-chat", { model: "pool/reliable-chat", messages: [] }, "Bearer test", undefined, async () => {
       calls++;

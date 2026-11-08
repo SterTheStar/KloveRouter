@@ -9,6 +9,7 @@ import { isOpenAICompatibleProtocol } from "../services/provider-appearance";
 import { assertSafeRemoteUrl } from "../services/ssrf";
 import { getDb } from "../db/connection";
 import { parseModelName } from "../clients/openai";
+import { clientIp } from "../services/request-ip";
 
 type MediaType = "image-generation" | "image-edit" | "image-variation" | "text-to-speech" | "video-generation" | "video-status" | "video-content" | "video-cancel" | "video-delete" | "video-list";
 
@@ -20,7 +21,57 @@ type MediaRoute = {
 };
 
 const apiError = (message: string, type = "invalid_request_error", code: string | null = null) => ({ error: { message, type, code } });
-const clientIp = (request: Request) => request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null;
+
+type MediaRejectionContext = {
+  headers: Record<string, string | undefined>;
+  request: Request;
+  server?: unknown;
+  body?: unknown;
+};
+
+function safeRejectionPayload(body: unknown) {
+  if (body == null) return undefined;
+  if (typeof body !== "object") return { value: body };
+  // FormData (image edits/variations): summarize keys and file metadata
+  // instead of logging an empty object or raw binary.
+  if (typeof (body as FormData).entries === "function") {
+    const fields: Record<string, unknown> = {};
+    for (const [key, value] of (body as unknown as FormData).entries() as Iterable<[string, unknown]>) {
+      if (value instanceof Blob) {
+        const blob = value as Blob & { name?: string };
+        fields[key] = { filename: blob.name ?? null, size: blob.size, content_type: blob.type };
+      } else {
+        fields[key] = value;
+      }
+    }
+    return { content_type: "multipart/form-data", fields };
+  }
+  return body;
+}
+
+function logMediaRejection(ctx: MediaRejectionContext, input: {
+  statusCode: number;
+  error: string;
+  providerId?: string | null;
+  providerName?: string | null;
+  modelName?: string | null;
+  requesterName?: string | null;
+  apiKeyPrefix?: string | null;
+}) {
+  try {
+    requestLogService.logRejection({
+      providerId: input.providerId ?? null,
+      providerName: input.providerName ?? null,
+      modelName: input.modelName ?? null,
+      statusCode: input.statusCode,
+      error: input.error,
+      clientIp: clientIp(ctx.request, ctx.headers, ctx.server as any),
+      requesterName: input.requesterName ?? null,
+      apiKeyPrefix: input.apiKeyPrefix ?? null,
+      requestDetails: { method: ctx.request.method, url: new URL(ctx.request.url).pathname, headers: ctx.headers, payload: safeRejectionPayload(ctx.body), klove: { rejected: true } },
+    });
+  } catch { /* Rejection logging must never affect the response. */ }
+}
 
 function endpointUrl(provider: MediaRoute["provider"], resourcePath: string, query?: string) {
   const base = provider.base_url.replace(/\/+$/, "");
@@ -84,26 +135,38 @@ function withMediaDefaults(body: any, route: MediaRoute, mediaType: MediaType) {
   return result;
 }
 
-async function resolveMediaRoute(modelName: unknown, modality: "image_generation" | "text_to_speech" | "video_generation", headers: Record<string, string | undefined>) {
-  if (typeof modelName !== "string" || !modelName) return { error: apiError("A model ID in provider/model format is required") } as const;
+type MediaRouteCtx = {
+  headers: Record<string, string | undefined>;
+  request: Request;
+  server?: unknown;
+  body?: unknown;
+};
+
+async function resolveMediaRoute(modelName: unknown, modality: "image_generation" | "text_to_speech" | "video_generation", ctx: MediaRouteCtx) {
+  const reject = (statusCode: number, error: string, details: Partial<Parameters<typeof logMediaRejection>[1]> = {}) => {
+    const parsedHint = typeof modelName === "string" ? modelName : null;
+    logMediaRejection(ctx, { statusCode, error, modelName: details.modelName ?? parsedHint, ...details });
+  };
+  const { headers } = ctx;
+  if (typeof modelName !== "string" || !modelName) { reject(400, "A model ID in provider/model format is required"); return { error: apiError("A model ID in provider/model format is required") } as const; }
   const parsed = parseModelName(modelName);
-  if (!parsed) return { error: apiError('Model must use "provider/model" format') } as const;
+  if (!parsed) { reject(400, 'Model must use "provider/model" format'); return { error: apiError('Model must use "provider/model" format') } as const; }
   const provider = providerService.findByName(parsed.providerName);
-  if (!provider || !provider.is_active) return { status: 404, error: apiError(`Provider "${parsed.providerName}" was not found or is disabled`, "invalid_request_error", "provider_not_found") } as const;
-  if (!isOpenAICompatibleProtocol(provider.protocol)) return { status: 400, error: apiError(`Provider "${provider.name}" does not expose OpenAI-compatible media endpoints`, "invalid_request_error", "incompatible_provider") } as const;
+  if (!provider || !provider.is_active) { reject(404, `Provider "${parsed.providerName}" was not found or is disabled`, { providerName: parsed.providerName, modelName: parsed.modelId }); return { status: 404, error: apiError(`Provider "${parsed.providerName}" was not found or is disabled`, "invalid_request_error", "provider_not_found") } as const; }
+  if (!isOpenAICompatibleProtocol(provider.protocol)) { reject(400, `Provider "${provider.name}" does not expose OpenAI-compatible media endpoints`, { providerId: provider.id, providerName: provider.name, modelName: parsed.modelId }); return { status: 400, error: apiError(`Provider "${provider.name}" does not expose OpenAI-compatible media endpoints`, "invalid_request_error", "incompatible_provider") } as const; }
   const model = modelService.findByPublicId(provider.id, parsed.modelId);
-  if (!model || !model.is_active) return { status: 404, error: apiError(`Model "${parsed.modelId}" was not found or is disabled`, "invalid_request_error", "model_not_found") } as const;
-  if (model.capabilities?.[modality] === false) return { status: 400, error: apiError(`Model "${modelName}" is not marked as supporting ${modality.replaceAll("_", " ")}`, "invalid_request_error", "unsupported_model_modality") } as const;
+  if (!model || !model.is_active) { reject(404, `Model "${parsed.modelId}" was not found or is disabled`, { providerId: provider.id, providerName: provider.name, modelName: parsed.modelId }); return { status: 404, error: apiError(`Model "${parsed.modelId}" was not found or is disabled`, "invalid_request_error", "model_not_found") } as const; }
+  if (model.capabilities?.[modality] === false) { reject(400, `Model "${modelName}" is not marked as supporting ${modality.replaceAll("_", " ")}`, { providerId: provider.id, providerName: provider.name, modelName: parsed.modelId }); return { status: 400, error: apiError(`Model "${modelName}" is not marked as supporting ${modality.replaceAll("_", " ")}`, "invalid_request_error", "unsupported_model_modality") } as const; }
 
   const auth = headers.authorization;
   const gatewayKey = auth?.startsWith("Bearer ") ? auth.slice(7) : headers["x-api-key"];
   const apiKey = gatewayKey ? await keyService.verify(gatewayKey) : null;
-  if (!apiKey) return { status: 401, error: apiError("Valid API key required", "authentication_error") } as const;
+  if (!apiKey) { reject(401, "Valid API key required", { providerName: "(unauthenticated)", modelName: `${provider.name}/${model.model_id}`, requesterName: null }); return { status: 401, error: apiError("Valid API key required", "authentication_error") } as const; }
 
   const sequence = provider.credential_mode === "round_robin" || provider.credential_mode === "failover" ? credentialService.beginRequest(provider.id) : undefined;
   const credential = credentialService.select(provider.id, provider.credential_mode, provider.fixed_credential_id, sequence)
     || credentialService.select(provider.id, provider.credential_mode === "failover" ? "failover" : "round_robin", null, sequence);
-  if (!credential) return { status: 503, error: apiError(`Provider "${provider.name}" has no active credential`, "server_error", "no_active_credential") } as const;
+  if (!credential) { reject(503, `Provider "${provider.name}" has no active credential`, { providerId: provider.id, providerName: provider.name, modelName: model.model_id, requesterName: apiKey.name, apiKeyPrefix: apiKey.prefix }); return { status: 503, error: apiError(`Provider "${provider.name}" has no active credential`, "server_error", "no_active_credential") } as const; }
   return { route: { provider, model, requestedModel: modelName, credential } as MediaRoute, gatewayKeyName: apiKey.name, gatewayKeyPrefix: apiKey.prefix } as const;
 }
 
@@ -167,6 +230,7 @@ async function proxyMediaRequest(input: {
   body?: any;
   headers: Record<string, string | undefined>;
   set: { status?: number | string };
+  server?: unknown;
   gatewayKeyName: string;
   gatewayKeyPrefix?: string | null;
   route: MediaRoute;
@@ -183,7 +247,7 @@ async function proxyMediaRequest(input: {
     providerId: route.provider.id,
     providerName: route.provider.name,
     modelName: route.model.model_id,
-    clientIp: clientIp(request),
+    clientIp: clientIp(request, headers, input.server as any),
     requesterName: gatewayKeyName,
     apiKeyPrefix: gatewayKeyPrefix,
     streaming: mediaType === "text-to-speech" || mediaType === "video-content",
@@ -264,18 +328,30 @@ function routeForVideoJob(job: NonNullable<ReturnType<typeof getVideoJob>>) {
 }
 
 async function videoAction(context: any, action: "retrieve" | "content" | "cancel" | "delete") {
-  const { params, request, headers, set, query } = context;
+  const { params, request, headers, set, query, server } = context;
   const apiKey = await requireGatewayKey(headers);
-  if (!apiKey) { set.status = 401; return apiError("Valid API key required", "authentication_error"); }
+  if (!apiKey) {
+    logMediaRejection({ headers, request, server }, { statusCode: 401, error: "Valid API key required", providerName: "Media API", modelName: `video ${action}` });
+    set.status = 401;
+    return apiError("Valid API key required", "authentication_error");
+  }
   const job = getVideoJob(params.id);
-  if (!job) { set.status = 404; return apiError("Video not found", "invalid_request_error", "video_not_found"); }
+  if (!job) {
+    logMediaRejection({ headers, request, server }, { statusCode: 404, error: "Video not found", providerName: "Media API", modelName: `video ${action}`, requesterName: apiKey.name, apiKeyPrefix: apiKey.prefix });
+    set.status = 404;
+    return apiError("Video not found", "invalid_request_error", "video_not_found");
+  }
   const route = routeForVideoJob(job);
-  if (!route) { set.status = 503; return apiError("The provider credential for this video is unavailable", "server_error", "no_active_credential"); }
+  if (!route) {
+    logMediaRejection({ headers, request, server }, { statusCode: 503, error: "The provider credential for this video is unavailable", providerId: job.provider_id, providerName: "Media API", modelName: job.model_name, requesterName: apiKey.name, apiKeyPrefix: apiKey.prefix });
+    set.status = 503;
+    return apiError("The provider credential for this video is unavailable", "server_error", "no_active_credential");
+  }
   const suffix = action === "content" ? `/content${query?.variant ? `?variant=${encodeURIComponent(query.variant)}` : ""}` : action === "cancel" ? "/cancel" : "";
   const path = `videos/${encodeURIComponent(job.upstream_id)}${suffix}`;
   const method = action === "cancel" ? "POST" : action === "delete" ? "DELETE" : "GET";
   const mediaType: MediaType = action === "content" ? "video-content" : action === "cancel" ? "video-cancel" : action === "delete" ? "video-delete" : "video-status";
-  const result = await proxyMediaRequest({ request, headers, set, gatewayKeyName: apiKey.name, gatewayKeyPrefix: apiKey.prefix, route, mediaType, resourcePath: path, method });
+  const result = await proxyMediaRequest({ request, headers, server, set, gatewayKeyName: apiKey.name, gatewayKeyPrefix: apiKey.prefix, route, mediaType, resourcePath: path, method });
   if ("error" in result) return result.error;
   if (action === "content") return trackedResponse(result.upstream, result.requestLogId, result.started, mediaType);
   if (!result.upstream.ok) return trackedResponse(result.upstream, result.requestLogId, result.started, mediaType);
@@ -295,51 +371,51 @@ async function videoAction(context: any, action: "retrieve" | "content" | "cance
 
 export const mediaProxyPlugin = (app: Elysia) => app
   .post("/v1/images/generations", async (context) => {
-    const { body, headers, request, set } = context as any;
+    const { body, headers, request, set, server } = context as any;
     const modelName = bodyValue(body, "model");
-    const resolved = await resolveMediaRoute(modelName, "image_generation", headers);
+    const resolved = await resolveMediaRoute(modelName, "image_generation", { headers, request, server, body });
     if ("error" in resolved) { set.status = resolved.status ?? 400; return resolved.error; }
-    if (typeof bodyValue(body, "prompt") !== "string" || !String(bodyValue(body, "prompt")).trim()) { set.status = 400; return apiError("prompt is required"); }
-    const result = await proxyMediaRequest({ request, body, headers, set, gatewayKeyName: resolved.gatewayKeyName, gatewayKeyPrefix: resolved.gatewayKeyPrefix, route: resolved.route, mediaType: "image-generation", resourcePath: "images/generations" });
+    if (typeof bodyValue(body, "prompt") !== "string" || !String(bodyValue(body, "prompt")).trim()) { logMediaRejection({ headers, request, server, body }, { statusCode: 400, error: "prompt is required", providerId: resolved.route.provider.id, providerName: resolved.route.provider.name, modelName: resolved.route.model.model_id, requesterName: resolved.gatewayKeyName, apiKeyPrefix: resolved.gatewayKeyPrefix }); set.status = 400; return apiError("prompt is required"); }
+    const result = await proxyMediaRequest({ request, body, headers, server, set, gatewayKeyName: resolved.gatewayKeyName, gatewayKeyPrefix: resolved.gatewayKeyPrefix, route: resolved.route, mediaType: "image-generation", resourcePath: "images/generations" });
     if ("error" in result) return result.error;
     return trackedResponse(result.upstream, result.requestLogId, result.started, result.mediaType);
   }, { body: t.Any() })
   .post("/v1/images/edits", async (context) => {
-    const { body, headers, request, set } = context as any;
-    const resolved = await resolveMediaRoute(bodyValue(body, "model"), "image_generation", headers);
+    const { body, headers, request, set, server } = context as any;
+    const resolved = await resolveMediaRoute(bodyValue(body, "model"), "image_generation", { headers, request, server, body });
     if ("error" in resolved) { set.status = resolved.status ?? 400; return resolved.error; }
     const contentType = headers["content-type"] ?? "";
-    if (!contentType.includes("multipart/form-data")) { set.status = 400; return apiError("Image edits require multipart/form-data"); }
-    const result = await proxyMediaRequest({ request, body, headers, set, gatewayKeyName: resolved.gatewayKeyName, gatewayKeyPrefix: resolved.gatewayKeyPrefix, route: resolved.route, mediaType: "image-edit", resourcePath: "images/edits", formData: true });
+    if (!contentType.includes("multipart/form-data")) { logMediaRejection({ headers, request, server, body }, { statusCode: 400, error: "Image edits require multipart/form-data", providerId: resolved.route.provider.id, providerName: resolved.route.provider.name, modelName: resolved.route.model.model_id, requesterName: resolved.gatewayKeyName, apiKeyPrefix: resolved.gatewayKeyPrefix }); set.status = 400; return apiError("Image edits require multipart/form-data"); }
+    const result = await proxyMediaRequest({ request, body, headers, server, set, gatewayKeyName: resolved.gatewayKeyName, gatewayKeyPrefix: resolved.gatewayKeyPrefix, route: resolved.route, mediaType: "image-edit", resourcePath: "images/edits", formData: true });
     if ("error" in result) return result.error;
     return trackedResponse(result.upstream, result.requestLogId, result.started, result.mediaType);
   }, { body: t.Any() })
   .post("/v1/images/variations", async (context) => {
-    const { body, headers, request, set } = context as any;
-    const resolved = await resolveMediaRoute(bodyValue(body, "model"), "image_generation", headers);
+    const { body, headers, request, set, server } = context as any;
+    const resolved = await resolveMediaRoute(bodyValue(body, "model"), "image_generation", { headers, request, server, body });
     if ("error" in resolved) { set.status = resolved.status ?? 400; return resolved.error; }
     const contentType = headers["content-type"] ?? "";
-    if (!contentType.includes("multipart/form-data")) { set.status = 400; return apiError("Image variations require multipart/form-data"); }
-    const result = await proxyMediaRequest({ request, body, headers, set, gatewayKeyName: resolved.gatewayKeyName, gatewayKeyPrefix: resolved.gatewayKeyPrefix, route: resolved.route, mediaType: "image-variation", resourcePath: "images/variations", formData: true });
+    if (!contentType.includes("multipart/form-data")) { logMediaRejection({ headers, request, server, body }, { statusCode: 400, error: "Image variations require multipart/form-data", providerId: resolved.route.provider.id, providerName: resolved.route.provider.name, modelName: resolved.route.model.model_id, requesterName: resolved.gatewayKeyName, apiKeyPrefix: resolved.gatewayKeyPrefix }); set.status = 400; return apiError("Image variations require multipart/form-data"); }
+    const result = await proxyMediaRequest({ request, body, headers, server, set, gatewayKeyName: resolved.gatewayKeyName, gatewayKeyPrefix: resolved.gatewayKeyPrefix, route: resolved.route, mediaType: "image-variation", resourcePath: "images/variations", formData: true });
     if ("error" in result) return result.error;
     return trackedResponse(result.upstream, result.requestLogId, result.started, result.mediaType);
   }, { body: t.Any() })
   .post("/v1/audio/speech", async (context) => {
-    const { body, headers, request, set } = context as any;
-    const resolved = await resolveMediaRoute(bodyValue(body, "model"), "text_to_speech", headers);
+    const { body, headers, request, set, server } = context as any;
+    const resolved = await resolveMediaRoute(bodyValue(body, "model"), "text_to_speech", { headers, request, server, body });
     if ("error" in resolved) { set.status = resolved.status ?? 400; return resolved.error; }
-    if (typeof bodyValue(body, "input") !== "string" || !String(bodyValue(body, "input")).trim()) { set.status = 400; return apiError("input is required"); }
-    const result = await proxyMediaRequest({ request, body, headers, set, gatewayKeyName: resolved.gatewayKeyName, gatewayKeyPrefix: resolved.gatewayKeyPrefix, route: resolved.route, mediaType: "text-to-speech", resourcePath: "audio/speech" });
+    if (typeof bodyValue(body, "input") !== "string" || !String(bodyValue(body, "input")).trim()) { logMediaRejection({ headers, request, server, body }, { statusCode: 400, error: "input is required", providerId: resolved.route.provider.id, providerName: resolved.route.provider.name, modelName: resolved.route.model.model_id, requesterName: resolved.gatewayKeyName, apiKeyPrefix: resolved.gatewayKeyPrefix }); set.status = 400; return apiError("input is required"); }
+    const result = await proxyMediaRequest({ request, body, headers, server, set, gatewayKeyName: resolved.gatewayKeyName, gatewayKeyPrefix: resolved.gatewayKeyPrefix, route: resolved.route, mediaType: "text-to-speech", resourcePath: "audio/speech" });
     if ("error" in result) return result.error;
     return trackedResponse(result.upstream, result.requestLogId, result.started, result.mediaType);
   }, { body: t.Any() })
   .post("/v1/videos", async (context) => {
-    const { body, headers, request, set } = context as any;
-    const resolved = await resolveMediaRoute(bodyValue(body, "model"), "video_generation", headers);
+    const { body, headers, request, set, server } = context as any;
+    const resolved = await resolveMediaRoute(bodyValue(body, "model"), "video_generation", { headers, request, server, body });
     if ("error" in resolved) { set.status = resolved.status ?? 400; return resolved.error; }
-    if (typeof bodyValue(body, "prompt") !== "string" || !String(bodyValue(body, "prompt")).trim()) { set.status = 400; return apiError("prompt is required"); }
+    if (typeof bodyValue(body, "prompt") !== "string" || !String(bodyValue(body, "prompt")).trim()) { logMediaRejection({ headers, request, server, body }, { statusCode: 400, error: "prompt is required", providerId: resolved.route.provider.id, providerName: resolved.route.provider.name, modelName: resolved.route.model.model_id, requesterName: resolved.gatewayKeyName, apiKeyPrefix: resolved.gatewayKeyPrefix }); set.status = 400; return apiError("prompt is required"); }
     const isForm = (headers["content-type"] ?? "").includes("multipart/form-data");
-    const result = await proxyMediaRequest({ request, body, headers, set, gatewayKeyName: resolved.gatewayKeyName, gatewayKeyPrefix: resolved.gatewayKeyPrefix, route: resolved.route, mediaType: "video-generation", resourcePath: "videos", formData: isForm });
+    const result = await proxyMediaRequest({ request, body, headers, server, set, gatewayKeyName: resolved.gatewayKeyName, gatewayKeyPrefix: resolved.gatewayKeyPrefix, route: resolved.route, mediaType: "video-generation", resourcePath: "videos", formData: isForm });
     if ("error" in result) return result.error;
     if (!result.upstream.ok) return trackedResponse(result.upstream, result.requestLogId, result.started, result.mediaType);
     const response = await result.upstream.json().catch(() => null);
@@ -350,15 +426,19 @@ export const mediaProxyPlugin = (app: Elysia) => app
     requestLogService.complete(result.requestLogId, { statusCode: result.upstream.status, durationMs: Math.round(performance.now() - result.started), responseDetails: rewritten });
     return rewritten;
   }, { body: t.Any() })
-  .get("/v1/videos", async ({ headers, set, query, request }) => {
+  .get("/v1/videos", async ({ headers, set, query, request, server }) => {
     const apiKey = await requireGatewayKey(headers);
-    if (!apiKey) { set.status = 401; return apiError("Valid API key required", "authentication_error"); }
+    if (!apiKey) {
+      logMediaRejection({ headers, request, server }, { statusCode: 401, error: "Valid API key required", providerName: "Media API", modelName: "video list" });
+      set.status = 401;
+      return apiError("Valid API key required", "authentication_error");
+    }
     const started = performance.now();
     const requestLogId = requestLogService.start({
       providerId: null,
       providerName: "Media API",
       modelName: "video list",
-      clientIp: clientIp(request),
+      clientIp: clientIp(request, headers, server as any),
       requesterName: apiKey.name,
       apiKeyPrefix: apiKey.prefix,
       requestDetails: { method: "GET", url: "/v1/videos", klove: { media_type: "video-list" } },

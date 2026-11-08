@@ -4,8 +4,7 @@ import type {
   ReasoningEffort,
 } from "./model.service";
 import type { ProviderProtocol } from "./provider-appearance";
-
-const DEFAULT_CONTEXT_WINDOW = 128_000;
+import type { CatalogModelInfo } from "./litellm-pricing";
 
 function positiveInteger(value: unknown): number | null | undefined {
   if (value === null) return null;
@@ -19,13 +18,13 @@ function boolean(value: unknown): boolean | undefined {
   return typeof value === "boolean" ? value : undefined;
 }
 
-function effortRows(values: string[], defaultEffort = "medium"): ReasoningEffort[] {
+function effortRows(values: string[], defaultEffort?: string): ReasoningEffort[] {
   return values.map((effort, sort_order) => ({
     effort,
     display_name: effort[0].toUpperCase() + effort.slice(1),
     upstream_value: effort,
     sort_order,
-    is_default: effort === defaultEffort,
+    is_default: defaultEffort !== undefined && effort === defaultEffort,
   }));
 }
 
@@ -41,9 +40,12 @@ function parseEfforts(raw: any): ReasoningEffort[] | undefined {
     .filter((item: unknown): item is string => typeof item === "string" && Boolean(item.trim()))
     .map((item) => item.trim());
   if (!values.length) return undefined;
-  const preferred = String(raw?.default_reasoning_effort ?? raw?.default_reasoning_level ?? raw?.reasoning?.default_effort ?? "medium");
-  const fallback = values.includes(preferred) ? preferred : values.includes("medium") ? "medium" : values[0];
-  return effortRows([...new Set(values)], fallback);
+  // A default is taken from the provider when it declares one (matched loosely);
+  // otherwise nothing is marked and clients must pick explicitly — the Klove
+  // panel can still set one manually.
+  const declared = String(raw?.default_reasoning_effort ?? raw?.default_reasoning_level ?? raw?.reasoning?.default_effort ?? "").trim().toLowerCase();
+  const declaredMatch = declared ? values.find((value) => value.toLowerCase() === declared) : undefined;
+  return effortRows([...new Set(values)], declaredMatch);
 }
 
 export function parseRawModelMetadata(raw: any): ModelMetadataInput {
@@ -160,14 +162,86 @@ export function mergeMetadata(...sources: ModelMetadataInput[]): ModelMetadataIn
   };
 }
 
+export type MetadataSourceTag = "provider" | "litellm" | "manual";
+
+export interface ModelMetadataSource {
+  context_window?: MetadataSourceTag | "unknown";
+  max_output_tokens?: MetadataSourceTag | "unknown";
+  capabilities?: Partial<Record<keyof ModelCapabilities, MetadataSourceTag>>;
+  reasoning_efforts?: MetadataSourceTag | "unknown";
+}
+
+const modalityIncludes = (modalities: string[] | undefined, needle: string): boolean | undefined =>
+  modalities ? modalities.some((value) => value.includes(needle)) : undefined;
+
+export function emptyMetadataSource(): ModelMetadataSource {
+  return { capabilities: {} };
+}
+
+export function mergeMetadataSource(
+  existing: ModelMetadataSource | null | undefined,
+  incoming: ModelMetadataSource | null | undefined,
+): ModelMetadataSource {
+  const base = existing?.capabilities ? existing : emptyMetadataSource();
+  if (!incoming) return { ...base, capabilities: { ...base.capabilities } };
+  return {
+    context_window: incoming.context_window ?? base.context_window,
+    max_output_tokens: incoming.max_output_tokens ?? base.max_output_tokens,
+    reasoning_efforts: incoming.reasoning_efforts ?? base.reasoning_efforts,
+    capabilities: { ...base.capabilities, ...(incoming.capabilities ?? {}) },
+  };
+}
+
+/**
+ * Fills gaps in provider-declared metadata from the LiteLLM catalog. The
+ * provider always wins when it declares something; LiteLLM only fills values
+ * that are missing, and every filled value is tagged with its origin so the
+ * admin can distinguish declared facts from catalog fallbacks.
+ */
+export function applyLiteLLMMetadata(
+  base: ModelMetadataInput,
+  info: CatalogModelInfo | null | undefined,
+  baseSource: MetadataSourceTag = "provider",
+): ModelMetadataInput {
+  const capabilities: Partial<ModelCapabilities> = { ...(base.capabilities ?? {}) };
+  const capSource: Partial<Record<keyof ModelCapabilities, MetadataSourceTag>> = {};
+  const fill = (key: keyof ModelCapabilities, litellmValue: boolean | undefined) => {
+    const current = capabilities[key];
+    if (current !== undefined && current !== null) { capSource[key] = baseSource; return; }
+    if (litellmValue !== undefined) capabilities[key] = litellmValue;
+    capSource[key] = litellmValue !== undefined ? "litellm" : undefined;
+  };
+  fill("vision", info?.supportsVision ?? modalityIncludes(info?.supportedModalities, "image"));
+  fill("tools", info?.supportsFunctionCalling);
+  fill("reasoning", info?.supportsReasoning);
+  fill("streaming", info?.supportsNativeStreaming);
+  fill("audio_input", modalityIncludes(info?.supportedModalities, "audio") ?? modalityIncludes(info?.supportedModalities, "speech"));
+  fill("audio_output", modalityIncludes(info?.supportedOutputModalities, "audio") ?? modalityIncludes(info?.supportedOutputModalities, "speech"));
+  fill("video", modalityIncludes(info?.supportedModalities, "video"));
+  fill("attachments", info?.supportsPdfInput ?? modalityIncludes(info?.supportedModalities, "file"));
+
+  const pick = (current: number | null | undefined, fallback?: number) =>
+    current !== undefined && current !== null ? current : fallback;
+  return {
+    ...base,
+    context_window: pick(base.context_window, info?.maxInputTokens) ?? null,
+    max_output_tokens: pick(base.max_output_tokens, info?.maxOutputTokens) ?? null,
+    capabilities,
+    metadata_source: mergeMetadataSource(emptyMetadataSource(), {
+      context_window: base.context_window != null ? baseSource : info?.maxInputTokens !== undefined ? "litellm" : "unknown",
+      max_output_tokens: base.max_output_tokens != null ? baseSource : info?.maxOutputTokens !== undefined ? "litellm" : "unknown",
+      reasoning_efforts: base.reasoning_efforts !== undefined ? baseSource : "unknown",
+      capabilities: Object.fromEntries(Object.entries(capSource).filter(([, value]) => value !== undefined)) as ModelMetadataSource["capabilities"],
+    }),
+  };
+}
+
 export async function resolveModelMetadata(
   protocol: ProviderProtocol,
   _modelId: string,
   raw: any = {},
 ): Promise<ModelMetadataInput> {
   const rawMetadata = parseRawModelMetadata(raw);
-  if (rawMetadata.context_window == null)
-    rawMetadata.context_window = DEFAULT_CONTEXT_WINDOW;
   if (protocol === "antigravity" || protocol === "codex")
     return rawMetadata;
   if (dedicatedIntegrations.has(protocol))

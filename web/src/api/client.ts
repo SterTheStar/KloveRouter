@@ -103,7 +103,7 @@ export const openfreeCli = {
 export const providers = {
   validateCredential: (data: {
     base_url: string;
-    protocol?: "openai" | "openai-responses" | "anthropic" | "codex" | "chatgpt" | "antigravity" | "freebuff" | "qwen" | "atomesus" | "conol" | "perch" | "openfree";
+    protocol?: "openai" | "openai-responses" | "anthropic" | "codex" | "chatgpt" | "antigravity" | "freebuff" | "qwen" | "atomesus" | "conol" | "perch" | "openfree" | "deepai";
     api_key?: string;
     auth_code?: string;
     secret?: string;
@@ -125,7 +125,7 @@ export const providers = {
     account_id?: string;
     avatar?: string;
     custom_headers?: unknown;
-      protocol?: "openai" | "openai-responses" | "anthropic" | "codex" | "chatgpt" | "antigravity" | "freebuff" | "qwen" | "atomesus" | "conol" | "perch" | "openfree";
+      protocol?: "openai" | "openai-responses" | "anthropic" | "codex" | "chatgpt" | "antigravity" | "freebuff" | "qwen" | "atomesus" | "conol" | "perch" | "openfree" | "deepai";
    }) =>
      request<import("../types").Provider>("/api/providers", {
        method: "POST",
@@ -139,7 +139,7 @@ export const providers = {
        api_key?: string;
        avatar?: string | null;
         custom_headers?: unknown;
-       protocol?: "openai" | "openai-responses" | "anthropic" | "codex" | "chatgpt" | "antigravity" | "freebuff" | "qwen" | "atomesus" | "conol" | "perch" | "openfree";
+       protocol?: "openai" | "openai-responses" | "anthropic" | "codex" | "chatgpt" | "antigravity" | "freebuff" | "qwen" | "atomesus" | "conol" | "perch" | "openfree" | "deepai";
       credential_mode?: "fixed" | "round_robin" | "failover";
       fixed_credential_id?: string | null;
       is_active?: number;
@@ -311,6 +311,23 @@ export const perch = {
   usage: (credential_id: string) =>
     request<import("../types").PerchUsage>(
       `/api/perch/usage?credential_id=${encodeURIComponent(credential_id)}`,
+    ),
+};
+
+export const deepai = {
+  login: (credential_id: string) =>
+    request<{ auth_url: string; expires_at: string }>("/api/deepai/login", {
+      method: "POST",
+      body: JSON.stringify({ credential_id }),
+    }),
+  completeLogin: (credential_id: string, code: string, state: string) =>
+    request<{ authenticated: boolean; username: string; is_pro: boolean }>("/api/deepai/login/complete", {
+      method: "POST",
+      body: JSON.stringify({ credential_id, code, state }),
+    }),
+  usage: (credential_id: string) =>
+    request<{ allowance: any; summary: any; allowance_checked_at: string | null }>(
+      `/api/deepai/usage?credential_id=${encodeURIComponent(credential_id)}`,
     ),
 };
 

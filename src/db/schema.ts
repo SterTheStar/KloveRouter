@@ -41,6 +41,7 @@ export function initSchema(db: Database): void {
       pretty_id     TEXT,
       display_name  TEXT,
       context_window INTEGER,
+      metadata_source TEXT,
       max_output_tokens INTEGER,
       max_output_tokens_source TEXT NOT NULL DEFAULT 'auto',
       media_settings TEXT,
@@ -429,6 +430,8 @@ export function initSchema(db: Database): void {
   db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_models_provider_pretty_id ON models(provider_id, pretty_id) WHERE pretty_id IS NOT NULL");
   if (!modelCols.find((c) => c.name === "context_window"))
     db.exec("ALTER TABLE models ADD COLUMN context_window INTEGER");
+  if (!modelCols.find((c) => c.name === "metadata_source"))
+    db.exec("ALTER TABLE models ADD COLUMN metadata_source TEXT");
   if (!modelCols.find((c) => c.name === "max_output_tokens"))
     db.exec("ALTER TABLE models ADD COLUMN max_output_tokens INTEGER");
   if (!modelCols.find((c) => c.name === "max_output_tokens_source")) {

@@ -31,7 +31,7 @@ import {
   chatgptModels,
   chatgptTest,
 } from "../integrations/chatgpt";
-import { parseRawModelMetadata, resolveModelMetadata } from "../services/model-metadata";
+import { parseRawModelMetadata, resolveModelMetadata, applyLiteLLMMetadata } from "../services/model-metadata";
 import { assertSafeRemoteUrl } from "../services/ssrf";
 import { anthropicEndpoint } from "../clients/anthropic";
 import { healthService } from "../services/health.service";
@@ -40,7 +40,8 @@ import { modelPoolService } from "../services/model-pool.service";
 import { getDb } from "../db/connection";
 import { convertResponse } from "../sdk/protocol-converter";
 import { upstreamProviderHeaders } from "../services/provider-headers";
-import { getLiteLLMPricing, refreshLiteLLMPricing } from "../services/litellm-pricing";
+import { getLiteLLMPricing, refreshLiteLLMPricing, getLiteLLMModelInfo } from "../services/litellm-pricing";
+import { deepaiModels } from "../integrations/deepai";
 
 const nullableBoolean = t.Union([t.Boolean(), t.Null()]);
 const capabilitiesSchema = t.Object({
@@ -179,19 +180,29 @@ export const modelsPlugin = (app: Elysia) =>
           return { error: "This model is blocked for Antigravity" };
         }
         try {
+          // Anything the admin leaves unset is recovered from the LiteLLM
+          // catalog (tagged accordingly); explicit input always wins.
+          const liteLLMHint = `${provider.name} ${provider.base_url}`;
+          const enriched = applyLiteLLMMetadata({
+            context_window: body.context_window,
+            max_output_tokens: body.max_output_tokens,
+            capabilities: body.capabilities,
+            reasoning_efforts: body.reasoning_efforts,
+          }, getLiteLLMModelInfo(provider.protocol, body.model_id, liteLLMHint), "manual");
           const model = modelService.create({
             provider_id: id,
             model_id: body.model_id,
             pretty_id: body.pretty_id,
             display_name: body.display_name || generateDisplayName(body.model_id),
-          pricing_tiers: body.pricing_tiers,
+            pricing_tiers: body.pricing_tiers,
             use_litellm_pricing: body.use_litellm_pricing,
-            context_window: body.context_window,
-            max_output_tokens: body.max_output_tokens,
+            context_window: enriched.context_window,
+            max_output_tokens: enriched.max_output_tokens,
             fix_missing_think_opening_tag: body.fix_missing_think_opening_tag,
             think_opening_tag_mode: body.think_opening_tag_mode,
-            capabilities: body.capabilities,
-            reasoning_efforts: body.reasoning_efforts,
+            capabilities: enriched.capabilities,
+            reasoning_efforts: enriched.reasoning_efforts,
+            metadata_source: enriched.metadata_source,
             media_settings: body.media_settings,
             is_manual: 1,
           });
@@ -250,6 +261,14 @@ export const modelsPlugin = (app: Elysia) =>
         }
 
         const requestedIds = body?.model_ids;
+        const liteLLMHint = `${provider.name} ${provider.base_url}`;
+        // Recovers declared limits/capabilities from the public LiteLLM catalog
+        // for anything the provider does not declare. Provider-declared values
+        // always win; LiteLLM output is tagged in metadata_source.
+        const enrichWithLiteLLM = <T extends Record<string, unknown>>(input: T): T =>
+          typeof input.model_id === "string"
+            ? (applyLiteLLMMetadata(input as any, getLiteLLMModelInfo(provider.protocol, input.model_id, liteLLMHint)) as any)
+            : input;
         const freeOnly = body?.free_only === true || query.free_only === true;
         const existingOnly = query.existing_only === true;
         const resetExisting = body?.reset_existing === true || query.reset_existing === true;
@@ -259,7 +278,8 @@ export const modelsPlugin = (app: Elysia) =>
           modelService.findByProvider(id).map((model) => model.model_id),
         );
         const saveSyncedModel = (input: Parameters<typeof modelService.upsert>[0]) => {
-          const withPricingOption = { ...input, use_litellm_pricing: useLiteLLMPricing };
+          const enriched = enrichWithLiteLLM(input as any);
+          const withPricingOption = { ...enriched, use_litellm_pricing: useLiteLLMPricing };
           return resetExisting ? modelService.resetExisting(withPricingOption) : modelService.upsert(withPricingOption);
         };
         const isFreeModel = (model: { id: string; is_free?: boolean }) =>
@@ -279,15 +299,18 @@ export const modelsPlugin = (app: Elysia) =>
             : available;
           const freeModels = catalog.filter(isFreeModel);
           const selected = freeOnly ? freeModels : catalog;
-          const items = selected.map((model) => ({
-            id: model.id,
-            display_name: model.display_name || generateDisplayName(model.id),
-            context_window: parseRawModelMetadata(model).context_window,
-            capabilities: parseRawModelMetadata(model).capabilities,
-            is_free: isFreeModel(model),
-            is_existing: existingIds.has(model.id),
-            pricing: useLiteLLMPricing ? getLiteLLMPricing(provider.protocol, model.id, `${provider.name} ${provider.base_url}`) : null,
-          }));
+          const items = selected.map((model) => {
+            const enriched = enrichWithLiteLLM({ ...model, model_id: model.id } as any);
+            return {
+              id: model.id,
+              display_name: model.display_name || generateDisplayName(model.id),
+              context_window: (enriched as any).context_window,
+              capabilities: (enriched as any).capabilities,
+              is_free: isFreeModel(model),
+              is_existing: existingIds.has(model.id),
+              pricing: useLiteLLMPricing ? getLiteLLMPricing(provider.protocol, model.id, `${provider.name} ${provider.base_url}`) : null,
+            };
+          });
           const existingModels = items.filter((model) => model.is_existing).length;
           return {
             preview: true,
@@ -376,6 +399,26 @@ export const modelsPlugin = (app: Elysia) =>
                 ...await resolveModelMetadata(provider.protocol, model.id, model),
               });
             return { success: true, models_found: selected.length, message: `Synced ${selected.length} OpenFREE models from ${provider.name}` };
+          }
+
+          if (provider.protocol === "deepai") {
+            const available = await deepaiModels();
+            if (query.preview === true) return preview(available.map((model) => ({ id: model.id, display_name: model.name, ...model })));
+            const selected = selectModels(available.map((model) => ({ id: model.id, display_name: model.name, ...model })));
+            for (const model of selected) {
+              saveSyncedModel({
+                provider_id: id,
+                model_id: model.id,
+                display_name: model.name,
+                is_manual: 0,
+                ...await resolveModelMetadata(provider.protocol, model.id, {
+                  context_window: model.contextWindow,
+                  max_output_tokens: model.maxTokens,
+                  capabilities: { reasoning: model.reasoning, vision: model.input.includes("image") },
+                }),
+              });
+            }
+            return { success: true, models_found: selected.length, message: `Synced ${selected.length} DeepAI models from ${provider.name}` };
           }
 
            if (provider.protocol === "freebuff") {
