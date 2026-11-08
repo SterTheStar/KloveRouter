@@ -41,7 +41,7 @@ import { getDb } from "../db/connection";
 import { convertResponse } from "../sdk/protocol-converter";
 import { upstreamProviderHeaders } from "../services/provider-headers";
 import { getLiteLLMPricing, refreshLiteLLMPricing, getLiteLLMModelInfo } from "../services/litellm-pricing";
-import { deepaiModels } from "../integrations/deepai";
+import { deepaiModels, deepaiTest } from "../integrations/deepai";
 
 const nullableBoolean = t.Union([t.Boolean(), t.Null()]);
 const capabilitiesSchema = t.Object({
@@ -402,9 +402,22 @@ export const modelsPlugin = (app: Elysia) =>
           }
 
           if (provider.protocol === "deepai") {
-            const available = await deepaiModels();
-            if (query.preview === true) return preview(available.map((model) => ({ id: model.id, display_name: model.name, ...model })));
-            const selected = selectModels(available.map((model) => ({ id: model.id, display_name: model.name, ...model })));
+            // A model is free when the lane 4 catalog prices it at 0 Theos:
+            // per-request "0", all per-second tiers "0", or not premier when
+            // the catalog carries no price fields (same rule as the app).
+            const available = (await deepaiModels()).map((model) => ({
+              id: model.id,
+              display_name: model.name,
+              ...model,
+              is_free:
+                model.theosPerRequest !== undefined
+                  ? Number(model.theosPerRequest) === 0
+                  : model.theosPerSecond
+                    ? Object.values(model.theosPerSecond).every((rate) => Number(rate) === 0)
+                    : model.premier !== true,
+            }));
+            if (query.preview === true) return preview(available);
+            const selected = selectModels(available);
             for (const model of selected) {
               saveSyncedModel({
                 provider_id: id,
@@ -737,6 +750,8 @@ export const modelsPlugin = (app: Elysia) =>
                      ? await conolTest(model.model_id, credential, provider.base_url)
                    : provider.protocol === "perch"
                      ? await perchTest(model.model_id, credential, provider.base_url)
+                   : provider.protocol === "deepai"
+                     ? await deepaiTest(model.model_id, credential.secret ?? "")
               : provider.protocol === "chatgpt"
                       ? {
                          choices: [
