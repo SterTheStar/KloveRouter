@@ -21,6 +21,7 @@ import AvatarUpload from "./AvatarUpload";
 import {
   antigravity,
   codex,
+  deepai,
   openfreeCli,
   providers,
   type OpenFreeCliStatus,
@@ -66,7 +67,7 @@ export default function AddProviderModal({
   const [verificationWarning, setVerificationWarning] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pendingOAuth, setPendingOAuth] = useState<{
-    protocol: "codex" | "antigravity";
+    protocol: "codex" | "antigravity" | "deepai";
     providerId: string;
     credentialId: string;
     authUrl: string;
@@ -141,7 +142,7 @@ export default function AddProviderModal({
     if (orphan) void providers.remove(orphan.providerId).catch(() => {});
   };
 
-  const finishOAuth = (protocol: "codex" | "antigravity") => {
+  const finishOAuth = (protocol: "codex" | "antigravity" | "deepai") => {
     if (oauthFinishedRef.current) return;
     oauthFinishedRef.current = true;
     clearPoll();
@@ -150,7 +151,7 @@ export default function AddProviderModal({
       "Account connected",
       protocol === "codex"
         ? "Codex is ready to use."
-        : "Google Antigravity is ready to use.",
+        : protocol === "deepai" ? "DeepAI Code is ready to use." : "Google Antigravity is ready to use.",
     );
     onSuccess();
     reset();
@@ -158,7 +159,7 @@ export default function AddProviderModal({
   };
 
   const waitForOAuth = (
-    protocol: "codex" | "antigravity",
+    protocol: "codex" | "antigravity" | "deepai",
     providerId: string,
     credentialId: string,
     authUrl: string,
@@ -175,7 +176,7 @@ export default function AddProviderModal({
             .authenticated
         )
           finishOAuth(protocol);
-        else if (Date.now() - started > 5 * 60_000) {
+        else if (Date.now() - started > (protocol === "deepai" ? 10 : 5) * 60_000) {
           clearPoll();
           setLoading(false);
           setError(
@@ -194,7 +195,14 @@ export default function AddProviderModal({
     setCompletingOAuth(true);
     setError(null);
     try {
-      if (pendingOAuth.protocol === "codex")
+      if (pendingOAuth.protocol === "deepai") {
+        const callback = new URL(callbackUrl.trim());
+        if (callback.protocol !== "http:" || !["127.0.0.1", "localhost", "[::1]"].includes(callback.hostname) || !callback.port || callback.pathname !== "/auth-callback") throw new Error("Expected the DeepAI loopback callback URL");
+        const code = callback.searchParams.get("code");
+        const state = callback.searchParams.get("state");
+        if (!code || !state || callback.searchParams.has("error")) throw new Error("Callback URL is missing valid DeepAI code and state");
+        await deepai.completeLogin(pendingOAuth.credentialId, code, state);
+      } else if (pendingOAuth.protocol === "codex")
         await codex.completeLogin(
           callbackUrl.trim(),
           pendingOAuth.credentialId,
@@ -230,7 +238,7 @@ export default function AddProviderModal({
     if (!pendingOAuth) return;
     const popup = window.open(
       "about:blank",
-      pendingOAuth.protocol === "codex"
+      pendingOAuth.protocol === "deepai" ? "klove-deepai-login" : pendingOAuth.protocol === "codex"
         ? "klove-codex-login"
         : "klove-antigravity-login",
       "popup,width=520,height=720",
@@ -240,7 +248,9 @@ export default function AddProviderModal({
     setCallbackUrl("");
     try {
       const result =
-        pendingOAuth.protocol === "codex"
+        pendingOAuth.protocol === "deepai"
+          ? await deepai.login(pendingOAuth.credentialId)
+          : pendingOAuth.protocol === "codex"
           ? await codex.login(pendingOAuth.credentialId)
           : await antigravity.login(pendingOAuth.credentialId);
       if (popup) popup.location.href = result.auth_url;
@@ -266,6 +276,36 @@ export default function AddProviderModal({
     setAvatarManuallySet(false);
     setError(null);
     setStep("form");
+  };
+
+  const startDeepAIConnection = async () => {
+    if (!name || !baseUrl) return setError("Provider name and base URL are required.");
+    const popup = window.open("about:blank", "klove-deepai-login", "popup,width=520,height=720");
+    setLoading(true);
+    setError(null);
+    let createdProviderId: string | null = null;
+    try {
+      const created = await providers.create({
+        name,
+        base_url: baseUrl,
+        protocol: "deepai",
+        avatar: await resolveAvatarPayload(),
+      });
+      createdProviderId = created.id;
+      const credential = (await providers.credentials(created.id)).find((item) => item.kind === "api_key");
+      if (!credential) throw new Error("Could not create the DeepAI account credential");
+      const login = await deepai.login(credential.id);
+      if (popup) popup.location.href = login.auth_url;
+      setLoading(false);
+      waitForOAuth("deepai", created.id, credential.id, login.auth_url);
+    } catch (cause: any) {
+      popup?.close();
+      if (createdProviderId) await providers.remove(createdProviderId).catch(() => {});
+      const message = cause?.message ?? "Could not start DeepAI Code sign-in";
+      setLoading(false);
+      setError(message);
+      notifyError("Could not connect DeepAI Code", message);
+    }
   };
 
   const saveOpenfreeCli = async (path: string) => {
@@ -318,6 +358,7 @@ export default function AddProviderModal({
   };
 
   const submit = async (skipVerification = false) => {
+    if (selectedType?.protocol === "deepai") return startDeepAIConnection();
     if (
       selectedType?.protocol === "codex" ||
       selectedType?.protocol === "antigravity"
@@ -696,7 +737,7 @@ export default function AddProviderModal({
                   placeholder={selectedType?.placeholder}
                 />
               </div>}
-              {selectedType?.protocol !== "openfree" && selectedType?.protocol !== "codex" &&
+              {selectedType?.protocol !== "openfree" && selectedType?.protocol !== "codex" && selectedType?.protocol !== "deepai" &&
                 selectedType?.protocol !== "antigravity" && (
                   <div className="space-y-2">
                     {selectedType?.protocol === "conol" ? (
@@ -852,10 +893,10 @@ export default function AddProviderModal({
                     className="min-h-24 font-mono text-xs"
                     value={callbackUrl}
                     onChange={(e) => setCallbackUrl(e.target.value)}
-                    placeholder={`http://localhost:1455/${pendingOAuth.protocol === "codex" ? "auth" : "antigravity"}/callback?code=...&state=...`}
+                    placeholder={pendingOAuth.protocol === "deepai" ? "http://127.0.0.1:<port>/auth-callback?code=...&state=..." : `http://localhost:1455/${pendingOAuth.protocol === "codex" ? "auth" : "antigravity"}/callback?code=...&state=...`}
                   />
                   <p className="text-xs text-tertiary">
-                    If the localhost page did not open, copy its complete URL
+                    If the browser callback did not complete automatically, copy its complete URL
                     from the browser address bar and paste it here. The
                     automatic login remains active.
                   </p>
@@ -899,6 +940,10 @@ export default function AddProviderModal({
                     {completingOAuth ? "Completing..." : "Complete login"}
                   </Button>
                 </>
+              ) : selectedType?.protocol === "deepai" ? (
+                <Button onClick={startDeepAIConnection} disabled={loading}>
+                  {loading ? "Opening login..." : "Sign in with DeepAI Code"}
+                </Button>
               ) : selectedType?.protocol === "codex" ? (
                 <Button onClick={connectCodex} disabled={loading}>
                   {loading ? "Opening login..." : "Connect Codex"}
