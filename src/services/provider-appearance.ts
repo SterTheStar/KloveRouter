@@ -10,7 +10,8 @@ export type ProviderProtocol =
   | "atomesus"
   | "conol"
   | "perch"
-  | "openfree";
+  | "openfree"
+  | "deepai";
 
 export function isOpenAICompatibleProtocol(protocol: ProviderProtocol): boolean {
   return protocol === "openai" || protocol === "openai-responses";

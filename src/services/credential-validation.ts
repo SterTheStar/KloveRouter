@@ -14,6 +14,7 @@ const protocolKinds: Record<ProviderProtocol, CredentialKind> = {
   conol: "conol",
   perch: "perch",
   openfree: "openfree",
+  deepai: "api_key",
 };
 
 const secretKinds = new Set<CredentialKind>([

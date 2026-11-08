@@ -7,7 +7,7 @@ import {
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { antigravity, codex, freebuff, perch, providers } from "../api/client";
+import { antigravity, codex, deepai, freebuff, perch, providers } from "../api/client";
 import type {
   AntigravityQuotaBucket,
   AntigravityUsage,
@@ -398,6 +398,7 @@ export default function UsageLimitsPage() {
       antigravityQuota: AntigravityUsage | null;
       freebuffUsage: any | null;
       perchUsage: PerchUsage | null;
+      deepaiUsage: any | null;
     }[]
   >([]);
   const [loading, setLoading] = useState(true);
@@ -423,7 +424,8 @@ export default function UsageLimitsPage() {
           provider.protocol === "codex" ||
           provider.protocol === "antigravity" ||
           provider.protocol === "freebuff" ||
-          provider.protocol === "perch",
+          provider.protocol === "perch" ||
+          provider.protocol === "deepai",
       );
       const accountGroups = await Promise.all(
         usageProviders.map(async (provider) => {
@@ -432,7 +434,8 @@ export default function UsageLimitsPage() {
               (credential.kind === "codex" && credential.account_id) ||
               (credential.kind === "antigravity" && credential.email) ||
               (credential.kind === "freebuff" && credential.masked_secret) ||
-              credential.kind === "perch",
+              credential.kind === "perch" ||
+              (provider.protocol === "deepai" && credential.kind === "api_key" && Boolean(credential.masked_secret)),
           );
           return Promise.all(
             credentials.map(async (credential) => {
@@ -446,6 +449,18 @@ export default function UsageLimitsPage() {
                     antigravityQuota: null,
                     freebuffUsage: null,
                     perchUsage: await perch.usage(credential.id),
+                    deepaiUsage: null,
+                  };
+                if (provider.protocol === "deepai")
+                  return {
+                    provider,
+                    credential,
+                    usage: null,
+                    credits: [],
+                    antigravityQuota: null,
+                    freebuffUsage: null,
+                    perchUsage: null,
+                    deepaiUsage: await deepai.usage(credential.id),
                   };
                 if (provider.protocol === "antigravity")
                   return {
@@ -456,6 +471,7 @@ export default function UsageLimitsPage() {
                     antigravityQuota: await antigravity.usage(credential.id),
                     freebuffUsage: null,
                     perchUsage: null,
+                    deepaiUsage: null,
                   };
                 if (provider.protocol === "freebuff")
                   return {
@@ -466,6 +482,7 @@ export default function UsageLimitsPage() {
                     antigravityQuota: null,
                     freebuffUsage: await freebuff.usage(credential.id),
                     perchUsage: null,
+                    deepaiUsage: null,
                   };
                 const [usageResult, creditResult] = await Promise.all([
                   codex.usage(credential.id),
@@ -478,7 +495,8 @@ export default function UsageLimitsPage() {
                   credits: creditsFromPayload(creditResult),
                   antigravityQuota: null,
                   freebuffUsage: null,
-                  perchUsage: null,
+                    perchUsage: null,
+                    deepaiUsage: null,
                 };
               } catch {
                 return {
@@ -489,6 +507,7 @@ export default function UsageLimitsPage() {
                   antigravityQuota: null,
                   freebuffUsage: null,
                   perchUsage: null,
+                  deepaiUsage: null,
                 };
               }
             }),
@@ -581,7 +600,7 @@ export default function UsageLimitsPage() {
       ) : (
         <div className="grid gap-5 xl:grid-cols-2">
           {accounts.map(
-            ({ provider, credential, usage, credits, antigravityQuota, freebuffUsage: freebuffData, perchUsage: perchData }) => (
+            ({ provider, credential, usage, credits, antigravityQuota, freebuffUsage: freebuffData, perchUsage: perchData, deepaiUsage: deepaiData }) => (
         <Card key={credential.id} className="border border-border shadow-none">
                 <CardHeader>
                   <div className="flex items-center justify-between gap-3">
@@ -589,10 +608,12 @@ export default function UsageLimitsPage() {
                       <ProviderIcon name={provider.name} src={provider.avatar} fallbackLabel={perchData?.profile?.email || credential.email || credential.label} className="size-11" />
                       <div>
                         <CardTitle className="text-foreground">
-                          {provider.protocol === "antigravity"
-                            ? credential.email || credential.label
-                            : provider.protocol === "perch"
-                              ? perchData?.profile?.email || credential.label
+                            {provider.protocol === "antigravity"
+                              ? credential.email || credential.label
+                              : provider.protocol === "perch"
+                                ? perchData?.profile?.email || credential.label
+                                : provider.protocol === "deepai"
+                                  ? deepaiData?.summary?.username || credential.label
                               : credential.label}
                         </CardTitle>
                         {provider.protocol === "freebuff" ? (
@@ -616,7 +637,9 @@ export default function UsageLimitsPage() {
                                 {accountIdentity(provider, credential)} ·{" "}
                                 {provider.protocol === "antigravity"
                                   ? "Antigravity account"
-                                  : usage?.plan_type ?? "Codex OAuth account"}
+                                  : provider.protocol === "deepai"
+                                    ? deepaiData?.summary?.plan ?? "DeepAI account"
+                                    : usage?.plan_type ?? "Codex OAuth account"}
                               </>
                             )}
                           </div>
@@ -664,7 +687,19 @@ export default function UsageLimitsPage() {
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-5">
-                    {provider.protocol === "freebuff" ? (
+                    {provider.protocol === "deepai" ? (
+                      deepaiData?.allowance || deepaiData?.summary ? (
+                        <div className="space-y-2 text-sm">
+                          <div className="font-medium">Theos usage</div>
+                          <div className="text-tertiary">
+                            {deepaiData.allowance?.enabled
+                              ? `Balance: ${deepaiData.allowance.balance ?? "unknown"} · Granted: ${deepaiData.allowance.granted ?? "unknown"} · Refresh: ${deepaiData.allowance.refresh_at ?? deepaiData.allowance.refreshAt ?? "unknown"}`
+                              : "Theos allowance is not enabled or unavailable."}
+                          </div>
+                          {deepaiData.summary && <div className="text-tertiary">Plan: {deepaiData.summary.plan ?? "unknown"} · Pro: {deepaiData.summary.is_pro ? "yes" : "no"} · Credits: {deepaiData.summary.credits_remaining ?? "unknown"}</div>}
+                        </div>
+                      ) : <div className="text-sm text-tertiary">No DeepAI usage data returned.</div>
+                    ) : provider.protocol === "freebuff" ? (
                       <FreebuffUsageSummary usage={freebuffData} />
                     ) : provider.protocol === "perch" ? (
                       <PerchUsageSummary usage={perchData} />

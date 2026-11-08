@@ -52,7 +52,7 @@ import { faviconForEndpoint, protocolIcon } from "./provider-icons";
 
 export type ProviderTemplate = {
   id: string;
-  protocol: "openai" | "openai-responses" | "antigravity" | "anthropic" | "codex" | "chatgpt" | "freebuff" | "qwen" | "atomesus" | "conol" | "perch" | "openfree";
+  protocol: "openai" | "openai-responses" | "antigravity" | "anthropic" | "codex" | "chatgpt" | "freebuff" | "qwen" | "atomesus" | "conol" | "perch" | "openfree" | "deepai";
   name: string;
   description: string;
   logo: string;
@@ -364,6 +364,15 @@ export const PROVIDER_TEMPLATES: readonly ProviderTemplate[] = [
     description: providerDescriptions.openfree,
     logo: opencodeLogo,
     placeholder: "https://opencode.ai",
+    preset: false,
+  },
+  {
+    id: "deepai",
+    protocol: "deepai",
+    name: "DeepAI Code",
+    description: "DeepAI Code models with Theos usage and account limits.",
+    logo: templateLogo("deepai", "https://deepai.org"),
+    placeholder: "https://api.deepai.org/deepai_code",
     preset: false,
   },
   {

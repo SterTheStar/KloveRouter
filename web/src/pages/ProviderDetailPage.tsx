@@ -70,6 +70,7 @@ import SyncModelsModal, { type SyncModelItem } from "../components/SyncModelsMod
 import {
   antigravity,
   codex,
+  deepai,
   openfreeCli,
   providers,
   models as modelsApi,
@@ -208,7 +209,7 @@ export default function ProviderDetailPage({
   );
   const [routingSaving, setRoutingSaving] = useState(false);
   const [manualOAuth, setManualOAuth] = useState<{
-    protocol: "codex" | "antigravity";
+    protocol: "codex" | "antigravity" | "deepai";
     credentialId: string;
     authUrl: string;
   } | null>(null);
@@ -377,7 +378,7 @@ export default function ProviderDetailPage({
   };
 
   const waitForOAuth = (
-    protocol: "codex" | "antigravity",
+    protocol: "codex" | "antigravity" | "deepai",
     credentialId: string,
   ) => {
     const started = Date.now();
@@ -396,7 +397,7 @@ export default function ProviderDetailPage({
           setManualOAuth(null);
           setCredentialAction(false);
           setSuccess(
-            `${protocol === "antigravity" ? "Google Antigravity" : "Codex"} account connected.`,
+            `${protocol === "antigravity" ? "Google Antigravity" : protocol === "deepai" ? "DeepAI Code" : "Codex"} account connected.`,
           );
           notifySuccess("Account connected");
           invalidateModels(providerId);
@@ -418,10 +419,11 @@ export default function ProviderDetailPage({
 
   const addOAuthAccount = async () => {
     if (!provider) return;
+    const isDeepAI = provider.protocol === "deepai";
     const isAntigravity = provider.protocol === "antigravity";
     const popup = window.open(
       "about:blank",
-      isAntigravity ? "klove-antigravity-login" : "klove-codex-login",
+      isDeepAI ? "klove-deepai-login" : isAntigravity ? "klove-antigravity-login" : "klove-codex-login",
       "popup,width=520,height=720",
     );
     let createdCredentialId: string | null = null;
@@ -429,15 +431,15 @@ export default function ProviderDetailPage({
     setError(null);
     try {
       const credential = await providers.addCredential(providerId, {
-        label: `${isAntigravity ? "Google" : "Codex"} account ${credentials.length + 1}`,
-        kind: isAntigravity ? "antigravity" : "codex",
+        label: `${isDeepAI ? "DeepAI Code" : isAntigravity ? "Google" : "Codex"} account ${credentials.length + 1}`,
+        kind: isDeepAI ? "api_key" : isAntigravity ? "antigravity" : "codex",
       });
       createdCredentialId = credential.id;
-      const result = isAntigravity
-        ? await antigravity.login(credential.id)
-        : await codex.login(credential.id);
+      const result = isDeepAI
+        ? await deepai.login(credential.id)
+        : isAntigravity ? await antigravity.login(credential.id) : await codex.login(credential.id);
       if (popup) popup.location.href = result.auth_url;
-      const protocol = isAntigravity ? "antigravity" : "codex";
+      const protocol = isDeepAI ? "deepai" : isAntigravity ? "antigravity" : "codex";
       setManualOAuth({
         protocol,
         credentialId: credential.id,
@@ -462,7 +464,15 @@ export default function ProviderDetailPage({
     setCompletingOAuth(true);
     setError(null);
     try {
-      if (manualOAuth.protocol === "codex")
+      if (manualOAuth.protocol === "deepai") {
+        const callback = new URL(callbackUrl.trim());
+        if (callback.protocol !== "http:" || !["127.0.0.1", "localhost", "[::1]"].includes(callback.hostname) || !callback.port || callback.pathname !== "/auth-callback") throw new Error("Expected the DeepAI loopback callback URL");
+        if (callback.searchParams.has("error")) throw new Error("DeepAI authorization was denied");
+        const code = callback.searchParams.get("code");
+        const state = callback.searchParams.get("state");
+        if (!code || !state) throw new Error("Callback URL is missing the code or state");
+        await deepai.completeLogin(manualOAuth.credentialId, code, state);
+      } else if (manualOAuth.protocol === "codex")
         await codex.completeLogin(callbackUrl.trim(), manualOAuth.credentialId);
       else
         await antigravity.completeLogin(
@@ -475,7 +485,7 @@ export default function ProviderDetailPage({
       setCallbackUrl("");
       setCredentialAction(false);
       setSuccess(
-        `${manualOAuth.protocol === "codex" ? "Codex" : "Google Antigravity"} account connected.`,
+        `${manualOAuth.protocol === "codex" ? "Codex" : manualOAuth.protocol === "deepai" ? "DeepAI Code" : "Google Antigravity"} account connected.`,
       );
       notifySuccess("Account connected");
       invalidateModels(providerId);
@@ -515,7 +525,7 @@ export default function ProviderDetailPage({
     if (!manualOAuth) return;
     const popup = window.open(
       "about:blank",
-      manualOAuth.protocol === "codex"
+      manualOAuth.protocol === "deepai" ? "klove-deepai-login" : manualOAuth.protocol === "codex"
         ? "klove-codex-login"
         : "klove-antigravity-login",
       "popup,width=520,height=720",
@@ -525,7 +535,9 @@ export default function ProviderDetailPage({
     setCallbackUrl("");
     try {
       const result =
-        manualOAuth.protocol === "codex"
+        manualOAuth.protocol === "deepai"
+          ? await deepai.login(manualOAuth.credentialId)
+          : manualOAuth.protocol === "codex"
           ? await codex.login(manualOAuth.credentialId)
           : await antigravity.login(manualOAuth.credentialId);
       if (popup) popup.location.href = result.auth_url;
@@ -1154,7 +1166,22 @@ export default function ProviderDetailPage({
       {provider.protocol !== "codex" && provider.protocol !== "antigravity" && <Card id="provider-credentials">
         <CardHeader><CardTitle>Credentials</CardTitle><p className="text-sm text-tertiary">Manage encrypted credentials and access tokens.</p></CardHeader>
         <CardContent className="space-y-3">
-          {provider.protocol === "openfree" ? (
+          {provider.protocol === "deepai" ? (
+            <div className="space-y-3 rounded-lg border border-border bg-background/60 p-3">
+              <div>
+                <Label>DeepAI Code account</Label>
+                <p className="mt-1 text-xs text-tertiary">Sign in through DeepAI in your browser. KloveRouter exchanges the one-time callback code and stores the API key encrypted.</p>
+              </div>
+              <div className="space-y-2">
+                {credentials.filter((credential) => credential.kind === "api_key").map((credential) => renderCredentialRow(credential, "DeepAI Code account"))}
+                {!credentials.some((credential) => credential.kind === "api_key" && credential.masked_secret) && <div className="text-xs text-tertiary">No DeepAI account connected.</div>}
+              </div>
+              <Button onClick={addOAuthAccount} disabled={credentialAction}>
+                {credentialAction ? <LoaderCircle className="size-4 animate-spin" /> : <LoginIcon className="size-4" />}
+                {credentials.some((credential) => credential.kind === "api_key" && credential.masked_secret) ? "Connect another account" : "Sign in with DeepAI Code"}
+              </Button>
+            </div>
+          ) : provider.protocol === "openfree" ? (
             <div className="space-y-3 rounded-lg border border-border bg-background/60 p-3">
               <div>
                 <Label htmlFor="openfree-detail-api-key">OpenCode Zen API key (required)</Label>
@@ -1613,7 +1640,7 @@ export default function ProviderDetailPage({
               className="min-h-28 font-mono text-xs"
               value={callbackUrl}
               onChange={(event) => setCallbackUrl(event.target.value)}
-              placeholder={`http://localhost:1455/${manualOAuth?.protocol === "codex" ? "auth" : "antigravity"}/callback?code=...&state=...`}
+              placeholder={manualOAuth?.protocol === "deepai" ? "http://127.0.0.1:<port>/auth-callback?code=...&state=..." : `http://localhost:1455/${manualOAuth?.protocol === "codex" ? "auth" : "antigravity"}/callback?code=...&state=...`}
             />
           </div>
           <DialogFooter>
