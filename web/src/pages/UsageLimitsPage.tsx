@@ -59,6 +59,58 @@ function UsageWindow({
   );
 }
 
+function DeepAIUsageSummary({ usage }: { usage: any | null }) {
+  if (!usage?.allowance && !usage?.summary) {
+    return <div className="text-sm text-tertiary">No DeepAI usage data returned.</div>;
+  }
+  const allowance = usage.allowance;
+  const enabled = allowance?.enabled === true;
+  const balance = Number(allowance?.balance);
+  const granted = Number(allowance?.granted);
+  const hasAllowance = enabled && Number.isFinite(balance) && Number.isFinite(granted) && granted > 0;
+  const used = hasAllowance ? Math.max(0, granted - balance) : 0;
+  const usedPercent = hasAllowance ? Math.min(100, Math.max(0, (used / granted) * 100)) : 0;
+  const refresh = usageDate(allowance?.refresh_at ?? allowance?.refreshAt);
+  const credits = Number(usage.summary?.credits_remaining);
+  return (
+    <div className="space-y-5">
+      <div className="space-y-2">
+        <div className="flex items-center justify-between gap-3 text-sm">
+          <span className="text-foreground">Theos allowance</span>
+          <span className="font-medium text-foreground tabular-nums">
+            {hasAllowance ? `${usageNumber(balance)} / ${usageNumber(granted)} remaining` : "Allowance unavailable"}
+          </span>
+        </div>
+        <div className="h-2 overflow-hidden rounded-full bg-overlay">
+          <div
+            className={`h-full rounded-full transition-all ${hasAllowance && usedPercent >= 100 ? "bg-red-500" : "bg-emerald-500"}`}
+            style={{ width: hasAllowance ? `${100 - usedPercent}%` : "0%" }}
+          />
+        </div>
+        <div className="text-xs text-tertiary">
+          {hasAllowance
+            ? `${usedPercent.toFixed(0)}% used · ${usageNumber(used)} Theos spent`
+            : enabled
+              ? "Balance or grant data unavailable."
+              : "Theos allowance is not enabled for this account."}
+          {refresh ? ` · Frees up ${refresh}` : ""}
+          {Number.isFinite(credits) ? ` · ${usageNumber(credits)} credits remaining` : ""}
+        </div>
+      </div>
+      {usage.summary && (
+        <div className="flex flex-wrap items-center gap-2 text-xs text-tertiary">
+          <span className="font-medium text-foreground">Plan:</span>
+          <span>{usage.summary.plan ?? "unknown"}</span>
+          {usage.summary.is_pro === true && (
+            <span className="rounded-full bg-accent px-2 py-0.5 text-[10px] font-medium text-foreground">Pro</span>
+          )}
+          {usage.allowance_checked_at && <span>· Checked {usageDate(usage.allowance_checked_at)}</span>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function FreebuffUsageSummary({ usage }: { usage: any }) {
   const rateLimit = usage?.rateLimit ?? usage?.rate_limit;
   const recentCount = Number(rateLimit?.recentCount ?? rateLimit?.recent_count ?? 0);
@@ -688,17 +740,7 @@ export default function UsageLimitsPage() {
                 </CardHeader>
                 <CardContent className="space-y-5">
                     {provider.protocol === "deepai" ? (
-                      deepaiData?.allowance || deepaiData?.summary ? (
-                        <div className="space-y-2 text-sm">
-                          <div className="font-medium">Theos usage</div>
-                          <div className="text-tertiary">
-                            {deepaiData.allowance?.enabled
-                              ? `Balance: ${deepaiData.allowance.balance ?? "unknown"} · Granted: ${deepaiData.allowance.granted ?? "unknown"} · Refresh: ${deepaiData.allowance.refresh_at ?? deepaiData.allowance.refreshAt ?? "unknown"}`
-                              : "Theos allowance is not enabled or unavailable."}
-                          </div>
-                          {deepaiData.summary && <div className="text-tertiary">Plan: {deepaiData.summary.plan ?? "unknown"} · Pro: {deepaiData.summary.is_pro ? "yes" : "no"} · Credits: {deepaiData.summary.credits_remaining ?? "unknown"}</div>}
-                        </div>
-                      ) : <div className="text-sm text-tertiary">No DeepAI usage data returned.</div>
+                      <DeepAIUsageSummary usage={deepaiData} />
                     ) : provider.protocol === "freebuff" ? (
                       <FreebuffUsageSummary usage={freebuffData} />
                     ) : provider.protocol === "perch" ? (
