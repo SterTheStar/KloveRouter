@@ -24,6 +24,7 @@ function ProviderSection({
   onToggle,
   onEdit,
   onDelete,
+  defaultCollapsed = false,
 }: {
   title: string;
   count: number;
@@ -32,8 +33,9 @@ function ProviderSection({
   onToggle: (id: string) => void;
   onEdit: (id: string) => void;
   onDelete: (id: string) => void;
+  defaultCollapsed?: boolean;
 }) {
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(defaultCollapsed);
   return (
     <section aria-labelledby={`${title.toLowerCase()}-providers-heading`}>
       <button
@@ -189,6 +191,7 @@ export default function DashboardPage({
               onDelete={(id) =>
                 setTarget(list.find((item) => item.id === id) ?? null)
               }
+              defaultCollapsed={true}
             />
           )}
         </div>
