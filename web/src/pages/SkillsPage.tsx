@@ -106,6 +106,7 @@ export default function SkillsPage() {
   const [formDescription, setFormDescription] = useState("");
   const [formCategory, setFormCategory] = useState("Custom");
   const [formContent, setFormContent] = useState("");
+  const [editTab, setEditTab] = useState<"write" | "preview">("write");
   const [savingSkill, setSavingSkill] = useState(false);
 
   // Action states
@@ -334,6 +335,7 @@ export default function SkillsPage() {
     setFormDescription("");
     setFormCategory("Custom");
     setFormContent("");
+    setEditTab("write");
     setShowEditDialog(true);
   };
 
@@ -343,6 +345,7 @@ export default function SkillsPage() {
     setFormDescription(skill.description || "");
     setFormCategory(skill.category || "Custom");
     setFormContent(skill.content);
+    setEditTab("write");
     setShowEditDialog(true);
   };
 
@@ -964,34 +967,49 @@ export default function SkillsPage() {
       </Dialog>
 
       {/* ========================================================================= */}
-      {/* CREATE / EDIT CUSTOM SKILL DIALOG */}
+      {/* CREATE / EDIT CUSTOM SKILL DIALOG (16:9 Two Columns) */}
       {/* ========================================================================= */}
       <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
-        <DialogContent className="max-w-xl">
-          <DialogHeader>
-            <DialogTitle>{editingId ? "Edit skill" : "Create custom skill"}</DialogTitle>
+        <DialogContent className="sm:max-w-5xl md:max-w-6xl w-[95vw] max-w-6xl max-md:h-[88vh] md:aspect-[16/9] max-h-[90vh] flex flex-col p-0 overflow-hidden gap-0">
+          <DialogHeader className="px-6 py-4 border-b border-border bg-card/40 shrink-0 space-y-1 text-left pr-12">
+            <div className="flex flex-wrap items-center gap-2">
+              <DialogTitle className="text-lg font-semibold text-foreground flex items-center gap-2">
+                <RiSparklingLine className="size-5 text-primary" />
+                {editingId ? "Edit custom skill" : "Create custom skill"}
+              </DialogTitle>
+              <Badge variant="outline" className="text-xs">
+                {formCategory.trim() || "Custom"}
+              </Badge>
+            </div>
             <DialogDescription className="text-xs text-tertiary">
-              Write a system prompt skill. Active skills are merged into every chat completion request.
+              Write custom prompt instructions. Active skills are automatically injected into every chat completion request.
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4 py-2">
-            <div className="space-y-1.5">
-              <Label htmlFor="skill-name" className="text-xs">
-                Skill Name
-              </Label>
-              <Input
-                id="skill-name"
-                value={formName}
-                onChange={(e) => setFormName(e.target.value)}
-                placeholder="e.g. Senior Security Auditor"
-                className="text-sm"
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
+          {/* TWO COLUMNS BODY */}
+          <div className="flex-1 min-h-0 grid grid-cols-1 md:grid-cols-12 overflow-hidden bg-background divide-y md:divide-y-0 md:divide-x divide-border">
+            {/* LEFT COLUMN: Metadata & Settings (col-span-5) */}
+            <div className="md:col-span-5 overflow-y-auto p-5 sm:p-6 space-y-5 bg-card/20">
+              {/* Skill Name */}
               <div className="space-y-1.5">
-                <Label htmlFor="skill-category" className="text-xs">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="skill-name" className="text-xs font-medium">
+                    Skill Name <span className="text-destructive">*</span>
+                  </Label>
+                  <span className="text-[10px] text-tertiary">Required</span>
+                </div>
+                <Input
+                  id="skill-name"
+                  value={formName}
+                  onChange={(e) => setFormName(e.target.value)}
+                  placeholder="e.g. Senior Security Auditor"
+                  className="text-xs h-9"
+                />
+              </div>
+
+              {/* Category with quick chips */}
+              <div className="space-y-2">
+                <Label htmlFor="skill-category" className="text-xs font-medium">
                   Category
                 </Label>
                 <Input
@@ -999,62 +1017,160 @@ export default function SkillsPage() {
                   value={formCategory}
                   onChange={(e) => setFormCategory(e.target.value)}
                   placeholder="e.g. Development, Security"
-                  className="text-sm"
+                  className="text-xs h-9"
                 />
+                <div className="flex flex-wrap gap-1 pt-1">
+                  {["Custom", "Development", "Security", "DevOps", "Database", "Testing", "Writing"].map(
+                    (cat) => (
+                      <button
+                        key={cat}
+                        type="button"
+                        onClick={() => setFormCategory(cat)}
+                        className={`text-[10px] px-2 py-0.5 rounded-full border transition-colors ${
+                          formCategory.toLowerCase() === cat.toLowerCase()
+                            ? "bg-primary text-primary-foreground border-primary"
+                            : "border-border hover:bg-muted text-tertiary hover:text-foreground"
+                        }`}
+                      >
+                        {cat}
+                      </button>
+                    ),
+                  )}
+                </div>
               </div>
 
+              {/* Short Description */}
               <div className="space-y-1.5">
-                <Label htmlFor="skill-desc" className="text-xs">
-                  Short Description (optional)
+                <Label htmlFor="skill-desc" className="text-xs font-medium">
+                  Short Description <span className="text-[10px] text-tertiary font-normal">(optional)</span>
                 </Label>
-                <Input
+                <Textarea
                   id="skill-desc"
                   value={formDescription}
                   onChange={(e) => setFormDescription(e.target.value)}
-                  placeholder="e.g. Enforces strict type boundaries"
-                  className="text-sm"
+                  placeholder="Briefly describe what this skill does and when the agent should apply it..."
+                  rows={3}
+                  className="text-xs resize-none leading-relaxed"
                 />
+              </div>
+
+              {/* Best practices guidance card */}
+              <div className="rounded-lg border border-border/80 bg-card/60 p-3.5 space-y-2 text-xs">
+                <div className="flex items-center gap-1.5 font-medium text-foreground text-xs">
+                  <RiInformationLine className="size-4 text-primary shrink-0" />
+                  <span>Skill Prompt Guidelines</span>
+                </div>
+                <ul className="list-disc list-inside space-y-1 text-tertiary text-[11px] leading-relaxed">
+                  <li>Use clear headings (Markdown <code className="font-mono text-[10px] bg-muted px-1 py-0.5 rounded">#</code>, <code className="font-mono text-[10px] bg-muted px-1 py-0.5 rounded">##</code>) to divide rules.</li>
+                  <li>Provide explicit constraints (e.g. "Never use any", "Prefer async/await").</li>
+                  <li>Include code examples for desired architecture or response style.</li>
+                </ul>
               </div>
             </div>
 
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <Label htmlFor="skill-content" className="text-xs">
-                  Prompt Instructions (Markdown)
-                </Label>
-                <span className="text-[10px] text-tertiary font-mono">
-                  {formContent.length} chars
-                </span>
+            {/* RIGHT COLUMN: Markdown Prompt Instructions (col-span-7) */}
+            <div className="md:col-span-7 flex flex-col h-full min-h-0 overflow-hidden bg-background">
+              {/* Tab Header & Stats Toolbar */}
+              <div className="flex items-center justify-between px-4 py-2.5 border-b border-border bg-card/40 shrink-0">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-medium text-foreground">
+                    Prompt Instructions <span className="text-destructive">*</span>
+                  </span>
+                  <div className="flex items-center gap-1.5 text-[11px] font-mono text-tertiary">
+                    <span className="rounded bg-muted px-1.5 py-0.5">
+                      {formContent.length.toLocaleString()} chars
+                    </span>
+                    <span className="rounded bg-muted px-1.5 py-0.5">
+                      {formContent.trim() ? formContent.trim().split(/\s+/).length : 0} words
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex items-center rounded-lg border border-border p-0.5 bg-muted/40">
+                  <button
+                    type="button"
+                    onClick={() => setEditTab("write")}
+                    className={`flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${
+                      editTab === "write"
+                        ? "bg-background text-foreground shadow-sm"
+                        : "text-tertiary hover:text-foreground"
+                    }`}
+                  >
+                    <RiEditLine className="size-3.5" />
+                    Write
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditTab("preview")}
+                    className={`flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${
+                      editTab === "preview"
+                        ? "bg-background text-foreground shadow-sm"
+                        : "text-tertiary hover:text-foreground"
+                    }`}
+                  >
+                    <RiEyeLine className="size-3.5" />
+                    Preview
+                  </button>
+                </div>
               </div>
-              <Textarea
-                id="skill-content"
-                value={formContent}
-                onChange={(e) => setFormContent(e.target.value)}
-                placeholder="# Role & Guidelines&#10;&#10;When assisting with code, always:&#10;1. ..."
-                rows={9}
-                className="font-mono text-xs leading-relaxed"
-              />
+
+              {/* Editor or Preview Pane */}
+              <div className="flex-1 min-h-0 relative overflow-hidden bg-background/50">
+                {editTab === "write" ? (
+                  <textarea
+                    id="skill-content"
+                    value={formContent}
+                    onChange={(e) => setFormContent(e.target.value)}
+                    placeholder={`# Role & Objectives\nDescribe the role or expertise of this skill.\n\n## Core Rules\n1. Always prioritize strict correctness.\n2. Follow standard industry conventions.\n\n## Examples & Code Style\n- Provide concrete examples of preferred code patterns.`}
+                    className="w-full h-full p-4 font-mono text-xs leading-relaxed resize-none focus:outline-none border-0 bg-transparent text-foreground placeholder:text-muted-foreground/50 selection:bg-primary/20 overflow-y-auto"
+                    spellCheck={false}
+                  />
+                ) : (
+                  <div className="h-full overflow-y-auto p-5 text-foreground leading-relaxed">
+                    {formContent.trim() ? (
+                      <Markdown content={formContent} />
+                    ) : (
+                      <div className="flex flex-col items-center justify-center h-full text-center p-8 space-y-2">
+                        <RiSparklingLine className="size-8 text-tertiary/60" />
+                        <p className="text-xs font-medium text-foreground">No instructions written yet</p>
+                        <p className="text-[11px] text-tertiary max-w-sm">
+                          Switch back to the <strong className="text-foreground">Write</strong> tab to enter your Markdown prompt guidelines.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
-          <DialogFooter>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowEditDialog(false)}
-              disabled={savingSkill}
-            >
-              Cancel
-            </Button>
-            <Button
-              size="sm"
-              onClick={handleSaveSkill}
-              disabled={savingSkill || !formName.trim() || !formContent.trim()}
-              className="gap-1.5"
-            >
-              {savingSkill && <RiLoader4Line className="size-4 animate-spin" />}
-              {editingId ? "Update skill" : "Create skill"}
-            </Button>
+          {/* FOOTER */}
+          <DialogFooter className="m-0 px-6 py-4 sm:py-5 border-t border-border bg-card/60 shrink-0 flex items-center justify-between sm:justify-between">
+            <div className="text-xs text-tertiary hidden sm:block">
+              {editingId
+                ? "Changes will be updated in your custom skills list."
+                : "Skill will be saved and enabled by default."}
+            </div>
+
+            <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowEditDialog(false)}
+                disabled={savingSkill}
+              >
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                onClick={handleSaveSkill}
+                disabled={savingSkill || !formName.trim() || !formContent.trim()}
+                className="gap-1.5"
+              >
+                {savingSkill && <RiLoader4Line className="size-4 animate-spin" />}
+                {editingId ? "Update skill" : "Create skill"}
+              </Button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>
