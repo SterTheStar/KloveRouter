@@ -65,6 +65,14 @@ export default function App() {
     startResizing: startSidebarResize,
     resetWidth: resetSidebarWidth,
   } = useSidebarWidth();
+  const [minLoadingElapsed, setMinLoadingElapsed] = useState(false);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setMinLoadingElapsed(true);
+    }, 5000);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     const syncRoute = () => {
@@ -209,7 +217,7 @@ export default function App() {
     if (isAuth && currentPage === "login") navigateToRoute({ page: "dashboard" }, true);
   }, [isAuth, currentPage]);
 
-  if (loading) {
+  if (loading || !minLoadingElapsed) {
     return <AsciiSaturnLoading />;
   }
 

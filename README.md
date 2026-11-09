@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="web/src/assets/klove-wordmark.svg" width="290" height="96" alt="Klove" />
+  <img src="web/src/assets/klove-wordmark.svg" width="290" height="96" alt="Saturn Router" />
   <p>A self-hosted control plane for routing AI requests across providers and models.</p>
   <p>
     <img alt="Bun" src="https://img.shields.io/badge/Bun-1.x-171717?logo=bun&logoColor=white" />
@@ -7,13 +7,13 @@
     <img alt="React" src="https://img.shields.io/badge/React-19-149ECA?logo=react&logoColor=white" />
     <img alt="Elysia" src="https://img.shields.io/badge/Elysia-1.x-7C3AED" />
     <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/License-Klove%20NC--SA-6B7280" /></a>
-    <img alt="Last commit" src="https://img.shields.io/github/last-commit/SterTheStar/KloveRouter?logo=github&color=171717" />
+    <img alt="Last commit" src="https://img.shields.io/github/last-commit/SterTheStar/SaturnRouter?logo=github&color=171717" />
   </p>
 </div>
 
-## What Klove does
+## What Saturn Router does
 
-Klove gives applications one API and one admin panel for multiple AI providers. Route OpenAI-compatible, Responses, and Anthropic Messages requests; manage provider credentials and models; and inspect request activity, token usage, and estimated costs.
+Saturn Router gives applications one API and one admin panel for multiple AI providers. Route OpenAI-compatible, Responses, and Anthropic Messages requests; manage provider credentials and models; and inspect request activity, token usage, and estimated costs.
 
 DeepAI Code provider supports browser sign-in with a loopback callback, encrypted account credentials, lane 4 model discovery, Chat Completions and Responses, Theos check-in, usage limits, session affinity, and `session_busy` retries. Add a DeepAI Code provider and use **Sign in with DeepAI Code** on its credential page. If browser loopback is unavailable, paste the callback URL into the login dialog.
 
@@ -41,13 +41,13 @@ Perch AI issues short-lived turn tickets against a CLI session and rotates Supab
 - [Bun](https://bun.sh/) 1.x
 - A modern browser
 - Credentials or an OAuth account for the providers you want to connect
-- For OpenFREE, an authenticated OpenCode CLI on the KloveRouter host. KloveRouter detects standard CLI and desktop installs; `OPENFREE_CLI_PATH` overrides detection when needed.
+- For OpenFREE, an authenticated OpenCode CLI on the Saturn Router host. Saturn Router detects standard CLI and desktop installs; `OPENFREE_CLI_PATH` overrides detection when needed.
 
 ### Install and start
 
 ```bash
-git clone https://github.com/SterTheStar/KloveRouter.git
-cd KloveRouter
+git clone https://github.com/SterTheStar/SaturnRouter.git
+cd SaturnRouter
 bun install
 cp .env.example .env
 bun run start

@@ -67,7 +67,7 @@ const app = new Elysia()
   .onError(requestHooks.onError)
   .use(cors())
   .get("/api", () => ({
-    name: "KloveRouter API",
+    name: "SaturnRouter API",
     status: "ok",
   }))
   .use(
@@ -188,8 +188,8 @@ ${b}${blue} /_/ |_/_/\\____/|___/\\___/${r}
 const version = "1.0.0";
 
 logger.badge(
-  "KLOVE",
-  `v${version} · https://github.com/SterTheStar/KloveRouter`,
+  "SATURN",
+  `v${version} · https://github.com/SterTheStar/SaturnRouter`,
 );
 logger.success("Server running", {
   panel: `http://0.0.0.0:${config.port}`,

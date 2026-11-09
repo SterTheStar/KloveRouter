@@ -13,7 +13,7 @@ const CHARSET = " .:-=+*#%@";
 const GLITCH = "01#%*+=-:.░▒▓";
 
 const COLS = 64;
-const ROWS = 28;
+const ROWS = 30;
 
 function sampleSaturnGrid(cols: number, rows: number): number[][] {
   if (typeof document === "undefined") return [];
@@ -26,11 +26,16 @@ function sampleSaturnGrid(cols: number, rows: number): number[][] {
   ctx.clearRect(0, 0, cols, rows);
   ctx.fillStyle = "#ffffff";
 
-  const padding = 0.88;
+  const charAspect = 0.55;
+  const targetSize = Math.min(cols, rows / charAspect) * 0.82;
+  const scaleX = targetSize / 504;
+  const scaleY = (targetSize * charAspect) / 504;
+  const tx = (cols - 504 * scaleX) / 2;
+  const ty = (rows - 504 * scaleY) / 2;
+
   ctx.save();
-  ctx.translate((cols * (1 - padding)) / 2, (rows * (1 - padding)) / 2);
-  // Monospace characters are roughly 2:1 height:width, so scale vertically to keep circular proportion
-  ctx.scale((cols * padding) / 504, (rows * 2 * padding * 0.94) / 504);
+  ctx.translate(tx, ty);
+  ctx.scale(scaleX, scaleY);
 
   if (typeof Path2D !== "undefined") {
     try {
@@ -62,7 +67,7 @@ function sampleSaturnGrid(cols: number, rows: number): number[][] {
 }
 
 export default function AsciiSaturnLoading({
-  status = "INITIALIZING SATURN",
+  status = "Initializing Saturn",
 }: {
   status?: string;
 }) {
@@ -86,9 +91,10 @@ export default function AsciiSaturnLoading({
       }
 
       const elapsed = (Date.now() - startTimeRef.current) / 1000;
-      // Reveal sweeps from center outwards over 2.4 seconds
-      const revealProgress = Math.min(1.2, elapsed / 2.2);
-      const maxDistance = 0.85;
+      // Reveal spreads outward smoothly over 3.0 seconds
+      const revealProgress = Math.min(1.0, elapsed / 3.0);
+      const isFullyRevealed = revealProgress >= 1.0;
+      const maxDistance = 0.9;
       const currentRevealRadius = revealProgress * maxDistance;
 
       const clickWave = clickWaveRef.current;
@@ -109,21 +115,23 @@ export default function AsciiSaturnLoading({
             continue;
           }
 
-          // Distance from center for initial typewriter wave
-          const dx = (x - cx) / COLS;
-          const dy = (y - cy) / ROWS;
-          const dist = Math.hypot(dx, dy * 1.5);
+          if (!isFullyRevealed) {
+            // Distance from center for radial typewriter wave
+            const dx = (x - cx) / COLS;
+            const dy = (y - cy) / ROWS;
+            const dist = Math.hypot(dx, dy * 1.4);
 
-          if (dist > currentRevealRadius) {
-            line += " ";
-            continue;
-          }
+            if (dist > currentRevealRadius) {
+              line += " ";
+              continue;
+            }
 
-          // If on the reveal boundary, scramble glyph
-          if (dist > currentRevealRadius - 0.07 && revealProgress < 1.05) {
-            const randIdx = Math.floor(Math.random() * GLITCH.length);
-            line += GLITCH[randIdx];
-            continue;
+            // On the reveal wave front, scramble with random glitch characters
+            if (dist > currentRevealRadius - 0.08) {
+              const randIdx = Math.floor(Math.random() * GLITCH.length);
+              line += GLITCH[randIdx];
+              continue;
+            }
           }
 
           // Optional click ripple sweep
@@ -131,7 +139,7 @@ export default function AsciiSaturnLoading({
           if (clickWave && clickElapsed < 2.0) {
             const cdx = (x - clickWave.x) / COLS;
             const cdy = (y - clickWave.y) / ROWS;
-            const cdist = Math.hypot(cdx, cdy * 1.5);
+            const cdist = Math.hypot(cdx, cdy * 1.4);
             if (Math.abs(cdist - clickRadius) < 0.08) {
               const randIdx = Math.floor(Math.random() * GLITCH.length);
               line += GLITCH[randIdx];
@@ -142,8 +150,8 @@ export default function AsciiSaturnLoading({
             }
           }
 
-          // Atmospheric subtle breathing wave once revealed
-          const wave = Math.sin(x * 0.25 + y * 0.15 - elapsed * 2.5) * 0.08;
+          // Subtle atmospheric wave that shimmers continuously
+          const wave = Math.sin(x * 0.22 + y * 0.15 - elapsed * 2.2) * 0.07;
           const totalB = Math.max(0, Math.min(1, brightness + wave + extraBrightness));
           const charIndex = Math.min(
             CHARSET.length - 1,
@@ -176,28 +184,22 @@ export default function AsciiSaturnLoading({
   return (
     <div
       onClick={handleClick}
-      className="flex min-h-svh w-full flex-col items-center justify-center bg-background px-4 select-none cursor-pointer"
+      className="flex min-h-svh w-full flex-col items-center justify-center bg-background px-2 sm:px-4 select-none cursor-pointer overflow-hidden animate-in fade-in duration-300"
       title="Click to ripple ASCII waves"
     >
-      <div className="flex flex-col items-center">
+      <div className="flex flex-col items-center max-w-full">
         <pre
-          className="font-mono text-[8px] leading-[1.05] sm:text-[10.5px] sm:leading-[1.08] tracking-widest text-foreground font-semibold drop-shadow-[0_0_12px_rgba(255,255,255,0.08)] overflow-hidden"
+          className="font-mono text-[7px] leading-[1.08] sm:text-[9.5px] sm:leading-[1.1] md:text-[11px] md:leading-[1.12] tracking-wider text-foreground font-semibold drop-shadow-[0_0_12px_rgba(255,255,255,0.08)] overflow-visible text-center"
           style={{ fontFamily: "'Geist Mono', ui-monospace, SFMono-Regular, monospace" }}
         >
           {asciiArt}
         </pre>
 
-        <div className="mt-8 flex flex-col items-center gap-2 font-mono text-xs text-muted-foreground">
-          <div className="flex items-center gap-2">
-            <span className="relative flex size-2">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-75" />
-              <span className="relative inline-flex size-2 rounded-full bg-primary" />
-            </span>
-            <span className="font-mono text-[11px] font-medium tracking-widest uppercase text-foreground">
-              {status}
-            </span>
-          </div>
-          <span className="text-[10px] text-tertiary">Connecting gateway services</span>
+        <div className="mt-8 flex flex-col items-center gap-1.5 font-mono text-xs text-muted-foreground">
+          <span className="font-mono text-xs font-medium tracking-wide text-foreground">
+            {status}
+          </span>
+          <span className="text-[11px] text-tertiary">Connecting gateway services</span>
         </div>
       </div>
     </div>
