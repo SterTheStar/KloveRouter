@@ -32,12 +32,14 @@ export interface RequestLog {
   streamed_bytes?: number;
   request_kind?: string | null;
   output_bytes?: number | null;
+  guardrails_status?: "blocked" | "redacted" | "audited" | null;
 }
 
 export interface RequestLogDetails extends RequestLog {
   request_details: unknown;
   response_details: unknown;
   error_details: unknown;
+  guardrails_details?: unknown;
 }
 
 export type RequestLogEvent =
@@ -55,7 +57,7 @@ function publish(event: RequestLogEvent) {
 }
 
 /** Columns needed to render the request log table (details are loaded on demand). */
-const LIST_COLUMNS = "id, provider_id, provider_name, model_name, client_ip, requester_name, api_key_prefix, credential_label, credential_identity, credential_kind, status, status_code, tokens_prompt, tokens_completion, tokens_cache_read, tokens_cache_write, tokens_total, estimated_cost_usd, tps, duration_ms, error_message, created_at, completed_at, streaming, streamed_chars, streamed_bytes";
+const LIST_COLUMNS = "id, provider_id, provider_name, model_name, client_ip, requester_name, api_key_prefix, credential_label, credential_identity, credential_kind, status, status_code, tokens_prompt, tokens_completion, tokens_cache_read, tokens_cache_write, tokens_total, estimated_cost_usd, tps, duration_ms, error_message, created_at, completed_at, streaming, streamed_chars, streamed_bytes, guardrails_status";
 
 const LIST_SQL = `SELECT ${LIST_COLUMNS},
   CASE WHEN request_details IS NULL THEN NULL ELSE json_extract(request_details, '$.klove.media_type') END AS request_kind,
@@ -65,6 +67,7 @@ FROM request_logs`;
 function hydrateRow(row: RequestLog & { request_kind: string | null; output_bytes: number | null }): RequestLog {
   row.streaming = Boolean(row.streaming);
   row.request_kind = typeof row.request_kind === "string" ? row.request_kind : null;
+  row.guardrails_status = (row as any).guardrails_status || null;
   const bytes = Number(row.output_bytes);
   row.output_bytes = Number.isFinite(bytes) ? bytes : (row.streamed_bytes ? Number(row.streamed_bytes) : null);
   return row;
@@ -223,11 +226,13 @@ export const requestLogService = {
     apiKeyPrefix?: string | null;
     requestDetails?: unknown;
     streaming?: boolean;
+    guardrailsStatus?: "blocked" | "redacted" | "audited" | null;
+    guardrailsDetails?: unknown;
   }) {
     const id = requestId();
     getDb()
       .query(
-        "INSERT INTO request_logs (id, provider_id, provider_name, model_name, client_ip, requester_name, api_key_prefix, request_details, streaming) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO request_logs (id, provider_id, provider_name, model_name, client_ip, requester_name, api_key_prefix, request_details, streaming, guardrails_status, guardrails_details) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
       )
       .run(
         id,
@@ -239,12 +244,26 @@ export const requestLogService = {
         input.apiKeyPrefix ?? null,
         serializeDetail(input.requestDetails),
         input.streaming ? 1 : 0,
+        input.guardrailsStatus ?? null,
+        input.guardrailsDetails ? serializeDetail(input.guardrailsDetails) : null,
       );
     try {
       const log = requireLog(id);
       if (log) publish({ type: "created", log });
     } catch { /* Logging must never affect the request. */ }
     return id;
+  },
+
+  setGuardrails(id: string, status: "blocked" | "redacted" | "audited", details?: unknown) {
+    try {
+      getDb()
+        .query(
+          "UPDATE request_logs SET guardrails_status = ?, guardrails_details = ? WHERE id = ?",
+        )
+        .run(status, details ? serializeDetail(details) : null, id);
+      const log = requireLog(id);
+      if (log) publish({ type: "updated", log });
+    } catch { /* Logging must never affect the request. */ }
   },
 
   progress(id: string, streamedChars: number) {
@@ -443,6 +462,8 @@ export const requestLogService = {
     requestDetails?: unknown;
     streaming?: boolean;
     durationMs?: number | null;
+    guardrailsStatus?: "blocked" | "redacted" | "audited" | null;
+    guardrailsDetails?: unknown;
   }): string | null {
     try {
       const id = requestId();
@@ -460,7 +481,7 @@ export const requestLogService = {
           : { message: error, rejected: true };
       getDb()
         .query(
-          "INSERT INTO request_logs (id, provider_id, provider_name, model_name, client_ip, requester_name, api_key_prefix, status, status_code, error_message, request_details, response_details, error_details, streaming, duration_ms, completed_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'error', ?, ?, ?, ?, ?, ?, ?, datetime('now'))",
+          "INSERT INTO request_logs (id, provider_id, provider_name, model_name, client_ip, requester_name, api_key_prefix, status, status_code, error_message, request_details, response_details, error_details, streaming, duration_ms, completed_at, guardrails_status, guardrails_details) VALUES (?, ?, ?, ?, ?, ?, ?, 'error', ?, ?, ?, ?, ?, ?, ?, datetime('now'), ?, ?)",
         )
         .run(
           id,
@@ -477,6 +498,8 @@ export const requestLogService = {
           serializeDetail(normalizeErrorForDetails(errorDetails)),
           input.streaming ? 1 : 0,
           input.durationMs ?? null,
+          input.guardrailsStatus ?? null,
+          input.guardrailsDetails ? serializeDetail(input.guardrailsDetails) : null,
         );
       try {
         const log = requireLog(id);
@@ -490,7 +513,7 @@ export const requestLogService = {
 
   get(id: string): RequestLogDetails | null {
     const db = getDb();
-    const row = db.query("SELECT * FROM request_logs WHERE id = ?").get(id) as (RequestLog & { request_details: string | null; response_details: string | null; error_details: string | null }) | null;
+    const row = db.query("SELECT * FROM request_logs WHERE id = ?").get(id) as (RequestLog & { request_details: string | null; response_details: string | null; error_details: string | null; guardrails_details: string | null }) | null;
     if (!row) return null;
     // Reuse the table projection so detail views expose the same derived fields.
     const summary = db.query(`${LIST_SQL} WHERE id = ?`).get(id) as (RequestLog & { request_kind: string | null; output_bytes: number | null }) | null;
@@ -499,6 +522,7 @@ export const requestLogService = {
       request_details: parseDetail(row.request_details),
       response_details: parseDetail(row.response_details),
       error_details: parseDetail(row.error_details),
+      guardrails_details: parseDetail(row.guardrails_details),
     };
   },
 
@@ -509,6 +533,7 @@ export const requestLogService = {
       status?: string;
       provider?: string;
       search?: string;
+      guardrails?: string;
       /** Keyset cursor: only return logs created strictly before this timestamp. */
       before?: string;
       /** Total row count is expensive on large tables; only compute it when asked. */
@@ -531,6 +556,14 @@ export const requestLogService = {
     if (input.provider) {
       clauses.push("provider_name = ?");
       values.push(input.provider);
+    }
+    if (input.guardrails) {
+      if (input.guardrails === "violations") {
+        clauses.push("guardrails_status IS NOT NULL");
+      } else if (["blocked", "redacted", "audited"].includes(input.guardrails)) {
+        clauses.push("guardrails_status = ?");
+        values.push(input.guardrails);
+      }
     }
     if (input.search) {
       clauses.push(

@@ -35,9 +35,9 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import AvatarUpload from "../components/AvatarUpload";
-import { settings, models, rtk, caveman, customSkills } from "../api/client";
+import { settings, models, rtk, caveman, customSkills, guardrails } from "../api/client";
 import { useToast } from "../components/ui/toast";
-import type { UserProfile, RtkStatus, CavemanStatus } from "../types";
+import type { UserProfile, RtkStatus, CavemanStatus, GuardrailsSettings, GuardrailViolation } from "../types";
 import { modelDisplayId, modelPublicId } from "../lib/model-id";
 
 const tabs: Tab[] = [
@@ -90,6 +90,17 @@ export default function SettingsPage({
   const [skillName, setSkillName] = useState("");
   const [skillContent, setSkillContent] = useState("");
 
+  const [guardrailsConfig, setGuardrailsConfig] = useState<GuardrailsSettings | null>(null);
+  const [guardrailsSaving, setGuardrailsSaving] = useState(false);
+  const [testInput, setTestInput] = useState("");
+  const [testResult, setTestResult] = useState<{
+    hasViolations: boolean;
+    violations: GuardrailViolation[];
+    sanitizedText: string;
+    shouldBlock: boolean;
+  } | null>(null);
+  const [testLoading, setTestLoading] = useState(false);
+
   useEffect(() => {
     customSkills.list().then(setCustomSkillList).catch(() => {});
     settings.chat().then((value) => {
@@ -102,6 +113,7 @@ export default function SettingsPage({
   useEffect(() => {
     rtk.status().then(setRtkStatus).catch(() => {});
     caveman.status().then(setCavemanStatus).catch(() => {});
+    guardrails.settings().then(setGuardrailsConfig).catch(() => {});
   }, []);
 
   const saveChatSettings = async () => {
@@ -280,6 +292,36 @@ export default function SettingsPage({
       notifySuccess("Skill removed");
     } catch (e: any) {
       notifyError("Remove failed", e.message);
+    }
+  };
+
+  const updateGuardrailField = async (field: keyof GuardrailsSettings, value: any) => {
+    if (!guardrailsConfig) return;
+    const next = { ...guardrailsConfig, [field]: value };
+    setGuardrailsConfig(next);
+    setGuardrailsSaving(true);
+    try {
+      const res = await guardrails.updateSettings({ [field]: value });
+      setGuardrailsConfig(res.settings);
+      notifySuccess("Guardrail updated");
+    } catch (e: any) {
+      notifyError("Failed to update guardrails", e.message);
+      guardrails.settings().then(setGuardrailsConfig).catch(() => {});
+    } finally {
+      setGuardrailsSaving(false);
+    }
+  };
+
+  const runGuardrailTest = async () => {
+    if (!testInput.trim()) return;
+    setTestLoading(true);
+    try {
+      const res = await guardrails.test(testInput, guardrailsConfig ?? undefined);
+      setTestResult(res);
+    } catch (e: any) {
+      notifyError("Test scan failed", e.message);
+    } finally {
+      setTestLoading(false);
     }
   };
 
@@ -662,6 +704,217 @@ export default function SettingsPage({
               <RiAddLine className="size-4" />
               Add skill
             </Button>
+          </CardContent>
+        </Card>
+
+        {/* Guardrails & AI Firewall Plugin Card */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2">
+                <ShieldLine className="size-5 text-primary" />
+                <span>Guardrails &amp; AI Firewall</span>
+              </CardTitle>
+              <Switch
+                checked={guardrailsConfig?.enabled ?? false}
+                onCheckedChange={(checked) => updateGuardrailField("enabled", checked)}
+                disabled={guardrailsSaving || !guardrailsConfig}
+                aria-label="Toggle Guardrails"
+              />
+            </div>
+            <p className="text-sm text-tertiary">
+              Protects against prompt injections, system prompt exfiltration, and intercepts or redacts SSH keys, environment variables (.env), API credentials, and sensitive personal information.
+            </p>
+          </CardHeader>
+          <CardContent className={cn("space-y-6", !guardrailsConfig?.enabled && "pointer-events-none opacity-50")}>
+            {/* Action Mode */}
+            <div className="space-y-2">
+              <Label className="text-sm font-medium text-foreground">Action policy</Label>
+              <div className="flex flex-wrap gap-2">
+                {[
+                  { id: "block", label: "Block requests" },
+                  { id: "redact", label: "Redact sensitive data" },
+                  { id: "audit", label: "Audit only" },
+                ].map((act) => (
+                  <Button
+                    key={act.id}
+                    variant={guardrailsConfig?.action === act.id ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => updateGuardrailField("action", act.id)}
+                    disabled={guardrailsSaving || !guardrailsConfig}
+                  >
+                    {act.label}
+                  </Button>
+                ))}
+              </div>
+              <p className="text-xs text-tertiary">
+                {guardrailsConfig?.action === "block" && "Requests with detected violations are blocked before reaching the provider."}
+                {guardrailsConfig?.action === "redact" && "Sensitive values are replaced with safe placeholders before forwarding."}
+                {guardrailsConfig?.action === "audit" && "Traffic passes through unmodified while security violations are recorded in logs."}
+              </p>
+            </div>
+
+            <Separator />
+
+            {/* Modular Protection Rules */}
+            <div className="space-y-3">
+              <div>
+                <Label className="text-sm font-medium text-foreground">Active rules</Label>
+                <p className="text-xs text-tertiary">Select which security checks run on requests and responses</p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="flex items-center justify-between rounded-lg border border-border bg-background/50 p-3">
+                  <div className="space-y-0.5 pr-2">
+                    <p className="text-sm font-medium text-foreground">Secrets &amp; credentials</p>
+                    <p className="text-xs text-tertiary">SSH/PGP keys, generic API keys &amp; Bearer tokens, cloud &amp; AI providers, DB URIs</p>
+                  </div>
+                  <Switch
+                    checked={guardrailsConfig?.protectSecrets ?? true}
+                    onCheckedChange={(val) => updateGuardrailField("protectSecrets", val)}
+                    disabled={guardrailsSaving || !guardrailsConfig}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between rounded-lg border border-border bg-background/50 p-3">
+                  <div className="space-y-0.5 pr-2">
+                    <p className="text-sm font-medium text-foreground">Environment variables (.env)</p>
+                    <p className="text-xs text-tertiary">Pasted .env assignments containing tokens, keys, passwords</p>
+                  </div>
+                  <Switch
+                    checked={guardrailsConfig?.protectEnvVars ?? true}
+                    onCheckedChange={(val) => updateGuardrailField("protectEnvVars", val)}
+                    disabled={guardrailsSaving || !guardrailsConfig}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between rounded-lg border border-border bg-background/50 p-3">
+                  <div className="space-y-0.5 pr-2">
+                    <p className="text-sm font-medium text-foreground">Personal information (PII)</p>
+                    <p className="text-xs text-tertiary">CPF, CNPJ, credit cards (validated via Luhn), emails, phone numbers</p>
+                  </div>
+                  <Switch
+                    checked={guardrailsConfig?.protectPii ?? true}
+                    onCheckedChange={(val) => updateGuardrailField("protectPii", val)}
+                    disabled={guardrailsSaving || !guardrailsConfig}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between rounded-lg border border-border bg-background/50 p-3">
+                  <div className="space-y-0.5 pr-2">
+                    <p className="text-sm font-medium text-foreground">Prompt injection &amp; jailbreaks</p>
+                    <p className="text-xs text-tertiary">Instruction override, DAN mode, fake system tags, jailbreak personas</p>
+                  </div>
+                  <Switch
+                    checked={guardrailsConfig?.protectPromptInjection ?? true}
+                    onCheckedChange={(val) => updateGuardrailField("protectPromptInjection", val)}
+                    disabled={guardrailsSaving || !guardrailsConfig}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between rounded-lg border border-border bg-background/50 p-3">
+                  <div className="space-y-0.5 pr-2">
+                    <p className="text-sm font-medium text-foreground">System prompt protection</p>
+                    <p className="text-xs text-tertiary">Attempts to extract, repeat, or exfiltrate system instructions</p>
+                  </div>
+                  <Switch
+                    checked={guardrailsConfig?.protectSystemPromptLeak ?? true}
+                    onCheckedChange={(val) => updateGuardrailField("protectSystemPromptLeak", val)}
+                    disabled={guardrailsSaving || !guardrailsConfig}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between rounded-lg border border-border bg-background/50 p-3">
+                  <div className="space-y-0.5 pr-2">
+                    <p className="text-sm font-medium text-foreground">Traffic inspection</p>
+                    <p className="text-xs text-tertiary">Inspect inbound requests and outbound model responses</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-tertiary">In</span>
+                    <Switch
+                      checked={guardrailsConfig?.scanInbound ?? true}
+                      onCheckedChange={(val) => updateGuardrailField("scanInbound", val)}
+                      disabled={guardrailsSaving || !guardrailsConfig}
+                    />
+                    <span className="text-xs text-tertiary ml-1">Out</span>
+                    <Switch
+                      checked={guardrailsConfig?.scanOutbound ?? true}
+                      onCheckedChange={(val) => updateGuardrailField("scanOutbound", val)}
+                      disabled={guardrailsSaving || !guardrailsConfig}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <Separator />
+
+            {/* Test Scanner */}
+            <div className="space-y-3">
+              <div>
+                <Label className="text-sm font-medium text-foreground">Test rules</Label>
+                <p className="text-xs text-tertiary">Simulate a prompt to test detection and sanitization preview</p>
+              </div>
+
+              <div className="space-y-2">
+                <Textarea
+                  placeholder="Paste a prompt, SSH key, API key, .env snippet, or injection test..."
+                  value={testInput}
+                  onChange={(e) => setTestInput(e.target.value)}
+                  rows={3}
+                />
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={runGuardrailTest}
+                  disabled={testLoading || !testInput.trim()}
+                >
+                  {testLoading ? <LoaderCircle className="size-4 animate-spin" /> : "Test scan"}
+                </Button>
+              </div>
+
+              {testResult && (
+                <div className="rounded-lg border border-border bg-background/60 p-3 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-medium">
+                      {testResult.hasViolations ? (
+                        <span className="text-destructive font-semibold">
+                          {testResult.violations.length} violation(s) detected
+                        </span>
+                      ) : (
+                        <span className="text-success font-semibold">
+                          Clean — no security violations found
+                        </span>
+                      )}
+                    </span>
+                    {testResult.hasViolations && (
+                      <span className="text-xs font-mono text-tertiary">
+                        action: {testResult.actionTaken}
+                      </span>
+                    )}
+                  </div>
+
+                  {testResult.violations.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 pt-1">
+                      {testResult.violations.map((v, i) => (
+                        <span key={i} className="inline-flex items-center gap-1 rounded bg-muted px-2 py-0.5 text-xs text-foreground font-mono">
+                          {v.category}: {v.description}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
+                  {testResult.sanitizedText && testResult.sanitizedText !== testInput && (
+                    <div className="pt-2">
+                      <p className="text-xs text-tertiary font-mono">Sanitized output:</p>
+                      <pre className="text-xs bg-card p-2 rounded border border-border mt-1 overflow-x-auto whitespace-pre-wrap font-mono">
+                        {testResult.sanitizedText}
+                      </pre>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </CardContent>
         </Card>
         </>

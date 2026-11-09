@@ -34,6 +34,7 @@ import {
   normalizeChatGptAuth,
 } from "../integrations/chatgpt";
 import { injectCavemanPrompt } from "../plugins/caveman";
+import { guardrailsService } from "../plugins/guardrails";
 import { customSkillsProxy } from "../plugins/custom-skills";
 import { rtkManager } from "../plugins/rtk";
 import { filterLastToolMessage } from "../plugins/rtk/rtk.messages";
@@ -110,6 +111,34 @@ function anthropicPayload(body: any, modelId: string, stream = false) {
         : {}),
     stream,
   };
+}
+
+function applyGuardrailsToCompletion(completion: any, requestLogId?: string): any {
+  if (!completion || typeof completion !== "object" || !Array.isArray(completion.choices)) return completion;
+  const settings = guardrailsService.getSettings();
+  if (!settings.enabled || !settings.scanOutbound) return completion;
+
+  for (const choice of completion.choices) {
+    if (choice?.message?.content && typeof choice.message.content === "string") {
+      const scan = guardrailsService.scanOutbound(choice.message.content);
+      if (scan.hasViolations) {
+        const status = scan.shouldBlock ? "blocked" : scan.actionTaken === "redact" ? "redacted" : "audited";
+        if (requestLogId) {
+          requestLogService.setGuardrails(requestLogId, status, {
+            direction: "outbound",
+            action: scan.actionTaken,
+            violations: scan.violations,
+          });
+        }
+        if (scan.shouldBlock) {
+          choice.message.content = "[Response blocked by security guardrails due to sensitive data leak]";
+        } else if (scan.actionTaken === "redact") {
+          choice.message.content = scan.sanitizedText;
+        }
+      }
+    }
+  }
+  return completion;
 }
 
 const forwardedChatFields = [
@@ -262,6 +291,8 @@ function logProxyRejection(
     apiKeyPrefix?: string | null;
     streaming?: boolean;
     payload?: unknown;
+    guardrailsStatus?: "blocked" | "redacted" | "audited" | null;
+    guardrailsDetails?: unknown;
   },
 ) {
   const url = (() => { try { return new URL(ctx.request.url).pathname; } catch { return ctx.request.url; } })();
@@ -271,7 +302,10 @@ function logProxyRejection(
     headers: ctx.headers,
     payload: input.payload,
     stream: input.streaming,
-    klove: { rejected: true },
+    klove: {
+      rejected: true,
+      ...(input.guardrailsDetails ? { guardrails: input.guardrailsDetails } : {}),
+    },
   };
   try {
     requestLogService.logRejection({
@@ -286,6 +320,8 @@ function logProxyRejection(
       apiKeyPrefix: input.apiKeyPrefix ?? null,
       requestDetails,
       streaming: input.streaming,
+      guardrailsStatus: input.guardrailsStatus ?? null,
+      guardrailsDetails: input.guardrailsDetails,
     });
   } catch { /* Rejection logging must never affect the response. */ }
 }
@@ -1055,12 +1091,16 @@ export const proxyPlugin = (app: Elysia) =>
             message: `No active model "${parsed.modelId}" is configured for provider "${provider.name}"`,
           };
         }
-        // Public identifier resolved; use upstream technical ID only internally.
+        // Public identifier resolved; use upstream technical ID internally.
         parsed.modelId = modelRecord.model_id;
+        let currentRequestLogId: string | null = null;
         const fixThinkTag = (completion: any) =>
-          fixMissingThinkOpeningTag(
-            completion,
-            modelRecord.think_opening_tag_mode,
+          applyGuardrailsToCompletion(
+            fixMissingThinkOpeningTag(
+              completion,
+              modelRecord.think_opening_tag_mode,
+            ),
+            currentRequestLogId ?? undefined,
           );
         const fixThinkTagStream = (response: Response) =>
           fixThinkTagSseResponse(
@@ -1087,9 +1127,62 @@ export const proxyPlugin = (app: Elysia) =>
           }
         }
 
+        let inboundGuardrailsStatus: "blocked" | "redacted" | "audited" | null = null;
+        let inboundGuardrailsDetails: any = null;
+
         if (!isTitleGeneration) {
           body.messages = await injectCavemanPrompt(body.messages);
           body.messages = await customSkillsProxy.injectSkills(body.messages);
+
+          const guardrailResult = guardrailsService.scanInbound(body.messages);
+          if (guardrailResult.shouldBlock) {
+            const reasons = guardrailResult.violations.map((v) => v.description).join("; ");
+            logProxyRejection(
+              { request, headers, server },
+              {
+                statusCode: 400,
+                error: `Guardrails blocked request: ${reasons}`,
+                errorDetails: {
+                  type: "guardrails_violation",
+                  reasons: guardrailResult.violations.map((v) => v.description),
+                  violations: guardrailResult.violations,
+                },
+                providerId: provider.id,
+                providerName: provider.name,
+                modelName: parsed.modelId,
+                payload: body,
+                streaming: streamHint,
+                apiKeyPrefix: apiKey.prefix,
+                requesterName: apiKey.name,
+                guardrailsStatus: "blocked",
+                guardrailsDetails: {
+                  action: "block",
+                  direction: "inbound",
+                  violations: guardrailResult.violations,
+                },
+              },
+            );
+            set.status = 400;
+            return {
+              error: {
+                message: `Security violation blocked by guardrails: ${reasons}`,
+                type: "guardrails_violation",
+                code: "security_violation",
+                violations: guardrailResult.violations,
+              },
+            };
+          }
+          if (guardrailResult.hasViolations) {
+            inboundGuardrailsStatus = guardrailResult.actionTaken === "redact" ? "redacted" : "audited";
+            inboundGuardrailsDetails = {
+              action: guardrailResult.actionTaken,
+              direction: "inbound",
+              violations: guardrailResult.violations,
+            };
+            if (guardrailResult.actionTaken === "redact") {
+              body.messages = guardrailResult.sanitizedMessages;
+            }
+          }
         }
 
         if (provider.protocol === "conol") {
@@ -1127,6 +1220,8 @@ export const proxyPlugin = (app: Elysia) =>
           clientIp: clientIp(request, headers, server as any),
           requesterName: apiKey.name,
           apiKeyPrefix: apiKey.prefix,
+          guardrailsStatus: inboundGuardrailsStatus,
+          guardrailsDetails: inboundGuardrailsDetails,
           requestDetails: {
             method: request.method,
             url: new URL(request.url).pathname,
@@ -1134,9 +1229,11 @@ export const proxyPlugin = (app: Elysia) =>
             payload: body,
             stream: Boolean(body.stream),
             ...(capabilityWarnings.length ? { klove: { warnings: capabilityWarnings } } : {}),
+            ...(inboundGuardrailsDetails ? { klove: { guardrails: inboundGuardrailsDetails } } : {}),
           },
           streaming: Boolean(body.stream),
         });
+        currentRequestLogId = requestLogId;
 
         const requestSequence =
           provider.credential_mode === "round_robin" || provider.credential_mode === "failover"

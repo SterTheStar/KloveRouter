@@ -494,6 +494,7 @@ export const requestLogs = {
       status?: string;
       provider?: string;
       search?: string;
+      guardrails?: string;
       before?: string;
       withTotal?: boolean;
     } = {},
@@ -752,5 +753,29 @@ export const settings = {
     request<{ success: boolean; message: string }>("/api/settings/password", {
       method: "PUT",
       body: JSON.stringify({ current_password, new_password }),
+    }),
+};
+
+// Guardrails & AI Firewall
+export const guardrails = {
+  settings: () =>
+    request<import("../types").GuardrailsSettings>("/api/guardrails/settings"),
+  updateSettings: (data: Partial<import("../types").GuardrailsSettings>) =>
+    request<{ success: boolean; settings: import("../types").GuardrailsSettings }>("/api/guardrails/settings", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  stats: () =>
+    request<import("../types").GuardrailsStats>("/api/guardrails/stats"),
+  test: (text: string, customSettings?: any) =>
+    request<{
+      hasViolations: boolean;
+      shouldBlock: boolean;
+      actionTaken: string;
+      violations: import("../types").GuardrailViolation[];
+      sanitizedText: string;
+    }>("/api/guardrails/test", {
+      method: "POST",
+      body: JSON.stringify({ text, settings: customSettings }),
     }),
 };

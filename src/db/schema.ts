@@ -362,6 +362,8 @@ export function initSchema(db: Database): void {
       streaming INTEGER NOT NULL DEFAULT 0,
       streamed_chars INTEGER NOT NULL DEFAULT 0,
       streamed_bytes INTEGER NOT NULL DEFAULT 0,
+      guardrails_status TEXT,
+      guardrails_details TEXT,
       FOREIGN KEY (provider_id) REFERENCES providers(id) ON DELETE SET NULL
     );
   `);
@@ -386,9 +388,16 @@ export function initSchema(db: Database): void {
     ["streamed_bytes", "ALTER TABLE request_logs ADD COLUMN streamed_bytes INTEGER NOT NULL DEFAULT 0"],
     ["credential_kind", "ALTER TABLE request_logs ADD COLUMN credential_kind TEXT"],
     ["api_key_prefix", "ALTER TABLE request_logs ADD COLUMN api_key_prefix TEXT"],
+    ["guardrails_status", "ALTER TABLE request_logs ADD COLUMN guardrails_status TEXT"],
+    ["guardrails_details", "ALTER TABLE request_logs ADD COLUMN guardrails_details TEXT"],
   ] as const) {
     if (!requestLogCols.find((column) => column.name === name)) db.exec(sql);
   }
+
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_request_logs_guardrails_status
+      ON request_logs(guardrails_status, created_at);
+  `);
 
   // Migrate existing tables: add avatar column if missing
   const cols = db.query("PRAGMA table_info(providers)").all() as {

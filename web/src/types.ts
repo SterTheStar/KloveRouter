@@ -448,12 +448,14 @@ export interface RequestLog {
   streamed_bytes?: number;
   request_kind?: string | null;
   output_bytes?: number | null;
+  guardrails_status?: "blocked" | "redacted" | "audited" | null;
 }
 
 export interface RequestLogDetails extends RequestLog {
   request_details: unknown;
   response_details: unknown;
   error_details: unknown;
+  guardrails_details?: any;
 }
 
 export interface UserProfile {
@@ -593,4 +595,29 @@ export interface CustomSkill {
   is_active: boolean;
   created_at: string;
   updated_at: string;
+}
+
+export interface GuardrailsSettings {
+  enabled: boolean;
+  action: "block" | "redact" | "audit";
+  protectSecrets: boolean;
+  protectEnvVars: boolean;
+  protectPii: boolean;
+  protectPromptInjection: boolean;
+  protectSystemPromptLeak: boolean;
+  scanInbound: boolean;
+  scanOutbound: boolean;
+}
+
+export interface GuardrailViolation {
+  category: string;
+  description: string;
+  matchedTextPreview: string;
+}
+
+export interface GuardrailsStats {
+  scannedRequests: number;
+  blockedRequests: number;
+  redactedRequests: number;
+  violationsCount: Record<string, number>;
 }

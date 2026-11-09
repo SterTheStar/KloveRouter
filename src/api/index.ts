@@ -19,6 +19,7 @@ import {
 import { requestLogsPlugin } from "./request-logs.plugin";
 import { perchUsagePlugin } from "./perch.plugin";
 import { rtkPlugin } from "../plugins/rtk";
+import { guardrailsPlugin } from "../plugins/guardrails";
 import { setupPlugin } from "./setup.plugin";
 import { avatarMediaPlugin } from "./avatar-media.plugin";
 
@@ -40,6 +41,7 @@ export {
   requestLogsPlugin,
   perchUsagePlugin,
   rtkPlugin,
+  guardrailsPlugin,
   chatPlugin,
   chatControlPlugin,
   chatsPlugin,

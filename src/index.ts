@@ -33,6 +33,7 @@ import { getSecuritySecrets } from "./services/security.service";
 import { insecureUrlsAllowed } from "./services/ssrf";
 import { initRtkOnStartup, rtkPublicPlugin } from "./plugins/rtk";
 import { cavemanPublicPlugin, cavemanPlugin } from "./plugins/caveman";
+import { guardrailsPlugin } from "./plugins/guardrails";
 import { customSkillsPlugin } from "./plugins/custom-skills";
 import { refreshLiteLLMPricing } from "./services/litellm-pricing";
 
@@ -123,6 +124,7 @@ const protectedApp = new Elysia()
   .use(rtkPlugin)
   .use(cavemanPlugin)
   .use(customSkillsPlugin)
+  .use(guardrailsPlugin)
   .use(chatsPlugin)
   .use(chatControlPlugin)
   .use(chatPlugin);

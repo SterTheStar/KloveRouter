@@ -18,6 +18,10 @@ import {
   RiSwapLine as TokensIcon,
   RiHardDrive2Line as BytesIcon,
   RiPlugLine as KindIcon,
+  RiShieldLine as ShieldIcon,
+  RiShieldCrossLine as ShieldCrossIcon,
+  RiShieldFlashLine as ShieldAlertIcon,
+  RiShieldCheckLine as ShieldCheckIcon,
 } from "@remixicon/react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -116,6 +120,104 @@ function StatusBadge({ log }: { log: RequestLog }) {
   );
 }
 
+function GuardrailsDetailSection({ detail }: { detail: RequestLogDetails }) {
+  const guardrailsData = (detail.guardrails_details as any) || (detail.request_details as any)?.klove?.guardrails;
+  const status = detail.guardrails_status || guardrailsData?.action;
+  if (!status && !guardrailsData) return null;
+
+  const violations: Array<{ category: string; description: string; matchedTextPreview?: string }> =
+    guardrailsData?.violations || (detail.error_details as any)?.violations || [];
+
+  const isBlocked = status === "blocked" || status === "block";
+  const isRedacted = status === "redacted" || status === "redact";
+
+  return (
+    <div
+      className={`rounded-xl border p-4 space-y-3 ${
+        isBlocked
+          ? "border-destructive/30 bg-destructive/5"
+          : isRedacted
+            ? "border-amber-500/30 bg-amber-500/5"
+            : "border-sky-500/30 bg-sky-500/5"
+      }`}
+    >
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2.5">
+          {isBlocked ? (
+            <ShieldCrossIcon className="size-5 shrink-0 text-destructive" />
+          ) : (
+            <ShieldIcon className={`size-5 shrink-0 ${isRedacted ? "text-amber-500" : "text-sky-500"}`} />
+          )}
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="font-semibold text-sm text-foreground">
+                AI Firewall &amp; Guardrails Protection
+              </span>
+              <span
+                className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs font-semibold ${
+                  isBlocked
+                    ? "bg-destructive text-destructive-foreground"
+                    : isRedacted
+                      ? "bg-amber-500 text-white"
+                      : "bg-sky-500 text-white"
+                }`}
+              >
+                {isBlocked ? "Request Blocked" : isRedacted ? "Data Redacted" : "Violation Audited"}
+              </span>
+            </div>
+            <p className="text-xs text-tertiary mt-0.5">
+              {isBlocked
+                ? "This request was rejected before reaching the LLM provider to protect against security threats."
+                : isRedacted
+                  ? "Sensitive credentials, .env secrets, or confidential personal data were sanitized with safe placeholders."
+                  : "Security violation detected and recorded according to policy."}
+            </p>
+          </div>
+        </div>
+        {guardrailsData?.direction && (
+          <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-surface border text-tertiary uppercase">
+            Traffic: {guardrailsData.direction}
+          </span>
+        )}
+      </div>
+
+      {violations.length > 0 && (
+        <div className="space-y-2 pt-2 border-t border-border/40">
+          <p className="text-xs font-medium text-foreground">
+            Detected Security Violations ({violations.length}):
+          </p>
+          <div className="grid grid-cols-1 gap-2">
+            {violations.map((v, idx) => (
+              <div
+                key={idx}
+                className="rounded-lg border border-border/60 bg-card p-2.5 text-xs space-y-1 shadow-2xs"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="font-medium text-foreground flex items-center gap-1.5">
+                    <span className="size-1.5 rounded-full bg-primary" />
+                    {v.description}
+                  </span>
+                  <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-muted text-tertiary uppercase">
+                    {v.category}
+                  </span>
+                </div>
+                {v.matchedTextPreview && (
+                  <div className="mt-1 pt-0.5 text-[11px] text-tertiary">
+                    <span>Matched preview: </span>
+                    <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] text-destructive break-all">
+                      {v.matchedTextPreview}
+                    </code>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function requestKindLabel(kind?: string | null) {
   if (!kind) return "";
   return kind
@@ -181,6 +283,33 @@ const LogRow = memo(function LogRow({
             <span className="text-[10px] capitalize text-tertiary">{log.status === "pending" && log.streaming ? "streaming" : log.status}</span>
           )}
           {log.streaming && !log.request_kind ? <span className="text-[10px] text-tertiary">· stream</span> : null}
+          {log.guardrails_status === "blocked" && (
+            <span
+              className="inline-flex items-center gap-1 rounded-md bg-destructive/15 px-1.5 py-0.5 text-[10px] font-semibold text-destructive shadow-xs"
+              title="Blocked by Guardrails AI Firewall"
+            >
+              <ShieldCrossIcon className="size-2.5 shrink-0" />
+              Blocked
+            </span>
+          )}
+          {log.guardrails_status === "redacted" && (
+            <span
+              className="inline-flex items-center gap-1 rounded-md bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-amber-600 dark:text-amber-400 shadow-xs"
+              title="Sensitive secrets / PII redacted by Guardrails"
+            >
+              <ShieldIcon className="size-2.5 shrink-0" />
+              Redacted
+            </span>
+          )}
+          {log.guardrails_status === "audited" && (
+            <span
+              className="inline-flex items-center gap-1 rounded-md bg-sky-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-sky-600 dark:text-sky-400 shadow-xs"
+              title="Security violation audited by Guardrails"
+            >
+              <ShieldIcon className="size-2.5 shrink-0" />
+              Audited
+            </span>
+          )}
         </div>
         {log.error_message && (
           <div className="mt-1 flex max-w-[240px] items-start gap-1 text-xs text-destructive" title={log.error_message}>
@@ -308,6 +437,7 @@ export default function RequestLogsPage() {
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
+  const [guardrailsFilter, setGuardrailsFilter] = useState("");
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -325,7 +455,7 @@ export default function RequestLogsPage() {
   const listGeneration = useRef(0);
   const loadingMoreRef = useRef(false);
   // Mirror of state the stream handler reads outside React's render cycle.
-  const filtersRef = useRef({ search, status });
+  const filtersRef = useRef({ search, status, guardrails: guardrailsFilter });
   const pausedRef = useRef(false);
   const pendingNewRef = useRef(0);
   const pendingUpdates = useRef(new Map<string, RequestLog>());
@@ -333,8 +463,8 @@ export default function RequestLogsPage() {
   const scrollAnchor = useRef<HTMLTableSectionElement>(null);
 
   useEffect(() => {
-    filtersRef.current = { search, status };
-  }, [search, status]);
+    filtersRef.current = { search, status, guardrails: guardrailsFilter };
+  }, [search, status, guardrailsFilter]);
 
   const flushPendingUpdates = useCallback(() => {
     flushTimer.current = undefined;
@@ -365,6 +495,10 @@ export default function RequestLogsPage() {
     const { log } = event;
     if (filtersRef.current.status && log.status !== filtersRef.current.status) return;
     if (filtersRef.current.search && !matchesSearch(log, filtersRef.current.search)) return;
+    if (filtersRef.current.guardrails) {
+      if (filtersRef.current.guardrails === "violations" && !log.guardrails_status) return;
+      if (["blocked", "redacted", "audited"].includes(filtersRef.current.guardrails) && log.guardrails_status !== filtersRef.current.guardrails) return;
+    }
 
     if (pausedRef.current) {
       if (event.type === "created") {
@@ -434,6 +568,7 @@ export default function RequestLogsPage() {
         limit: PAGE_SIZE,
         status: status || undefined,
         search: search || undefined,
+        guardrails: guardrailsFilter || undefined,
         before,
         withTotal: isFirstPage,
       });
@@ -459,13 +594,13 @@ export default function RequestLogsPage() {
         setLoadingMore(false);
       }
     }
-  }, [logs.length, search, status]);
+  }, [guardrailsFilter, logs.length, search, status]);
 
   // Reload the first page whenever filters change (search is already debounced).
   useEffect(() => {
     void fetchPage();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search, status]);
+  }, [search, status, guardrailsFilter]);
 
   // Debounce the search input so each keystroke does not hit the API.
   useEffect(() => {
@@ -658,6 +793,66 @@ export default function RequestLogsPage() {
                 ))}
               </DropdownMenuContent>
             </DropdownMenu>
+
+            {/* Guardrails Filter */}
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={
+                  <Button
+                    variant="outline"
+                    className="h-9 min-w-36 justify-between gap-2 bg-background"
+                  />
+                }
+              >
+                <span className="flex items-center gap-1.5 truncate">
+                  {guardrailsFilter === "violations" ? (
+                    <>
+                      <ShieldAlertIcon className="size-3.5 text-destructive" />
+                      <span>Violations</span>
+                    </>
+                  ) : guardrailsFilter === "blocked" ? (
+                    <>
+                      <ShieldCrossIcon className="size-3.5 text-destructive" />
+                      <span>Blocked</span>
+                    </>
+                  ) : guardrailsFilter === "redacted" ? (
+                    <>
+                      <ShieldIcon className="size-3.5 text-amber-500" />
+                      <span>Redacted</span>
+                    </>
+                  ) : guardrailsFilter === "audited" ? (
+                    <>
+                      <ShieldIcon className="size-3.5 text-sky-500" />
+                      <span>Audited</span>
+                    </>
+                  ) : (
+                    <>
+                      <ShieldIcon className="size-3.5 text-tertiary" />
+                      <span>All Guardrails</span>
+                    </>
+                  )}
+                </span>
+                <ArrowDown className="size-4 shrink-0 text-tertiary" />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                {[
+                  ["", "All traffic", ShieldIcon],
+                  ["violations", "All violations", ShieldAlertIcon],
+                  ["blocked", "Blocked only", ShieldCrossIcon],
+                  ["redacted", "Redacted only", ShieldIcon],
+                  ["audited", "Audited only", ShieldIcon],
+                ].map(([value, label, IconComponent]) => (
+                  <DropdownMenuItem
+                    key={label as string}
+                    onClick={() => setGuardrailsFilter(value as string)}
+                    className="flex items-center gap-2"
+                  >
+                    <IconComponent className="size-4 text-tertiary" />
+                    <span>{label as string}</span>
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </CardHeader>
         <CardContent className="p-0">
@@ -742,6 +937,7 @@ export default function RequestLogsPage() {
             {detailError && <Alert variant="destructive"><AlertDescription>Unable to load this request log: {detailError}</AlertDescription></Alert>}
             {detail && <div className="space-y-4">
               <div className="flex flex-wrap items-center gap-2"><StatusBadge log={detail} /><span>{detail.provider_name} / {detail.model_name}</span><span className="text-tertiary">{detail.credential_label || "credential masked"}</span></div>
+              <GuardrailsDetailSection detail={detail} />
               {([ ["Request metadata / payload", detail.request_details], ["Response payload", detail.response_details], ["Error details", detail.error_details] ] as const).map(([title, value]) => (
                 <section key={title} className="space-y-1">
                   <div className="flex items-center justify-between"><h3 className="text-sm font-medium text-foreground">{title}</h3><Button variant="ghost" size="sm" disabled={value == null} onClick={() => copy(JSON.stringify(value, null, 2))}><CopyIcon className="size-3" /> Copy</Button></div>
