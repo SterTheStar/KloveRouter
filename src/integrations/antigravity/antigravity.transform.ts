@@ -368,7 +368,7 @@ export function deriveSessionId(body: any, accountEmail?: string): string {
 export async function toGoogleBody(
   body: any,
   projectId: string,
-  sessionId = crypto.randomUUID(),
+  sessionId: string = crypto.randomUUID(),
 ) {
   const cleanInputBody = cleanCacheControl(body);
 
@@ -749,7 +749,7 @@ export function googleStreamToOpenAI(
               object: "chat.completion.chunk",
               created: Math.floor(Date.now() / 1000),
               model,
-              choices: [{ index: 0, delta, finish_reason: "stop" }],
+              choices: [{ index: 0, delta: {}, finish_reason: "stop" }],
             });
           }
         } catch (error: any) {

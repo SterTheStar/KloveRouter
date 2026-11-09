@@ -170,28 +170,6 @@ function requireLog(id: string): RequestLog | null {
   return row ? hydrateRow(row) : null;
 }
 
-/**
- * Writes whose SQL embeds the detail bundles a client needs (request/response
- * details) rebuild the list row from the values already in hand, avoiding an
- * extra read just to publish the event.
- */
-function publishFromWrite(id: string, requestDetails: string | null, responseDetails: string | null, fallback: RequestLog) {
-  try {
-    const request = requestDetails ? parseDetail(requestDetails) as any : null;
-    const response = responseDetails ? parseDetail(responseDetails) as any : null;
-    const outputBytes = Number(response?.output_bytes);
-    const log: RequestLog = {
-      ...fallback,
-      request_kind: typeof request?.klove?.media_type === "string" ? request.klove.media_type : null,
-      output_bytes: Number.isFinite(outputBytes) ? outputBytes : fallback.output_bytes ?? null,
-    };
-    publish({ type: "updated", log });
-  } catch {
-    const log = requireLog(id);
-    if (log) publish({ type: "updated", log });
-  }
-}
-
 export const requestLogService = {
   subscribe(listener: RequestLogListener) {
     listeners.add(listener);
@@ -327,7 +305,7 @@ export const requestLogService = {
     const cacheRead = input.cacheRead ?? 0;
     const cacheWrite = input.cacheWrite ?? 0;
     let cost = input.cost;
-    // Also supplies the point-of-write fields used to publish the update.
+    // Supplies provider/protocol needed for pricing.
     const request = db
       .query("SELECT r.provider_id, r.provider_name, r.model_name, p.protocol, p.name AS name, p.base_url, m.use_litellm_pricing, r.error_details FROM request_logs r LEFT JOIN providers p ON p.id = r.provider_id LEFT JOIN models m ON m.provider_id = r.provider_id AND m.model_id = r.model_name WHERE r.id = ?")
       .get(id) as { provider_id: string | null; provider_name: string | null; model_name: string; protocol: string | null; name: string | null; base_url: string | null; use_litellm_pricing: number | null; error_details: string | null } | null;
@@ -392,37 +370,11 @@ export const requestLogService = {
     const { changed } = db.query("SELECT changes() AS changed").get() as { changed: number };
     if (!changed) return;
     try {
-      const stored = db.query("SELECT request_details, response_details, streaming FROM request_logs WHERE id = ?").get(id) as { request_details: string | null; response_details: string | null; streaming: number | null } | null;
-      if (!stored) return;
-      publishFromWrite(id, stored.request_details, stored.response_details, {
-        id,
-        provider_id: request?.provider_id ?? null,
-        provider_name: request?.provider_name ?? "",
-        model_name: request?.model_name ?? "",
-        client_ip: null,
-        requester_name: null,
-        credential_label: null,
-        credential_identity: null,
-        credential_kind: null,
-        api_key_prefix: null,
-        status,
-        status_code: statusCode,
-        tokens_prompt: prompt,
-        tokens_completion: completion,
-        tokens_cache_read: cacheRead,
-        tokens_cache_write: cacheWrite,
-        tokens_total: prompt + completion,
-        estimated_cost_usd: cost ?? 0,
-        tps:
-          input.tps ??
-          (input.durationMs && input.durationMs > 0 ? completion / (input.durationMs / 1000) : null),
-        duration_ms: input.durationMs ?? null,
-        error_message: typeof input.error === "string" ? input.error : input.error ? JSON.stringify(input.error) : null,
-        created_at: "",
-        completed_at: null,
-        streaming: Boolean(stored.streaming),
-        streamed_chars: 0,
-      });
+      // Re-read the persisted row so the live update carries requester_name,
+      // api_key_prefix, credential_* and client_ip set at start/setCredential.
+      // Rebuilding from in-hand values blanked them (showed "—") on completion.
+      const log = requireLog(id);
+      if (log) publish({ type: "updated", log });
     } catch { /* Logging must never affect the request. */ }
   },
 
