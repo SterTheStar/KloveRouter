@@ -592,17 +592,7 @@ export default function SkillsPage() {
                     </div>
                   </CardHeader>
 
-                  <CardFooter className="flex items-center justify-between border-t border-border pt-3 text-xs">
-                    <div className="flex items-center gap-1.5 text-tertiary text-[11px]">
-                      <span
-                        className={cn(
-                          "size-1.5 rounded-full",
-                          skill.is_active ? "bg-primary" : "bg-muted-foreground/40",
-                        )}
-                      />
-                      <span>{skill.is_active ? "Active in prompts" : "Disabled"}</span>
-                    </div>
-
+                  <CardFooter className="flex items-center justify-end border-t border-border pt-3 text-xs">
                     <div className="flex items-center gap-1">
                       <Button
                         variant="ghost"
@@ -833,7 +823,7 @@ export default function SkillsPage() {
                   {viewSkill.is_installed && (
                     <Badge variant="secondary" className="text-xs gap-1 font-medium">
                       <RiCheckLine className="size-3 text-primary" />
-                      Installed
+                      {viewSkill.is_active ? "Installed (Active)" : "Installed (Inactive)"}
                     </Badge>
                   )}
                 </div>
@@ -915,12 +905,17 @@ export default function SkillsPage() {
                       </Button>
                       <Button
                         size="sm"
-                        variant={viewSkill.is_active ? "default" : "secondary"}
+                        variant={viewSkill.is_active ? "outline" : "default"}
                         onClick={() =>
                           viewSkill.installed_id && handleToggle(viewSkill.installed_id)
                         }
+                        disabled={actionInProgress === viewSkill.installed_id}
+                        className="gap-1.5"
                       >
-                        {viewSkill.is_active ? "Active in prompts" : "Enable skill"}
+                        {actionInProgress === viewSkill.installed_id && (
+                          <RiLoader4Line className="size-3.5 animate-spin" />
+                        )}
+                        {viewSkill.is_active ? "Deactivate" : "Activate"}
                       </Button>
                     </>
                   ) : (
