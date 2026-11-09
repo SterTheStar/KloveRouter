@@ -10,7 +10,6 @@ import {
   RiScales3Line as LimitsLine,
   RiTerminalBoxLine as KeysLine,
   RiSettings4Line as Settings4Line,
-  RiCupLine as CupLine,
   RiChatAiLine as ChatAiLine,
   RiSparklingLine as SkillsLine,
 } from "@remixicon/react";
@@ -35,25 +34,6 @@ const items = [
   { page: "docs" as Page, label: "Documentation", icon: BookOpenLine },
   { page: "settings" as Page, label: "Settings", icon: Settings4Line },
 ];
-
-function BuyMeACoffeeButton() {
-  return (
-    <div className="mb-3 px-1">
-      <Button
-        render={<a href="https://ko-fi.com/V7V11EYI5U" target="_blank" rel="noreferrer" />}
-        variant="default"
-        className="kofi-button group relative h-10 w-full justify-center bg-primary px-3 text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground"
-        aria-label="Support me on Ko-fi"
-      >
-        <span className="kofi-icon-wrap" aria-hidden="true">
-          <CupLine className="kofi-icon size-6" />
-          <span className="kofi-steam" />
-        </span>
-        <span className="text-sm font-semibold">Support me on Ko-fi</span>
-      </Button>
-    </div>
-  );
-}
 
 export default function Sidebar({
   currentPage,
@@ -128,7 +108,6 @@ export default function Sidebar({
       </nav>
 
       <div className="shrink-0 p-3">
-        <BuyMeACoffeeButton />
         <div className="flex items-center gap-2 rounded-lg border border-border/60 bg-card p-2 shadow-xs">
           <button
             type="button"
