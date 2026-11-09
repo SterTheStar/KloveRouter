@@ -28,6 +28,7 @@ import type { UserProfile } from "./types";
 import { queryCache, queryKeys, invalidateChats } from "./lib/query-cache";
 import { navigateToRoute, pathForRoute, routeFromPath, type AppRoute } from "./lib/navigation";
 import { useSidebarWidth } from "./hooks/use-sidebar-width";
+import AsciiSaturnLoading from "./components/AsciiSaturnLoading";
 
 function sortChats(chats: ChatSession[]): ChatSession[] {
   return chats
@@ -209,11 +210,7 @@ export default function App() {
   }, [isAuth, currentPage]);
 
   if (loading) {
-    return (
-      <div className="flex min-h-svh items-center justify-center">
-        <LoaderCircle className="size-6 animate-spin text-muted-foreground" />
-      </div>
-    );
+    return <AsciiSaturnLoading />;
   }
 
   if (!isAuth) {
