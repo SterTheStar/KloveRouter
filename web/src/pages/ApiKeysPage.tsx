@@ -180,7 +180,7 @@ export default function ApiKeysPage() {
           <KeyRound className="mx-auto size-8 text-tertiary" />
           <h2 className="mt-3 text-sm font-medium text-foreground">No API keys</h2>
           <p className="mt-1 text-xs text-tertiary">
-            Generate a key to use the Klove proxy.
+            Generate a key to use the Saturn proxy.
           </p>
           <Button className="mt-5" onClick={() => setCreateOpen(true)}>
             Generate your first key

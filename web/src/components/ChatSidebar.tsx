@@ -23,6 +23,7 @@ import {
 import type { ChatSession, Page, UserProfile } from "../types";
 import DisplayAvatar from "./DisplayAvatar";
 import ChatCommandPalette from "./ChatCommandPalette";
+import SaturnMark from "./SaturnMark";
 import SidebarResizeHandle from "./SidebarResizeHandle";
 import { pathForPage, shouldHandleLinkClick } from "../lib/navigation";
 
@@ -154,14 +155,7 @@ export default function ChatSidebar({
               title="Expand chat sidebar"
               aria-label="Expand chat sidebar"
             >
-              <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" className="size-5" aria-hidden="true">
-                <path d="M5.6906 6 3.1651 1.6258A8 8 0 0 1 9.1106.0765L5.6906 6Z" fill="currentColor" />
-                <path d="M5.1133 9 1.6936 3.077A8 8 0 0 0 .0619 9h5.0514Z" fill="currentColor" />
-                <path d="M4.8964 15.3757A8 8 0 0 1 .5815 11h6.8411l-2.5262 4.3757Z" fill="currentColor" />
-                <path d="M8 16a8 8 0 0 1-1.1106-.0765L10.3094 10l2.5255 4.3742A8 8 0 0 1 8 16Z" fill="currentColor" />
-                <path d="M16 8a8 8 0 0 1-1.6936 4.9229L10.8868 7h5.0513c.0419.3276.0619.6614.0619 1Z" fill="currentColor" />
-                <path d="M11.1036.6243A8 8 0 0 1 15.4185 5H8.5774l2.5262-4.3757Z" fill="currentColor" />
-              </svg>
+              <SaturnMark className="size-5 text-sidebar-foreground" />
             </button>
           </div>
           <div className="flex flex-col items-center gap-1.5">
@@ -239,25 +233,12 @@ export default function ChatSidebar({
           }}
           className="flex min-w-0 items-center gap-3 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
         >
-          <svg
-            viewBox="0 0 16 16"
-            fill="none"
-            xmlns="http://www.w3.org/2000/svg"
-            className="size-8 shrink-0 text-foreground"
-            aria-hidden="true"
-          >
-            <path d="M5.6906 6 3.1651 1.6258A8 8 0 0 1 9.1106.0765L5.6906 6Z" fill="currentColor" />
-            <path d="M5.1133 9 1.6936 3.077A8 8 0 0 0 .0619 9h5.0514Z" fill="currentColor" />
-            <path d="M4.8964 15.3757A8 8 0 0 1 .5815 11h6.8411l-2.5262 4.3757Z" fill="currentColor" />
-            <path d="M8 16a8 8 0 0 1-1.1106-.0765L10.3094 10l2.5255 4.3742A8 8 0 0 1 8 16Z" fill="currentColor" />
-            <path d="M16 8a8 8 0 0 1-1.6936 4.9229L10.8868 7h5.0513c.0419.3276.0619.6614.0619 1Z" fill="currentColor" />
-            <path d="M11.1036.6243A8 8 0 0 1 15.4185 5H8.5774l2.5262-4.3757Z" fill="currentColor" />
-          </svg>
+          <SaturnMark className="size-8 shrink-0 text-foreground" />
           <span
             className="truncate text-2xl font-semibold tracking-tight text-foreground"
             style={{ fontFamily: "'Playwrite NZ Basic', cursive" }}
           >
-            Klove
+            Saturn
           </span>
         </a>
         <Button

@@ -143,7 +143,7 @@ export default function AddModelModal({
               <div>
                 <div className="text-sm font-medium text-foreground">Model identity</div>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Upstream identifier and friendly name shown in Klove.
+                  Upstream identifier and friendly name shown in Saturn.
                 </p>
               </div>
               <div className="grid min-w-0 gap-4 sm:grid-cols-2">
@@ -515,7 +515,7 @@ export function ThinkTagModeEditor({
       <div>
         <div className="text-sm font-medium text-foreground">Think tag handling</div>
         <p className="mt-1 text-xs text-muted-foreground">
-          How Klove should treat responses that omit the opening &lt;think&gt;
+          How Saturn should treat responses that omit the opening &lt;think&gt;
           tag.
         </p>
       </div>

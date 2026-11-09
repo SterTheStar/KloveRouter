@@ -609,7 +609,7 @@ export default function RequestLogsPage() {
             Request logs
           </h1>
           <p className="mt-1 text-sm text-tertiary">
-            Monitor every completion request routed through Klove.
+            Monitor every completion request routed through Saturn.
           </p>
         </div>
         <div className="flex gap-2">

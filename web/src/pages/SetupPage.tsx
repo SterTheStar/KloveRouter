@@ -4,6 +4,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import SaturnMark from "@/components/SaturnMark";
 
 export default function SetupPage({
   onComplete,
@@ -28,11 +29,14 @@ export default function SetupPage({
   return (
     <main className="flex min-h-svh flex-col bg-background">
       <header className="flex h-20 items-center px-6 sm:px-10 lg:px-14">
-        <span className="font-heading text-xl font-semibold tracking-tight">Klove</span>
+        <div className="flex items-center gap-3">
+          <SaturnMark className="size-7 text-foreground" />
+          <span className="font-heading text-xl font-semibold tracking-tight">Saturn</span>
+        </div>
       </header>
       <div className="flex flex-1 items-center justify-center px-6 pb-10 sm:px-10">
         <section className="w-full max-w-[360px] text-center">
-          <h1 className="font-heading text-2xl font-semibold tracking-tight text-foreground">Set up Klove</h1>
+          <h1 className="font-heading text-2xl font-semibold tracking-tight text-foreground">Set up Saturn</h1>
           <p className="mt-2 text-sm leading-6 text-muted-foreground">Create your profile and secure admin password.</p>
           <form onSubmit={submit} className="mt-8 space-y-5 text-left">
             <div className="space-y-2"><Label htmlFor="name">Name</Label><Input id="name" value={name} onChange={(e) => setName(e.target.value)} required autoFocus /></div>

@@ -11,6 +11,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import SaturnMark from "@/components/SaturnMark";
 import { copyToClipboard } from "@/lib/clipboard";
 import { navigateToRoute, routeFromPath, shouldHandleLinkClick } from "@/lib/navigation";
 
@@ -19,7 +20,7 @@ type DocGroup = "Guide" | "API reference" | "Integrations";
 type DocItem = { id: DocId; title: string; group: DocGroup; description: string; keywords: string };
 
 const docs: DocItem[] = [
-  { id: "overview", title: "Overview", group: "Guide", description: "Klove Router API at a glance", keywords: "gateway openai compatible endpoints capabilities" },
+  { id: "overview", title: "Overview", group: "Guide", description: "Saturn Router API at a glance", keywords: "gateway openai compatible endpoints capabilities" },
   { id: "quickstart", title: "Quickstart", group: "Guide", description: "Make your first request", keywords: "curl node python rust install api key" },
   { id: "auth", title: "Authentication", group: "Guide", description: "API keys and base URLs", keywords: "bearer authorization x-api-key" },
   { id: "models", title: "List models", group: "API reference", description: "Discover available model IDs", keywords: "GET catalog models pool capabilities" },
@@ -28,9 +29,9 @@ const docs: DocItem[] = [
   { id: "responses", title: "Responses", group: "API reference", description: "OpenAI Responses format", keywords: "POST input output response" },
   { id: "messages", title: "Anthropic Messages", group: "API reference", description: "Anthropic-compatible messages", keywords: "POST anthropic claude system content" },
   { id: "streaming", title: "Streaming and errors", group: "API reference", description: "SSE, passthrough, and error handling", keywords: "streaming sse chunks buffer event errors status" },
-  { id: "claude-code", title: "Claude Code", group: "Integrations", description: "Connect Claude Code to Klove", keywords: "anthropic base url token env" },
+  { id: "claude-code", title: "Claude Code", group: "Integrations", description: "Connect Claude Code to Saturn", keywords: "anthropic base url token env" },
   { id: "codex", title: "Codex CLI", group: "Integrations", description: "Configure a custom Codex provider", keywords: "openai config toml responses wire_api" },
-  { id: "opencode", title: "OpenCode", group: "Integrations", description: "Add Klove as a custom provider", keywords: "opencode json npm baseURL model" },
+  { id: "opencode", title: "OpenCode", group: "Integrations", description: "Add Saturn as a custom provider", keywords: "opencode json npm baseURL model" },
 ];
 
 const codeSamples: Record<string, Record<string, string>> = {
@@ -222,15 +223,8 @@ export default function DocsPage({ onBack }: { onBack: () => void }) {
         <div className="shrink-0">
         <div className="mb-6 px-2 pt-1">
           <div className="flex items-center gap-3">
-            <svg viewBox="0 0 16 16" fill="none" aria-hidden="true" className="size-8 shrink-0 text-foreground">
-              <path d="M5.6906 6.00001L3.16512 1.62576C4.50811 0.605527 6.18334 0 8 0C8.37684 0 8.74759 0.0260554 9.11056 0.076463L5.6906 6.00001Z" fill="currentColor" />
-              <path d="M5.11325 9L1.69363 3.07705C0.632438 4.43453 0 6.14341 0 8C0 8.33866 0.0210434 8.67241 0.0618939 9H5.11325Z" fill="currentColor" />
-              <path d="M4.89635 15.3757C2.93947 14.5512 1.37925 12.9707 0.581517 11H7.42265L4.89635 15.3757Z" fill="currentColor" />
-              <path d="M8 16C7.62316 16 7.25241 15.9739 6.88944 15.9235L10.3094 10L12.8349 14.3742C11.4919 15.3945 9.81666 16 8 16Z" fill="currentColor" />
-              <path d="M16 8C16 9.85659 15.3676 11.5655 14.3064 12.9229L10.8868 7H15.9381C15.979 7.32759 16 7.66141 16 8Z" fill="currentColor" />
-              <path d="M11.1036 0.624326C13.0605 1.44877 14.6208 3.02927 15.4185 5H8.57735L11.1036 0.624326Z" fill="currentColor" />
-            </svg>
-            <span className="text-xl font-semibold tracking-tight text-foreground">Klove Docs</span>
+            <SaturnMark className="size-8 shrink-0 text-foreground" />
+            <span className="text-xl font-semibold tracking-tight text-foreground">Saturn Docs</span>
           </div>
         </div>
         <div className="relative mb-5"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-tertiary" /><Input aria-label="Search documentation" placeholder="Search docs..." className="h-9 pl-9" value={search} onChange={(event) => { const value = event.target.value; setSearch(value); const match = docs.find((item) => `${item.title} ${item.description} ${item.keywords}`.toLowerCase().includes(value.trim().toLowerCase())); if (match) selectDoc(match.id); }} /></div>

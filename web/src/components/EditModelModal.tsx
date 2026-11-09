@@ -179,7 +179,7 @@ export default function EditModelModal({
               <div>
                 <div className="text-sm font-medium">Model identity</div>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Upstream identifier and friendly name shown in Klove.
+                  Upstream identifier and friendly name shown in Saturn.
                 </p>
               </div>
               <div className="grid min-w-0 gap-4 sm:grid-cols-2">
