@@ -1,3 +1,4 @@
+import type React from "react";
 import {
   RiServerLine as ProvidersLine,
   RiLogoutBoxRLine as LogoutBoxRLine,
@@ -15,13 +16,14 @@ import {
 } from "@remixicon/react";
 import { Button } from "@/components/ui/button";
 import DisplayAvatar from "./DisplayAvatar";
+import SidebarResizeHandle from "./SidebarResizeHandle";
 import type { Page } from "../types";
 import type { UserProfile } from "../types";
 import { pathForPage, shouldHandleLinkClick } from "../lib/navigation";
 
 const items = [
-  { page: "chat" as Page, label: "Chat", icon: ChatAiLine },
   { page: "dashboard" as Page, label: "Providers", icon: ProvidersLine },
+  { page: "chat" as Page, label: "Chat", icon: ChatAiLine, badge: "Beta" },
   { page: "models" as Page, label: "Models", icon: ModelsLine },
   { page: "model-pools" as Page, label: "Compound models", icon: CompoundLine },
   { page: "skills" as Page, label: "Skills & Prompts", icon: SkillsLine },
@@ -58,70 +60,67 @@ export default function Sidebar({
   onLogout,
   profile,
   mobileOpen,
+  width,
+  isResizing,
+  onResizeStart,
+  onResetWidth,
 }: {
   currentPage: Page;
   onNavigate: (page: Page) => void;
   onLogout: () => void;
   profile: UserProfile;
   mobileOpen: boolean;
+  width?: number;
+  isResizing?: boolean;
+  onResizeStart?: (event: React.MouseEvent) => void;
+  onResetWidth?: () => void;
 }) {
   return (
-    <aside className={`fixed inset-y-0 left-0 z-40 flex h-svh w-72 shrink-0 flex-col bg-surface text-foreground transition-transform duration-200 md:sticky md:z-auto ${mobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"}`}>
-      <div className="flex h-16 items-center justify-center gap-3 px-5">
-        <svg
-          viewBox="0 0 16 16"
-          fill="none"
-          xmlns="http://www.w3.org/2000/svg"
-          className="size-8 text-foreground"
+    <aside
+      style={{ width: `${width ?? 288}px`, maxWidth: "85vw" }}
+      className={`fixed inset-y-0 left-0 z-40 flex h-svh shrink-0 flex-col border-r border-border bg-sidebar text-sidebar-foreground md:sticky md:z-auto ${
+        isResizing ? "transition-none select-none" : "transition-transform duration-200"
+      } ${mobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"}`}
+    >
+      <div className="relative flex h-16 shrink-0 items-center justify-center gap-3 px-5">
+        <a
+          href={pathForPage("dashboard")}
+          onClick={(event) => {
+            if (!shouldHandleLinkClick(event)) return;
+            event.preventDefault();
+            onNavigate("dashboard");
+          }}
+          className="flex min-w-0 items-center gap-3 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
         >
-          <g id="SVGRepo_bgCarrier" strokeWidth="0"></g>
-          <g
-            id="SVGRepo_tracerCarrier"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          ></g>
-          <g id="SVGRepo_iconCarrier">
-            {" "}
-            <path
-              d="M5.6906 6.00001L3.16512 1.62576C4.50811 0.605527 6.18334 0 8 0C8.37684 0 8.74759 0.0260554 9.11056 0.076463L5.6906 6.00001Z"
-              fill="currentColor"
-            ></path>{" "}
-            <path
-              d="M5.11325 9L1.69363 3.07705C0.632438 4.43453 0 6.14341 0 8C0 8.33866 0.0210434 8.67241 0.0618939 9H5.11325Z"
-              fill="currentColor"
-            ></path>{" "}
-            <path
-              d="M4.89635 15.3757C2.93947 14.5512 1.37925 12.9707 0.581517 11H7.42265L4.89635 15.3757Z"
-              fill="currentColor"
-            ></path>{" "}
-            <path
-              d="M8 16C7.62316 16 7.25241 15.9739 6.88944 15.9235L10.3094 10L12.8349 14.3742C11.4919 15.3945 9.81666 16 8 16Z"
-              fill="currentColor"
-            ></path>{" "}
-            <path
-              d="M16 8C16 9.85659 15.3676 11.5655 14.3064 12.9229L10.8868 7H15.9381C15.979 7.32759 16 7.66134 16 8Z"
-              fill="currentColor"
-            ></path>{" "}
-            <path
-              d="M11.1036 0.624326C13.0605 1.44877 14.6208 3.02927 15.4185 5H8.57735L11.1036 0.624326Z"
-              fill="currentColor"
-            ></path>{" "}
-          </g>
-        </svg>
-        <span
-          className="text-2xl font-semibold tracking-tight text-foreground"
-          style={{ fontFamily: "'Playwrite NZ Basic', cursive" }}
-        >
-          Klove
-        </span>
+          <svg
+            viewBox="0 0 16 16"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+            className="size-8 shrink-0 text-foreground"
+            aria-hidden="true"
+          >
+            <path d="M5.6906 6 3.1651 1.6258A8 8 0 0 1 9.1106.0765L5.6906 6Z" fill="currentColor" />
+            <path d="M5.1133 9 1.6936 3.077A8 8 0 0 0 .0619 9h5.0514Z" fill="currentColor" />
+            <path d="M4.8964 15.3757A8 8 0 0 1 .5815 11h6.8411l-2.5262 4.3757Z" fill="currentColor" />
+            <path d="M8 16a8 8 0 0 1-1.1106-.0765L10.3094 10l2.5255 4.3742A8 8 0 0 1 8 16Z" fill="currentColor" />
+            <path d="M16 8a8 8 0 0 1-1.6936 4.9229L10.8868 7h5.0513c.0419.3276.0619.6614.0619 1Z" fill="currentColor" />
+            <path d="M11.1036.6243A8 8 0 0 1 15.4185 5H8.5774l2.5262-4.3757Z" fill="currentColor" />
+          </svg>
+          <span
+            className="truncate text-2xl font-semibold tracking-tight text-foreground"
+            style={{ fontFamily: "'Playwrite NZ Basic', cursive" }}
+          >
+            Klove
+          </span>
+        </a>
       </div>
+
       <nav className="flex-1 space-y-1 overflow-y-auto p-3">
-        {items.map(({ page, label, icon: Icon }) => (
+        {items.map(({ page, label, icon: Icon, badge }) => (
           <Button
             key={page}
-            size="lg"
             variant={currentPage === page ? "secondary" : "ghost"}
-            className="w-full justify-start gap-3 text-sm font-medium"
+            className="h-10 w-full justify-start gap-3 rounded-lg px-3 text-sm font-medium"
             render={<a href={pathForPage(page)} />}
             onClick={(event) => {
               if (!shouldHandleLinkClick(event)) return;
@@ -129,14 +128,20 @@ export default function Sidebar({
               onNavigate(page);
             }}
           >
-            <Icon className="size-5" />
-            {label}
+            <Icon className="size-5 shrink-0" />
+            <span className="truncate">{label}</span>
+            {badge && (
+              <span className="ml-auto rounded-md bg-foreground/10 px-1.5 py-0.5 font-mono text-[10px] font-medium uppercase tracking-wider text-muted-foreground transition-colors group-hover/button:text-foreground">
+                {badge}
+              </span>
+            )}
           </Button>
         ))}
       </nav>
-      <div className="p-3">
+
+      <div className="shrink-0 p-3">
         <BuyMeACoffeeButton />
-        <div className="flex items-center gap-2 rounded-lg bg-card p-2">
+        <div className="flex items-center gap-2 rounded-lg border border-border/60 bg-card p-2 shadow-xs">
           <button
             type="button"
             onClick={() => onNavigate("settings")}
@@ -154,7 +159,7 @@ export default function Sidebar({
             type="button"
             size="icon-sm"
             variant="ghost"
-            className="shrink-0"
+            className="shrink-0 text-muted-foreground hover:text-foreground"
             onClick={onLogout}
             title="Logout"
             aria-label="Logout"
@@ -163,6 +168,14 @@ export default function Sidebar({
           </Button>
         </div>
       </div>
+
+      {onResizeStart && (
+        <SidebarResizeHandle
+          onMouseDown={onResizeStart}
+          onDoubleClick={onResetWidth}
+          isResizing={isResizing}
+        />
+      )}
     </aside>
   );
 }

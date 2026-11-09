@@ -27,6 +27,7 @@ import { settings } from "./api/client";
 import type { UserProfile } from "./types";
 import { queryCache, queryKeys, invalidateChats } from "./lib/query-cache";
 import { navigateToRoute, pathForRoute, routeFromPath, type AppRoute } from "./lib/navigation";
+import { useSidebarWidth } from "./hooks/use-sidebar-width";
 
 function sortChats(chats: ChatSession[]): ChatSession[] {
   return chats
@@ -57,6 +58,12 @@ export default function App() {
   const [darkMode, setDarkMode] = useState(() => {
     return localStorage.getItem("klove_theme") !== "light";
   });
+  const {
+    width: sidebarWidth,
+    isResizing: isSidebarResizing,
+    startResizing: startSidebarResize,
+    resetWidth: resetSidebarWidth,
+  } = useSidebarWidth();
 
   useEffect(() => {
     const syncRoute = () => {
@@ -269,8 +276,13 @@ export default function App() {
               onExport={(chat) => void exportChat(chat)}
               onBack={() => handleNavigate("dashboard")}
               onLogout={logout}
+              onNavigate={handleNavigate}
               generatingChats={generatingChats}
               mobileOpen={mobileSidebarOpen}
+              width={sidebarWidth}
+              isResizing={isSidebarResizing}
+              onResizeStart={startSidebarResize}
+              onResetWidth={resetSidebarWidth}
             />
           ) : (
             <Sidebar
@@ -279,6 +291,10 @@ export default function App() {
               onLogout={logout}
               profile={profile}
               mobileOpen={mobileSidebarOpen}
+              width={sidebarWidth}
+              isResizing={isSidebarResizing}
+              onResizeStart={startSidebarResize}
+              onResetWidth={resetSidebarWidth}
             />
           ))}
           {mobileSidebarOpen && currentPage !== "docs" && (
