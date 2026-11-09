@@ -391,11 +391,6 @@ export default function SkillsPage() {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const activeCount = useMemo(
-    () => installedSkills.filter((s) => s.is_active).length,
-    [installedSkills],
-  );
-
   const hasMoreMarketplace = marketplaceSkills.length < totalMarketplace;
 
   // Parsed details for the modal view
@@ -515,18 +510,6 @@ export default function SkillsPage() {
       {/* ========================================================================= */}
       {activeTab === "installed" && (
         <div className="space-y-4">
-          {installedSkills.length > 0 && (
-            <div className="flex items-center justify-between rounded-lg border border-border bg-card/60 px-4 py-2.5 text-xs text-tertiary">
-              <span className="flex items-center gap-1.5">
-                <RiInformationLine className="size-4 text-primary shrink-0" />
-                <span>
-                  <strong>{activeCount}</strong> of {installedSkills.length} skills active. Active
-                  skills are merged automatically into every proxy chat request.
-                </span>
-              </span>
-            </div>
-          )}
-
           {installedLoading ? (
             <div className="flex justify-center p-12">
               <RiLoader4Line className="size-6 animate-spin text-tertiary" />
@@ -567,39 +550,29 @@ export default function SkillsPage() {
               </CardContent>
             </Card>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {filteredInstalled.map((skill) => (
                 <Card
                   key={skill.id}
                   className={cn(
-                    "flex flex-col justify-between transition-colors",
+                    "flex flex-col justify-between hover:border-border-strong transition-colors",
                     !skill.is_active && "opacity-75 bg-card/40",
                   )}
                 >
                   <CardHeader className="space-y-2 pb-3">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="space-y-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <CardTitle className="text-base truncate">{skill.name}</CardTitle>
-                          {skill.category && (
-                            <Badge variant="outline" className="text-[10px] py-0 px-1.5 font-normal">
-                              {skill.category}
-                            </Badge>
-                          )}
-                          <Badge
-                            variant={skill.source === "marketplace" ? "secondary" : "default"}
-                            className="text-[10px] py-0 px-1.5 font-normal"
-                          >
-                            {skill.source === "marketplace" ? "Marketplace" : "Custom"}
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        {skill.category && (
+                          <Badge variant="outline" className="text-[10px] py-0 px-1.5 font-normal truncate max-w-[130px]">
+                            {skill.category}
                           </Badge>
-                        </div>
-                        {skill.description ? (
-                          <p className="text-xs text-tertiary line-clamp-2">{skill.description}</p>
-                        ) : (
-                          <p className="text-xs font-mono text-tertiary truncate">
-                            {skill.content.split("\n")[0]}
-                          </p>
                         )}
+                        <Badge
+                          variant={skill.source === "marketplace" ? "secondary" : "default"}
+                          className="text-[10px] py-0 px-1.5 font-normal"
+                        >
+                          {skill.source === "marketplace" ? "Marketplace" : "Custom"}
+                        </Badge>
                       </div>
 
                       <Switch
@@ -609,14 +582,28 @@ export default function SkillsPage() {
                         aria-label={`Toggle ${skill.name}`}
                       />
                     </div>
+
+                    <div className="space-y-1">
+                      <CardTitle className="text-sm font-semibold line-clamp-1">{skill.name}</CardTitle>
+                      <p className="text-xs text-tertiary line-clamp-3 leading-relaxed">
+                        {skill.description ||
+                          (skill.content ? skill.content.split("\n")[0] : "No description provided.")}
+                      </p>
+                    </div>
                   </CardHeader>
 
                   <CardFooter className="flex items-center justify-between border-t border-border pt-3 text-xs">
-                    <span className="text-tertiary text-[11px]">
-                      {skill.is_active ? "Active in prompts" : "Disabled"}
-                    </span>
+                    <div className="flex items-center gap-1.5 text-tertiary text-[11px]">
+                      <span
+                        className={cn(
+                          "size-1.5 rounded-full",
+                          skill.is_active ? "bg-primary" : "bg-muted-foreground/40",
+                        )}
+                      />
+                      <span>{skill.is_active ? "Active in prompts" : "Disabled"}</span>
+                    </div>
 
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1">
                       <Button
                         variant="ghost"
                         size="xs"
