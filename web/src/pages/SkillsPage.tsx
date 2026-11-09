@@ -860,7 +860,7 @@ export default function SkillsPage() {
               </div>
 
               {/* Modal Footer */}
-              <DialogFooter className="px-6 py-3.5 border-t border-border bg-card/40 shrink-0 flex items-center justify-between sm:justify-between">
+              <DialogFooter className="m-0 px-6 py-4 sm:py-5 border-t border-border bg-card/60 shrink-0 flex items-center justify-between sm:justify-between">
                 <div className="text-xs text-tertiary">
                   Agent Skill Exchange standard (SKILL.md)
                 </div>
