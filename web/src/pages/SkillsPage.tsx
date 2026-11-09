@@ -633,7 +633,7 @@ export default function SkillsPage() {
             onClick={() => setActiveTab("designs")}
             className="gap-2"
           >
-            <RiPaletteLine className="size-4 text-primary" />
+            <RiPaletteLine className="size-4" />
             <span>UI Designs</span>
             <Badge variant="secondary" className="px-1.5 py-0 text-[10px]">
               {designSkills.length || 12}
