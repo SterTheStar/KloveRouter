@@ -372,7 +372,32 @@ function AntigravityQuotaSummary({ usage }: { usage: AntigravityUsage }) {
   const groups = usage.groups.filter((group) => group.buckets.length > 0);
   return (
     <div className="space-y-5">
-      {groups.length === 0 && (
+      {groups.length === 0 && usage.models.length > 0 && (
+        <div className="space-y-3">
+          <div className="text-sm font-medium text-foreground">
+            Models Quota
+          </div>
+          <div className="space-y-2">
+            {usage.models.map((model) => (
+              <div
+                key={model.model_id}
+                className="flex items-center justify-between text-xs py-1.5 border-b border-border/40 last:border-0"
+              >
+                <span className="font-medium text-foreground">
+                  {model.display_name || model.model_id}
+                </span>
+                <span className="text-tertiary">
+                  {model.remaining_fraction !== null
+                    ? `${Math.round(model.remaining_fraction * 100)}% remaining`
+                    : "Available"}
+                  {model.reset_in ? ` (resets in ${model.reset_in})` : ""}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      {groups.length === 0 && usage.models.length === 0 && (
         <div className="text-sm text-tertiary">
           Antigravity returned no quota groups for this account.
         </div>
@@ -749,7 +774,7 @@ export default function UsageLimitsPage() {
                     ) : provider.protocol === "perch" ? (
                       <PerchUsageSummary usage={perchData} />
                     ) : provider.protocol === "antigravity" ? (
-                    antigravityQuota?.groups?.length ? (
+                    antigravityQuota && (antigravityQuota.groups?.length || antigravityQuota.models?.length) ? (
                       <AntigravityQuotaSummary usage={antigravityQuota} />
                     ) : (
                       <div className="text-sm text-tertiary">

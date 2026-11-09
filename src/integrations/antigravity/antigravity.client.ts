@@ -4,7 +4,7 @@ import {
   discoverProject,
   DEFAULT_ANTIGRAVITY_PROJECT_ID,
 } from "./antigravity-auth.service";
-import { getImpersonationHeaders } from "./antigravity.headers";
+import { getImpersonationHeaders, buildHubUserAgent } from "./antigravity.headers";
 import {
   deriveSessionId,
   googleStreamToOpenAI,
@@ -147,114 +147,150 @@ function titleizeModelId(id: string) {
     .join(" ");
 }
 
+const QUOTA_SUMMARY_ENDPOINTS = [
+  "https://daily-cloudcode-pa.googleapis.com/v1internal:retrieveUserQuotaSummary",
+  "https://cloudcode-pa.googleapis.com/v1internal:retrieveUserQuotaSummary",
+  "https://daily-cloudcode-pa.sandbox.googleapis.com/v1internal:retrieveUserQuotaSummary",
+] as const;
+
+const AVAILABLE_MODELS_ENDPOINTS = [
+  "https://daily-cloudcode-pa.sandbox.googleapis.com/v1internal:fetchAvailableModels",
+  "https://daily-cloudcode-pa.googleapis.com/v1internal:fetchAvailableModels",
+  "https://cloudcode-pa.googleapis.com/v1internal:fetchAvailableModels",
+] as const;
+
+const CODE_ASSIST_ENDPOINTS = [
+  "https://cloudcode-pa.googleapis.com/v1internal:loadCodeAssist",
+  "https://daily-cloudcode-pa.googleapis.com/v1internal:loadCodeAssist",
+] as const;
+
+async function callCloudCodeWithFallback(
+  endpoints: readonly string[],
+  token: string,
+  fingerprint: ReturnType<typeof antigravityAuthService.fingerprint>,
+  initialPayload: Record<string, any>,
+  customUserAgent?: string,
+): Promise<{ data: any; text: string; status: number }> {
+  let lastResult = { data: null as any, text: "", status: 0 };
+  const baseHeaders = getImpersonationHeaders(token, fingerprint);
+  const headers: Record<string, string> = {
+    ...baseHeaders,
+    "User-Agent": customUserAgent || baseHeaders["User-Agent"] || buildHubUserAgent(),
+  };
+
+  for (let i = 0; i < endpoints.length; i++) {
+    const url = endpoints[i];
+    let currentPayload = { ...initialPayload };
+    let retriedWithoutProject = false;
+
+    while (true) {
+      try {
+        const response = await fetch(url, {
+          method: "POST",
+          headers,
+          body: JSON.stringify(currentPayload),
+        });
+        const text = await response.text().catch(() => "");
+        let data: any = null;
+        try {
+          data = JSON.parse(text);
+        } catch {
+          data = null;
+        }
+        lastResult = { data, text, status: response.status };
+
+        if (response.status >= 200 && response.status < 300) {
+          return lastResult;
+        }
+
+        // 403 retry without project ID if project was passed
+        if (response.status === 403 && "project" in currentPayload && !retriedWithoutProject) {
+          delete currentPayload.project;
+          retriedWithoutProject = true;
+          continue;
+        }
+
+        // Abort immediately for 401
+        if (response.status === 401) {
+          return lastResult;
+        }
+
+        break;
+      } catch (err: any) {
+        lastResult = { data: null, text: err?.message || String(err), status: 0 };
+        break;
+      }
+    }
+  }
+
+  return lastResult;
+}
+
 export async function antigravityModels(credential: any) {
   const account = await antigravityAuthService.ensure(credential.id);
-  if (!account.access_token || !account.project_id)
+  if (!account.access_token)
     throw new Error("Antigravity account is not ready");
 
   const fingerprint = antigravityAuthService.fingerprint(account);
-  const endpoints = [
-    "https://daily-cloudcode-pa.googleapis.com/v1internal:fetchAvailableModels",
-    "https://cloudcode-pa.googleapis.com/v1internal:fetchAvailableModels",
-  ];
-  let lastError = "";
-  for (const endpoint of endpoints) {
-    const headers = {
-      ...getImpersonationHeaders(account.access_token, fingerprint),
-      "User-Agent": "antigravity",
-    };
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({ project: account.project_id }),
-    });
-    const text = await response.text().catch(() => "");
-    const data = (() => {
-      try {
-        return JSON.parse(text);
-      } catch {
-        return null;
-      }
-    })();
-    if (response.ok) {
-      const raw = data?.availableModels ?? data?.models ?? [];
-      const entries = Array.isArray(raw)
-        ? raw.map((m: any) => ({
-            ...m,
-            id: m.model?.name || m.name || m.displayName,
-            display_name:
-              m.displayMetadata?.label || m.displayName || m.model?.name,
-          }))
-        : Object.entries(raw).map(([id, m]: any) => ({
-            ...m,
-            id: id.replace(/^models\//, ""),
-            display_name: m.displayMetadata?.label || m.displayName || id,
-          }));
-      const models = filterAntigravityModels(
-        entries
-          .filter((m: any) => m.id)
-          .map((m: any, index: number) => ({
-            ...m,
-            id: m.id,
-            display_name: m.display_name || undefined,
-            _index: index,
-          })),
-      )
-        .sort(
-          (a: any, b: any) =>
-            Number(!a.display_name) - Number(!b.display_name) ||
-            a._index - b._index,
-        )
-        .map((m: any) => ({
+  const payload = account.project_id ? { project: account.project_id } : {};
+  const hubUa = buildHubUserAgent();
+
+  const response = await callCloudCodeWithFallback(
+    AVAILABLE_MODELS_ENDPOINTS,
+    account.access_token,
+    fingerprint,
+    payload,
+    hubUa,
+  );
+
+  if (response.status >= 200 && response.status < 300) {
+    const raw = response.data?.availableModels ?? response.data?.models ?? [];
+    const entries = Array.isArray(raw)
+      ? raw.map((m: any) => ({
           ...m,
-          display_name: m.display_name || titleizeModelId(m.id),
+          id: m.model?.name || m.name || m.displayName,
+          display_name:
+            m.displayMetadata?.label || m.displayName || m.model?.name,
+        }))
+      : Object.entries(raw).map(([id, m]: any) => ({
+          ...m,
+          id: id.replace(/^models\//, ""),
+          display_name: m.displayMetadata?.label || m.displayName || id,
         }));
-      if (models.length) return models;
-      lastError = "Antigravity returned no available models";
-      continue;
-    }
-    lastError =
-      data?.error?.message ||
-      data?.message ||
-      text ||
-      `HTTP ${response.status}`;
-    if (response.status === 401) {
-      throw new Error(
-        `Antigravity authentication failed while syncing models: ${lastError}`,
-      );
-    }
+    const models = filterAntigravityModels(
+      entries
+        .filter((m: any) => m.id)
+        .map((m: any, index: number) => ({
+          ...m,
+          id: m.id,
+          display_name: m.display_name || undefined,
+          _index: index,
+        })),
+    )
+      .sort(
+        (a: any, b: any) =>
+          Number(!a.display_name) - Number(!b.display_name) ||
+          a._index - b._index,
+      )
+      .map((m: any) => ({
+        ...m,
+        display_name: m.display_name || titleizeModelId(m.id),
+      }));
+    if (models.length) return models;
+    throw new Error("Antigravity returned no available models");
+  }
+
+  const lastError =
+    response.data?.error?.message ||
+    response.data?.message ||
+    response.text ||
+    `HTTP ${response.status}`;
+  if (response.status === 401) {
+    throw new Error(
+      `Antigravity authentication failed while syncing models: ${lastError}`,
+    );
   }
   throw new Error(`Antigravity models request failed: ${lastError}`);
-}
-
-const CLOUDCODE_HOSTS = [
-  "https://daily-cloudcode-pa.googleapis.com",
-  "https://cloudcode-pa.googleapis.com",
-];
-
-async function cloudCodePost(
-  endpoint: string,
-  token: string,
-  fingerprint: ReturnType<typeof antigravityAuthService.fingerprint>,
-  body: unknown,
-): Promise<{ data: any; text: string; status: number }> {
-  const response = await fetch(`${CLOUDCODE_HOSTS[0]}/v1internal:${endpoint}`, {
-    method: "POST",
-    headers: {
-      ...getImpersonationHeaders(token, fingerprint),
-      "User-Agent": "antigravity",
-    },
-    body: JSON.stringify(body),
-  });
-  const text = await response.text().catch(() => "");
-  const data = (() => {
-    try {
-      return JSON.parse(text);
-    } catch {
-      return null;
-    }
-  })();
-  return { data, text, status: response.status };
 }
 
 function parseResetTime(raw: unknown): string | null {
@@ -372,6 +408,57 @@ function groupsFromSummary(raw: any): AntigravityQuotaGroup[] {
   });
 }
 
+function fallbackGroupsFromModels(models: AntigravityUsage["models"]): AntigravityQuotaGroup[] {
+  if (!models.length) return [];
+  const byGroup: Record<string, AntigravityUsage["models"]> = {};
+  for (const model of models) {
+    const gid = model.group_id || "gemini";
+    if (!byGroup[gid]) byGroup[gid] = [];
+    byGroup[gid].push(model);
+  }
+
+  const result: AntigravityQuotaGroup[] = [];
+  const groupMeta: Record<string, { name: string; desc: string }> = {
+    gemini: { name: "Gemini Models", desc: "Per-model rate limits" },
+    "3p": { name: "Claude and GPT Models", desc: "Anthropic and OpenAI model limits" },
+    argon: { name: "Gemini 4 Argon", desc: "Gemini 4 Argon rate limits" },
+  };
+
+  for (const [gid, mList] of Object.entries(byGroup)) {
+    const meta = groupMeta[gid] || { name: gid.toUpperCase(), desc: "Model limits" };
+    const withFraction = mList.filter((m) => m.remaining_fraction !== null);
+    const minFraction = withFraction.length > 0
+      ? Math.min(...withFraction.map((m) => m.remaining_fraction!))
+      : null;
+    const sortedResets = withFraction
+      .map((m) => m.reset_at)
+      .filter((r): r is string => Boolean(r))
+      .sort();
+    const earliestReset = sortedResets[0] || null;
+
+    result.push({
+      id: gid,
+      group_name: meta.name,
+      description: meta.desc,
+      available: mList.length > 0,
+      buckets: [
+        quotaBucket(
+          `fallback-${gid}`,
+          meta.name,
+          "Model Limits",
+          earliestReset,
+          minFraction,
+          null,
+          mList.length === 0,
+          minFraction === null,
+        ),
+      ],
+    });
+  }
+
+  return result.sort((a, b) => groupSortKey(a.group_name) - groupSortKey(b.group_name));
+}
+
 function groupsFromModels(raw: any): {
   groups: AntigravityQuotaGroup[];
   models: AntigravityUsage["models"];
@@ -407,61 +494,148 @@ function groupsFromModels(raw: any): {
         : null,
     });
   }
-  return { groups: [], models };
+  return { groups: fallbackGroupsFromModels(models), models };
+}
+
+export function populateSyntheticArgonModels(
+  models: AntigravityUsage["models"],
+  quotaGroups?: readonly AntigravityQuotaGroup[],
+): void {
+  if (!quotaGroups || quotaGroups.length === 0) return;
+
+  const hasArgon = models.some((m) => {
+    const normalized = m.model_id.replace(/^models\//i, "").toLowerCase();
+    return normalized.startsWith("gemini-4-argon");
+  });
+  if (hasArgon) return;
+
+  for (const group of quotaGroups) {
+    const isArgonGroup =
+      group.id === "argon" ||
+      group.group_name.toLowerCase().includes("argon") ||
+      group.buckets.some((b) => b.bucket_id.toLowerCase().includes("argon"));
+    if (!isArgonGroup) continue;
+
+    const bucket =
+      group.buckets.find((b) => b.bucket_id.toLowerCase().includes("argon")) ?? group.buckets[0];
+    if (!bucket) continue;
+
+    const remaining = bucket.remaining_fraction ?? 1;
+    models.push({
+      model_id: "gemini-4-argon-high",
+      display_name: "Gemini 4 Argon (High)",
+      group_id: "argon",
+      remaining_fraction: remaining,
+      used_percent: bucket.used_percent ?? (remaining !== null ? Math.round((1 - remaining) * 100) : 0),
+      reset_at: bucket.reset_at,
+      reset_in: bucket.reset_in,
+    });
+    break;
+  }
+}
+
+function resolveSubscriptionTier(payload: any): string | null {
+  const paidTier = payload?.paidTier;
+  if (typeof paidTier?.name === "string" && paidTier.name.trim()) {
+    return paidTier.name;
+  }
+  if (typeof paidTier?.id === "string" && paidTier.id.trim()) {
+    return paidTier.id;
+  }
+
+  const ineligible = Array.isArray(payload?.ineligibleTiers) && payload.ineligibleTiers.length > 0;
+  if (!ineligible) {
+    const currentTier = payload?.currentTier;
+    if (typeof currentTier?.name === "string" && currentTier.name.trim()) {
+      return currentTier.name;
+    }
+    if (typeof currentTier?.id === "string" && currentTier.id.trim()) {
+      return currentTier.id;
+    }
+  }
+
+  if (Array.isArray(payload?.allowedTiers) && payload.allowedTiers.length > 0) {
+    const preferred = payload.allowedTiers.find((t: any) => t.is_default === true) ?? payload.allowedTiers[0];
+    if (typeof preferred?.name === "string" && preferred.name.trim()) {
+      return ineligible ? `${preferred.name} (Restricted)` : preferred.name;
+    }
+    if (typeof preferred?.id === "string" && preferred.id.trim()) {
+      return ineligible ? `${preferred.id} (Restricted)` : preferred.id;
+    }
+  }
+
+  return null;
 }
 
 export async function antigravityUsage(credential: any): Promise<AntigravityUsage> {
   const account = await antigravityAuthService.ensure(credential.id);
-  if (!account.access_token || !account.project_id)
+  if (!account.access_token)
     throw new Error("Antigravity account is not ready");
   const fingerprint = antigravityAuthService.fingerprint(account);
-  let plan: string | null = null;
+  const hubUa = buildHubUserAgent();
 
-  const summary = await cloudCodePost(
-    "retrieveUserQuotaSummary",
+  const summaryPayload = account.project_id ? { project: account.project_id } : {};
+  const summary = await callCloudCodeWithFallback(
+    QUOTA_SUMMARY_ENDPOINTS,
     account.access_token,
     fingerprint,
-    { project: account.project_id },
+    summaryPayload,
+    hubUa,
   );
-  const modelsResponse = await cloudCodePost(
-    "fetchAvailableModels",
+
+  const modelsResponse = await callCloudCodeWithFallback(
+    AVAILABLE_MODELS_ENDPOINTS,
     account.access_token,
     fingerprint,
-    { project: account.project_id },
+    summaryPayload,
+    hubUa,
   );
-  if (summary.status !== 200 && modelsResponse.status !== 200)
+
+  if (summary.status !== 200 && modelsResponse.status !== 200) {
     throw new Error(
       modelsResponse.data?.error?.message ||
         modelsResponse.data?.message ||
+        summary.data?.error?.message ||
+        summary.data?.message ||
         modelsResponse.text ||
-        `Antigravity quota failed (${modelsResponse.status})`,
+        summary.text ||
+        `Antigravity quota failed (${modelsResponse.status || summary.status})`,
     );
-  const groups = summary.status === 200 ? groupsFromSummary(summary.data) : [];
-  const fallback = groupsFromModels(
+  }
+
+  const summaryGroups = summary.status === 200 ? groupsFromSummary(summary.data) : [];
+  const modelResult = groupsFromModels(
     modelsResponse.data?.models ?? modelsResponse.data?.availableModels,
   );
 
-  const tiers = await cloudCodePost("loadCodeAssist", account.access_token, fingerprint, {
-    metadata: {
-      ideType: fingerprint.ideType,
-      platform: "PLATFORM_UNSPECIFIED",
-      pluginType: "GEMINI",
+  const groups = summaryGroups.length > 0 ? summaryGroups : modelResult.groups;
+
+  // Synthesize Gemini 4 Argon model if missing from models catalog
+  populateSyntheticArgonModels(modelResult.models, groups);
+
+  const tiers = await callCloudCodeWithFallback(
+    CODE_ASSIST_ENDPOINTS,
+    account.access_token,
+    fingerprint,
+    {
+      metadata: {
+        ideType: fingerprint.ideType || "ANTIGRAVITY",
+        platform: "PLATFORM_UNSPECIFIED",
+        pluginType: "GEMINI",
+      },
     },
-  });
-  if (tiers.status === 200)
-    plan =
-      tiers.data?.paidTier?.name ||
-      tiers.data?.paidTier?.id ||
-      tiers.data?.currentTier?.name ||
-      tiers.data?.currentTier?.id ||
-      null;
+    hubUa,
+  );
+
+  const plan = tiers.status === 200 ? resolveSubscriptionTier(tiers.data) : null;
 
   const usage: AntigravityUsage = {
     fetched_at: new Date().toISOString(),
     plan,
     groups: groups.sort((a, b) => groupSortKey(a.group_name) - groupSortKey(b.group_name)),
-    models: fallback.models,
+    models: modelResult.models,
   };
+
   credentialService.update(credential.id, {
     quota_json: JSON.stringify(usage),
   });

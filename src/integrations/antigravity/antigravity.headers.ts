@@ -7,6 +7,17 @@ function stableId(value: string) {
     .slice(0, 16);
 }
 
+export function buildHubUserAgent(version = "2.26.0"): string {
+  const platform =
+    process.platform === "win32"
+      ? "windows"
+      : process.platform === "darwin"
+        ? "darwin"
+        : "linux";
+  const arch = process.arch === "x64" ? "amd64" : process.arch === "arm64" ? "arm64" : process.arch;
+  return `antigravity/hub/${version} (aidev_client; os_type=${platform}; arch=${arch})`;
+}
+
 export function generateFingerprint(email: string): DeviceFingerprint {
   const device = stableId(email);
   const arch = process.arch === "arm64" ? "arm64" : "x64";
@@ -17,7 +28,7 @@ export function generateFingerprint(email: string): DeviceFingerprint {
         ? "win32"
         : "linux";
   return {
-    userAgent: `antigravity/hub/2.25.0 ${platform}/${arch}`,
+    userAgent: buildHubUserAgent(),
     quotaUser: `device-${device}`,
     deviceId: device,
     platform: `${platform}/${arch}`,
