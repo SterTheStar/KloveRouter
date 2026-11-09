@@ -145,7 +145,7 @@ export function applyResolvedReasoning(body: any, model: Model) {
       body.reasoning = Object.keys(rest).length ? rest : undefined;
     }
   }
-  Object.defineProperty(body, "__klove_reasoning", {
+  Object.defineProperty(body, "__saturn_reasoning", {
     value: resolved,
     configurable: true,
     writable: true,

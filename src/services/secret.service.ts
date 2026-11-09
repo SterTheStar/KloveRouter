@@ -44,7 +44,7 @@ export function decryptSecret(value: string | null | undefined) {
     ]).toString("utf8");
   } catch {
     throw new Error(
-      "Unable to decrypt stored credential. Check KLOVE_ENCRYPTION_KEY.",
+      "Unable to decrypt stored credential. Check SATURN_ENCRYPTION_KEY.",
     );
   }
 }

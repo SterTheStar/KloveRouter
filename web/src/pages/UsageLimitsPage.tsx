@@ -226,7 +226,7 @@ function PerchUsageSummary({ usage }: { usage: PerchUsage | null }) {
       {usage.source === "local" && (
         <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-300">
           {usage.warning ||
-            "Perch usage endpoint unavailable. Showing local KloveRouter usage."}
+            "Perch usage endpoint unavailable. Showing local SaturnRouter usage."}
         </div>
       )}
 
@@ -782,7 +782,7 @@ export default function UsageLimitsPage() {
                         "Perch account"}{" "}
                       ·{" "}
                       {perchData?.source === "local"
-                        ? "local KloveRouter usage"
+                        ? "local SaturnRouter usage"
                         : "Perch usage"}
                     </>
                   ) : (

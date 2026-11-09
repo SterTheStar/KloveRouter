@@ -2,7 +2,7 @@
   "id": "antigravity",
   "name": "Google Antigravity",
   "protocol": "antigravity",
-  "description": "Google account access to Gemini models through Klove's Antigravity integration.",
+  "description": "Google account access to Gemini models through Saturn's Antigravity integration.",
   "website": "https://antigravity.google",
   "docsUrl": "https://antigravity.google",
   "placeholder": "https://daily-cloudcode-pa.googleapis.com",

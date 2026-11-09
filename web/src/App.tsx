@@ -57,7 +57,7 @@ export default function App() {
     avatar: null,
   });
   const [darkMode, setDarkMode] = useState(() => {
-    return localStorage.getItem("klove_theme") !== "light";
+    return (localStorage.getItem("saturn_theme") ?? localStorage.getItem("klove_theme")) !== "light";
   });
   const {
     width: sidebarWidth,
@@ -90,7 +90,7 @@ export default function App() {
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", darkMode);
-    localStorage.setItem("klove_theme", darkMode ? "dark" : "light");
+    localStorage.setItem("saturn_theme", darkMode ? "dark" : "light");
   }, [darkMode]);
 
   useEffect(() => {

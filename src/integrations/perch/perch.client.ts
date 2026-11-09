@@ -198,7 +198,7 @@ function normalizeAppUrl(value: string | undefined | null): string {
   return (value?.trim() || DEFAULT_APP_URL).replace(/\/+$/, "");
 }
 
-/** Resolve a public Klove model id to the `manualModelOptionId` Perch expects. */
+/** Resolve a public Saturn model id to the `manualModelOptionId` Perch expects. */
 export function resolvePerchModel(requested: string): {
   exposed: string;
   optionId: string | null;
@@ -389,7 +389,7 @@ async function loadSession(
   const stored = await readStoredSession(endpoint);
   if (!stored)
     throw new PerchError(
-      "No Perch session was found. Run `perch login` on the KloveRouter host, or paste a session JSON/access token in the provider credential.",
+      "No Perch session was found. Run `perch login` on the SaturnRouter host, or paste a session JSON/access token in the provider credential.",
       { status: 401, code: "not_authenticated" },
     );
   return { session: stored, source: { kind: "file", path: perchSessionPath() } };
@@ -773,8 +773,8 @@ function legacyToolChoice(body: any): unknown {
 
 function effortLevel(body: any): string | null {
   const raw =
-    body?.__klove_reasoning?.upstreamValue ??
-    body?.__klove_reasoning?.effort ??
+    body?.__saturn_reasoning?.upstreamValue ??
+    body?.__saturn_reasoning?.effort ??
     body?.reasoning_effort ??
     body?.reasoning?.effort ??
     body?.effort;

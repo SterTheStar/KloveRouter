@@ -423,7 +423,7 @@ export default function ProviderDetailPage({
     const isAntigravity = provider.protocol === "antigravity";
     const popup = window.open(
       "about:blank",
-      isDeepAI ? "klove-deepai-login" : isAntigravity ? "klove-antigravity-login" : "klove-codex-login",
+      isDeepAI ? "saturn-deepai-login" : isAntigravity ? "saturn-antigravity-login" : "saturn-codex-login",
       "popup,width=520,height=720",
     );
     let createdCredentialId: string | null = null;
@@ -525,9 +525,9 @@ export default function ProviderDetailPage({
     if (!manualOAuth) return;
     const popup = window.open(
       "about:blank",
-      manualOAuth.protocol === "deepai" ? "klove-deepai-login" : manualOAuth.protocol === "codex"
-        ? "klove-codex-login"
-        : "klove-antigravity-login",
+      manualOAuth.protocol === "deepai" ? "saturn-deepai-login" : manualOAuth.protocol === "codex"
+        ? "saturn-codex-login"
+        : "saturn-antigravity-login",
       "popup,width=520,height=720",
     );
     setCompletingOAuth(true);
@@ -1170,7 +1170,7 @@ export default function ProviderDetailPage({
             <div className="space-y-3 rounded-lg border border-border bg-background/60 p-3">
               <div>
                 <Label>DeepAI Code account</Label>
-                <p className="mt-1 text-xs text-tertiary">Sign in through DeepAI in your browser. KloveRouter exchanges the one-time callback code and stores the API key encrypted.</p>
+                <p className="mt-1 text-xs text-tertiary">Sign in through DeepAI in your browser. SaturnRouter exchanges the one-time callback code and stores the API key encrypted.</p>
               </div>
               <div className="space-y-2">
                 {credentials.filter((credential) => credential.kind === "api_key").map((credential) => renderCredentialRow(credential, "DeepAI Code account"))}
@@ -1208,7 +1208,7 @@ export default function ProviderDetailPage({
                 </Button>
               </div>
               <p className="text-xs text-tertiary">
-                KloveRouter stores this required key encrypted and passes it to the OpenCode CLI for requests. If <code>expect</code> is installed on the KloveRouter host, the button also runs <code>opencode auth login opencode --method key</code> and saves the login in an app-managed OpenCode profile.
+                SaturnRouter stores this required key encrypted and passes it to the OpenCode CLI for requests. If <code>expect</code> is installed on the SaturnRouter host, the button also runs <code>opencode auth login opencode --method key</code> and saves the login in an app-managed OpenCode profile.
               </p>
             </div>
           ) : provider.protocol === "chatgpt" ? (

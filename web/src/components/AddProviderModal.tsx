@@ -232,10 +232,10 @@ export default function AddProviderModal({
     const popup = window.open(
       "about:blank",
       pendingOAuth.protocol === "deepai"
-        ? "klove-deepai-login"
+        ? "saturn-deepai-login"
         : pendingOAuth.protocol === "codex"
-          ? "klove-codex-login"
-          : "klove-antigravity-login",
+          ? "saturn-codex-login"
+          : "saturn-antigravity-login",
       "popup,width=520,height=720",
     );
     setLoading(true);
@@ -275,7 +275,7 @@ export default function AddProviderModal({
 
   const startDeepAIConnection = async () => {
     if (!name || !baseUrl) return setError("Provider name and base URL are required.");
-    const popup = window.open("about:blank", "klove-deepai-login", "popup,width=520,height=720");
+    const popup = window.open("about:blank", "saturn-deepai-login", "popup,width=520,height=720");
     setLoading(true);
     setError(null);
     let createdProviderId: string | null = null;
@@ -304,7 +304,7 @@ export default function AddProviderModal({
   };
 
   const connectAntigravity = async () => {
-    const popup = window.open("about:blank", "klove-antigravity-login", "popup,width=520,height=720");
+    const popup = window.open("about:blank", "saturn-antigravity-login", "popup,width=520,height=720");
     let createdProviderId: string | null = null;
     setLoading(true);
     setError(null);
@@ -331,7 +331,7 @@ export default function AddProviderModal({
   };
 
   const connectCodex = async () => {
-    const popup = window.open("about:blank", "klove-codex-login", "popup,width=520,height=720");
+    const popup = window.open("about:blank", "saturn-codex-login", "popup,width=520,height=720");
     let createdProviderId: string | null = null;
     setLoading(true);
     setError(null);
@@ -394,7 +394,7 @@ export default function AddProviderModal({
       setOpenfreeCliPath(status.saved_path ?? "");
       success(
         "OpenCode CLI installed",
-        `Installed in KloveRouter's managed folder: ${status.managed_path}`,
+        `Installed in SaturnRouter's managed folder: ${status.managed_path}`,
       );
     } catch (cause: unknown) {
       const message = cause instanceof Error ? cause.message : String(cause);

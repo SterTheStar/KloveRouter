@@ -384,7 +384,7 @@ export function codexRequestBody(
     : toResponsesInput(body.messages),
 ) {
   const text = toResponsesTextFormat(body.response_format);
-  const resolved = body.__klove_reasoning;
+  const resolved = body.__saturn_reasoning;
   const reasoningInput =
     body.reasoning && typeof body.reasoning === "object" ? body.reasoning : {};
   const reasoning =

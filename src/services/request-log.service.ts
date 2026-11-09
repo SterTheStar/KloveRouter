@@ -60,7 +60,7 @@ function publish(event: RequestLogEvent) {
 const LIST_COLUMNS = "id, provider_id, provider_name, model_name, client_ip, requester_name, api_key_prefix, credential_label, credential_identity, credential_kind, status, status_code, tokens_prompt, tokens_completion, tokens_cache_read, tokens_cache_write, tokens_total, estimated_cost_usd, tps, duration_ms, error_message, created_at, completed_at, streaming, streamed_chars, streamed_bytes, guardrails_status";
 
 const LIST_SQL = `SELECT ${LIST_COLUMNS},
-  CASE WHEN request_details IS NULL THEN NULL ELSE json_extract(request_details, '$.klove.media_type') END AS request_kind,
+  CASE WHEN request_details IS NULL THEN NULL ELSE json_extract(request_details, '$.saturn.media_type') END AS request_kind,
   CASE WHEN response_details IS NULL THEN NULL ELSE json_extract(response_details, '$.output_bytes') END AS output_bytes
 FROM request_logs`;
 

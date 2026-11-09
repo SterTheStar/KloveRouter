@@ -175,7 +175,7 @@ export function ProviderAuthForm({
             >
               <AlertDescription className="text-xs">
                 {checkingOpenfreeCli
-                  ? "Checking for OpenCode CLI on the KloveRouter host..."
+                  ? "Checking for OpenCode CLI on the SaturnRouter host..."
                   : openfreeCliStatus?.path
                     ? (
                       <>
@@ -185,7 +185,7 @@ export function ProviderAuthForm({
                       </>
                     )
                     : openfreeCliStatus
-                      ? "No OpenCode CLI was found on the KloveRouter host. Enter its executable path below."
+                      ? "No OpenCode CLI was found on the SaturnRouter host. Enter its executable path below."
                       : "Could not check for the OpenCode CLI."}
                 {openfreeCliStatus?.warning && <><br />{openfreeCliStatus.warning}</>}
               </AlertDescription>

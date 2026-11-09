@@ -129,7 +129,7 @@ function credentialMetadata(credential: FreebuffCredential) {
 }
 
 function instanceIdFor(credential: FreebuffCredential) {
-  return credentialMetadata(credential).instanceId || `klove-${credential.id}`;
+  return credentialMetadata(credential).instanceId || `saturn-${credential.id}`;
 }
 
 async function persistInstanceId(credential: FreebuffCredential, instanceId: string) {

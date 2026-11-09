@@ -92,7 +92,7 @@ export function validateCustomHeaders(value: unknown): Record<string, string> {
     if (!/^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/.test(name))
       throw new Error(`Invalid custom header name: ${rawName}`);
     if (forbiddenHeaderNames.has(name.toLowerCase()))
-      throw new Error(`Custom header "${name}" is managed by Klove and cannot be overridden`);
+      throw new Error(`Custom header "${name}" is managed by Saturn and cannot be overridden`);
     if (typeof rawValue !== "string" || /[\r\n\0]/.test(rawValue))
       throw new Error(`Custom header "${name}" must have a single-line string value`);
     headers[name] = rawValue;

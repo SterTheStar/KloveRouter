@@ -1,7 +1,7 @@
 import { logger } from "../../logger";
 
 const DEFAULT_BASE_URL = "https://qwen.aikit.club";
-const USER_AGENT = "Klove/1.0.0";
+const USER_AGENT = "Saturn/1.0.0";
 
 type QwenCredential = {
   id: string;
@@ -155,7 +155,7 @@ async function jsonError(response: Response, action: string) {
 // and cannot skip thinking (canDisableThinking=false) must not receive
 // enable_thinking: false — the fields are simply stripped instead.
 export function qwenPayload(body: any, model: string, canDisableThinking = true) {
-  const effort = body.__klove_reasoning?.effort ??
+  const effort = body.__saturn_reasoning?.effort ??
     body.reasoning?.effort ??
     body.reasoning_effort ??
     body.effort;

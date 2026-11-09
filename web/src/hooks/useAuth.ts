@@ -19,7 +19,7 @@ export function useAuth() {
         setState({ isAuth: false, loading: false, error: null, needsSetup: true });
         return;
       }
-      const token = localStorage.getItem("klove_token");
+      const token = localStorage.getItem("saturn_token") || localStorage.getItem("klove_token");
       if (!token) {
         setState({ isAuth: false, loading: false, error: null, needsSetup: false });
         return;

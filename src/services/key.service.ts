@@ -109,7 +109,7 @@ export const keyService = {
     if (internalKeyValue && key === internalKeyValue) {
       return {
         id: "internal",
-        name: "Klove Panel",
+        name: "Saturn Panel",
         key_hash: "",
         key_secret: null,
         prefix: "kl-internal...",

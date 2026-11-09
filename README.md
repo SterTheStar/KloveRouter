@@ -1,12 +1,12 @@
 <div align="center">
-  <img src="web/src/assets/klove-wordmark.svg" width="290" height="96" alt="Saturn Router" />
+  <img src="web/src/assets/saturn-wordmark.svg" width="290" height="96" alt="Saturn Router" />
   <p>A self-hosted control plane for routing AI requests across providers and models.</p>
   <p>
     <img alt="Bun" src="https://img.shields.io/badge/Bun-1.x-171717?logo=bun&logoColor=white" />
     <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5.x-3178C6?logo=typescript&logoColor=white" />
     <img alt="React" src="https://img.shields.io/badge/React-19-149ECA?logo=react&logoColor=white" />
     <img alt="Elysia" src="https://img.shields.io/badge/Elysia-1.x-7C3AED" />
-    <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/License-Klove%20NC--SA-6B7280" /></a>
+    <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/License-Saturn%20NC--SA-6B7280" /></a>
     <img alt="Last commit" src="https://img.shields.io/github/last-commit/SterTheStar/SaturnRouter?logo=github&color=171717" />
   </p>
 </div>
@@ -32,7 +32,7 @@ Compound models expose a stable `pool/<id>` model that routes across selected pr
 | Perch AI | Perch session JSON/access token, or the host's `perch login` session | Perch models with streaming, reasoning, and tool calls |
 | OpenFREE | Authenticated OpenCode CLI | Live free OpenCode Zen models, including Big Pickle, streaming, and bridged tool calls |
 
-Perch AI issues short-lived turn tickets against a CLI session and rotates Supabase refresh tokens. Klove stores a pasted session encrypted, or reads `~/.perch/cli-auth-session.json` from the host. Perch's documentation warns that calling its API outside the official CLI may violate its terms and risk account suspension; connect only an account you are permitted to use this way.
+Perch AI issues short-lived turn tickets against a CLI session and rotates Supabase refresh tokens. Saturn stores a pasted session encrypted, or reads `~/.perch/cli-auth-session.json` from the host. Perch's documentation warns that calling its API outside the official CLI may violate its terms and risk account suspension; connect only an account you are permitted to use this way.
 
 ## Quick start
 
@@ -53,20 +53,20 @@ cp .env.example .env
 bun run start
 ```
 
-Open [http://localhost:6999](http://localhost:6999). The example environment file sets port `6999`; if `PORT` is unset, Klove uses `3000`.
+Open [http://localhost:6999](http://localhost:6999). The example environment file sets port `6999`; if `PORT` is unset, Saturn uses `3000`.
 
-On first launch, complete the setup in the web panel. You can optionally set bootstrap values in `.env`; see the comments in `.env.example`. Before exposing the service beyond a trusted network, set strong, unique values for `JWT_SECRET`, `KLOVE_ENCRYPTION_KEY`, and `DEFAULT_PASSWORD`.
+On first launch, complete the setup in the web panel. You can optionally set bootstrap values in `.env`; see the comments in `.env.example`. Before exposing the service beyond a trusted network, set strong, unique values for `JWT_SECRET`, `SATURN_ENCRYPTION_KEY`, and `DEFAULT_PASSWORD`.
 
 ## Configuration
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `PORT` | `3000` (the example `.env` uses `6999`) | Panel and API port; listens on `0.0.0.0`. |
-| `DB_PATH` | `./data/klove.db` | SQLite database path. |
+| `DB_PATH` | `./data/saturn.db` | SQLite database path. |
 | `DEFAULT_PASSWORD` | Generated during setup unless supplied | Optional first-run bootstrap password. |
 | `PROFILE_NAME` | Set during setup | Optional first-run profile name. |
 | `JWT_SECRET` | Generated during setup unless supplied | Signs panel sessions. |
-| `KLOVE_ENCRYPTION_KEY` | Generated during setup unless supplied | Encrypts stored provider credentials. |
+| `SATURN_ENCRYPTION_KEY` | Generated during setup unless supplied | Encrypts stored provider credentials. |
 | `OPENFREE_CLI_PATH` | Auto-detected | Optional override for the authenticated OpenCode CLI used by OpenFREE. Free models are loaded from the public OpenCode Zen catalog without an API token. |
 | `LOG_LEVEL` | `info` | Set to `debug` for additional diagnostics. |
 | `NODE_ENV` | Development | Set to `production` to serve the built frontend from Bun. |
@@ -109,18 +109,18 @@ bunx tsc --noEmit
 
 ## API examples
 
-Create an API key in the Klove panel, then list available models:
+Create an API key in the Saturn panel, then list available models:
 
 ```bash
 curl http://localhost:6999/v1/models \
-  -H "Authorization: Bearer $KLOVE_API_KEY"
+  -H "Authorization: Bearer $SATURN_API_KEY"
 ```
 
 Send a streaming Chat Completions request. Use a provider-prefixed model ID or a compound model ID such as `pool/reliable-chat`:
 
 ```bash
 curl --no-buffer http://localhost:6999/v1/chat/completions \
-  -H "Authorization: Bearer $KLOVE_API_KEY" \
+  -H "Authorization: Bearer $SATURN_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
     "model": "pool/reliable-chat",
@@ -129,7 +129,7 @@ curl --no-buffer http://localhost:6999/v1/chat/completions \
   }'
 ```
 
-Klove also accepts the OpenAI Responses API at `/v1/responses` and Anthropic Messages requests at `/v1/messages`. Responses from reasoning-capable models may include `reasoning_content` in streamed Chat Completions deltas when the provider supplies it.
+Saturn also accepts the OpenAI Responses API at `/v1/responses` and Anthropic Messages requests at `/v1/messages`. Responses from reasoning-capable models may include `reasoning_content` in streamed Chat Completions deltas when the provider supplies it.
 
 OpenAI-compatible image endpoints are available at `/v1/images/generations`, `/v1/images/edits`, and `/v1/images/variations`. Text-to-speech is available at `/v1/audio/speech`. Video generation uses `/v1/videos` with the compatible list, retrieve, content, cancel, and delete operations. Set `model` to `provider/model` (or a compound model ID where supported), and mark each model's generation capabilities in the Models panel. Binary media responses are streamed through the gateway and their delivered byte count appears in Request Logs.
 
@@ -145,13 +145,13 @@ Back up the SQLite database and its encryption key together.
 
 ## License
 
-Klove is source-available under the [Klove NC-SA License 1.0.0](LICENSE), a modified form of PolyForm Noncommercial 1.0.0. Noncommercial use, study, modification, and redistribution are permitted under the license terms. Copies, forks, and derivative works must provide their complete source under the same license, and public network deployments must publish the corresponding source. Commercial use requires a separate written license.
+Saturn is source-available under the [Saturn NC-SA License 1.0.0](LICENSE), a modified form of PolyForm Noncommercial 1.0.0. Noncommercial use, study, modification, and redistribution are permitted under the license terms. Copies, forks, and derivative works must provide their complete source under the same license, and public network deployments must publish the corresponding source. Commercial use requires a separate written license.
 
 The license includes noncommercial restrictions and is not OSI-approved.
 
 <div align="center">
   <h2>Support</h2>
-  <p>If Klove is useful to you, consider supporting its development.</p>
+  <p>If Saturn is useful to you, consider supporting its development.</p>
   <p>
     <a href="https://www.buymeacoffee.com/sterzinhab9"><img height="50" src="https://img.buymeacoffee.com/button-api/?text=Buy%20me%20a%20coffee&emoji=&slug=sterzinhab9&button_colour=FFDD00&font_colour=000000&font_family=Poppins&outline_colour=000000&coffee_colour=ffffff" alt="Buy me a coffee" /></a>
   </p>

@@ -84,7 +84,7 @@ export const chatTitleService = {
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${keyService.internalKey()}`,
-          "X-Klove-Title-Generation": "true",
+          "X-Saturn-Title-Generation": "true",
         },
         signal: controller.signal,
         body: JSON.stringify({

@@ -36,15 +36,15 @@ const docs: DocItem[] = [
 
 const codeSamples: Record<string, Record<string, string>> = {
   quickstart: {
-    cURL: `curl "$KLOVE_BASE_URL/chat/completions" \\
-  -H "Authorization: Bearer $KLOVE_API_KEY" \\
+    cURL: `curl "$SATURN_BASE_URL/chat/completions" \\
+  -H "Authorization: Bearer $SATURN_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{"model":"provider/model-id","messages":[{"role":"user","content":"Hello!"}]}'`,
     "Node.js": `import OpenAI from "openai";
 
 const client = new OpenAI({
-  apiKey: process.env.KLOVE_API_KEY,
-  baseURL: process.env.KLOVE_BASE_URL,
+  apiKey: process.env.SATURN_API_KEY,
+  baseURL: process.env.SATURN_BASE_URL,
 });
 
 const result = await client.chat.completions.create({
@@ -56,8 +56,8 @@ console.log(result.choices[0]?.message.content);`,
 import os
 
 client = OpenAI(
-    api_key=os.environ["KLOVE_API_KEY"],
-    base_url=os.environ["KLOVE_BASE_URL"],
+    api_key=os.environ["SATURN_API_KEY"],
+    base_url=os.environ["SATURN_BASE_URL"],
 )
 
 result = client.chat.completions.create(
@@ -71,8 +71,8 @@ use serde_json::json;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let base = std::env::var("KLOVE_BASE_URL")?;
-    let key = std::env::var("KLOVE_API_KEY")?;
+    let base = std::env::var("SATURN_BASE_URL")?;
+    let key = std::env::var("SATURN_API_KEY")?;
     let response = Client::new()
         .post(format!("{base}/chat/completions"))
         .bearer_auth(key)
@@ -86,15 +86,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }`,
   },
   chat: {
-    cURL: `curl "$KLOVE_BASE_URL/chat/completions" \\
-  -H "Authorization: Bearer $KLOVE_API_KEY" \\
+    cURL: `curl "$SATURN_BASE_URL/chat/completions" \\
+  -H "Authorization: Bearer $SATURN_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{"model":"provider/model-id","messages":[{"role":"user","content":"Explain streaming"}],"stream":true}'`,
     "Node.js": `import OpenAI from "openai";
 
 const client = new OpenAI({
-  apiKey: process.env.KLOVE_API_KEY,
-  baseURL: process.env.KLOVE_BASE_URL,
+  apiKey: process.env.SATURN_API_KEY,
+  baseURL: process.env.SATURN_BASE_URL,
 });
 
 const stream = await client.chat.completions.create({
@@ -109,8 +109,8 @@ for await (const chunk of stream) {
 from openai import OpenAI
 
 client = OpenAI(
-    api_key=os.environ["KLOVE_API_KEY"],
-    base_url=os.environ["KLOVE_BASE_URL"],
+    api_key=os.environ["SATURN_API_KEY"],
+    base_url=os.environ["SATURN_BASE_URL"],
 )
 
 stream = client.chat.completions.create(
@@ -128,8 +128,8 @@ use std::{env, io::{self, Write}};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let base = "{{KLOVE_API_BASE}}";
-    let key = env::var("KLOVE_API_KEY")?;
+    let base = "{{SATURN_API_BASE}}";
+    let key = env::var("SATURN_API_KEY")?;
     let response = Client::new().post(format!("{base}/chat/completions"))
         .bearer_auth(key)
         .json(&json!({"model":"provider/model-id", "messages":[{"role":"user","content":"Hi"}], "stream":true}))
@@ -149,13 +149,13 @@ function CodeBlock({ code, language = "json", label }: { code: string; language?
   const appOrigin = window.location.origin;
   const apiBase = `${appOrigin}/v1`;
   const displayCode = code
-    .replaceAll("{{KLOVE_API_BASE}}", apiBase)
+    .replaceAll("{{SATURN_API_BASE}}", apiBase)
     .replaceAll("http://localhost:3000/v1", apiBase)
     .replaceAll("http://localhost:3000", appOrigin)
-    .replaceAll("$KLOVE_BASE_URL", apiBase)
-    .replaceAll("process.env.KLOVE_BASE_URL", JSON.stringify(apiBase))
-    .replaceAll('os.environ["KLOVE_BASE_URL"]', JSON.stringify(apiBase))
-    .replaceAll('std::env::var("KLOVE_BASE_URL")?', JSON.stringify(apiBase));
+    .replaceAll("$SATURN_BASE_URL", apiBase)
+    .replaceAll("process.env.SATURN_BASE_URL", JSON.stringify(apiBase))
+    .replaceAll('os.environ["SATURN_BASE_URL"]', JSON.stringify(apiBase))
+    .replaceAll('std::env::var("SATURN_BASE_URL")?', JSON.stringify(apiBase));
   return <div className="overflow-hidden rounded-xl border border-border bg-card">
     <div className="flex h-10 items-center justify-between border-b border-border bg-background/60 px-3 text-xs text-tertiary">
       <span>{label ?? language}</span>
@@ -268,15 +268,15 @@ export default function DocsPage({ onBack }: { onBack: () => void }) {
 
 function DocContent({ id, onSelectDoc }: { id: DocId; onSelectDoc: (id: DocId) => void }) {
   switch (id) {
-    case "overview": return <><SectionTitle eyebrow="Klove Router" title="One API for your model providers" description="Klove Router exposes authenticated OpenAI-compatible chat and Responses APIs, plus an Anthropic Messages endpoint. Chat requests can route to individual providers or compound models." /><div className="grid gap-3 sm:grid-cols-2">{[["Chat & tools", "Chat Completions with streaming, tool calls, and multimodal message content.", "chat"], ["Responses", "Responses API-compatible requests for clients built on the OpenAI Responses format.", "responses"], ["Anthropic Messages", "A Messages-compatible interface for Claude Code and Anthropic SDK clients.", "messages"]].map(([title, body, target]) => <a key={title} href={`/docs#${target}`} onClick={(event) => { if (!shouldHandleLinkClick(event)) return; event.preventDefault(); onSelectDoc(target as DocId); }} className="group rounded-xl border border-border bg-card p-4 transition-colors hover:border-border-strong hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong"><div className="mb-1 flex items-center justify-between font-medium text-foreground">{title}<ArrowRight className="size-3.5 opacity-0 transition-opacity group-hover:opacity-100" /></div><p className="text-sm leading-6 text-muted-foreground">{body}</p></a>)}</div><h2 className="mb-3 mt-9 text-lg font-semibold tracking-tight text-foreground">Endpoint reference</h2><div className="space-y-2"><Endpoint method="GET" path="/v1/models" description="List active provider and compound models" to="models" /><Endpoint method="POST" path="/v1/chat/completions" description="OpenAI Chat Completions" to="chat" /><Endpoint method="POST" path="/v1/responses" description="OpenAI Responses" to="responses" /><Endpoint method="POST" path="/v1/messages" description="Anthropic Messages" to="messages" /></div><div className="mt-7 space-y-3"><Callout>Compound models are available on the chat-compatible routes. Requests can target a single provider model or a compound model.</Callout><Callout>Authenticated API requests appear in <a href="/request-logs" onClick={handleAppLink} className="font-medium text-foreground underline underline-offset-4 hover:text-accent-blue">Request logs</a>. Text streams report delivered characters.</Callout></div></>;
-    case "quickstart": return <><SectionTitle eyebrow="Guide" title="Make your first request" description="Use a gateway API key and a model ID returned by the catalog. Set the base URL to your Klove server, including /v1." /><Callout>Examples below use this Klove instance's base URL: <code>{window.location.origin}/v1</code>. Keep the API key in an environment variable and never ship it in browser code.</Callout><div className="mt-6"><ExampleTabs sample="quickstart" /></div><h2 className="mb-3 mt-8 text-lg font-semibold tracking-tight text-foreground">What you need</h2><ul className="list-disc space-y-2 pl-5 text-sm leading-6 text-muted-foreground"><li>A gateway API key created on the <a href="/api-keys" onClick={handleAppLink} className="text-foreground underline underline-offset-4 hover:text-accent-blue">API Keys page</a>.</li><li>An active provider with an enabled model, or an enabled compound model.</li><li>The exact public model ID from <a href="/docs#models" className="text-foreground underline underline-offset-4 hover:text-accent-blue"><code>GET /v1/models</code></a>.</li></ul></>;
-    case "auth": return <><SectionTitle eyebrow="Guide" title="Authentication" description="Authenticate requests with a Klove API key. The gateway validates the key before routing the request." /><div className="space-y-3"><p className="text-sm leading-6 text-muted-foreground">OpenAI-compatible endpoints accept the standard bearer token header. The Anthropic Messages endpoint also accepts the Anthropic <code>x-api-key</code> header; bearer authentication works through the gateway key verifier.</p><CodeBlock language="http" code={`Authorization: Bearer $KLOVE_API_KEY\nContent-Type: application/json`} /><p className="text-sm leading-6 text-muted-foreground">The OpenAI-compatible base URL for this instance is <code>{window.location.origin}/v1</code>. Use HTTPS and secret storage in deployed environments.</p><Callout>Missing or invalid keys return HTTP 401. Do not put secrets in source control, client-side bundles, or URLs.</Callout></div></>;
+    case "overview": return <><SectionTitle eyebrow="Saturn Router" title="One API for your model providers" description="Saturn Router exposes authenticated OpenAI-compatible chat and Responses APIs, plus an Anthropic Messages endpoint. Chat requests can route to individual providers or compound models." /><div className="grid gap-3 sm:grid-cols-2">{[["Chat & tools", "Chat Completions with streaming, tool calls, and multimodal message content.", "chat"], ["Responses", "Responses API-compatible requests for clients built on the OpenAI Responses format.", "responses"], ["Anthropic Messages", "A Messages-compatible interface for Claude Code and Anthropic SDK clients.", "messages"]].map(([title, body, target]) => <a key={title} href={`/docs#${target}`} onClick={(event) => { if (!shouldHandleLinkClick(event)) return; event.preventDefault(); onSelectDoc(target as DocId); }} className="group rounded-xl border border-border bg-card p-4 transition-colors hover:border-border-strong hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong"><div className="mb-1 flex items-center justify-between font-medium text-foreground">{title}<ArrowRight className="size-3.5 opacity-0 transition-opacity group-hover:opacity-100" /></div><p className="text-sm leading-6 text-muted-foreground">{body}</p></a>)}</div><h2 className="mb-3 mt-9 text-lg font-semibold tracking-tight text-foreground">Endpoint reference</h2><div className="space-y-2"><Endpoint method="GET" path="/v1/models" description="List active provider and compound models" to="models" /><Endpoint method="POST" path="/v1/chat/completions" description="OpenAI Chat Completions" to="chat" /><Endpoint method="POST" path="/v1/responses" description="OpenAI Responses" to="responses" /><Endpoint method="POST" path="/v1/messages" description="Anthropic Messages" to="messages" /></div><div className="mt-7 space-y-3"><Callout>Compound models are available on the chat-compatible routes. Requests can target a single provider model or a compound model.</Callout><Callout>Authenticated API requests appear in <a href="/request-logs" onClick={handleAppLink} className="font-medium text-foreground underline underline-offset-4 hover:text-accent-blue">Request logs</a>. Text streams report delivered characters.</Callout></div></>;
+    case "quickstart": return <><SectionTitle eyebrow="Guide" title="Make your first request" description="Use a gateway API key and a model ID returned by the catalog. Set the base URL to your Saturn server, including /v1." /><Callout>Examples below use this Saturn instance's base URL: <code>{window.location.origin}/v1</code>. Keep the API key in an environment variable and never ship it in browser code.</Callout><div className="mt-6"><ExampleTabs sample="quickstart" /></div><h2 className="mb-3 mt-8 text-lg font-semibold tracking-tight text-foreground">What you need</h2><ul className="list-disc space-y-2 pl-5 text-sm leading-6 text-muted-foreground"><li>A gateway API key created on the <a href="/api-keys" onClick={handleAppLink} className="text-foreground underline underline-offset-4 hover:text-accent-blue">API Keys page</a>.</li><li>An active provider with an enabled model, or an enabled compound model.</li><li>The exact public model ID from <a href="/docs#models" className="text-foreground underline underline-offset-4 hover:text-accent-blue"><code>GET /v1/models</code></a>.</li></ul></>;
+    case "auth": return <><SectionTitle eyebrow="Guide" title="Authentication" description="Authenticate requests with a Saturn API key. The gateway validates the key before routing the request." /><div className="space-y-3"><p className="text-sm leading-6 text-muted-foreground">OpenAI-compatible endpoints accept the standard bearer token header. The Anthropic Messages endpoint also accepts the Anthropic <code>x-api-key</code> header; bearer authentication works through the gateway key verifier.</p><CodeBlock language="http" code={`Authorization: Bearer $SATURN_API_KEY\nContent-Type: application/json`} /><p className="text-sm leading-6 text-muted-foreground">The OpenAI-compatible base URL for this instance is <code>{window.location.origin}/v1</code>. Use HTTPS and secret storage in deployed environments.</p><Callout>Missing or invalid keys return HTTP 401. Do not put secrets in source control, client-side bundles, or URLs.</Callout></div></>;
     case "models": return <>
       <SectionTitle eyebrow="API reference · GET" title="List available models" description="Fetch active models visible to the API key. Use the exact returned id as the model field in requests." />
       <Endpoint method="GET" path="/v1/models" description="Requires a valid API key" />
       <div className="mt-5 space-y-4">
-        <CodeBlock language="bash" code={`curl "$KLOVE_BASE_URL/models" \\
-  -H "Authorization: Bearer $KLOVE_API_KEY"`} />
+        <CodeBlock language="bash" code={`curl "$SATURN_BASE_URL/models" \\
+  -H "Authorization: Bearer $SATURN_API_KEY"`} />
         <CodeBlock language="json" code={`{
   "object": "list",
   "data": [
@@ -289,14 +289,14 @@ function DocContent({ id, onSelectDoc }: { id: DocId; onSelectDoc: (id: DocId) =
       "max_output_tokens": 8192,
       "capabilities": { "tools": true, "streaming": true }
     },
-    { "id": "pool/reliable-chat", "object": "model", "owned_by": "klove" }
+    { "id": "pool/reliable-chat", "object": "model", "owned_by": "saturn" }
   ]
 }`} />
         <p className="text-sm leading-6 text-muted-foreground">Provider IDs use <code>provider/model</code>; when a public model ID is configured, that value appears after the slash instead of the upstream model ID. Active compound models use <code>pool/slug</code>. Disabled models and pool members hidden by catalog rules are omitted. Capability, context, and reasoning metadata is included where available.</p>
       </div>
     </>;
-    case "compound-models": return <><SectionTitle eyebrow="Guide" title="Compound model routing" description="A compound model exposes one stable pool ID and routes compatible chat requests to its configured provider models." /><CodeBlock language="bash" code={`curl "$KLOVE_BASE_URL/chat/completions" \\
-  -H "Authorization: Bearer $KLOVE_API_KEY" \\
+    case "compound-models": return <><SectionTitle eyebrow="Guide" title="Compound model routing" description="A compound model exposes one stable pool ID and routes compatible chat requests to its configured provider models." /><CodeBlock language="bash" code={`curl "$SATURN_BASE_URL/chat/completions" \\
+  -H "Authorization: Bearer $SATURN_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{"model":"pool/reliable-chat","messages":[{"role":"user","content":"Hello"}]}'`} /><h2 className="mb-3 mt-7 text-lg font-semibold tracking-tight text-foreground">Strategies</h2><div className="grid gap-3 sm:grid-cols-2"><div className="rounded-xl border border-border bg-card p-4"><h3 className="mb-1 font-medium text-foreground">Priority</h3><p className="text-sm leading-6 text-muted-foreground">Members are attempted in configured order. A member's fallback setting controls whether the router may continue after an eligible failure.</p></div><div className="rounded-xl border border-border bg-card p-4"><h3 className="mb-1 font-medium text-foreground">Random</h3><p className="text-sm leading-6 text-muted-foreground">The router shuffles the member order for each request. Fallback settings still control whether it may try another member.</p></div></div><h2 className="mb-3 mt-7 text-lg font-semibold tracking-tight text-foreground">Fallback behavior</h2><p className="mb-4 text-sm leading-6 text-muted-foreground">Fallback can proceed when an enabled member is incompatible with the request, the provider connection fails, or the upstream returns a retryable response such as 401, 403, 404, 408, 409, 425, 429, or 5xx. A failure from a member with fallback disabled ends the attempt. Requests stop falling back after output has started so the client does not receive mixed partial answers.</p><Callout>Compound models are available on <code>/v1/chat/completions</code>, <code>/v1/responses</code>, and <code>/v1/messages</code>.</Callout></>;
     case "chat": return <><SectionTitle eyebrow="API reference · POST" title="Chat Completions" description="Send messages using the familiar OpenAI Chat Completions schema. Set stream to true to receive Server-Sent Events as the upstream produces output." /><Endpoint method="POST" path="/v1/chat/completions" description="application/json" /><h2 className="mb-3 mt-6 text-lg font-semibold tracking-tight text-foreground">Request examples</h2><ExampleTabs sample="chat" /><h2 className="mb-3 mt-7 text-lg font-semibold tracking-tight text-foreground">Non-streaming response</h2><CodeBlock language="json" code={`{
@@ -333,7 +333,7 @@ function DocContent({ id, onSelectDoc }: { id: DocId; onSelectDoc: (id: DocId) =
     "total_tokens": 202
   }
 }`} /><Callout>Response fields and supported features can vary with the selected provider and model.</Callout><p className="mt-4 text-sm leading-6 text-muted-foreground">Usage can include cache read and write counts in <code>input_tokens_details</code> when the upstream reports them. Responses-only upstream models should be called through this endpoint. Chat-only upstreams may be adapted by the gateway when compatible; unsupported features can return an incompatibility error.</p></>;
-    case "messages": return <><SectionTitle eyebrow="API reference · POST" title="Anthropic Messages" description="Send Anthropic-style message requests to /v1/messages. Klove translates the message format for compatible upstreams and returns an Anthropic-shaped response." /><Endpoint method="POST" path="/v1/messages" description="Anthropic Messages-compatible" /><CodeBlock language="json" code={`{
+    case "messages": return <><SectionTitle eyebrow="API reference · POST" title="Anthropic Messages" description="Send Anthropic-style message requests to /v1/messages. Saturn translates the message format for compatible upstreams and returns an Anthropic-shaped response." /><Endpoint method="POST" path="/v1/messages" description="Anthropic Messages-compatible" /><CodeBlock language="json" code={`{
   "model": "provider/model-id",
   "max_tokens": 1024,
   "messages": [{ "role": "user", "content": "Hello" }]
@@ -355,35 +355,35 @@ function DocContent({ id, onSelectDoc }: { id: DocId; onSelectDoc: (id: DocId) =
 
 data: {"choices":[{"delta":{"content":" there"},"index":0}]}
 
-data: [DONE]`} /><p className="mt-4 text-sm leading-6 text-muted-foreground">Set <code>stream: true</code> on <code>/v1/chat/completions</code>, <code>/v1/responses</code>, or <code>/v1/messages</code>. For best time-to-first-token, avoid middleware and reverse proxies that buffer response bodies; disable proxy buffering for these routes when applicable.</p><h2 className="mb-3 mt-7 text-lg font-semibold tracking-tight text-foreground">Common status codes</h2><div className="space-y-2">{[["400", "Invalid request, missing required field, or incompatible endpoint."], ["401", "Missing or invalid Klove API key."], ["404", "Unknown model."], ["429", "Upstream quota or throttling response; not a Klove-wide rate limit."], ["502", "Provider returned an invalid or unusable response."], ["503", "Provider or credential is temporarily unavailable."], ["5xx", "Gateway or upstream provider error."]].map(([code, text]) => <div key={code} className="flex gap-4 rounded-lg border border-border bg-card px-4 py-3 text-sm"><code className="font-mono font-semibold text-foreground">{code}</code><span className="text-muted-foreground">{text}</span></div>)}</div><Callout>Provider errors may be returned in the provider's native error envelope. Check the HTTP status and response body; do not assume every error uses one identical schema.</Callout></>;
-    case "claude-code": return <><SectionTitle eyebrow="Integration" title="Use Klove with Claude Code" description="Claude Code can connect through its Anthropic-compatible API configuration. Choose a model ID visible from Klove's model catalog." /><p className="mb-4 text-sm leading-6 text-muted-foreground">Set the gateway base URL and key in your shell. The value for <code>ANTHROPIC_BASE_URL</code> is the server root (without an extra <code>/v1</code>), because Claude Code appends the Anthropic API path.</p><CodeBlock language="bash" code={`export ANTHROPIC_BASE_URL="http://localhost:3000"
-export ANTHROPIC_AUTH_TOKEN="$KLOVE_API_KEY"
+data: [DONE]`} /><p className="mt-4 text-sm leading-6 text-muted-foreground">Set <code>stream: true</code> on <code>/v1/chat/completions</code>, <code>/v1/responses</code>, or <code>/v1/messages</code>. For best time-to-first-token, avoid middleware and reverse proxies that buffer response bodies; disable proxy buffering for these routes when applicable.</p><h2 className="mb-3 mt-7 text-lg font-semibold tracking-tight text-foreground">Common status codes</h2><div className="space-y-2">{[["400", "Invalid request, missing required field, or incompatible endpoint."], ["401", "Missing or invalid Saturn API key."], ["404", "Unknown model."], ["429", "Upstream quota or throttling response; not a Saturn-wide rate limit."], ["502", "Provider returned an invalid or unusable response."], ["503", "Provider or credential is temporarily unavailable."], ["5xx", "Gateway or upstream provider error."]].map(([code, text]) => <div key={code} className="flex gap-4 rounded-lg border border-border bg-card px-4 py-3 text-sm"><code className="font-mono font-semibold text-foreground">{code}</code><span className="text-muted-foreground">{text}</span></div>)}</div><Callout>Provider errors may be returned in the provider's native error envelope. Check the HTTP status and response body; do not assume every error uses one identical schema.</Callout></>;
+    case "claude-code": return <><SectionTitle eyebrow="Integration" title="Use Saturn with Claude Code" description="Claude Code can connect through its Anthropic-compatible API configuration. Choose a model ID visible from Saturn's model catalog." /><p className="mb-4 text-sm leading-6 text-muted-foreground">Set the gateway base URL and key in your shell. The value for <code>ANTHROPIC_BASE_URL</code> is the server root (without an extra <code>/v1</code>), because Claude Code appends the Anthropic API path.</p><CodeBlock language="bash" code={`export ANTHROPIC_BASE_URL="http://localhost:3000"
+export ANTHROPIC_AUTH_TOKEN="$SATURN_API_KEY"
 export ANTHROPIC_MODEL="provider/model-id"
 claude`} /><Callout>Use the exact model ID supported by your gateway. Claude Code may send Anthropic-specific request fields; compatibility depends on the selected upstream model. See Anthropic's gateway guide for the current Claude Code environment settings.</Callout><a className="mt-4 inline-flex items-center gap-1 text-sm text-accent-blue hover:underline" href="https://docs.anthropic.com/en/docs/claude-code/llm-gateway" target="_blank" rel="noreferrer">Claude Code gateway documentation <ExternalLink className="size-3.5" /></a></>;
-    case "codex": return <><SectionTitle eyebrow="Integration" title="Use Klove with Codex CLI" description="Configure Codex CLI with a custom Responses-compatible model provider. The model must support the Responses API contract for the best compatibility." /><p className="mb-4 text-sm leading-6 text-muted-foreground">Add a custom provider to <code>~/.codex/config.toml</code>. For a local gateway, set the base URL to the Klove server's <code>/v1</code> endpoint.</p><CodeBlock language="toml" code={`model_provider = "klove"
+    case "codex": return <><SectionTitle eyebrow="Integration" title="Use Saturn with Codex CLI" description="Configure Codex CLI with a custom Responses-compatible model provider. The model must support the Responses API contract for the best compatibility." /><p className="mb-4 text-sm leading-6 text-muted-foreground">Add a custom provider to <code>~/.codex/config.toml</code>. For a local gateway, set the base URL to the Saturn server's <code>/v1</code> endpoint.</p><CodeBlock language="toml" code={`model_provider = "saturn"
 model = "provider/model-id"
 
-[model_providers.klove]
-name = "Klove Router"
+[model_providers.saturn]
+name = "Saturn Router"
 base_url = "http://localhost:3000/v1"
-env_key = "KLOVE_API_KEY"
+env_key = "SATURN_API_KEY"
 wire_api = "responses"
 
-# Export KLOVE_API_KEY before launching Codex.`} /><Callout>Codex CLI configuration evolves. Confirm your installed CLI accepts the custom provider fields and Responses wire API. If your selected upstream only supports Chat Completions, Codex may not work with this configuration.</Callout><a className="mt-4 inline-flex items-center gap-1 text-sm text-accent-blue hover:underline" href="https://developers.openai.com/codex/config-reference" target="_blank" rel="noreferrer">Codex configuration reference <ExternalLink className="size-3.5" /></a></>;
-    case "opencode": return <><SectionTitle eyebrow="Integration" title="Use Klove with OpenCode" description="Define Klove as a custom OpenAI-compatible provider in OpenCode, then select one of the model IDs exposed by Klove." /><p className="mb-4 text-sm leading-6 text-muted-foreground">Add a provider entry to <code>opencode.json</code>. This configuration uses OpenCode's current custom OpenAI-compatible provider package and maps a short OpenCode model name to Klove's full public model ID.</p><CodeBlock language="json" code={`{
+# Export SATURN_API_KEY before launching Codex.`} /><Callout>Codex CLI configuration evolves. Confirm your installed CLI accepts the custom provider fields and Responses wire API. If your selected upstream only supports Chat Completions, Codex may not work with this configuration.</Callout><a className="mt-4 inline-flex items-center gap-1 text-sm text-accent-blue hover:underline" href="https://developers.openai.com/codex/config-reference" target="_blank" rel="noreferrer">Codex configuration reference <ExternalLink className="size-3.5" /></a></>;
+    case "opencode": return <><SectionTitle eyebrow="Integration" title="Use Saturn with OpenCode" description="Define Saturn as a custom OpenAI-compatible provider in OpenCode, then select one of the model IDs exposed by Saturn." /><p className="mb-4 text-sm leading-6 text-muted-foreground">Add a provider entry to <code>opencode.json</code>. This configuration uses OpenCode's current custom OpenAI-compatible provider package and maps a short OpenCode model name to Saturn's full public model ID.</p><CodeBlock language="json" code={`{
   "$schema": "https://opencode.ai/config.json",
-  "model": "klove/chat",
+  "model": "saturn/chat",
   "providers": {
-    "klove": {
-      "name": "Klove Router",
-      "env": ["KLOVE_API_KEY"],
+    "saturn": {
+      "name": "Saturn Router",
+      "env": ["SATURN_API_KEY"],
       "package": "@opencode/ai/providers/openai-compatible",
       "settings": { "baseURL": "http://localhost:3000/v1" },
       "models": {
-        "chat": { "name": "Model via Klove", "modelID": "provider/model-id" }
+        "chat": { "name": "Model via Saturn", "modelID": "provider/model-id" }
       }
     }
   }
-}`} /><p className="mt-4 text-sm leading-6 text-muted-foreground">Export <code>KLOVE_API_KEY</code> before launching OpenCode. Replace <code>provider/model-id</code> with an ID returned by Klove. Verify the selected model's endpoint compatibility; this provider uses Chat Completions.</p><a className="mt-4 inline-flex items-center gap-1 text-sm text-accent-blue hover:underline" href="https://opencode.ai/v2/docs/providers" target="_blank" rel="noreferrer">OpenCode provider documentation <ExternalLink className="size-3.5" /></a></>;
+}`} /><p className="mt-4 text-sm leading-6 text-muted-foreground">Export <code>SATURN_API_KEY</code> before launching OpenCode. Replace <code>provider/model-id</code> with an ID returned by Saturn. Verify the selected model's endpoint compatibility; this provider uses Chat Completions.</p><a className="mt-4 inline-flex items-center gap-1 text-sm text-accent-blue hover:underline" href="https://opencode.ai/v2/docs/providers" target="_blank" rel="noreferrer">OpenCode provider documentation <ExternalLink className="size-3.5" /></a></>;
   }
 }

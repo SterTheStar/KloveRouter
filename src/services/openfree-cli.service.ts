@@ -58,7 +58,7 @@ export async function loginOpenfreeCli(apiKey: string): Promise<OpenFreeCliLogin
     return {
       logged_in: false,
       path: cliStatus.path,
-      warning: "The expect utility is not installed on the KloveRouter host, so OpenCode CLI login could not be opened. The saved API key can still be passed directly to OpenCode when OpenFREE makes requests.",
+      warning: "The expect utility is not installed on the SaturnRouter host, so OpenCode CLI login could not be opened. The saved API key can still be passed directly to OpenCode when OpenFREE makes requests.",
     };
   }
 
@@ -178,7 +178,7 @@ function findDesktopCli(): string | null {
 function findInstalledCli(): { path: string; source: string } | null {
   const managedPath = managedBinaryPath();
   if (isExecutableFile(managedPath)) {
-    return { path: managedPath, source: "KloveRouter managed install" };
+    return { path: managedPath, source: "SaturnRouter managed install" };
   }
 
   for (const command of ["opencode-cli", "opencode"]) {
@@ -226,7 +226,7 @@ export function getOpenfreeCliStatus(): OpenFreeCliStatus {
   ].filter((item): item is { path: string; source: string } => Boolean(item.path));
   const overrides = [
     ...environmentOverrides,
-    ...(databasePath ? [{ path: databasePath, source: "KloveRouter setting" }] : []),
+    ...(databasePath ? [{ path: databasePath, source: "SaturnRouter setting" }] : []),
   ];
   let warning: string | null = null;
 
@@ -278,7 +278,7 @@ export function saveOpenfreeCliPath(value: string): OpenFreeCliStatus {
   }
   if (!isAbsolute(path)) throw new Error("Enter an absolute path to the OpenCode CLI executable.");
   const absolutePath = resolve(path);
-  if (!isExecutableFile(absolutePath)) throw new Error("That path is not an executable file on the KloveRouter host.");
+  if (!isExecutableFile(absolutePath)) throw new Error("That path is not an executable file on the SaturnRouter host.");
   db.query("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)").run(SETTING_KEY, absolutePath);
   return getOpenfreeCliStatus();
 }

@@ -334,7 +334,7 @@ async function runOpenCode(
       ? `OpenFREE could not find an OpenCode CLI. ${cliStatus.warning} Set its path in the OpenFREE provider settings.`
       : "OpenFREE could not find an OpenCode CLI. Install and sign in to OpenCode, or set its executable path in the OpenFREE provider settings.");
   }
-  const workDir = mkdtempSync(join(tmpdir(), "klove-openfree-"));
+  const workDir = mkdtempSync(join(tmpdir(), "saturn-openfree-"));
   const child = Bun.spawn(
     [executable, "run", "--format", "json", "--model", `opencode/${model}`],
     {

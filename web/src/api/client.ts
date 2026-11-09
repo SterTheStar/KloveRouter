@@ -1,14 +1,15 @@
 const API_BASE = "";
 
 function getToken(): string | null {
-  return localStorage.getItem("klove_token");
+  return localStorage.getItem("saturn_token") || localStorage.getItem("klove_token");
 }
 
 export function setToken(token: string) {
-  localStorage.setItem("klove_token", token);
+  localStorage.setItem("saturn_token", token);
 }
 
 export function clearToken() {
+  localStorage.removeItem("saturn_token");
   localStorage.removeItem("klove_token");
 }
 

@@ -68,7 +68,7 @@ function logMediaRejection(ctx: MediaRejectionContext, input: {
       clientIp: clientIp(ctx.request, ctx.headers, ctx.server as any),
       requesterName: input.requesterName ?? null,
       apiKeyPrefix: input.apiKeyPrefix ?? null,
-      requestDetails: { method: ctx.request.method, url: new URL(ctx.request.url).pathname, headers: ctx.headers, payload: safeRejectionPayload(ctx.body), klove: { rejected: true } },
+      requestDetails: { method: ctx.request.method, url: new URL(ctx.request.url).pathname, headers: ctx.headers, payload: safeRejectionPayload(ctx.body), saturn: { rejected: true } },
     });
   } catch { /* Rejection logging must never affect the response. */ }
 }
@@ -255,7 +255,7 @@ async function proxyMediaRequest(input: {
       method: input.method ?? request.method,
       url: new URL(request.url).pathname,
       stream: mediaType === "text-to-speech" || mediaType === "video-content",
-      klove: { media_type: mediaType },
+      saturn: { media_type: mediaType },
       payload: safeRequestDetails(body, contentType),
     },
   });
@@ -441,7 +441,7 @@ export const mediaProxyPlugin = (app: Elysia) => app
       clientIp: clientIp(request, headers, server as any),
       requesterName: apiKey.name,
       apiKeyPrefix: apiKey.prefix,
-      requestDetails: { method: "GET", url: "/v1/videos", klove: { media_type: "video-list" } },
+      requestDetails: { method: "GET", url: "/v1/videos", saturn: { media_type: "video-list" } },
     });
     const limit = Math.min(Math.max(Number(query.limit) || 20, 1), 100);
     const after = typeof query.after === "string" ? query.after : null;

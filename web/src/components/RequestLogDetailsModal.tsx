@@ -364,7 +364,7 @@ function ChatMessageCard({
 function GuardrailsSection({ detail }: { detail: RequestLogDetails }) {
   const guardrailsData =
     (detail.guardrails_details as any) ||
-    (detail.request_details as any)?.klove?.guardrails;
+    (detail.request_details as any)?.saturn?.guardrails;
   const status = detail.guardrails_status || guardrailsData?.action;
   if (!status && !guardrailsData) return null;
 

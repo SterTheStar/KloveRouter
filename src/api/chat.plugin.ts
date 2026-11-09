@@ -50,7 +50,7 @@ export function startTitleGeneration(
 
 /**
  * Wraps the proxy's OpenAI-compatible SSE stream to hand the chat UI a final
- * `klove_stats` event with the token accounting the proxy already computed.
+ * `saturn_stats` event with the token accounting the proxy already computed.
  *
  * The proxy records usage and duration server-side through the existing
  * usage/request-log pipeline, but that state is not observable from the
@@ -142,7 +142,7 @@ function chatStatsStream(
         ? Number((completionTokens / (durationMs / 1000)).toFixed(2))
         : 0;
     const stats = {
-      type: "klove_stats",
+      type: "saturn_stats",
       model,
       prompt_tokens: promptTokens,
       completion_tokens: completionTokens,
@@ -154,7 +154,7 @@ function chatStatsStream(
     };
     if (assistantMessageId) {
       if (assistantError && controller && streamOpen) {
-        enqueue(controller, encoder.encode(statsEvent({ type: "klove_chat_error", message: assistantError })));
+        enqueue(controller, encoder.encode(statsEvent({ type: "saturn_chat_error", message: assistantError })));
       }
       chatService.updateMessage(assistantMessageId, {
         content: assistantContent,
@@ -170,7 +170,7 @@ function chatStatsStream(
     if (usageEmitted) return;
     usageEmitted = true;
     enqueue(controller, encoder.encode(statsEvent({
-      type: "klove_usage",
+      type: "saturn_usage",
       prompt_tokens: promptTokens,
       completion_tokens: completionTokens,
       total_tokens: promptTokens + completionTokens,
@@ -266,7 +266,7 @@ function chatStatsStream(
                 if (titleGenerator && chatId) {
                   void titleGenerator().then((title) => {
                     const updated = chatService.setGeneratedTitle(chatId, title);
-                    if (updated && streamOpen && clientConnected) enqueue(controller, encoder.encode(statsEvent({ type: "klove_chat_title", chat_id: chatId, title: updated.title })));
+                    if (updated && streamOpen && clientConnected) enqueue(controller, encoder.encode(statsEvent({ type: "saturn_chat_title", chat_id: chatId, title: updated.title })));
                   }).catch(() => undefined);
                 }
                 enqueue(controller, encoder.encode(DONE_MARKER));
@@ -281,7 +281,7 @@ function chatStatsStream(
                 continue;
               }
               if (
-                chunk.type === "klove_stats" ||
+                chunk.type === "saturn_stats" ||
                 chunk.usage ||
                 chunk.error ||
                 Array.isArray(chunk.choices)
@@ -577,12 +577,12 @@ export const chatControlPlugin = (app: Elysia) =>
           const sendStart = () => {
             if (started) return;
             started = true;
-            send({ type: "klove_chat_stream_start" });
-            if (reasoning) send({ type: "klove_chat_reasoning_snapshot", reasoning });
+            send({ type: "saturn_chat_stream_start" });
+            if (reasoning) send({ type: "saturn_chat_reasoning_snapshot", reasoning });
             if (typeof content === "string" ? content.length > 0 : JSON.stringify(content) !== '""') {
               send(typeof content === "string"
-                ? { type: "klove_chat_snapshot", content }
-                : { type: "klove_chat_snapshot", content });
+                ? { type: "saturn_chat_snapshot", content }
+                : { type: "saturn_chat_snapshot", content });
             }
           };
           try {
@@ -594,37 +594,37 @@ export const chatControlPlugin = (app: Elysia) =>
               }
               const nextContent: any = message.content ?? "";
               if (typeof nextContent !== "string") {
-                if (JSON.stringify(nextContent) !== JSON.stringify(content)) send({ type: "klove_chat_snapshot", content: nextContent });
+                if (JSON.stringify(nextContent) !== JSON.stringify(content)) send({ type: "saturn_chat_snapshot", content: nextContent });
                 content = nextContent;
               } else if (typeof content !== "string") {
-                if (nextContent !== (content.content ?? "")) send({ type: "klove_chat_snapshot", content: { ...content, content: nextContent } });
+                if (nextContent !== (content.content ?? "")) send({ type: "saturn_chat_snapshot", content: { ...content, content: nextContent } });
                 content = { ...content, content: nextContent };
               } else if (nextContent.startsWith(content) && nextContent.length > content.length) {
                 send({ choices: [{ delta: { content: nextContent.slice(content.length) } }] });
               } else if (nextContent !== content) {
-                send({ type: "klove_chat_snapshot", content: nextContent });
+                send({ type: "saturn_chat_snapshot", content: nextContent });
               }
               if (typeof nextContent === "string") content = nextContent;
               const nextReasoning = message.reasoning ?? "";
               if (nextReasoning.startsWith(reasoning) && nextReasoning.length > reasoning.length) {
                 send({ choices: [{ delta: { reasoning_content: nextReasoning.slice(reasoning.length) } }] });
               } else if (nextReasoning !== reasoning) {
-                send({ type: "klove_chat_reasoning_snapshot", reasoning: nextReasoning });
+                send({ type: "saturn_chat_reasoning_snapshot", reasoning: nextReasoning });
               }
               reasoning = nextReasoning;
               const active = chatGenerationService.isActive(params.id, params.messageId);
               if (message.error && !active && message.error !== lastError) {
-                send({ type: "klove_chat_error", message: message.error });
+                send({ type: "saturn_chat_error", message: message.error });
                 lastError = message.error;
               }
               // Only announce an active stream once its first output exists,
               // so viewers do not keep the spinner for finished responses.
               if (active && !started && (reasoning || (typeof content === "string" ? content.length > 0 : true))) sendStart();
               if (message.stats && !statsSent) {
-                send({ type: "klove_stats", ...(message.stats as Record<string, unknown>) });
+                send({ type: "saturn_stats", ...(message.stats as Record<string, unknown>) });
                 statsSent = true;
               }
-              if (!active) send({ type: "klove_chat_stream_end" });
+              if (!active) send({ type: "saturn_chat_stream_end" });
               if (message.stats || !active) break;
               await new Promise((resolve) => setTimeout(resolve, 300));
             }
@@ -639,7 +639,7 @@ export const chatControlPlugin = (app: Elysia) =>
               catch { closed = true; }
             }
           } finally {
-            if (!closed) send({ type: "klove_chat_stream_end" });
+            if (!closed) send({ type: "saturn_chat_stream_end" });
             if (!closed) {
               closed = true;
               try { controller.close(); } catch { /* consumer disconnected */ }

@@ -513,9 +513,9 @@ export async function toGoogleBody(
       generationConfig.maxOutputTokens = thinkingBudget + 8192;
     }
   } else if (/gemini|gpt|thinking/i.test(body.model)) {
-    const resolvedEffort = body.__klove_reasoning?.effort;
+    const resolvedEffort = body.__saturn_reasoning?.effort;
     const effort =
-      body.__klove_reasoning?.upstreamValue ??
+      body.__saturn_reasoning?.upstreamValue ??
       body.reasoning?.effort ??
       body.reasoning_effort ??
       modelReasoningEffort(body.model);

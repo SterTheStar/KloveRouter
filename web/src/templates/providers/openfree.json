@@ -2,7 +2,7 @@
   "id": "openfree",
   "name": "OpenFREE",
   "protocol": "openfree",
-  "description": "OpenCode's free models through the authenticated OpenCode CLI on the KloveRouter host. No API key is required.",
+  "description": "OpenCode's free models through the authenticated OpenCode CLI on the SaturnRouter host. No API key is required.",
   "website": "https://opencode.ai",
   "docsUrl": "https://opencode.ai/docs",
   "placeholder": "https://opencode.ai",

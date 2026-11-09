@@ -129,7 +129,7 @@ describe("toGoogleBody", () => {
       messages: [{ role: "user", content: "hello" }],
       max_output_tokens: 123,
     } as any;
-    Object.defineProperty(body, "__klove_reasoning", {
+    Object.defineProperty(body, "__saturn_reasoning", {
       value: { effort: "none", upstreamValue: "disabled", explicit: true },
     });
     const transformed = await toGoogleBody(body, "project");
@@ -145,7 +145,7 @@ describe("toGoogleBody", () => {
       model: "gemini-3-pro-agent",
       messages: [{ role: "user", content: "hello" }],
     } as any;
-    Object.defineProperty(body, "__klove_reasoning", {
+    Object.defineProperty(body, "__saturn_reasoning", {
       value: { effort: "none", upstreamValue: "none", explicit: true },
     });
     const transformed = await toGoogleBody(body, "project");
@@ -160,7 +160,7 @@ describe("toGoogleBody", () => {
       model: "gemini-3-flash-agent",
       messages: [{ role: "user", content: "hello" }],
     } as any;
-    Object.defineProperty(body, "__klove_reasoning", {
+    Object.defineProperty(body, "__saturn_reasoning", {
       value: { effort: "none", upstreamValue: "none", explicit: true },
     });
     const transformed = await toGoogleBody(body, "project");
@@ -175,7 +175,7 @@ describe("toGoogleBody", () => {
       model: "gemini-2.5-pro",
       messages: [{ role: "user", content: "hello" }],
     } as any;
-    Object.defineProperty(body, "__klove_reasoning", {
+    Object.defineProperty(body, "__saturn_reasoning", {
       value: { effort: "none", upstreamValue: "none", explicit: true },
     });
     const transformed = await toGoogleBody(body, "project");
@@ -190,7 +190,7 @@ describe("toGoogleBody", () => {
       model: "gemini-2.5-flash-preview",
       messages: [{ role: "user", content: "hello" }],
     } as any;
-    Object.defineProperty(body, "__klove_reasoning", {
+    Object.defineProperty(body, "__saturn_reasoning", {
       value: { effort: "none", upstreamValue: "none", explicit: true },
     });
     const transformed = await toGoogleBody(body, "project");

@@ -144,9 +144,9 @@ export default function ChatSidebar({
 }) {
   const [editing, setEditing] = useState<string | null>(null);
   const [title, setTitle] = useState("");
-  const [collapsed, setCollapsed] = useState(() => localStorage.getItem("klove_chat_sidebar_collapsed") === "true");
+  const [collapsed, setCollapsed] = useState(() => localStorage.getItem("saturn_chat_sidebar_collapsed") === "true");
   const [commandOpen, setCommandOpen] = useState(false);
-  const [recentsCollapsed, setRecentsCollapsed] = useState(() => localStorage.getItem("klove_recents_collapsed") === "true");
+  const [recentsCollapsed, setRecentsCollapsed] = useState(() => localStorage.getItem("saturn_recents_collapsed") === "true");
   const [deleteAllOpen, setDeleteAllOpen] = useState(false);
   const [deletingAll, setDeletingAll] = useState(false);
   const [deleteAllError, setDeleteAllError] = useState<string | null>(null);
@@ -168,7 +168,7 @@ export default function ChatSidebar({
   const toggleCollapsed = () => {
     setCollapsed((current) => {
       const next = !current;
-      localStorage.setItem("klove_chat_sidebar_collapsed", String(next));
+      localStorage.setItem("saturn_chat_sidebar_collapsed", String(next));
       return next;
     });
   };
@@ -176,7 +176,7 @@ export default function ChatSidebar({
   const toggleRecents = () => {
     setRecentsCollapsed((current) => {
       const next = !current;
-      localStorage.setItem("klove_recents_collapsed", String(next));
+      localStorage.setItem("saturn_recents_collapsed", String(next));
       return next;
     });
   };

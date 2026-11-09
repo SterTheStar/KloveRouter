@@ -13,7 +13,7 @@ type LogEntry = {
 };
 
 type PreviewMessage = {
-  source: "klove-preview";
+  source: "saturn-preview";
   token: string;
   type: "log";
   level: LogEntry["level"];
@@ -26,7 +26,7 @@ function makeBridge(token: string) {
   const serializedToken = JSON.stringify(token);
   return `<script>(${((bridgeToken: string) => {
     const send = (message: { type: string; level?: string; message?: string }) =>
-      window.parent.postMessage({ source: "klove-preview", token: bridgeToken, ...message }, "*");
+      window.parent.postMessage({ source: "saturn-preview", token: bridgeToken, ...message }, "*");
     const format = (value: unknown) => {
       if (typeof value === "string") return value;
       try { return JSON.stringify(value, null, 2); } catch { return String(value); }
@@ -104,7 +104,7 @@ export function HtmlPreview({
       if (
         event.source !== iframeRef.current?.contentWindow ||
         event.origin !== "null" ||
-        event.data?.source !== "klove-preview" ||
+        event.data?.source !== "saturn-preview" ||
         event.data.token !== tokenRef.current
       ) return;
       setLogs((current) => [...current, { level: event.data.level, message: event.data.message }].slice(-MAX_LOGS));

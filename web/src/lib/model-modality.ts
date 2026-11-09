@@ -1,6 +1,6 @@
 import type { ModelCapabilities } from "../types";
 
-// Klove only exposes text chat models. Media categories are intentionally not
+// Saturn only exposes text chat models. Media categories are intentionally not
 // produced here so the UI never offers image, speech, or video surfaces.
 export type ModelCategory = "chat" | "image" | "tts" | "video";
 export type CategorizedModel = {

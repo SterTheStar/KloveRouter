@@ -124,7 +124,7 @@ async function fetchRemoteOrBundledCatalog(): Promise<MarketplaceSkill[]> {
     const res = await fetch(
       "https://raw.githubusercontent.com/agentskillexchange/skills/main/skills.json",
       {
-        headers: { "User-Agent": "KloveRouter" },
+        headers: { "User-Agent": "SaturnRouter" },
         signal: controller.signal,
       },
     );
@@ -461,14 +461,14 @@ async function fetchRemoteOrBundledDesignCatalog(force = false): Promise<DesignS
       fetch(
         "https://raw.githubusercontent.com/bergside/awesome-design-skills/main/skills/index.json",
         {
-          headers: { "User-Agent": "KloveRouter" },
+          headers: { "User-Agent": "SaturnRouter" },
           signal: controller.signal,
         },
       ),
       fetch(
         "https://raw.githubusercontent.com/bergside/awesome-design-skills/main/README.md",
         {
-          headers: { "User-Agent": "KloveRouter" },
+          headers: { "User-Agent": "SaturnRouter" },
           signal: controller.signal,
         },
       ).catch(() => null),
@@ -506,7 +506,7 @@ async function fetchRemoteOrBundledDesignCatalog(force = false): Promise<DesignS
               const dRes = await fetch(
                 `https://raw.githubusercontent.com/bergside/awesome-design-skills/main/skills/${encodeURIComponent(slug)}/DESIGN.md`,
                 {
-                  headers: { "User-Agent": "KloveRouter" },
+                  headers: { "User-Agent": "SaturnRouter" },
                   signal: controller.signal,
                 },
               );
@@ -714,7 +714,7 @@ export const customSkillsProxy = {
       const res = await fetch(
         `https://raw.githubusercontent.com/agentskillexchange/skills/main/skills/${encodeURIComponent(slug)}/SKILL.md`,
         {
-          headers: { "User-Agent": "KloveRouter" },
+          headers: { "User-Agent": "SaturnRouter" },
           signal: controller.signal,
         },
       );
@@ -914,7 +914,7 @@ export const customSkillsProxy = {
       const timeout = setTimeout(() => controller.abort(), 6000);
       const res = await fetch(
         `https://raw.githubusercontent.com/bergside/awesome-design-skills/main/skills/${encodeURIComponent(slug)}/SKILL.md`,
-        { headers: { "User-Agent": "KloveRouter" }, signal: controller.signal },
+        { headers: { "User-Agent": "SaturnRouter" }, signal: controller.signal },
       );
       clearTimeout(timeout);
       if (res.ok) {
@@ -941,7 +941,7 @@ export const customSkillsProxy = {
       try {
         const res = await fetch(
           `https://raw.githubusercontent.com/bergside/awesome-design-skills/main/skills/${encodeURIComponent(slug)}/SKILL.md`,
-          { headers: { "User-Agent": "KloveRouter" } },
+          { headers: { "User-Agent": "SaturnRouter" } },
         );
         if (res.ok) {
           content = await res.text();

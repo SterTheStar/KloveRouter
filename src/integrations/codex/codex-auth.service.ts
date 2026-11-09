@@ -325,4 +325,4 @@ async function fetchAccountLabel(
 }
 
 export const CODEX_CALLBACK_HTML =
-  "<!doctype html><html><body><h1>Codex connected</h1><p>You can close this window and return to Klove.</p></body></html>";
+  "<!doctype html><html><body><h1>Codex connected</h1><p>You can close this window and return to Saturn.</p></body></html>";

@@ -1,15 +1,25 @@
 import { dirname } from "node:path";
+import { existsSync } from "node:fs";
 
 const isProduction = process.env.NODE_ENV === "production";
 const jwtSecret = process.env.JWT_SECRET?.trim() || undefined;
-const encryptionKey = process.env.KLOVE_ENCRYPTION_KEY?.trim() || undefined;
+const encryptionKey =
+  process.env.SATURN_ENCRYPTION_KEY?.trim() ||
+  process.env.KLOVE_ENCRYPTION_KEY?.trim() ||
+  undefined;
 const defaultPassword = process.env.DEFAULT_PASSWORD?.trim() || undefined;
 const profileName = process.env.PROFILE_NAME?.trim() || undefined;
 
+const defaultDbPath = existsSync("./data/saturn.db")
+  ? "./data/saturn.db"
+  : existsSync("./data/klove.db")
+    ? "./data/klove.db"
+    : "./data/saturn.db";
+
 if (isProduction) {
   const weakValues = new Set([
-    "klove-jwt-secret-change-in-production",
-    "klove-credential-encryption-key-change-in-production",
+    "saturn-jwt-secret-change-in-production",
+    "saturn-credential-encryption-key-change-in-production",
     "klove123",
   ]);
   if (
@@ -20,7 +30,7 @@ if (isProduction) {
     (defaultPassword && defaultPassword.length < 12)
   ) {
     throw new Error(
-      "Production requires strong, distinct JWT_SECRET, KLOVE_ENCRYPTION_KEY, and DEFAULT_PASSWORD values",
+      "Production requires strong, distinct JWT_SECRET, SATURN_ENCRYPTION_KEY, and DEFAULT_PASSWORD values",
     );
   }
 }
@@ -28,7 +38,7 @@ if (isProduction) {
 export const config = {
   port: parseInt(process.env.PORT || "3000"),
   jwtSecret,
-  dbPath: process.env.DB_PATH || "./data/klove.db",
+  dbPath: process.env.DB_PATH || defaultDbPath,
   defaultPassword,
   profileName,
   isDev: !isProduction,

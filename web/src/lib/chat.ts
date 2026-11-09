@@ -101,11 +101,11 @@ function handleChunk(raw: string, handlers: ChatStreamHandlers): void {
   } catch {
     return;
   }
-  if (chunk.type === "klove_chat_title") {
+  if (chunk.type === "saturn_chat_title") {
     handlers.onTitle({ chat_id: String(chunk.chat_id), title: String(chunk.title) });
     return;
   }
-  if (chunk.type === "klove_usage") {
+  if (chunk.type === "saturn_usage") {
     // Values are passed through as-is: absent fields must stay undefined so
     // the caller keeps its current values instead of zeroing them out.
     handlers.onUsage({
@@ -117,7 +117,7 @@ function handleChunk(raw: string, handlers: ChatStreamHandlers): void {
     });
     return;
   }
-  if (chunk.type === "klove_stats") {
+  if (chunk.type === "saturn_stats") {
     handlers.onStats({
       model: (chunk.model as string | null) ?? null,
       prompt_tokens: Number(chunk.prompt_tokens ?? 0),
@@ -130,23 +130,23 @@ function handleChunk(raw: string, handlers: ChatStreamHandlers): void {
     });
     return;
   }
-  if (chunk.type === "klove_chat_error") {
+  if (chunk.type === "saturn_chat_error") {
     handlers.onError(String(chunk.message ?? "Chat request failed"));
     return;
   }
-  if (chunk.type === "klove_chat_stream_start") {
+  if (chunk.type === "saturn_chat_stream_start") {
     handlers.onStreamStart?.();
     return;
   }
-  if (chunk.type === "klove_chat_stream_end") {
+  if (chunk.type === "saturn_chat_stream_end") {
     handlers.onStreamEnd?.();
     return;
   }
-  if (chunk.type === "klove_chat_snapshot") {
+  if (chunk.type === "saturn_chat_snapshot") {
     handlers.onContent({ __snapshot: true, content: chunk.content ?? "" });
     return;
   }
-  if (chunk.type === "klove_chat_reasoning_snapshot") {
+  if (chunk.type === "saturn_chat_reasoning_snapshot") {
     handlers.onReasoning(`\u0000snapshot:${String(chunk.reasoning ?? "")}`);
     return;
   }
@@ -176,7 +176,7 @@ function handleChunk(raw: string, handlers: ChatStreamHandlers): void {
 /**
  * Reads an OpenAI-compatible SSE stream from the panel chat endpoint and
  * dispatches each chunk to the handlers. `[DONE]` and the custom
- * `klove_stats`/`klove_usage`/`klove_chat_title` events are handled internally.
+ * `saturn_stats`/`saturn_usage`/`saturn_chat_title` events are handled internally.
  */
 export async function readChatStream(
   response: Response,

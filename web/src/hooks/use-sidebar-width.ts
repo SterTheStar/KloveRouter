@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-export const SIDEBAR_STORAGE_KEY = "klove_sidebar_width";
+export const SIDEBAR_STORAGE_KEY = "saturn_sidebar_width";
 export const DEFAULT_SIDEBAR_WIDTH = 288; // 18rem / w-72
 export const MIN_SIDEBAR_WIDTH = 220;
 export const MAX_SIDEBAR_WIDTH = 480;

@@ -27,7 +27,7 @@ async function exchange(code: string) {
 
 function html(message: string) {
   const safeMessage = message.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;");
-  return new Response(`<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>DeepAI Code</title><body style="font:16px system-ui;max-width:36rem;margin:15vh auto;padding:1rem"><h1>${safeMessage}</h1><p>You can close this tab and return to KloveRouter.</p></body></html>`, { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "Referrer-Policy": "no-referrer" } });
+  return new Response(`<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>DeepAI Code</title><body style="font:16px system-ui;max-width:36rem;margin:15vh auto;padding:1rem"><h1>${safeMessage}</h1><p>You can close this tab and return to SaturnRouter.</p></body></html>`, { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "Referrer-Policy": "no-referrer" } });
 }
 
 export const deepaiAuthService = {

@@ -41,7 +41,7 @@ function parseEfforts(raw: any): ReasoningEffort[] | undefined {
     .map((item) => item.trim());
   if (!values.length) return undefined;
   // A default is taken from the provider when it declares one (matched loosely);
-  // otherwise nothing is marked and clients must pick explicitly — the Klove
+  // otherwise nothing is marked and clients must pick explicitly — the Saturn
   // panel can still set one manually.
   const declared = String(raw?.default_reasoning_effort ?? raw?.default_reasoning_level ?? raw?.reasoning?.default_effort ?? "").trim().toLowerCase();
   const declaredMatch = declared ? values.find((value) => value.toLowerCase() === declared) : undefined;

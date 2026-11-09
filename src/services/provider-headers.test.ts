@@ -9,7 +9,7 @@ import { mock } from "bun:test";
 describe("provider custom headers", () => {
   test("validates header maps and forbids protocol and transport overrides", () => {
     expect(validateCustomHeaders({ "X-Team": "research" })).toEqual({ "X-Team": "research" });
-    expect(() => validateCustomHeaders({ Authorization: "Bearer override" })).toThrow("managed by Klove");
+    expect(() => validateCustomHeaders({ Authorization: "Bearer override" })).toThrow("managed by Saturn");
     expect(() => validateCustomHeaders({ "Bad Header": "x" })).toThrow("Invalid custom header name");
     expect(() => validateCustomHeaders({ "X-Test": "a\r\nb" })).toThrow("single-line");
   });
@@ -52,7 +52,7 @@ describe("provider custom headers", () => {
   });
 
   test("rejects manual X-Session-ID overrides like x-opencode-session", () => {
-    expect(() => validateCustomHeaders({ "X-Session-ID": "manual" })).toThrow("managed by Klove");
+    expect(() => validateCustomHeaders({ "X-Session-ID": "manual" })).toThrow("managed by Saturn");
   });
 
   test("generates a ses_-shaped OpenCode session ID by default", () => {

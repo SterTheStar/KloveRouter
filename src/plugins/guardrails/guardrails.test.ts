@@ -108,13 +108,13 @@ describe("Guardrails Rules: Environment Variables (.env)", () => {
 PORT=3000
 DATABASE_URL="postgres://user:pass@localhost/db"
 JWT_SECRET=super_secret_jwt_key_12345
-KLOVE_ENCRYPTION_KEY=my-super-strong-encryption-key
+SATURN_ENCRYPTION_KEY=my-super-strong-encryption-key
 DEBUG=true
 `;
     const { violations, sanitized } = scanEnvVars(text);
     expect(violations.length).toBeGreaterThanOrEqual(3);
     expect(sanitized).toContain("JWT_SECRET=[REDACTED_ENV_VAR]");
-    expect(sanitized).toContain("KLOVE_ENCRYPTION_KEY=[REDACTED_ENV_VAR]");
+    expect(sanitized).toContain("SATURN_ENCRYPTION_KEY=[REDACTED_ENV_VAR]");
     expect(sanitized).toContain("PORT=3000"); // Non-sensitive env var should remain
   });
 });

@@ -6,8 +6,8 @@ import { resolveChatModel } from "../lib/chat-model";
 import { effortOptions, defaultEffortOption } from "../lib/chat-efforts";
 import { queryCache, invalidateChats, queryKeys } from "../lib/query-cache";
 
-const MODEL_STORAGE_KEY = "klove_chat_model";
-const REASONING_STORAGE_PREFIX = "klove_chat_reasoning:";
+const MODEL_STORAGE_KEY = "saturn_chat_model";
+const REASONING_STORAGE_PREFIX = "saturn_chat_reasoning:";
 
 function reasoningKey(selectedModel: string) {
   return `${REASONING_STORAGE_PREFIX}${selectedModel}`;

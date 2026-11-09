@@ -73,7 +73,7 @@ import {
 
 function anthropicPayload(body: any, modelId: string, stream = false) {
   const converted = requestFromChat("anthropic", { ...body, model: modelId, stream });
-  const effort = body.__klove_reasoning?.effort;
+  const effort = body.__saturn_reasoning?.effort;
   const maxTokens =
     body.max_output_tokens ??
     body.max_tokens ??
@@ -302,7 +302,7 @@ function logProxyRejection(
     headers: ctx.headers,
     payload: input.payload,
     stream: input.streaming,
-    klove: {
+    saturn: {
       rejected: true,
       ...(input.guardrailsDetails ? { guardrails: input.guardrailsDetails } : {}),
     },
@@ -688,7 +688,7 @@ export const proxyPlugin = (app: Elysia) =>
             return { type: "error", error: { type: "api_error", message: `Compound model "${poolSlug}" is unavailable` } };
           }
           const selfIp = clientIp(request, headers, server as any);
-          const response = await routeModelPool(poolSlug, chatBody, headers.authorization ?? `Bearer ${headers["x-api-key"]}`, request.signal, async (input, init) => fetch(input, { ...init, headers: { ...(init?.headers as Record<string, string>), "X-Klove-Model-Pool-Attempt": "true", "x-forwarded-for": selfIp } }));
+          const response = await routeModelPool(poolSlug, chatBody, headers.authorization ?? `Bearer ${headers["x-api-key"]}`, request.signal, async (input, init) => fetch(input, { ...init, headers: { ...(init?.headers as Record<string, string>), "X-Saturn-Model-Pool-Attempt": "true", "x-forwarded-for": selfIp } }));
           if (!response.ok) {
             logProxyRejection({ request, headers, server }, { statusCode: response.status, error: `Compound model "${poolSlug}" failed with HTTP ${response.status}`, providerName: "compound", modelName: model, payload: body, streaming: Boolean((body as any)?.stream) });
             set.status = response.status; const error = await response.json().catch(() => null) as any; return { type: "error", error: { type: error?.error?.type ?? "api_error", message: error?.error?.message ?? error?.message ?? "Provider request failed" } }; }
@@ -811,7 +811,7 @@ export const proxyPlugin = (app: Elysia) =>
               clientIp: clientIp(request, headers, server as any),
               requesterName: apiKey.name,
           apiKeyPrefix: apiKey.prefix,
-              requestDetails: { method: request.method, url: "/v1/responses", headers, payload: body, stream: Boolean(body.stream), ...(validationWarnings.length ? { klove: { warnings: validationWarnings } } : {}) },
+              requestDetails: { method: request.method, url: "/v1/responses", headers, payload: body, stream: Boolean(body.stream), ...(validationWarnings.length ? { saturn: { warnings: validationWarnings } } : {}) },
               streaming: Boolean(body.stream),
             });
             const incomingSession = (headers["x-opencode-session"] ?? headers["x-session-id"]);
@@ -908,7 +908,7 @@ export const proxyPlugin = (app: Elysia) =>
           const selfIp = clientIp(request, headers, server as any);
           const poolResponse = await routeModelPool(poolSlug, chatBody, headers.authorization!, request.signal, async (input, init) => fetch(input, {
             ...init,
-            headers: { ...(init?.headers as Record<string, string>), "X-Klove-Model-Pool-Attempt": "true", "x-forwarded-for": selfIp },
+            headers: { ...(init?.headers as Record<string, string>), "X-Saturn-Model-Pool-Attempt": "true", "x-forwarded-for": selfIp },
           }));
           if (!poolResponse.ok) {
             logProxyRejection({ request, headers, server }, { statusCode: poolResponse.status, error: `Compound model "${poolSlug}" failed with HTTP ${poolResponse.status}`, providerName: "compound", modelName: modelNameHint, payload: body, streaming: streamHint, apiKeyPrefix: apiKey.prefix, requesterName: apiKey.name });
@@ -1000,7 +1000,7 @@ export const proxyPlugin = (app: Elysia) =>
           return { error: "Unauthorized", message: "Valid API key required" };
         }
 
-        const isTitleGeneration = headers["x-klove-title-generation"] === "true";
+        const isTitleGeneration = headers["x-saturn-title-generation"] === "true";
         if (rtkManager.enabled && !isTitleGeneration) {
           const lastMessage = body.messages.at(-1);
           logger.info("RTK checking last message", {
@@ -1062,7 +1062,7 @@ export const proxyPlugin = (app: Elysia) =>
           const selfIp = clientIp(request, headers, server as any);
           const response = await routeModelPool(poolSlug, body, headers.authorization!, request.signal, async (input, init) => fetch(input, {
             ...init,
-            headers: { ...(init?.headers as Record<string, string>), "X-Klove-Model-Pool-Attempt": "true", "x-forwarded-for": selfIp },
+            headers: { ...(init?.headers as Record<string, string>), "X-Saturn-Model-Pool-Attempt": "true", "x-forwarded-for": selfIp },
           }));
           if (!response.ok) {
             logProxyRejection({ request, headers, server }, { statusCode: response.status, error: `Compound model "${poolSlug}" failed with HTTP ${response.status}`, providerName: "compound", modelName: modelNameHint, payload: body, streaming: streamHint, apiKeyPrefix: apiKey.prefix, requesterName: apiKey.name });
@@ -1228,8 +1228,8 @@ export const proxyPlugin = (app: Elysia) =>
             headers,
             payload: body,
             stream: Boolean(body.stream),
-            ...(capabilityWarnings.length ? { klove: { warnings: capabilityWarnings } } : {}),
-            ...(inboundGuardrailsDetails ? { klove: { guardrails: inboundGuardrailsDetails } } : {}),
+            ...(capabilityWarnings.length ? { saturn: { warnings: capabilityWarnings } } : {}),
+            ...(inboundGuardrailsDetails ? { saturn: { guardrails: inboundGuardrailsDetails } } : {}),
           },
           streaming: Boolean(body.stream),
         });

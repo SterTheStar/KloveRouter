@@ -58,7 +58,7 @@ describe("qwenPayload", () => {
       reasoning_effort: "none",
       reasoning: { effort: "none" },
     };
-    Object.defineProperty(body, "__klove_reasoning", {
+    Object.defineProperty(body, "__saturn_reasoning", {
       value: { explicit: true, effort: "none", upstreamValue: "none" },
       enumerable: false,
     });
@@ -76,7 +76,7 @@ describe("qwenPayload", () => {
       reasoning_effort: "none",
       reasoning: { effort: "none" },
     };
-    Object.defineProperty(body, "__klove_reasoning", {
+    Object.defineProperty(body, "__saturn_reasoning", {
       value: { explicit: true, effort: "none", upstreamValue: "none" },
       enumerable: false,
     });

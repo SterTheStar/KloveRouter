@@ -205,7 +205,7 @@ export function OAuthInfoGuide({ protocol }: { protocol: "codex" | "antigravity"
         <span>OAuth 2.0 authentication</span>
       </div>
       <p>
-        Connect your {providerTitle} account securely. KloveRouter stores tokens encrypted in SQLite and routes through private provider endpoints.
+        Connect your {providerTitle} account securely. SaturnRouter stores tokens encrypted in SQLite and routes through private provider endpoints.
       </p>
     </div>
   );

@@ -164,7 +164,7 @@ describe("codexRequestBody", () => {
       codexRequestBody({ messages: [], max_tokens: 20 }, "gpt-test"),
     ).not.toHaveProperty("reasoning");
     const disabled = { messages: [] } as any;
-    Object.defineProperty(disabled, "__klove_reasoning", {
+    Object.defineProperty(disabled, "__saturn_reasoning", {
       value: { effort: "none", upstreamValue: "none" },
     });
     expect(codexRequestBody(disabled, "gpt-test")).not.toHaveProperty(
