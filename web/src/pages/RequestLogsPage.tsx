@@ -28,20 +28,13 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import ConfirmDialog from "@/components/ConfirmDialog";
+import { RequestLogDetailsModal } from "@/components/RequestLogDetailsModal";
 import { requestLogs } from "../api/client";
 import type { RequestLog, RequestLogDetails } from "../types";
 import { copyToClipboard } from "../lib/clipboard";
@@ -117,104 +110,6 @@ function StatusBadge({ log }: { log: RequestLog }) {
       <span className="capitalize">{label}</span>
       {log.status_code ? <span className="font-mono text-tertiary">{log.status_code}</span> : null}
     </span>
-  );
-}
-
-function GuardrailsDetailSection({ detail }: { detail: RequestLogDetails }) {
-  const guardrailsData = (detail.guardrails_details as any) || (detail.request_details as any)?.klove?.guardrails;
-  const status = detail.guardrails_status || guardrailsData?.action;
-  if (!status && !guardrailsData) return null;
-
-  const violations: Array<{ category: string; description: string; matchedTextPreview?: string }> =
-    guardrailsData?.violations || (detail.error_details as any)?.violations || [];
-
-  const isBlocked = status === "blocked" || status === "block";
-  const isRedacted = status === "redacted" || status === "redact";
-
-  return (
-    <div
-      className={`rounded-xl border p-4 space-y-3 ${
-        isBlocked
-          ? "border-destructive/30 bg-destructive/5"
-          : isRedacted
-            ? "border-amber-500/30 bg-amber-500/5"
-            : "border-sky-500/30 bg-sky-500/5"
-      }`}
-    >
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-2.5">
-          {isBlocked ? (
-            <ShieldCrossIcon className="size-5 shrink-0 text-destructive" />
-          ) : (
-            <ShieldIcon className={`size-5 shrink-0 ${isRedacted ? "text-amber-500" : "text-sky-500"}`} />
-          )}
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="font-semibold text-sm text-foreground">
-                AI Firewall &amp; Guardrails Protection
-              </span>
-              <span
-                className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs font-semibold ${
-                  isBlocked
-                    ? "bg-destructive text-destructive-foreground"
-                    : isRedacted
-                      ? "bg-amber-500 text-white"
-                      : "bg-sky-500 text-white"
-                }`}
-              >
-                {isBlocked ? "Request Blocked" : isRedacted ? "Data Redacted" : "Violation Audited"}
-              </span>
-            </div>
-            <p className="text-xs text-tertiary mt-0.5">
-              {isBlocked
-                ? "This request was rejected before reaching the LLM provider to protect against security threats."
-                : isRedacted
-                  ? "Sensitive credentials, .env secrets, or confidential personal data were sanitized with safe placeholders."
-                  : "Security violation detected and recorded according to policy."}
-            </p>
-          </div>
-        </div>
-        {guardrailsData?.direction && (
-          <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-surface border text-tertiary uppercase">
-            Traffic: {guardrailsData.direction}
-          </span>
-        )}
-      </div>
-
-      {violations.length > 0 && (
-        <div className="space-y-2 pt-2 border-t border-border/40">
-          <p className="text-xs font-medium text-foreground">
-            Detected Security Violations ({violations.length}):
-          </p>
-          <div className="grid grid-cols-1 gap-2">
-            {violations.map((v, idx) => (
-              <div
-                key={idx}
-                className="rounded-lg border border-border/60 bg-card p-2.5 text-xs space-y-1 shadow-2xs"
-              >
-                <div className="flex items-center justify-between">
-                  <span className="font-medium text-foreground flex items-center gap-1.5">
-                    <span className="size-1.5 rounded-full bg-primary" />
-                    {v.description}
-                  </span>
-                  <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-muted text-tertiary uppercase">
-                    {v.category}
-                  </span>
-                </div>
-                {v.matchedTextPreview && (
-                  <div className="mt-1 pt-0.5 text-[11px] text-tertiary">
-                    <span>Matched preview: </span>
-                    <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] text-destructive break-all">
-                      {v.matchedTextPreview}
-                    </code>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
   );
 }
 
@@ -926,29 +821,13 @@ export default function RequestLogsPage() {
         </CardContent>
       </Card>
 
-      <Dialog open={!!selected} onOpenChange={(open) => !open && setSelected(null)}>
-        <DialogContent className="max-h-[90vh] gap-3 overflow-hidden rounded-xl border border-border bg-card shadow-[0px_4px_16px_0px_rgba(0,0,0,0.05)] sm:max-w-4xl">
-          <DialogHeader>
-            <DialogTitle>Request log details</DialogTitle>
-            <DialogDescription>{selected?.id} · {selected ? formatTime(selected.created_at) : ""}</DialogDescription>
-          </DialogHeader>
-          <ScrollArea className="max-h-[70vh] pr-3">
-            {detailLoading && <LoaderCircle className="mx-auto my-8 size-5 animate-spin" />}
-            {detailError && <Alert variant="destructive"><AlertDescription>Unable to load this request log: {detailError}</AlertDescription></Alert>}
-            {detail && <div className="space-y-4">
-              <div className="flex flex-wrap items-center gap-2"><StatusBadge log={detail} /><span>{detail.provider_name} / {detail.model_name}</span><span className="text-tertiary">{detail.credential_label || "credential masked"}</span></div>
-              <GuardrailsDetailSection detail={detail} />
-              {([ ["Request metadata / payload", detail.request_details], ["Response payload", detail.response_details], ["Error details", detail.error_details] ] as const).map(([title, value]) => (
-                <section key={title} className="space-y-1">
-                  <div className="flex items-center justify-between"><h3 className="text-sm font-medium text-foreground">{title}</h3><Button variant="ghost" size="sm" disabled={value == null} onClick={() => copy(JSON.stringify(value, null, 2))}><CopyIcon className="size-3" /> Copy</Button></div>
-                  <pre className="max-h-72 overflow-auto rounded-xl border border-border bg-background/60 p-3 font-mono text-xs text-foreground whitespace-pre-wrap break-words">{value == null ? "No details captured." : JSON.stringify(value, null, 2)}</pre>
-                </section>
-              ))}
-              {detail.error_message && <section><h3 className="text-sm font-medium text-destructive">Error</h3><pre className="mt-1 whitespace-pre-wrap text-xs text-destructive">{detail.error_message}</pre></section>}
-            </div>}
-          </ScrollArea>
-        </DialogContent>
-      </Dialog>
+      <RequestLogDetailsModal
+        selected={selected}
+        detail={detail}
+        loading={detailLoading}
+        error={detailError}
+        onClose={() => setSelected(null)}
+      />
 
       <ConfirmDialog
         open={confirmOpen}
