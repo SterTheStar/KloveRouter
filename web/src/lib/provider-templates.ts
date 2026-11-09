@@ -323,7 +323,7 @@ export const PROVIDER_TEMPLATES: readonly ProviderTemplate[] = [
     protocol: "deepai",
     name: "DeepAI Code",
     description: "DeepAI Code models with Theos usage and account limits.",
-    logo: templateLogo("deepai", "https://deepai.org"),
+    logo: `${PRESET_AVATAR_BASE}/deepai.svg`,
     placeholder: "https://api.deepai.org/deepai_code",
     preset: false,
   },

@@ -16,6 +16,7 @@ const protocolIcons: Partial<Record<ProviderProtocol, string>> = {
   atomesus: "https://atomesus.com/favicon.ico",
   perch: "https://app.perchai.app/favicon.ico",
   openfree: "https://opencode.ai/favicon.ico",
+  deepai: "/api/media/avatars/presets/deepai.svg",
 };
 
 export interface ParsedAvatar {

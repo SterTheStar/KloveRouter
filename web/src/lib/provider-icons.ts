@@ -12,7 +12,7 @@ const protocolIcons: Partial<Record<string, string>> = {
   atomesus: "https://atomesus.com/favicon.ico",
   perch: "https://app.perchai.app/favicon.ico",
   openfree: "https://opencode.ai/favicon.ico",
-  deepai: "https://deepai.org/favicon.ico",
+  deepai: "/api/media/avatars/presets/deepai.svg",
 };
 
 /** Google favicon service URL for the host of an endpoint, or null when it cannot be parsed. */

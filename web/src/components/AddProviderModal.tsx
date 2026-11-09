@@ -550,7 +550,8 @@ export default function AddProviderModal({
                         <Badge variant="destructive">Not working</Badge>
                       )}
                       {(type.protocol === "codex" ||
-                        type.protocol === "antigravity") && (
+                        type.protocol === "antigravity" ||
+                        type.protocol === "deepai") && (
                         <Badge variant="outline">OAuth</Badge>
                       )}
                     </div>
@@ -597,7 +598,8 @@ export default function AddProviderModal({
             </DialogHeader>
             <div className="space-y-4">
               {(selectedType?.protocol === "codex" ||
-                selectedType?.protocol === "antigravity") && (
+                selectedType?.protocol === "antigravity" ||
+                selectedType?.protocol === "deepai") && (
                 <Alert>
                   <AlertDescription>
                     <strong>OAuth integration:</strong> Klove stores the account
@@ -610,7 +612,7 @@ export default function AddProviderModal({
                 value={avatarManuallySet ? avatar : null}
                 previewSrc={selectedType?.logo}
                 previewFallbackUrl={faviconForEndpoint(baseUrl)}
-                name={name}
+                name={name || selectedType?.name || "Provider"}
                 onChange={(value) => { setAvatar(value); setAvatarManuallySet(value !== null); }}
                 label="Provider avatar"
                 onError={(message) => notifyError("Invalid avatar", message)}
