@@ -232,7 +232,7 @@ describe("toGoogleBody", () => {
     expect(text).not.toContain("RFC 2119");
     expect(text).not.toContain("used_claude");
     expect(text).not.toContain("Oh My Pi");
-    expect((transformed as any).requestType).toBeUndefined();
+    expect((transformed as any).requestType).toBe("agent");
   });
 
   test("replaces standalone RFC 2119 clauses without a wrapper", async () => {
@@ -247,10 +247,97 @@ describe("toGoogleBody", () => {
       ],
     }, "project");
 
-    const text = transformed.request.systemInstruction.parts[0].text;
+    const text = transformed.request.systemInstruction.parts.find((p: any) =>
+      p.text?.includes("Requirement terminology"),
+    )?.text;
     expect(text).toBe(
       "Requirement terminology: MUST means mandatory, SHOULD means recommended, and MAY means optional.",
     );
+  });
+
+  test("strips billing header and scrubs competitor identities", async () => {
+    const transformed = await toGoogleBody({
+      model: "gemini-test",
+      messages: [
+        {
+          role: "system",
+          content: [
+            "x-anthropic-billing-header: cc_version=2.1.274.834; cc_entrypoint=sdk-cli;",
+            "You are Claude Code, Anthropic's official CLI for Claude.",
+            "Created with Hermes Agent from Nous Research.",
+          ].join("\n"),
+        },
+        { role: "user", content: "hello" },
+      ],
+    }, "project");
+
+    const fullText = transformed.request.systemInstruction.parts
+      .map((p: any) => p.text)
+      .join("\n");
+
+    expect(fullText).not.toContain("x-anthropic-billing-header");
+    expect(fullText).not.toContain("Claude Code");
+    expect(fullText).not.toContain("Anthropic");
+    expect(fullText).not.toContain("Nous Research");
+    expect(fullText).not.toContain("Hermes Agent");
+    expect(fullText).toContain("the assistant");
+    expect(fullText).toContain("the vendor");
+  });
+
+  test("configures Claude thinking with snake_case thinking_budget and adjusts max tokens", async () => {
+    const transformed = await toGoogleBody({
+      model: "claude-3-7-sonnet-20250219",
+      messages: [{ role: "user", content: "explain quantum physics" }],
+      max_tokens: 1000,
+      thinking: { budget_tokens: 4000 },
+    }, "project");
+
+    expect(transformed.request.generationConfig.thinkingConfig).toEqual({
+      include_thoughts: true,
+      thinking_budget: 4000,
+    });
+    // Should be adjusted to exceed budget (4000 + 8192)
+    expect(transformed.request.generationConfig.maxOutputTokens).toBe(12192);
+  });
+
+  test("tool calls have skip_thought_signature_validator fallback and Claude has VALIDATED mode", async () => {
+    const transformed = await toGoogleBody({
+      model: "claude-sonnet-4-6",
+      messages: [
+        { role: "user", content: "check weather" },
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "tool_use",
+              id: "call_123",
+              name: "get_weather",
+              input: { city: "Paris" },
+            },
+          ],
+        },
+      ],
+      tools: [
+        {
+          type: "function",
+          function: {
+            name: "get_weather",
+            description: "Get weather",
+            parameters: {
+              type: "object",
+              properties: { city: { type: "string" } },
+              required: ["city"],
+            },
+          },
+        },
+      ],
+    }, "project");
+
+    expect(transformed.request.toolConfig).toEqual({
+      functionCallingConfig: { mode: "VALIDATED" },
+    });
+    const assistantMsg = transformed.request.contents.find((c: any) => c.role === "model");
+    expect(assistantMsg.parts[0].thoughtSignature).toBe("skip_thought_signature_validator");
   });
 
   test("drops telemetry keys recursively", () => {

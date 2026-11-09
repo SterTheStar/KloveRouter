@@ -2,17 +2,24 @@ import { credentialService } from "../../services/credential.service";
 import {
   antigravityAuthService,
   discoverProject,
+  DEFAULT_ANTIGRAVITY_PROJECT_ID,
 } from "./antigravity-auth.service";
 import { getImpersonationHeaders } from "./antigravity.headers";
-import { googleStreamToOpenAI, toGoogleBody } from "./antigravity.transform";
+import {
+  deriveSessionId,
+  googleStreamToOpenAI,
+  toGoogleBody,
+} from "./antigravity.transform";
 import {
   filterAntigravityModels,
   isBlockedAntigravityModel,
 } from "./antigravity.models";
 import { logger } from "../../logger";
 
-const ENDPOINT =
-  "https://daily-cloudcode-pa.googleapis.com/v1internal:streamGenerateContent?alt=sse";
+const CLOUDCODE_STREAM_ENDPOINTS = [
+  "https://daily-cloudcode-pa.googleapis.com/v1internal:streamGenerateContent?alt=sse",
+  "https://cloudcode-pa.googleapis.com/v1internal:streamGenerateContent?alt=sse",
+];
 export type AntigravityQuotaBucket = {
   bucket_id: string;
   label: string;
@@ -64,39 +71,54 @@ export async function antigravityResponses(
           credential.id,
       )!;
   }
-  if (!credential.access_token || !credential.project_id)
-    throw new Error("Antigravity account has no access token or project");
+  const projectId = credential.project_id || DEFAULT_ANTIGRAVITY_PROJECT_ID;
+  if (!credential.access_token)
+    throw new Error("Antigravity account has no access token");
   const fingerprint = antigravityAuthService.fingerprint(credential);
+  const sessionId = deriveSessionId(body, credential.email || credential.id);
   const headers = getImpersonationHeaders(
     credential.access_token,
     fingerprint,
     model,
+    sessionId,
+    "text/event-stream",
   );
   const payload = JSON.stringify(
-    await toGoogleBody({ ...body, model }, credential.project_id),
+    await toGoogleBody({ ...body, model }, projectId, sessionId),
   );
   let response: Response | null = null;
   let lastError: unknown;
-  for (let attempt = 0; attempt < 2; attempt++) {
-    try {
-      const requestStarted = performance.now();
-      response = await fetch(ENDPOINT, {
-        method: "POST",
-        headers,
-        body: payload,
-      });
-      logger.debug("Antigravity response headers received", {
-        model,
-        attempt: attempt + 1,
-        duration_ms: Math.round(performance.now() - requestStarted),
-        status: response.status,
-      });
-      if (response.status < 500) break;
-      lastError = new Error(`Antigravity upstream returned ${response.status}`);
-    } catch (error) {
-      lastError = error;
+  for (const endpoint of CLOUDCODE_STREAM_ENDPOINTS) {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const requestStarted = performance.now();
+        response = await fetch(endpoint, {
+          method: "POST",
+          headers,
+          body: payload,
+        });
+        logger.debug("Antigravity response headers received", {
+          model,
+          endpoint,
+          attempt: attempt + 1,
+          duration_ms: Math.round(performance.now() - requestStarted),
+          status: response.status,
+        });
+        if (response.ok) break;
+        if (response.status === 401) {
+          const refreshed = await antigravityAuthService.ensure(credential.id);
+          headers.Authorization = `Bearer ${refreshed.access_token}`;
+        }
+        if (response.status < 500 && response.status !== 401 && response.status !== 429) {
+          break;
+        }
+        lastError = new Error(`Antigravity upstream returned ${response.status}`);
+      } catch (error) {
+        lastError = error;
+      }
+      if (attempt === 0) await Bun.sleep(400);
     }
-    if (attempt === 0) await Bun.sleep(350);
+    if (response?.ok) break;
   }
   if (!response)
     throw new Error(

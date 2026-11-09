@@ -6,59 +6,73 @@ function stableId(value: string) {
     .digest("hex")
     .slice(0, 16);
 }
+
 export function generateFingerprint(email: string): DeviceFingerprint {
   const device = stableId(email);
+  const arch = process.arch === "arm64" ? "arm64" : "x64";
+  const platform =
+    process.platform === "darwin"
+      ? "darwin"
+      : process.platform === "win32"
+        ? "win32"
+        : "linux";
   return {
-    userAgent: "antigravity/2.0.1 darwin/arm64",
+    userAgent: `antigravity/hub/2.25.0 ${platform}/${arch}`,
     quotaUser: `device-${device}`,
     deviceId: device,
-    platform: "darwin/arm64",
-    apiClient: "google-cloud-sdk vscode/1.96.0",
-    ideType: "VSCODE",
-    platformName: "MACOS",
+    platform: `${platform}/${arch}`,
+    apiClient: "gl-node/18.18.2 fire/0.8.6 grpc/1.10.x",
+    ideType: "ANTIGRAVITY",
+    platformName: platform.toUpperCase(),
     sessionToken: crypto.randomUUID().replaceAll("-", ""),
     cliUserAgent: "google-api-nodejs-client/10.3.0",
     cliApiClient: "gl-node/22.18.0",
     clientMetadata: {
-      ideType: "VSCODE",
-      platform: "MACOS",
+      ideType: "ANTIGRAVITY",
+      platform: platform.toUpperCase(),
       pluginType: "GEMINI",
       osVersion: "15.1",
-      arch: "arm64",
+      arch,
       sqmId: crypto.randomUUID(),
     },
     createdAt: Date.now(),
   };
 }
+
 export function getImpersonationHeaders(
   token: string,
   fp: DeviceFingerprint,
   model?: string,
+  sessionId?: string,
+  accept = "application/json",
 ) {
-  const clientMetadata = { ...fp.clientMetadata, ideType: "IDE_UNSPECIFIED" };
+  const isClaude = model?.toLowerCase().includes("claude");
   return {
     Authorization: `Bearer ${token}`,
     "Content-Type": "application/json",
-    "User-Agent": fp.userAgent,
-    "X-Goog-Api-Client": fp.apiClient,
+    "User-Agent": fp.userAgent || "antigravity/hub/2.25.0 linux/x64",
+    "X-Client-Name": "antigravity",
+    "X-Client-Version": "1.110.0",
+    "x-goog-api-client": fp.apiClient || "gl-node/18.18.2 fire/0.8.6 grpc/1.10.x",
     "X-Goog-QuotaUser": fp.quotaUser,
     "X-Client-Device-Id": fp.deviceId,
-    "Client-Metadata": JSON.stringify(clientMetadata),
-    ...(model?.includes("claude")
+    ...(sessionId ? { "X-Machine-Session-Id": sessionId } : {}),
+    ...(accept && accept !== "application/json" ? { Accept: accept } : {}),
+    ...(isClaude
       ? { "anthropic-beta": "interleaved-thinking-2025-05-14" }
       : {}),
   };
 }
+
 export function getGeminiCliHeaders(token: string, fp: DeviceFingerprint) {
   return {
     Authorization: `Bearer ${token}`,
     "Content-Type": "application/json; charset=utf-8",
-    "User-Agent": fp.cliUserAgent,
-    "X-Goog-Api-Client": fp.cliApiClient,
+    "User-Agent": fp.cliUserAgent || "antigravity/hub/2.25.0 linux/x64",
+    "X-Client-Name": "antigravity",
+    "X-Client-Version": "1.110.0",
+    "x-goog-api-client": fp.cliApiClient || "gl-node/22.18.0",
     "X-Goog-QuotaUser": fp.quotaUser,
     "X-Client-Device-Id": fp.deviceId,
-    "Client-Metadata": Object.entries(fp.clientMetadata ?? {})
-      .map(([k, v]) => `${k}=${v}`)
-      .join(","),
   };
 }

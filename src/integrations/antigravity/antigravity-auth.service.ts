@@ -50,39 +50,88 @@ async function userInfo(token: string) {
   if (!res.ok) throw new Error("Failed to fetch Google account");
   return (await res.json()) as { email?: string; name?: string };
 }
-export async function discoverProject(token: string) {
-  for (const ideType of [
-    "VSCODE",
-    "JETBRAINS",
-    "CLOUD_SHELL",
-    "IDE_UNSPECIFIED",
-  ]) {
-    const res = await fetch(
-      "https://cloudcode-pa.googleapis.com/v1internal:loadCodeAssist",
-      {
+export const DEFAULT_ANTIGRAVITY_PROJECT_ID = "rising-fact-p41fc";
+
+export async function discoverProject(token: string): Promise<string> {
+  const endpoints = [
+    "https://cloudcode-pa.googleapis.com",
+    "https://daily-cloudcode-pa.googleapis.com",
+  ];
+
+  let allowedTiers: any[] = [];
+
+  for (const endpoint of endpoints) {
+    try {
+      const res = await fetch(`${endpoint}/v1internal:loadCodeAssist`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
-          "User-Agent": "antigravity/2.0.1",
+          "User-Agent": "antigravity/hub/2.25.0 linux/x64",
+          "X-Client-Name": "antigravity",
+          "X-Client-Version": "1.110.0",
         },
         body: JSON.stringify({
           metadata: {
-            ideType,
+            ideType: "ANTIGRAVITY",
             platform: "PLATFORM_UNSPECIFIED",
             pluginType: "GEMINI",
           },
         }),
-      },
-    );
-    if (res.ok) {
-      const data = await res.json().catch(() => null);
-      const project = data?.cloudaicompanionProject;
-      const id = typeof project === "string" ? project : project?.id;
-      if (id) return id;
+      });
+
+      if (res.ok) {
+        const data = await res.json().catch(() => null);
+        const project = data?.cloudaicompanionProject;
+        const id = typeof project === "string" ? project : project?.id;
+        if (id) return id;
+        if (Array.isArray(data?.allowedTiers)) {
+          allowedTiers = data.allowedTiers;
+        }
+      }
+    } catch {
+      // Continue to next endpoint
     }
   }
-  return null;
+
+  // If cloudaicompanionProject was not returned, attempt onboarding user
+  const tierId =
+    allowedTiers.find((t) => t?.isDefault)?.id ||
+    allowedTiers[0]?.id ||
+    "free-tier";
+
+  for (const endpoint of endpoints) {
+    try {
+      const res = await fetch(`${endpoint}/v1internal:onboardUser`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+          "User-Agent": "antigravity/hub/2.25.0 linux/x64",
+          "X-Client-Name": "antigravity",
+          "X-Client-Version": "1.110.0",
+        },
+        body: JSON.stringify({
+          tierId,
+          metadata: {
+            ideType: "ANTIGRAVITY",
+            platform: "PLATFORM_UNSPECIFIED",
+            pluginType: "GEMINI",
+          },
+        }),
+      });
+
+      if (res.ok) {
+        const data = await res.json().catch(() => null);
+        const managed = data?.response?.cloudaicompanionProject?.id;
+        if (managed) return managed;
+      }
+    } catch {
+      // Continue to fallback
+    }
+  }
+
+  return DEFAULT_ANTIGRAVITY_PROJECT_ID;
 }
 
 export const antigravityAuthService = {
