@@ -312,26 +312,32 @@ function AntigravityQuotaBucketBar({
 }) {
   if (bucket.disabled)
     return (
-      <div className="space-y-2">
-        <div className="text-sm text-foreground">{windowTitle(bucket)}</div>
-        <div className="text-xs text-tertiary">Not available on this plan</div>
+      <div className="space-y-1">
+        <div className="flex items-center justify-between text-xs">
+          <span className="font-medium text-foreground">{windowTitle(bucket)}</span>
+          <span className="text-tertiary">Not available on plan</span>
+        </div>
       </div>
     );
   if (bucket.unlimited)
     return (
-      <div className="space-y-2">
-        <div className="text-sm text-foreground">{windowTitle(bucket)}</div>
-        <div className="text-xs text-tertiary">Unlimited on this account</div>
+      <div className="space-y-1">
+        <div className="flex items-center justify-between text-xs">
+          <span className="font-medium text-foreground">{windowTitle(bucket)}</span>
+          <span className="text-emerald-500 font-medium">Unlimited</span>
+        </div>
       </div>
     );
   if (bucket.remaining_fraction === null)
     return (
-      <div className="space-y-2">
-        <div className="text-sm text-foreground">{windowTitle(bucket)}</div>
-        <div className="text-xs text-tertiary">
-          {bucket.remaining_amount !== null
-            ? `${usageNumber(bucket.remaining_amount)} remaining`
-            : "Quota data unavailable"}
+      <div className="space-y-1">
+        <div className="flex items-center justify-between text-xs">
+          <span className="font-medium text-foreground">{windowTitle(bucket)}</span>
+          <span className="text-tertiary">
+            {bucket.remaining_amount !== null
+              ? `${usageNumber(bucket.remaining_amount)} left`
+              : "Data unavailable"}
+          </span>
         </div>
       </div>
     );
@@ -344,26 +350,34 @@ function AntigravityQuotaBucketBar({
   const resetLabel =
     reset && !Number.isNaN(reset.getTime())
       ? bucket.reset_in
-        ? `Refreshes in ${bucket.reset_in} (${reset.toLocaleString()})`
-        : `Refreshes ${reset.toLocaleString()}`
+        ? `Refreshes in ${bucket.reset_in} (${reset.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })})`
+        : `Refreshes ${reset.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
       : bucket.reset_in
         ? `Refreshes in ${bucket.reset_in}`
-        : "Quota available";
+        : null;
+
   return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between gap-3 text-sm">
-        <span className="text-foreground">{windowTitle(bucket)}</span>
-        <span className="font-medium text-foreground tabular-nums">
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between gap-2 text-xs">
+        <span className="font-medium text-foreground">{windowTitle(bucket)}</span>
+        <span className="font-semibold text-foreground tabular-nums">
           {remaining.toFixed(2)}% left
         </span>
       </div>
-      <div className="h-2 overflow-hidden rounded-full bg-overlay">
+      <div className="h-1.5 overflow-hidden rounded-full bg-overlay">
         <div
-          className={`h-full rounded-full ${tone} transition-all`}
+          className={`h-full rounded-full ${tone} transition-all duration-300`}
           style={{ width: `${remaining}%` }}
         />
       </div>
-      <div className="text-xs text-tertiary">{resetLabel}</div>
+      {resetLabel && (
+        <div className="flex items-center justify-between text-[11px] text-tertiary">
+          <span>{resetLabel}</span>
+          {reset && !Number.isNaN(reset.getTime()) && (
+            <span className="text-[10px] text-tertiary/70">{reset.toLocaleDateString()}</span>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -371,26 +385,26 @@ function AntigravityQuotaBucketBar({
 function AntigravityQuotaSummary({ usage }: { usage: AntigravityUsage }) {
   const groups = usage.groups.filter((group) => group.buckets.length > 0);
   return (
-    <div className="space-y-5">
+    <div className="space-y-3.5">
       {groups.length === 0 && usage.models.length > 0 && (
-        <div className="space-y-3">
-          <div className="text-sm font-medium text-foreground">
+        <div className="space-y-2">
+          <div className="text-xs font-semibold uppercase tracking-wider text-tertiary">
             Models Quota
           </div>
-          <div className="space-y-2">
+          <div className="space-y-1.5">
             {usage.models.map((model) => (
               <div
                 key={model.model_id}
-                className="flex items-center justify-between text-xs py-1.5 border-b border-border/40 last:border-0"
+                className="flex items-center justify-between text-xs py-1 border-b border-border/30 last:border-0"
               >
                 <span className="font-medium text-foreground">
                   {model.display_name || model.model_id}
                 </span>
-                <span className="text-tertiary">
+                <span className="text-tertiary tabular-nums">
                   {model.remaining_fraction !== null
-                    ? `${Math.round(model.remaining_fraction * 100)}% remaining`
+                    ? `${Math.round(model.remaining_fraction * 100)}% left`
                     : "Available"}
-                  {model.reset_in ? ` (resets in ${model.reset_in})` : ""}
+                  {model.reset_in ? ` · in ${model.reset_in}` : ""}
                 </span>
               </div>
             ))}
@@ -398,7 +412,7 @@ function AntigravityQuotaSummary({ usage }: { usage: AntigravityUsage }) {
         </div>
       )}
       {groups.length === 0 && usage.models.length === 0 && (
-        <div className="text-sm text-tertiary">
+        <div className="text-xs text-tertiary">
           Antigravity returned no quota groups for this account.
         </div>
       )}
@@ -410,21 +424,39 @@ function AntigravityQuotaSummary({ usage }: { usage: AntigravityUsage }) {
               .map((model) => model.display_name || model.model_id),
           ),
         ];
+
+        // Deduplicate description: only show description if it exists; for argon, only show ARGON_NOTE if description is missing
+        const descriptionText = group.description
+          ? group.description
+          : group.id === "argon"
+            ? ARGON_NOTE
+            : null;
+
         return (
-          <div key={group.group_name} className="space-y-3">
-            <div className="space-y-1">
-              <div className="text-sm font-medium text-foreground">
-                {group.group_name}
+          <div
+            key={group.group_name}
+            className="rounded-lg border border-border/50 bg-overlay/20 p-3 space-y-2.5"
+          >
+            <div className="space-y-0.5">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-foreground">
+                  {group.group_name}
+                </span>
+                {!group.available && (
+                  <span className="text-[10px] text-tertiary uppercase tracking-wider bg-overlay px-1.5 py-0.5 rounded">
+                    Unavailable
+                  </span>
+                )}
               </div>
-              {group.description && (
-                <div className="text-xs text-tertiary">{group.description}</div>
-              )}
-              {group.id === "argon" && (
-                <div className="text-xs text-tertiary">{ARGON_NOTE}</div>
+              {descriptionText && (
+                <div className="text-[11px] leading-relaxed text-tertiary">
+                  {descriptionText}
+                </div>
               )}
             </div>
+
             {group.available ? (
-              <div className="space-y-4">
+              <div className="space-y-2.5 pt-0.5">
                 {group.buckets.map((bucket) => (
                   <AntigravityQuotaBucketBar
                     key={bucket.bucket_id}
@@ -437,18 +469,33 @@ function AntigravityQuotaSummary({ usage }: { usage: AntigravityUsage }) {
                 Not available on this plan
               </div>
             )}
+
             {modelNames.length > 0 && (
-              <div className="max-h-16 overflow-y-auto break-all text-xs text-tertiary">
-                Models: {modelNames.join(", ")}
+              <div className="pt-1 border-t border-border/30">
+                <div
+                  className="text-[11px] text-tertiary leading-normal line-clamp-2 hover:line-clamp-none transition-all cursor-pointer"
+                  title="Click to expand/collapse models"
+                >
+                  <span className="font-medium text-foreground/80">Models: </span>
+                  {modelNames.join(", ")}
+                </div>
               </div>
             )}
           </div>
         );
       })}
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-tertiary">
-        {usage.plan && <span>Plan: {usage.plan}</span>}
+      <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-border/40 text-[11px] text-tertiary">
+        <div className="flex items-center gap-1.5">
+          {usage.plan && (
+            <span className="inline-flex items-center rounded-md bg-overlay px-2 py-0.5 font-medium text-foreground/90">
+              Plan: {usage.plan}
+            </span>
+          )}
+        </div>
         {usage.fetched_at && (
-          <span>Updated: {new Date(usage.fetched_at).toLocaleString()}</span>
+          <span className="tabular-nums">
+            Updated: {new Date(usage.fetched_at).toLocaleDateString()} {new Date(usage.fetched_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+          </span>
         )}
       </div>
     </div>
@@ -675,7 +722,7 @@ export default function UsageLimitsPage() {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-5 xl:grid-cols-2">
+        <div className="grid gap-5 xl:grid-cols-2 items-start">
           {accounts.map(
             ({ provider, credential, usage, credits, antigravityQuota, freebuffUsage: freebuffData, perchUsage: perchData, deepaiUsage: deepaiData }) => (
         <Card key={credential.id} className="border border-border shadow-none">
