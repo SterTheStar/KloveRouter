@@ -22,6 +22,8 @@ import {
   RiShieldCrossLine as ShieldCrossIcon,
   RiShieldFlashLine as ShieldAlertIcon,
   RiShieldCheckLine as ShieldCheckIcon,
+  RiFilter3Line as FilterIcon,
+  RiCloseLine as CloseIcon,
 } from "@remixicon/react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -638,54 +640,101 @@ export default function RequestLogsPage() {
       )}
 
       <Card className="gap-0 overflow-hidden rounded-xl border border-border p-0 shadow-none ring-0">
-        <CardHeader className="flex flex-wrap items-center justify-between gap-3 py-(--card-spacing)">
-          <CardTitle className="text-base font-medium tracking-tight text-foreground">
-            All requests{" "}
-            <span className="font-mono text-tertiary">({total ?? "…"})</span>
+        <CardHeader className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-card/60 px-4 py-3">
+          <div className="flex items-center gap-2.5">
+            <CardTitle className="text-sm font-semibold tracking-tight text-foreground">
+              All requests
+            </CardTitle>
+            <span className="inline-flex items-center rounded-full bg-muted/80 px-2 py-0.5 font-mono text-xs font-normal text-tertiary border border-border/50">
+              {total != null ? formatNumber(total) : "…"}
+            </span>
             {refreshing && (
               <LoaderCircle
-                className="ml-2 inline size-3.5 animate-spin text-tertiary"
+                className="size-3.5 animate-spin text-tertiary"
                 aria-label="Refreshing logs"
               />
             )}
-          </CardTitle>
-          <div className="flex flex-wrap gap-2">
-            <div className="relative">
-              <SearchIcon className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-tertiary" />
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative flex-1 sm:w-64 sm:flex-initial">
+              <SearchIcon className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-tertiary pointer-events-none" />
               <Input
-                className="h-9 w-64 pl-9"
+                className="h-9 w-full pl-9 pr-8"
                 placeholder="Search ID, model or account"
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
               />
+              {searchInput && (
+                <button
+                  type="button"
+                  onClick={() => setSearchInput("")}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded p-0.5 text-tertiary hover:text-foreground transition-colors cursor-pointer"
+                  title="Clear search"
+                  aria-label="Clear search"
+                >
+                  <CloseIcon className="size-3.5" />
+                </button>
+              )}
             </div>
+
+            {/* Status Filter */}
             <DropdownMenu>
               <DropdownMenuTrigger
                 render={
                   <Button
                     variant="outline"
-                    className="h-9 min-w-32 justify-between gap-3 bg-background"
+                    className={`h-9 min-w-32 justify-between gap-2.5 bg-background transition-colors ${
+                      status ? "border-border-strong bg-accent/40 font-medium" : ""
+                    }`}
                   />
                 }
               >
-                <span>
-                  {status
-                    ? status.charAt(0).toUpperCase() + status.slice(1)
-                    : "All statuses"}
+                <span className="flex items-center gap-1.5 truncate">
+                  {status === "success" ? (
+                    <>
+                      <SuccessIcon className="size-3.5 shrink-0 text-emerald-500" />
+                      <span>Success</span>
+                    </>
+                  ) : status === "error" ? (
+                    <>
+                      <ErrorIcon className="size-3.5 shrink-0 text-destructive" />
+                      <span className="text-destructive font-medium">Error</span>
+                    </>
+                  ) : status === "pending" ? (
+                    <>
+                      <PendingIcon className="size-3.5 shrink-0 text-amber-500 animate-spin" />
+                      <span>Pending</span>
+                    </>
+                  ) : (
+                    <>
+                      <FilterIcon className="size-3.5 shrink-0 text-tertiary" />
+                      <span>All statuses</span>
+                    </>
+                  )}
                 </span>
-                <ArrowDown className="size-4" />
+                <ArrowDown className="size-4 shrink-0 text-tertiary" />
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
+              <DropdownMenuContent align="end" className="w-40">
                 {[
-                  ["", "All statuses"],
-                  ["success", "Success"],
-                  ["error", "Error"],
-                  ["pending", "Pending"],
-                ].map(([value, label]) => (
-                  <DropdownMenuItem key={label} onClick={() => setStatus(value)}>
-                    {label}
-                  </DropdownMenuItem>
-                ))}
+                  ["", "All statuses", FilterIcon, "text-tertiary"],
+                  ["success", "Success", SuccessIcon, "text-emerald-500"],
+                  ["error", "Error", ErrorIcon, "text-destructive"],
+                  ["pending", "Pending", PendingIcon, "text-amber-500"],
+                ].map(([value, label, IconComp, iconColor]) => {
+                  const Icon = IconComp as any;
+                  return (
+                    <DropdownMenuItem
+                      key={label as string}
+                      onClick={() => setStatus(value as string)}
+                      className="flex items-center gap-2 cursor-pointer"
+                    >
+                      <Icon className={`size-4 shrink-0 ${iconColor} ${value === "pending" ? "animate-spin" : ""}`} />
+                      <span className={status === value ? "font-medium text-foreground" : ""}>
+                        {label as string}
+                      </span>
+                    </DropdownMenuItem>
+                  );
+                })}
               </DropdownMenuContent>
             </DropdownMenu>
 
@@ -695,34 +744,36 @@ export default function RequestLogsPage() {
                 render={
                   <Button
                     variant="outline"
-                    className="h-9 min-w-36 justify-between gap-2 bg-background"
+                    className={`h-9 min-w-36 justify-between gap-2 bg-background transition-colors ${
+                      guardrailsFilter ? "border-border-strong bg-accent/40 font-medium" : ""
+                    }`}
                   />
                 }
               >
                 <span className="flex items-center gap-1.5 truncate">
                   {guardrailsFilter === "violations" ? (
                     <>
-                      <ShieldAlertIcon className="size-3.5 text-destructive" />
-                      <span>Violations</span>
+                      <ShieldAlertIcon className="size-3.5 shrink-0 text-destructive" />
+                      <span className="text-destructive font-medium">Violations</span>
                     </>
                   ) : guardrailsFilter === "blocked" ? (
                     <>
-                      <ShieldCrossIcon className="size-3.5 text-destructive" />
-                      <span>Blocked</span>
+                      <ShieldCrossIcon className="size-3.5 shrink-0 text-destructive" />
+                      <span className="text-destructive font-medium">Blocked</span>
                     </>
                   ) : guardrailsFilter === "redacted" ? (
                     <>
-                      <ShieldIcon className="size-3.5 text-amber-500" />
-                      <span>Redacted</span>
+                      <ShieldIcon className="size-3.5 shrink-0 text-amber-500" />
+                      <span className="text-amber-600 dark:text-amber-400 font-medium">Redacted</span>
                     </>
                   ) : guardrailsFilter === "audited" ? (
                     <>
-                      <ShieldIcon className="size-3.5 text-sky-500" />
-                      <span>Audited</span>
+                      <ShieldIcon className="size-3.5 shrink-0 text-sky-500" />
+                      <span className="text-sky-600 dark:text-sky-400 font-medium">Audited</span>
                     </>
                   ) : (
                     <>
-                      <ShieldIcon className="size-3.5 text-tertiary" />
+                      <ShieldIcon className="size-3.5 shrink-0 text-tertiary" />
                       <span>All Guardrails</span>
                     </>
                   )}
@@ -731,23 +782,46 @@ export default function RequestLogsPage() {
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-48">
                 {[
-                  ["", "All traffic", ShieldIcon],
-                  ["violations", "All violations", ShieldAlertIcon],
-                  ["blocked", "Blocked only", ShieldCrossIcon],
-                  ["redacted", "Redacted only", ShieldIcon],
-                  ["audited", "Audited only", ShieldIcon],
-                ].map(([value, label, IconComponent]) => (
-                  <DropdownMenuItem
-                    key={label as string}
-                    onClick={() => setGuardrailsFilter(value as string)}
-                    className="flex items-center gap-2"
-                  >
-                    <IconComponent className="size-4 text-tertiary" />
-                    <span>{label as string}</span>
-                  </DropdownMenuItem>
-                ))}
+                  ["", "All traffic", ShieldIcon, "text-tertiary"],
+                  ["violations", "All violations", ShieldAlertIcon, "text-destructive"],
+                  ["blocked", "Blocked only", ShieldCrossIcon, "text-destructive"],
+                  ["redacted", "Redacted only", ShieldIcon, "text-amber-500"],
+                  ["audited", "Audited only", ShieldIcon, "text-sky-500"],
+                ].map(([value, label, IconComponent, iconColor]) => {
+                  const Icon = IconComponent as any;
+                  return (
+                    <DropdownMenuItem
+                      key={label as string}
+                      onClick={() => setGuardrailsFilter(value as string)}
+                      className="flex items-center gap-2 cursor-pointer"
+                    >
+                      <Icon className={`size-4 shrink-0 ${iconColor}`} />
+                      <span className={guardrailsFilter === value ? "font-medium text-foreground" : ""}>
+                        {label as string}
+                      </span>
+                    </DropdownMenuItem>
+                  );
+                })}
               </DropdownMenuContent>
             </DropdownMenu>
+
+            {/* Clear active filters */}
+            {(status || guardrailsFilter || searchInput) && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setStatus("");
+                  setGuardrailsFilter("");
+                  setSearchInput("");
+                }}
+                className="h-9 px-2.5 text-xs text-tertiary hover:text-foreground transition-colors cursor-pointer"
+                title="Reset all filters"
+              >
+                <CloseIcon className="size-3.5" />
+                <span>Reset</span>
+              </Button>
+            )}
           </div>
         </CardHeader>
         <CardContent className="p-0">
@@ -765,7 +839,7 @@ export default function RequestLogsPage() {
                 </Button>
               </div>
             )}
-            <div className="overflow-x-auto border-t border-border">
+            <div className="overflow-x-auto">
               <table className="w-full min-w-[1100px] text-sm">
                 <thead ref={scrollAnchor}>
                   <tr className="border-b border-border bg-background/60 text-left text-xs font-medium text-tertiary">

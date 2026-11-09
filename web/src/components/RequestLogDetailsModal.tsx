@@ -472,6 +472,7 @@ export function RequestLogDetailsModal({
   const [responseTab, setResponseTab] = useState<"parsed" | "raw">("parsed");
   const [showHeaders, setShowHeaders] = useState(false);
   const [showTechnicalError, setShowTechnicalError] = useState(false);
+  const [showTools, setShowTools] = useState(false);
 
   // Payload parsing
   const parsedRequest = useMemo(() => {
@@ -772,25 +773,85 @@ export function RequestLogDetailsModal({
 
                       {/* Request Parameters Card */}
                       {Object.keys(parsedRequest.params).length > 0 && (
-                        <div className="rounded-lg border border-border/70 bg-card p-3 space-y-2">
+                        <div className="rounded-lg border border-border/70 bg-card p-3 space-y-2.5">
                           <span className="text-xs font-semibold text-foreground uppercase tracking-wider">
                             Parameters
                           </span>
                           <div className="flex flex-wrap gap-1.5">
-                            {Object.entries(parsedRequest.params).map(([paramKey, paramVal]) => (
-                              <div
-                                key={paramKey}
-                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-muted/70 text-[11px] font-mono border border-border/50"
-                              >
-                                <span className="text-muted-foreground">{paramKey}:</span>
-                                <span className="text-foreground font-medium">
-                                  {typeof paramVal === "object"
-                                    ? JSON.stringify(paramVal)
-                                    : String(paramVal)}
-                                </span>
-                              </div>
-                            ))}
+                            {Object.entries(parsedRequest.params).map(([paramKey, paramVal]) => {
+                              const rawStr =
+                                typeof paramVal === "object"
+                                  ? JSON.stringify(paramVal)
+                                  : String(paramVal);
+                              let displayVal = rawStr;
+                              if (paramKey === "tools" && Array.isArray(paramVal)) {
+                                displayVal = `${paramVal.length} ${
+                                  paramVal.length === 1 ? "tool" : "tools"
+                                }`;
+                              } else if (paramKey === "functions" && Array.isArray(paramVal)) {
+                                displayVal = `${paramVal.length} ${
+                                  paramVal.length === 1 ? "function" : "functions"
+                                }`;
+                              }
+
+                              return (
+                                <div
+                                  key={paramKey}
+                                  className="inline-flex max-w-full min-w-0 items-center gap-1 px-2 py-0.5 rounded bg-muted/70 text-[11px] font-mono border border-border/50"
+                                  title={rawStr}
+                                >
+                                  <span className="text-muted-foreground shrink-0">{paramKey}:</span>
+                                  <span className="text-foreground font-medium truncate max-w-[260px] sm:max-w-xs md:max-w-sm">
+                                    {displayVal}
+                                  </span>
+                                </div>
+                              );
+                            })}
                           </div>
+
+                          {/* Expandable Tools Schema */}
+                          {parsedRequest.params.tools && (
+                            <div className="pt-2 border-t border-border/50 space-y-2">
+                              <div className="flex items-center justify-between">
+                                <button
+                                  type="button"
+                                  onClick={() => setShowTools((prev) => !prev)}
+                                  className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors cursor-pointer select-none"
+                                >
+                                  {showTools ? (
+                                    <ChevronDown className="size-3.5 text-tertiary" />
+                                  ) : (
+                                    <ChevronRight className="size-3.5 text-tertiary" />
+                                  )}
+                                  <ToolIcon className="size-3.5 text-tertiary" />
+                                  <span>
+                                    Tools Schema (
+                                    {Array.isArray(parsedRequest.params.tools)
+                                      ? `${parsedRequest.params.tools.length} ${
+                                          parsedRequest.params.tools.length === 1
+                                            ? "tool"
+                                            : "tools"
+                                        }`
+                                      : "object"}
+                                    )
+                                  </span>
+                                </button>
+                                {showTools && (
+                                  <CopyableButton
+                                    text={JSON.stringify(parsedRequest.params.tools, null, 2)}
+                                    label="Copy Tools"
+                                    size="xs"
+                                  />
+                                )}
+                              </div>
+
+                              {showTools && (
+                                <pre className="p-2.5 rounded bg-muted/50 text-[11px] font-mono text-foreground overflow-x-auto max-h-72 border border-border/50 whitespace-pre">
+                                  {JSON.stringify(parsedRequest.params.tools, null, 2)}
+                                </pre>
+                              )}
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
