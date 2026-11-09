@@ -5,11 +5,11 @@
 
 const protocolIcons: Partial<Record<string, string>> = {
   antigravity: "https://antigravity.google/assets/image/brand/antigravity-icon__full-color.png",
-  chatgpt: "https://chatgpt.com/favicon.ico",
+  chatgpt: "/api/media/avatars/presets/chatgpt.svg",
   codex: "https://openai.com/favicon.ico",
   freebuff: "https://freebuff.com/favicon.ico",
   qwen: "https://assets.alicdn.com/g/qwenweb/qwen-webui-fe/0.0.201/favicon.png",
-  atomesus: "https://atomesus.com/favicon.ico",
+  atomesus: "/api/media/avatars/presets/atomesus.svg",
   perch: "https://app.perchai.app/favicon.ico",
   openfree: "https://opencode.ai/favicon.ico",
   deepai: "/api/media/avatars/presets/deepai.svg",
