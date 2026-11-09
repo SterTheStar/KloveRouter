@@ -1,0 +1,13 @@
+{
+  "id": "chatgpt",
+  "name": "ChatGPT",
+  "protocol": "chatgpt",
+  "description": "Authorized ChatGPT session access through the ChatGPT backend API. Use only credentials you are permitted to use.",
+  "website": "https://chatgpt.com",
+  "docsUrl": "https://chatgpt.com",
+  "placeholder": "https://chatgpt.com/backend-api",
+  "logo": "/api/media/avatars/presets/chatgpt.svg",
+  "preset": false,
+  "category": "official",
+  "integrationType": "web-session"
+}

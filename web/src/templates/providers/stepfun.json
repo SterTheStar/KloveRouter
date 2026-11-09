@@ -1,0 +1,13 @@
+{
+  "id": "stepfun",
+  "name": "StepFun",
+  "protocol": "openai",
+  "description": "StepFun's model API for Chinese and multilingual language tasks, reasoning, and agent workflows.",
+  "website": "https://stepfun.com",
+  "docsUrl": "https://platform.stepfun.com",
+  "placeholder": "https://api.stepfun.ai/v1",
+  "logo": "/api/media/avatars/presets/stepfun.png",
+  "preset": true,
+  "category": "hosted",
+  "integrationType": "cloud-api"
+}

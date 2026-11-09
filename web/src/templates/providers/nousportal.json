@@ -1,0 +1,13 @@
+{
+  "id": "nousportal",
+  "name": "NousPortal",
+  "protocol": "openai",
+  "description": "Nous Research's inference endpoint for open models and Nous-developed releases.",
+  "website": "https://nousresearch.com",
+  "docsUrl": "https://nousresearch.com",
+  "placeholder": "https://inference-api.nousresearch.com/v1",
+  "logo": "/api/media/avatars/presets/nousportal.png",
+  "preset": true,
+  "category": "hosted",
+  "integrationType": "cloud-api"
+}

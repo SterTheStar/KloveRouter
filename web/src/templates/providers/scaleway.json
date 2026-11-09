@@ -1,0 +1,13 @@
+{
+  "id": "scaleway",
+  "name": "Scaleway",
+  "protocol": "openai",
+  "description": "Scaleway AI's hosted inference API for open-source language models.",
+  "website": "https://scaleway.com",
+  "docsUrl": "https://www.scaleway.com/en/docs/ai-data/generative-apis",
+  "placeholder": "https://api.scaleway.ai/v1",
+  "logo": "/api/media/avatars/presets/scaleway.svg",
+  "preset": true,
+  "category": "hosted",
+  "integrationType": "cloud-api"
+}

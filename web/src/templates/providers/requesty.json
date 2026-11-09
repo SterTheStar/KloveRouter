@@ -1,0 +1,13 @@
+{
+  "id": "requesty",
+  "name": "Requesty",
+  "protocol": "openai",
+  "description": "A unified AI router that connects applications to multiple model providers through one API.",
+  "website": "https://requesty.ai",
+  "docsUrl": "https://requesty.ai",
+  "placeholder": "https://router.requesty.ai/v1",
+  "logo": "/api/media/avatars/presets/requesty.ico",
+  "preset": true,
+  "category": "aggregator",
+  "integrationType": "cloud-api"
+}

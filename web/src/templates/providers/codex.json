@@ -1,0 +1,13 @@
+{
+  "id": "codex",
+  "name": "OpenAI Codex",
+  "protocol": "codex",
+  "description": "ChatGPT OAuth access for OpenAI Codex models with account-based usage limits.",
+  "website": "https://openai.com",
+  "docsUrl": "https://platform.openai.com",
+  "placeholder": "https://chatgpt.com/backend-api/codex",
+  "logo": "/api/media/avatars/presets/codex.png",
+  "preset": false,
+  "category": "official",
+  "integrationType": "oauth"
+}

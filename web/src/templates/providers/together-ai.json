@@ -1,0 +1,13 @@
+{
+  "id": "together-ai",
+  "name": "Together AI",
+  "protocol": "openai",
+  "description": "Fast hosted inference for open models, with support for chat, vision, reasoning, and fine-tuning.",
+  "website": "https://together.ai",
+  "docsUrl": "https://docs.together.ai",
+  "placeholder": "https://api.together.xyz/v1",
+  "logo": "/api/media/avatars/presets/together.png",
+  "preset": true,
+  "category": "hosted",
+  "integrationType": "cloud-api"
+}

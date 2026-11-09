@@ -1,0 +1,13 @@
+{
+  "id": "xkiro",
+  "name": "Xkiro",
+  "protocol": "openai",
+  "description": "An OpenAI-compatible gateway for accessing supported language models.",
+  "website": "https://xkiro.com",
+  "docsUrl": "https://xkiro.com",
+  "placeholder": "https://api.xkiro.com/v1",
+  "logo": "/api/media/avatars/presets/xkiro.ico",
+  "preset": true,
+  "category": "hosted",
+  "integrationType": "cloud-api"
+}

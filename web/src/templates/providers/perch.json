@@ -1,0 +1,13 @@
+{
+  "id": "perch",
+  "name": "Perch AI",
+  "protocol": "perch",
+  "description": "Perch AI models through a CLI session. Note: direct API or third-party use violates Perch's terms of service and can result in an account ban.",
+  "website": "https://perchai.app",
+  "docsUrl": "https://app.perchai.app",
+  "placeholder": "https://app.perchai.app",
+  "logo": "https://app.perchai.app/favicon.ico",
+  "preset": false,
+  "category": "hosted",
+  "integrationType": "cli-session"
+}

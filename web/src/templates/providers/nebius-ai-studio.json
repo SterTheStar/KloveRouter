@@ -1,0 +1,13 @@
+{
+  "id": "nebius-ai-studio",
+  "name": "Nebius AI Studio",
+  "protocol": "openai",
+  "description": "Nebius AI Studio's hosted inference for open models with developer-focused API access.",
+  "website": "https://nebius.com",
+  "docsUrl": "https://docs.nebius.com",
+  "placeholder": "https://api.studio.nebius.ai/v1",
+  "logo": "/api/media/avatars/presets/nebius.png",
+  "preset": true,
+  "category": "hosted",
+  "integrationType": "cloud-api"
+}

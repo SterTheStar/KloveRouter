@@ -1,0 +1,13 @@
+{
+  "id": "moonshot-kimi",
+  "name": "Moonshot AI (Kimi)",
+  "protocol": "openai",
+  "description": "Moonshot AI's API for Kimi models, known for multilingual work and long-context conversations.",
+  "website": "https://moonshot.cn",
+  "docsUrl": "https://platform.moonshot.cn/docs",
+  "placeholder": "https://api.moonshot.ai/v1",
+  "logo": "/api/media/avatars/presets/moonshot.png",
+  "preset": true,
+  "category": "hosted",
+  "integrationType": "cloud-api"
+}

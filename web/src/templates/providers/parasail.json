@@ -1,0 +1,13 @@
+{
+  "id": "parasail",
+  "name": "Parasail",
+  "protocol": "openai",
+  "description": "Hosted inference for open models with an OpenAI-compatible API and production-oriented endpoints.",
+  "website": "https://parasail.io",
+  "docsUrl": "https://docs.parasail.io",
+  "placeholder": "https://api.parasail.io/v1",
+  "logo": "/api/media/avatars/presets/parasail.svg",
+  "preset": true,
+  "category": "hosted",
+  "integrationType": "cloud-api"
+}

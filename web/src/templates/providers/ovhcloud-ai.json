@@ -1,0 +1,13 @@
+{
+  "id": "ovhcloud-ai",
+  "name": "OVHcloud AI",
+  "protocol": "openai",
+  "description": "OVHcloud AI Endpoints for managed open-source model inference.",
+  "website": "https://ovhcloud.com",
+  "docsUrl": "https://endpoints.ai.cloud.ovh.net",
+  "placeholder": "https://oai.endpoints.kepler.ai.cloud.ovh.net/v1",
+  "logo": "/api/media/avatars/presets/ovhcloud-ai.ico",
+  "preset": true,
+  "category": "hosted",
+  "integrationType": "cloud-api"
+}

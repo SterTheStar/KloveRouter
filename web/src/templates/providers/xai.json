@@ -1,0 +1,13 @@
+{
+  "id": "xai",
+  "name": "xAI",
+  "protocol": "openai",
+  "description": "xAI's API for Grok models, including general-purpose and reasoning capabilities.",
+  "website": "https://x.ai",
+  "docsUrl": "https://docs.x.ai",
+  "placeholder": "https://api.x.ai/v1",
+  "logo": "/api/media/avatars/presets/xai.ico",
+  "preset": true,
+  "category": "hosted",
+  "integrationType": "cloud-api"
+}

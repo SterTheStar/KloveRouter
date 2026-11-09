@@ -1,0 +1,13 @@
+{
+  "id": "opencode",
+  "name": "OpenCode Zen",
+  "protocol": "openai",
+  "description": "OpenCode Zen's curated gateway for accessing supported models through an OpenAI-compatible API.",
+  "website": "https://opencode.ai",
+  "docsUrl": "https://opencode.ai/docs",
+  "placeholder": "https://opencode.ai/zen/v1",
+  "logo": "/api/media/avatars/presets/opencode.png",
+  "preset": true,
+  "category": "hosted",
+  "integrationType": "cloud-api"
+}

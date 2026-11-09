@@ -1,0 +1,13 @@
+{
+  "id": "deepseek",
+  "name": "DeepSeek",
+  "protocol": "openai",
+  "description": "DeepSeek's API for general language, coding, and reasoning models at competitive inference costs.",
+  "website": "https://deepseek.com",
+  "docsUrl": "https://api-docs.deepseek.com",
+  "placeholder": "https://api.deepseek.com/v1",
+  "logo": "/api/media/avatars/presets/deepseek.ico",
+  "preset": true,
+  "category": "hosted",
+  "integrationType": "cloud-api"
+}

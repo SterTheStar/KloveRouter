@@ -1,0 +1,13 @@
+{
+  "id": "atomesus",
+  "name": "Atomesus",
+  "protocol": "atomesus",
+  "description": "Atomesus models with effort controls, persistent upstream sessions, streaming, and encrypted token storage.",
+  "website": "https://atomesus.com",
+  "docsUrl": "https://atomesus.com",
+  "placeholder": "https://api.atomesus.com",
+  "logo": "/api/media/avatars/presets/atomesus.svg",
+  "preset": false,
+  "category": "hosted",
+  "integrationType": "web-session"
+}

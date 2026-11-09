@@ -1,0 +1,13 @@
+{
+  "id": "replicate",
+  "name": "Replicate",
+  "protocol": "openai",
+  "description": "A model platform for running a wide range of open-source and community AI models by API.",
+  "website": "https://replicate.com",
+  "docsUrl": "https://replicate.com/docs",
+  "placeholder": "https://api.replicate.com/v1",
+  "logo": "/api/media/avatars/presets/replicate.png",
+  "preset": true,
+  "category": "hosted",
+  "integrationType": "cloud-api"
+}

@@ -1,0 +1,13 @@
+{
+  "id": "freebuff",
+  "name": "Freebuff",
+  "protocol": "freebuff",
+  "description": "Free Codebuff/Freebuff models through a token-authenticated OpenAI-compatible gateway.",
+  "website": "https://codebuff.com",
+  "docsUrl": "https://codebuff.com",
+  "placeholder": "https://www.codebuff.com",
+  "logo": "/api/media/avatars/presets/freebuff.png",
+  "preset": false,
+  "category": "hosted",
+  "integrationType": "cloud-api"
+}

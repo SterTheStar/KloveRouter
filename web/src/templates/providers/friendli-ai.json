@@ -1,0 +1,13 @@
+{
+  "id": "friendli-ai",
+  "name": "FriendliAI",
+  "protocol": "openai",
+  "description": "Low-latency serving for generative AI models, with serverless and dedicated deployment options.",
+  "website": "https://friendli.ai",
+  "docsUrl": "https://docs.friendli.ai",
+  "placeholder": "https://api.friendli.ai/serverless/v1",
+  "logo": "/api/media/avatars/presets/friendli.ico",
+  "preset": true,
+  "category": "hosted",
+  "integrationType": "cloud-api"
+}

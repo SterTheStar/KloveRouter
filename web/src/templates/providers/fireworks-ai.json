@@ -1,0 +1,13 @@
+{
+  "id": "fireworks-ai",
+  "name": "Fireworks AI",
+  "protocol": "openai",
+  "description": "Serverless and dedicated inference for open models, including structured output and tool calling.",
+  "website": "https://fireworks.ai",
+  "docsUrl": "https://docs.fireworks.ai",
+  "placeholder": "https://api.fireworks.ai/inference/v1",
+  "logo": "/api/media/avatars/presets/fireworks.jpg",
+  "preset": true,
+  "category": "hosted",
+  "integrationType": "cloud-api"
+}

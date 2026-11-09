@@ -1,0 +1,13 @@
+{
+  "id": "orcarouter",
+  "name": "OrcaRouter",
+  "protocol": "openai",
+  "description": "A model routing platform that provides access to multiple providers through one API.",
+  "website": "https://orcarouter.ai",
+  "docsUrl": "https://orcarouter.ai/docs",
+  "placeholder": "https://api.orcarouter.ai/v1",
+  "logo": "/api/media/avatars/presets/orcarouter.ico",
+  "preset": true,
+  "category": "aggregator",
+  "integrationType": "cloud-api"
+}

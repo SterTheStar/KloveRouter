@@ -1,0 +1,13 @@
+{
+  "id": "conol",
+  "name": "Conol.ai",
+  "protocol": "conol",
+  "description": "Conol.ai agents with account and browser-cookie authentication. Credentials are stored encrypted.",
+  "website": "https://conol.ai",
+  "docsUrl": "https://conol.ai",
+  "placeholder": "https://conol.ai",
+  "logo": "/api/media/avatars/presets/conol.png",
+  "preset": false,
+  "category": "hosted",
+  "integrationType": "web-session"
+}

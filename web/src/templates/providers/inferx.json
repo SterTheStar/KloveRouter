@@ -1,0 +1,13 @@
+{
+  "id": "inferx",
+  "name": "InferX",
+  "protocol": "openai",
+  "description": "An OpenAI-compatible inference endpoint for hosted language models.",
+  "website": "https://inferx.net",
+  "docsUrl": "https://inferx.net",
+  "placeholder": "https://model.inferx.net/endpoints/v1",
+  "logo": "/api/media/avatars/presets/inferx.ico",
+  "preset": true,
+  "category": "hosted",
+  "integrationType": "cloud-api"
+}

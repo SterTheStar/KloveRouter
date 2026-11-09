@@ -1,0 +1,13 @@
+{
+  "id": "openai-responses",
+  "name": "OpenAI Compatible (Responses API)",
+  "protocol": "openai-responses",
+  "description": "OpenAI-compatible Responses API (POST /v1/responses).",
+  "website": "https://platform.openai.com",
+  "docsUrl": "https://platform.openai.com/docs/api-reference/responses",
+  "placeholder": "https://api.openai.com/v1",
+  "logo": "/api/media/avatars/presets/openai.svg",
+  "preset": false,
+  "category": "official",
+  "integrationType": "cloud-api"
+}

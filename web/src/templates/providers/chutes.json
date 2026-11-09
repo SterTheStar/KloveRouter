@@ -1,0 +1,13 @@
+{
+  "id": "chutes",
+  "name": "Chutes",
+  "protocol": "openai",
+  "description": "Chutes' OpenAI-compatible serverless inference for open models.",
+  "website": "https://chutes.ai",
+  "docsUrl": "https://chutes.ai/docs",
+  "placeholder": "https://llm.chutes.ai/v1",
+  "logo": "/api/media/avatars/presets/chutes.svg",
+  "preset": true,
+  "category": "hosted",
+  "integrationType": "cloud-api"
+}

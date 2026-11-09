@@ -1,0 +1,13 @@
+{
+  "id": "portkey",
+  "name": "Portkey AI Gateway",
+  "protocol": "openai",
+  "description": "An AI gateway for routing, observability, fallbacks, and governance across model providers.",
+  "website": "https://portkey.ai",
+  "docsUrl": "https://docs.portkey.ai",
+  "placeholder": "https://api.portkey.ai/v1",
+  "logo": "/api/media/avatars/presets/portkey.png",
+  "preset": true,
+  "category": "aggregator",
+  "integrationType": "cloud-api"
+}

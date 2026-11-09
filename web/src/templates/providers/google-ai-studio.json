@@ -1,0 +1,13 @@
+{
+  "id": "google-ai-studio",
+  "name": "Google AI Studio (OpenAI Compatible)",
+  "protocol": "openai",
+  "description": "Google's Gemini API with an OpenAI-compatible endpoint for rapid model experimentation.",
+  "website": "https://aistudio.google.com",
+  "docsUrl": "https://ai.google.dev/gemini-api/docs/openai",
+  "placeholder": "https://generativelanguage.googleapis.com/v1beta/openai/",
+  "logo": "/api/media/avatars/presets/google-ai-studio.png",
+  "preset": true,
+  "category": "hosted",
+  "integrationType": "cloud-api"
+}

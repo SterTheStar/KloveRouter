@@ -1,0 +1,13 @@
+{
+  "id": "sambanova",
+  "name": "SambaNova",
+  "protocol": "openai",
+  "description": "Enterprise AI inference powered by SambaNova systems, with APIs for selected open models.",
+  "website": "https://sambanova.ai",
+  "docsUrl": "https://docs.sambanova.ai",
+  "placeholder": "https://api.sambanova.ai/v1",
+  "logo": "/api/media/avatars/presets/sambanova.ico",
+  "preset": true,
+  "category": "hosted",
+  "integrationType": "cloud-api"
+}

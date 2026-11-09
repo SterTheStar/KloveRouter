@@ -1,0 +1,13 @@
+{
+  "id": "zhipu-glm",
+  "name": "Zhipu AI (GLM)",
+  "protocol": "openai",
+  "description": "Zhipu AI's GLM platform for Chinese and multilingual generation, reasoning, and tool use.",
+  "website": "https://zhipuai.cn",
+  "docsUrl": "https://open.bigmodel.cn/dev/api",
+  "placeholder": "https://open.bigmodel.cn/api/paas/v4",
+  "logo": "/api/media/avatars/presets/zhipu.png",
+  "preset": true,
+  "category": "hosted",
+  "integrationType": "cloud-api"
+}

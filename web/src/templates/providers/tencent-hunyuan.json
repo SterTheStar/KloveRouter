@@ -1,0 +1,13 @@
+{
+  "id": "tencent-hunyuan",
+  "name": "Tencent Hunyuan",
+  "protocol": "openai",
+  "description": "Tencent Cloud's Hunyuan models for Chinese-language, multimodal, and enterprise workloads.",
+  "website": "https://hunyuan.tencent.com",
+  "docsUrl": "https://cloud.tencent.com/document/product/1729",
+  "placeholder": "https://api.hunyuan.cloud.tencent.com/v1",
+  "logo": "/api/media/avatars/presets/tencent-hunyuan.png",
+  "preset": true,
+  "category": "hosted",
+  "integrationType": "cloud-api"
+}

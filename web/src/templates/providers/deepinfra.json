@@ -1,0 +1,13 @@
+{
+  "id": "deepinfra",
+  "name": "DeepInfra",
+  "protocol": "openai",
+  "description": "Serverless inference for open models, with a broad catalog and simple OpenAI-compatible access.",
+  "website": "https://deepinfra.com",
+  "docsUrl": "https://deepinfra.com/docs",
+  "placeholder": "https://api.deepinfra.com/v1/openai",
+  "logo": "/api/media/avatars/presets/deepinfra.ico",
+  "preset": true,
+  "category": "hosted",
+  "integrationType": "cloud-api"
+}

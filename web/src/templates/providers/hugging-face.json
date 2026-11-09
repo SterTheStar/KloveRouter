@@ -1,0 +1,13 @@
+{
+  "id": "hugging-face",
+  "name": "Hugging Face Inference",
+  "protocol": "openai",
+  "description": "Hugging Face's router for accessing models from its open machine-learning ecosystem.",
+  "website": "https://huggingface.co",
+  "docsUrl": "https://huggingface.co/docs/api-inference",
+  "placeholder": "https://router.huggingface.co/v1",
+  "logo": "/api/media/avatars/presets/huggingface.ico",
+  "preset": true,
+  "category": "hosted",
+  "integrationType": "cloud-api"
+}

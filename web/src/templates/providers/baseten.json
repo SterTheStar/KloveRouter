@@ -1,0 +1,13 @@
+{
+  "id": "baseten",
+  "name": "Baseten",
+  "protocol": "openai",
+  "description": "A deployment platform for running and scaling custom and open-source models in production.",
+  "website": "https://baseten.co",
+  "docsUrl": "https://docs.baseten.co",
+  "placeholder": "https://inference.baseten.co/v1",
+  "logo": "/api/media/avatars/presets/baseten.ico",
+  "preset": true,
+  "category": "hosted",
+  "integrationType": "cloud-api"
+}

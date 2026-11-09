@@ -1,0 +1,13 @@
+{
+  "id": "mistral",
+  "name": "Mistral",
+  "protocol": "openai",
+  "description": "Mistral AI's API for efficient open and commercial models, including multilingual and code models.",
+  "website": "https://mistral.ai",
+  "docsUrl": "https://docs.mistral.ai",
+  "placeholder": "https://api.mistral.ai/v1",
+  "logo": "/api/media/avatars/presets/mistral.ico",
+  "preset": true,
+  "category": "hosted",
+  "integrationType": "cloud-api"
+}

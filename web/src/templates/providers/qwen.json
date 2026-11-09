@@ -1,0 +1,13 @@
+{
+  "id": "qwen",
+  "name": "Qwen Chat",
+  "protocol": "qwen",
+  "description": "Qwen AI models through an OpenAI-compatible gateway. Uses a Bearer token extracted from chat.qwen.ai.",
+  "website": "https://chat.qwen.ai",
+  "docsUrl": "https://chat.qwen.ai",
+  "placeholder": "https://qwen.aikit.club",
+  "logo": "https://assets.alicdn.com/g/qwenweb/qwen-webui-fe/0.0.201/favicon.png",
+  "preset": false,
+  "category": "hosted",
+  "integrationType": "web-session"
+}

@@ -1,0 +1,13 @@
+{
+  "id": "tokenrouter",
+  "name": "TokenRouter",
+  "protocol": "openai",
+  "description": "An OpenAI-compatible gateway for routing requests to supported language models.",
+  "website": "https://tokenrouter.com",
+  "docsUrl": "https://tokenrouter.com",
+  "placeholder": "https://api.tokenrouter.com/v1",
+  "logo": "/api/media/avatars/presets/tokenrouter.svg",
+  "preset": true,
+  "category": "aggregator",
+  "integrationType": "cloud-api"
+}

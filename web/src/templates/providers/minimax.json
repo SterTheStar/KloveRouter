@@ -1,0 +1,13 @@
+{
+  "id": "minimax",
+  "name": "MiniMax",
+  "protocol": "openai",
+  "description": "MiniMax's API for language, multimodal, and creative generation models.",
+  "website": "https://minimax.io",
+  "docsUrl": "https://platform.minimaxi.com",
+  "placeholder": "https://api.minimax.chat/v1",
+  "logo": "/api/media/avatars/presets/minimax.png",
+  "preset": true,
+  "category": "hosted",
+  "integrationType": "cloud-api"
+}

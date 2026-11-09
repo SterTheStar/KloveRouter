@@ -1,0 +1,13 @@
+{
+  "id": "novita-ai",
+  "name": "Novita AI",
+  "protocol": "openai",
+  "description": "An API platform for affordable inference across a broad catalog of open-source models.",
+  "website": "https://novita.ai",
+  "docsUrl": "https://novita.ai/docs",
+  "placeholder": "https://api.novita.ai/v3/openai",
+  "logo": "/api/media/avatars/presets/novita.ico",
+  "preset": true,
+  "category": "hosted",
+  "integrationType": "cloud-api"
+}

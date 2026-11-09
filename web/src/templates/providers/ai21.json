@@ -1,0 +1,13 @@
+{
+  "id": "ai21",
+  "name": "AI21",
+  "protocol": "openai",
+  "description": "AI21's language model platform for text generation, long-context work, and developer applications.",
+  "website": "https://ai21.com",
+  "docsUrl": "https://docs.ai21.com",
+  "placeholder": "https://api.ai21.com/studio/v1",
+  "logo": "/api/media/avatars/presets/ai21.png",
+  "preset": true,
+  "category": "hosted",
+  "integrationType": "cloud-api"
+}

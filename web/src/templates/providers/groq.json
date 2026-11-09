@@ -1,0 +1,13 @@
+{
+  "id": "groq",
+  "name": "Groq",
+  "protocol": "openai",
+  "description": "High-speed inference for selected open models, built around Groq's low-latency hardware.",
+  "website": "https://groq.com",
+  "docsUrl": "https://console.groq.com/docs",
+  "placeholder": "https://api.groq.com/openai/v1",
+  "logo": "/api/media/avatars/presets/groq.ico",
+  "preset": true,
+  "category": "hosted",
+  "integrationType": "cloud-api"
+}

@@ -1,0 +1,13 @@
+{
+  "id": "blueminds",
+  "name": "Blueminds",
+  "protocol": "openai",
+  "description": "An OpenAI-compatible gateway for accessing hosted language models through BlueMinds.",
+  "website": "https://bluesminds.com",
+  "docsUrl": "https://bluesminds.com",
+  "placeholder": "https://api.bluesminds.com/v1",
+  "logo": "/api/media/avatars/presets/blueminds.ico",
+  "preset": true,
+  "category": "hosted",
+  "integrationType": "cloud-api"
+}

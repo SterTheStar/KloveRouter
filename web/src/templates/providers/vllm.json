@@ -1,0 +1,13 @@
+{
+  "id": "vllm",
+  "name": "vLLM",
+  "protocol": "openai",
+  "description": "Local vLLM server exposing an OpenAI-compatible inference API.",
+  "website": "https://vllm.ai",
+  "docsUrl": "https://docs.vllm.ai",
+  "placeholder": "http://localhost:8000/v1",
+  "logo": "/api/media/avatars/presets/vllm.ico",
+  "preset": true,
+  "category": "local",
+  "integrationType": "local-server"
+}

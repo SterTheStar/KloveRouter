@@ -1,0 +1,13 @@
+{
+  "id": "nvidia-nim",
+  "name": "NVIDIA NIM",
+  "protocol": "openai",
+  "description": "NVIDIA-hosted NIM endpoints for production inference across language and multimodal models.",
+  "website": "https://build.nvidia.com",
+  "docsUrl": "https://docs.api.nvidia.com/nim",
+  "placeholder": "https://integrate.api.nvidia.com/v1",
+  "logo": "/api/media/avatars/presets/nvidia.png",
+  "preset": true,
+  "category": "hosted",
+  "integrationType": "cloud-api"
+}

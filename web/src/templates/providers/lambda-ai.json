@@ -1,0 +1,13 @@
+{
+  "id": "lambda-ai",
+  "name": "Lambda AI",
+  "protocol": "openai",
+  "description": "Lambda AI's hosted inference API for open and commercial language models.",
+  "website": "https://lambdalabs.com",
+  "docsUrl": "https://docs.lambdalabs.com/inference",
+  "placeholder": "https://api.lambdal.ai/v1",
+  "logo": "/api/media/avatars/presets/lambda-ai.svg",
+  "preset": true,
+  "category": "hosted",
+  "integrationType": "cloud-api"
+}

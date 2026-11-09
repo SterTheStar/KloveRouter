@@ -1,0 +1,13 @@
+{
+  "id": "lm-studio",
+  "name": "LM Studio",
+  "protocol": "openai",
+  "description": "Local LM Studio server with an OpenAI-compatible API.",
+  "website": "https://lmstudio.ai",
+  "docsUrl": "https://lmstudio.ai/docs",
+  "placeholder": "http://localhost:1234/v1",
+  "logo": "/api/media/avatars/presets/lm-studio.ico",
+  "preset": true,
+  "category": "local",
+  "integrationType": "local-server"
+}

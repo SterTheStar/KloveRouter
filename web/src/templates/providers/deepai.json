@@ -1,0 +1,13 @@
+{
+  "id": "deepai",
+  "name": "DeepAI Code",
+  "protocol": "deepai",
+  "description": "DeepAI Code models with Theos usage and account limits. Note: using this outside official apps violates DeepAI's terms and may result in an account ban.",
+  "website": "https://deepai.org",
+  "docsUrl": "https://deepai.org",
+  "placeholder": "https://api.deepai.org/deepai_code",
+  "logo": "/api/media/avatars/presets/deepai.svg",
+  "preset": false,
+  "category": "hosted",
+  "integrationType": "oauth"
+}

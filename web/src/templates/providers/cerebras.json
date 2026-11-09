@@ -1,0 +1,13 @@
+{
+  "id": "cerebras",
+  "name": "Cerebras",
+  "protocol": "openai",
+  "description": "Real-time inference for open models, focused on very high throughput and low response latency.",
+  "website": "https://cerebras.ai",
+  "docsUrl": "https://inference-docs.cerebras.ai",
+  "placeholder": "https://api.cerebras.ai/v1",
+  "logo": "/api/media/avatars/presets/cerebras.png",
+  "preset": true,
+  "category": "hosted",
+  "integrationType": "cloud-api"
+}

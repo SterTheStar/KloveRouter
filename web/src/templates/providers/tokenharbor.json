@@ -1,0 +1,13 @@
+{
+  "id": "tokenharbor",
+  "name": "TokenHarbor",
+  "protocol": "openai",
+  "description": "An OpenAI-compatible model gateway for accessing hosted language models.",
+  "website": "https://tokenharbor.ai",
+  "docsUrl": "https://tokenharbor.ai",
+  "placeholder": "https://tokenharbor.ai/v1",
+  "logo": "/api/media/avatars/presets/tokenharbor.ico",
+  "preset": true,
+  "category": "aggregator",
+  "integrationType": "cloud-api"
+}

@@ -1,0 +1,13 @@
+{
+  "id": "hcnsec",
+  "name": "HCNSEC",
+  "protocol": "openai",
+  "description": "An OpenAI-compatible inference endpoint for supported language models.",
+  "website": "https://api.hcnsec.cn",
+  "docsUrl": "https://api.hcnsec.cn",
+  "placeholder": "https://api.hcnsec.cn/v1",
+  "logo": "/api/media/avatars/presets/hcnsec.ico",
+  "preset": true,
+  "category": "hosted",
+  "integrationType": "cloud-api"
+}

@@ -1,0 +1,13 @@
+{
+  "id": "agnes",
+  "name": "Agnes",
+  "protocol": "openai",
+  "description": "An AI model hub exposing hosted models through an OpenAI-compatible API.",
+  "website": "https://agnes-ai.com",
+  "docsUrl": "https://apihub.agnes-ai.com",
+  "placeholder": "https://apihub.agnes-ai.com/v1",
+  "logo": "/api/media/avatars/presets/agnes.png",
+  "preset": true,
+  "category": "hosted",
+  "integrationType": "cloud-api"
+}

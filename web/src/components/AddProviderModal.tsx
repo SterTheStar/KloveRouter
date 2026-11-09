@@ -1,23 +1,13 @@
 import { useEffect, useRef, useState } from "react";
-import {
-  RiSearchLine as Search,
-  RiArrowLeftSLine as ArrowLeft,
-} from "@remixicon/react";
+import { RiArrowLeftSLine as ArrowLeft } from "@remixicon/react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Textarea } from "@/components/ui/textarea";
-import AvatarUpload from "./AvatarUpload";
 import {
   antigravity,
   codex,
@@ -27,14 +17,17 @@ import {
   type OpenFreeCliStatus,
 } from "../api/client";
 import { useToast } from "./ui/toast";
-import { copyToClipboard } from "../lib/clipboard";
 import {
   PROVIDER_TEMPLATES,
   type ProviderTemplate,
 } from "../lib/provider-templates";
-import ProviderIcon from "./ProviderIcon";
-import { faviconForEndpoint, isEndpointFavicon, isPersistableAvatar, logoToDataUrl } from "@/lib/provider-icons";
+import { isEndpointFavicon, isPersistableAvatar, logoToDataUrl } from "@/lib/provider-icons";
 import { invalidateProviders } from "../lib/query-cache";
+import {
+  ProviderListColumn,
+  ProviderInfoColumn,
+  ProviderAuthForm,
+} from "./providers";
 
 export default function AddProviderModal({
   isOpen,
@@ -47,8 +40,9 @@ export default function AddProviderModal({
 }) {
   const { success, error: notifyError } = useToast();
   const [step, setStep] = useState<"select" | "form">("select");
-  const [selectedType, setSelectedType] = useState<ProviderTemplate | null>(null);
-  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedType, setSelectedType] = useState<ProviderTemplate | null>(
+    () => PROVIDER_TEMPLATES[0] ?? null,
+  );
   const [name, setName] = useState("");
   const [baseUrl, setBaseUrl] = useState("");
   const [apiKey, setApiKey] = useState("");
@@ -76,6 +70,8 @@ export default function AddProviderModal({
   const [completingOAuth, setCompletingOAuth] = useState(false);
   const pollRef = useRef<number | null>(null);
   const oauthFinishedRef = useRef(false);
+
+  const unavailableProtocols = new Set(["chatgpt", "freebuff"]);
 
   const clearPoll = () => {
     if (pollRef.current !== null) {
@@ -124,8 +120,7 @@ export default function AddProviderModal({
     setError(null);
     setVerificationWarning(null);
     setStep("select");
-    setSelectedType(null);
-    setSearchQuery("");
+    setSelectedType(PROVIDER_TEMPLATES[0] ?? null);
     setPendingOAuth(null);
     setCallbackUrl("");
     setCompletingOAuth(false);
@@ -151,7 +146,9 @@ export default function AddProviderModal({
       "Account connected",
       protocol === "codex"
         ? "Codex is ready to use."
-        : protocol === "deepai" ? "DeepAI Code is ready to use." : "Google Antigravity is ready to use.",
+        : protocol === "deepai"
+          ? "DeepAI Code is ready to use."
+          : "Google Antigravity is ready to use.",
     );
     onSuccess();
     reset();
@@ -172,16 +169,13 @@ export default function AddProviderModal({
       try {
         if (
           !oauthFinishedRef.current &&
-          (await providers.credentialStatus(providerId, credentialId))
-            .authenticated
-        )
+          (await providers.credentialStatus(providerId, credentialId)).authenticated
+        ) {
           finishOAuth(protocol);
-        else if (Date.now() - started > (protocol === "deepai" ? 10 : 5) * 60_000) {
+        } else if (Date.now() - started > (protocol === "deepai" ? 10 : 5) * 60_000) {
           clearPoll();
           setLoading(false);
-          setError(
-            "OAuth login timed out. Start a new login and paste its callback URL.",
-          );
+          setError("OAuth login timed out. Start a new login and paste its callback URL.");
         }
       } catch {
         /* Keep polling during browser login. */
@@ -190,42 +184,41 @@ export default function AddProviderModal({
   };
 
   const completeOAuthManually = async () => {
-    if (!pendingOAuth || oauthFinishedRef.current || !callbackUrl.trim())
+    if (!pendingOAuth || oauthFinishedRef.current || !callbackUrl.trim()) {
       return setError("Paste the complete localhost callback URL.");
+    }
     setCompletingOAuth(true);
     setError(null);
     try {
       if (pendingOAuth.protocol === "deepai") {
         const callback = new URL(callbackUrl.trim());
-        if (callback.protocol !== "http:" || !["127.0.0.1", "localhost", "[::1]"].includes(callback.hostname) || !callback.port || callback.pathname !== "/auth-callback") throw new Error("Expected the DeepAI loopback callback URL");
+        if (
+          callback.protocol !== "http:" ||
+          !["127.0.0.1", "localhost", "[::1]"].includes(callback.hostname) ||
+          !callback.port ||
+          callback.pathname !== "/auth-callback"
+        ) {
+          throw new Error("Expected the DeepAI loopback callback URL");
+        }
         const code = callback.searchParams.get("code");
         const state = callback.searchParams.get("state");
-        if (!code || !state || callback.searchParams.has("error")) throw new Error("Callback URL is missing valid DeepAI code and state");
+        if (!code || !state || callback.searchParams.has("error")) {
+          throw new Error("Callback URL is missing valid DeepAI code and state");
+        }
         await deepai.completeLogin(pendingOAuth.credentialId, code, state);
-      } else if (pendingOAuth.protocol === "codex")
-        await codex.completeLogin(
-          callbackUrl.trim(),
-          pendingOAuth.credentialId,
-        );
-      else
-        await antigravity.completeLogin(
-          callbackUrl.trim(),
-          pendingOAuth.credentialId,
-        );
+      } else if (pendingOAuth.protocol === "codex") {
+        await codex.completeLogin(callbackUrl.trim(), pendingOAuth.credentialId);
+      } else {
+        await antigravity.completeLogin(callbackUrl.trim(), pendingOAuth.credentialId);
+      }
       finishOAuth(pendingOAuth.protocol);
     } catch (e: any) {
       try {
-        if (
-          (
-            await providers.credentialStatus(
-              pendingOAuth.providerId,
-              pendingOAuth.credentialId,
-            )
-          ).authenticated
-        )
+        if ((await providers.credentialStatus(pendingOAuth.providerId, pendingOAuth.credentialId)).authenticated) {
           return finishOAuth(pendingOAuth.protocol);
+        }
       } catch {
-        /* Report the original completion error. */
+        /* Report original error */
       }
       setError(e.message);
       notifyError("Could not complete OAuth", e.message);
@@ -238,9 +231,11 @@ export default function AddProviderModal({
     if (!pendingOAuth) return;
     const popup = window.open(
       "about:blank",
-      pendingOAuth.protocol === "deepai" ? "klove-deepai-login" : pendingOAuth.protocol === "codex"
-        ? "klove-codex-login"
-        : "klove-antigravity-login",
+      pendingOAuth.protocol === "deepai"
+        ? "klove-deepai-login"
+        : pendingOAuth.protocol === "codex"
+          ? "klove-codex-login"
+          : "klove-antigravity-login",
       "popup,width=520,height=720",
     );
     setLoading(true);
@@ -251,8 +246,8 @@ export default function AddProviderModal({
         pendingOAuth.protocol === "deepai"
           ? await deepai.login(pendingOAuth.credentialId)
           : pendingOAuth.protocol === "codex"
-          ? await codex.login(pendingOAuth.credentialId)
-          : await antigravity.login(pendingOAuth.credentialId);
+            ? await codex.login(pendingOAuth.credentialId)
+            : await antigravity.login(pendingOAuth.credentialId);
       if (popup) popup.location.href = result.auth_url;
       waitForOAuth(
         pendingOAuth.protocol,
@@ -308,6 +303,68 @@ export default function AddProviderModal({
     }
   };
 
+  const connectAntigravity = async () => {
+    const popup = window.open("about:blank", "klove-antigravity-login", "popup,width=520,height=720");
+    let createdProviderId: string | null = null;
+    setLoading(true);
+    setError(null);
+    try {
+      const provider = await providers.create({
+        name: name.trim() || "antigravity",
+        base_url: baseUrl || "https://daily-cloudcode-pa.googleapis.com",
+        protocol: "antigravity",
+        avatar: await resolveAvatarPayload(),
+      });
+      createdProviderId = provider.id;
+      const credential = (await providers.credentials(provider.id))[0];
+      if (!credential) throw new Error("Unable to create Google credential");
+      const result = await antigravity.login(credential.id);
+      if (popup) popup.location.href = result.auth_url;
+      waitForOAuth("antigravity", provider.id, credential.id, result.auth_url);
+    } catch (e: any) {
+      popup?.close();
+      if (createdProviderId) await providers.remove(createdProviderId).catch(() => {});
+      setError(e.message);
+      notifyError("Could not connect Google", e.message);
+      setLoading(false);
+    }
+  };
+
+  const connectCodex = async () => {
+    const popup = window.open("about:blank", "klove-codex-login", "popup,width=520,height=720");
+    let createdProviderId: string | null = null;
+    setLoading(true);
+    setError(null);
+    try {
+      const provider = await providers.create({
+        name: name.trim() || "codex",
+        base_url: baseUrl || "https://chatgpt.com/backend-api/codex",
+        api_key: "codex-session",
+        protocol: "codex",
+        avatar: await resolveAvatarPayload(),
+      });
+      createdProviderId = provider.id;
+      const credentials = await providers.credentials(provider.id);
+      const credential = credentials[0];
+      if (!credential) throw new Error("Unable to create Codex credential");
+      const result = await codex.login(credential.id);
+      if (popup) popup.location.href = result.auth_url;
+      waitForOAuth("codex", provider.id, credential.id, result.auth_url);
+    } catch (e: any) {
+      popup?.close();
+      if (createdProviderId) await providers.remove(createdProviderId).catch(() => {});
+      setError(e.message);
+      notifyError("Could not connect Codex", e.message);
+      setLoading(false);
+    }
+  };
+
+  const handleOAuthConnect = async () => {
+    if (selectedType?.protocol === "deepai") return startDeepAIConnection();
+    if (selectedType?.protocol === "codex") return connectCodex();
+    if (selectedType?.protocol === "antigravity") return connectAntigravity();
+  };
+
   const saveOpenfreeCli = async (path: string) => {
     setSavingOpenfreeCliPath(true);
     setError(null);
@@ -348,8 +405,6 @@ export default function AddProviderModal({
     }
   };
 
-  // Only a user-chosen avatar, or a static template logo, is persisted. The favicon
-  // derived from the typed endpoint is not persisted so it keeps following URL edits.
   const resolveAvatarPayload = async (): Promise<string | undefined> => {
     if (avatarManuallySet) return isPersistableAvatar(avatar) ? avatar : undefined;
     const logo = selectedType?.logo;
@@ -358,50 +413,59 @@ export default function AddProviderModal({
     return (await logoToDataUrl(logo)) ?? undefined;
   };
 
-  const submit = async (skipVerification = false) => {
-    if (selectedType?.protocol === "deepai") return startDeepAIConnection();
-    if (
-      selectedType?.protocol === "codex" ||
-      selectedType?.protocol === "antigravity"
-    ) {
-      return setError(
-        "Connect your Codex account before adding this provider.",
-      );
+  const submit = async (skipVerification: boolean) => {
+    if (selectedType?.protocol === "openfree" && !apiKey.trim()) {
+      return setError("Enter your OpenCode Zen API key.");
     }
-    if (!name || !baseUrl)
+    if (selectedType?.protocol !== "openfree" && (!name || !baseUrl)) {
       return setError("Provider name and base URL are required.");
-    if (selectedType?.protocol === "openfree" && !apiKey.trim())
-      return setError("OpenCode Zen API key is required for OpenFREE.");
-    const conolParsedAccountId = conolAccountId.trim() || authCode.match(/^account_id\s*=\s*(.+)$/m)?.[1]?.trim() || "";
-    if (selectedType?.protocol === "chatgpt" && !cookieFile)
-      return setError("Select a cookies.txt file.");
-    if (selectedType?.protocol === "conol" && !conolParsedAccountId)
-      return setError("Conol.ai account_id is required. Enter it separately or use account_id=<id> on the first line.");
-    const hasCredentialToVerify = selectedType?.protocol === "chatgpt"
-      ? Boolean(cookieFile)
-      : selectedType?.protocol === "freebuff" || selectedType?.protocol === "qwen" || selectedType?.protocol === "atomesus" || selectedType?.protocol === "conol" || selectedType?.protocol === "perch"
-        ? Boolean(authCode.trim())
-        : Boolean(apiKey.trim());
-    const shouldVerify = !skipVerification && hasCredentialToVerify && selectedType?.protocol !== "openfree";
+    }
+    const conolParsedAccountId =
+      selectedType?.protocol === "conol"
+        ? (conolAccountId.trim() || undefined)
+        : undefined;
+
+    const hasCredentialToVerify =
+      selectedType?.protocol === "chatgpt"
+        ? Boolean(cookieFile)
+        : selectedType?.protocol === "freebuff" ||
+            selectedType?.protocol === "qwen" ||
+            selectedType?.protocol === "atomesus" ||
+            selectedType?.protocol === "conol" ||
+            selectedType?.protocol === "perch"
+          ? Boolean(authCode.trim())
+          : Boolean(apiKey.trim());
+
+    const shouldVerify =
+      !skipVerification && hasCredentialToVerify && selectedType?.protocol !== "openfree";
+
     setLoading(true);
     setVerifying(shouldVerify);
     setError(null);
     setVerificationWarning(null);
+
     try {
       let openfreeLoginWarning: string | null = null;
       if (selectedType?.protocol === "openfree" && apiKey.trim()) {
         const login = await openfreeCli.login(apiKey.trim());
         openfreeLoginWarning = login.warning;
       }
-      if (shouldVerify && selectedType?.protocol !== "chatgpt") await providers.validateCredential({
-        base_url: baseUrl,
-        ...(selectedType?.protocol === "freebuff" || selectedType?.protocol === "qwen" || selectedType?.protocol === "atomesus" || selectedType?.protocol === "perch"
-          ? { auth_code: authCode }
-          : selectedType?.protocol === "conol"
-            ? { secret: authCode, account_id: conolParsedAccountId }
-            : { api_key: apiKey }),
-        protocol: selectedType?.protocol,
-      });
+
+      if (shouldVerify && selectedType?.protocol !== "chatgpt") {
+        await providers.validateCredential({
+          base_url: baseUrl,
+          ...(selectedType?.protocol === "freebuff" ||
+          selectedType?.protocol === "qwen" ||
+          selectedType?.protocol === "atomesus" ||
+          selectedType?.protocol === "perch"
+            ? { auth_code: authCode }
+            : selectedType?.protocol === "conol"
+              ? { secret: authCode, account_id: conolParsedAccountId }
+              : { api_key: apiKey }),
+          protocol: selectedType?.protocol,
+        });
+      }
+
       setVerifying(false);
       const created = await providers.create({
         name,
@@ -410,7 +474,10 @@ export default function AddProviderModal({
           ? {}
           : selectedType?.protocol === "openfree"
             ? (apiKey.trim() ? { api_key: apiKey.trim() } : {})
-            : selectedType?.protocol === "freebuff" || selectedType?.protocol === "qwen" || selectedType?.protocol === "atomesus" || selectedType?.protocol === "perch"
+            : selectedType?.protocol === "freebuff" ||
+                selectedType?.protocol === "qwen" ||
+                selectedType?.protocol === "atomesus" ||
+                selectedType?.protocol === "perch"
               ? (authCode.trim() ? { auth_code: authCode } : {})
               : selectedType?.protocol === "conol"
                 ? { secret: authCode, account_id: conolParsedAccountId }
@@ -418,12 +485,18 @@ export default function AddProviderModal({
         protocol: selectedType?.protocol,
         avatar: await resolveAvatarPayload(),
       });
-      if (selectedType?.protocol === "chatgpt" && cookieFile)
+
+      if (selectedType?.protocol === "chatgpt" && cookieFile) {
         await providers.uploadCookies(created.id, cookieFile);
+      }
+
       invalidateProviders();
-      success("Provider added", openfreeLoginWarning
-        ? `The API key is saved. ${openfreeLoginWarning}`
-        : `${name} is ready to use.`);
+      success(
+        "Provider added",
+        openfreeLoginWarning
+          ? `The API key is saved. ${openfreeLoginWarning}`
+          : `${name} is ready to use.`,
+      );
       onSuccess();
       close();
     } catch (e: any) {
@@ -440,538 +513,123 @@ export default function AddProviderModal({
     }
   };
 
-  const connectAntigravity = async () => {
-    const popup = window.open(
-      "about:blank",
-      "klove-antigravity-login",
-      "popup,width=520,height=720",
-    );
-    let createdProviderId: string | null = null;
-    setLoading(true);
-    setError(null);
-    try {
-      const provider = await providers.create({
-        name: name.trim() || "antigravity",
-        base_url: baseUrl || "https://daily-cloudcode-pa.googleapis.com",
-        protocol: "antigravity",
-        avatar: await resolveAvatarPayload(),
-      });
-      createdProviderId = provider.id;
-      const credential = (await providers.credentials(provider.id))[0];
-      if (!credential) throw new Error("Unable to create Google credential");
-      const result = await antigravity.login(credential.id);
-      if (popup) popup.location.href = result.auth_url;
-      waitForOAuth("antigravity", provider.id, credential.id, result.auth_url);
-    } catch (e: any) {
-      popup?.close();
-      if (createdProviderId)
-        await providers.remove(createdProviderId).catch(() => {});
-      setError(e.message);
-      notifyError("Could not connect Google", e.message);
-      setLoading(false);
-    }
-  };
-
-  const connectCodex = async () => {
-    const popup = window.open(
-      "about:blank",
-      "klove-codex-login",
-      "popup,width=520,height=720",
-    );
-    let createdProviderId: string | null = null;
-    setLoading(true);
-    setError(null);
-    try {
-      const provider = await providers.create({
-        name: name.trim() || "codex",
-        base_url: baseUrl || "https://chatgpt.com/backend-api/codex",
-        api_key: "codex-session",
-        protocol: "codex",
-        avatar: await resolveAvatarPayload(),
-      });
-      createdProviderId = provider.id;
-      const credentials = await providers.credentials(provider.id);
-      const credential = credentials[0];
-      if (!credential) throw new Error("Unable to create Codex credential");
-      const result = await codex.login(credential.id);
-      if (popup) popup.location.href = result.auth_url;
-      waitForOAuth("codex", provider.id, credential.id, result.auth_url);
-    } catch (e: any) {
-      popup?.close();
-      if (createdProviderId)
-        await providers.remove(createdProviderId).catch(() => {});
-      setError(e.message);
-      notifyError("Could not connect Codex", e.message);
-      setLoading(false);
-    }
-  };
-
-  const unavailableProtocols = new Set(["chatgpt", "freebuff"]);
-  const filteredTypes = PROVIDER_TEMPLATES.filter(
-    (t) =>
-      t.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      t.description.toLowerCase().includes(searchQuery.toLowerCase()),
-  );
-
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && close()}>
-      <DialogContent className="sm:max-w-3xl">
-        {step === "select" ? (
-          <>
-            <DialogHeader>
-              <DialogTitle>Add provider</DialogTitle>
-              <DialogDescription>
-                Choose a provider type to connect.
+      <DialogContent className="sm:max-w-4xl md:max-w-5xl h-[85vh] max-h-[740px] flex flex-col p-0 gap-0 overflow-hidden">
+        {/* Modal Top Header */}
+        <div className="flex items-center justify-between border-b border-border px-6 py-3.5 shrink-0">
+          <div className="flex items-center gap-3">
+            {step === "form" && (
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                className="size-7"
+                onClick={() => {
+                  setStep("select");
+                  setError(null);
+                }}
+              >
+                <ArrowLeft className="size-4" />
+              </Button>
+            )}
+            <div>
+              <DialogTitle className="text-sm font-semibold">
+                {step === "select" ? "Add provider" : `Configure ${selectedType?.name || "Provider"}`}
+              </DialogTitle>
+              <DialogDescription className="text-xs text-muted-foreground">
+                {step === "select"
+                  ? "Choose a provider template to connect and access its language models."
+                  : "Review provider details and enter your connection parameters."}
               </DialogDescription>
-            </DialogHeader>
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                placeholder="Search provider types..."
-                className="h-9 pl-9"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
             </div>
-            <div className="space-y-2 min-h-[24rem] max-h-[32rem] overflow-y-auto">
-              {filteredTypes.map((type) => (
-                <button
-                  key={type.id}
-                  type="button"
-                  disabled={unavailableProtocols.has(type.protocol)}
-                  className={`flex w-full items-center gap-4 rounded-lg border border-border bg-card p-4 text-left transition-colors ${unavailableProtocols.has(type.protocol) ? "cursor-not-allowed opacity-50" : "hover:bg-accent"}`}
-                  onClick={() => selectType(type)}
-                >
-                  <ProviderIcon name={type.name} src={type.logo} className={`size-9 ${type.id === "openai" ? "dark:invert" : ""}`} />
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <div className="font-medium text-foreground">{type.name}</div>
-                      {unavailableProtocols.has(type.protocol) && (
-                        <Badge variant="destructive">Not working</Badge>
-                      )}
-                      {(type.protocol === "codex" ||
-                        type.protocol === "antigravity" ||
-                        type.protocol === "deepai") && (
-                        <Badge variant="outline">OAuth</Badge>
-                      )}
-                    </div>
-                    <div className="text-xs text-tertiary">
-                      {type.description}
-                    </div>
-                  </div>
-                </button>
-              ))}
-              {filteredTypes.length === 0 && (
-                <div className="rounded-xl border border-dashed border-border bg-background/60 py-10 text-center text-sm text-tertiary">
-                  No provider types found.
-                </div>
-              )}
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={close}>
-                Cancel
-              </Button>
-            </DialogFooter>
-          </>
-        ) : (
-          <>
-            <DialogHeader>
-              <div className="flex items-center gap-3">
-                <Button
-                  variant="ghost"
-                  size="icon-xs"
-                  className="size-7"
-                  onClick={() => {
-                    setStep("select");
-                    setError(null);
-                  }}
-                >
-                  <ArrowLeft className="size-4" />
-                </Button>
-                <div>
-                  <DialogTitle>{selectedType?.name}</DialogTitle>
-                  <DialogDescription>
-                    Fill in the connection details.
-                  </DialogDescription>
-                </div>
-              </div>
-            </DialogHeader>
-            <div className="space-y-4">
-              {(selectedType?.protocol === "codex" ||
-                selectedType?.protocol === "antigravity" ||
-                selectedType?.protocol === "deepai") && (
-                <Alert>
-                  <AlertDescription>
-                    <strong>OAuth integration:</strong> Klove stores the account
-                    tokens encrypted in SQLite and uses private provider
-                    endpoints.
-                  </AlertDescription>
-                </Alert>
-              )}
-              <AvatarUpload
-                value={avatarManuallySet ? avatar : null}
-                previewSrc={selectedType?.logo}
-                previewFallbackUrl={faviconForEndpoint(baseUrl)}
-                name={name || selectedType?.name || "Provider"}
-                onChange={(value) => { setAvatar(value); setAvatarManuallySet(value !== null); }}
-                label="Provider avatar"
-                onError={(message) => notifyError("Invalid avatar", message)}
-              />
-              <div className="space-y-2">
-                <Label htmlFor="provider-name">Provider name</Label>
-                <Input
-                  id="provider-name"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder={selectedType?.id}
+          </div>
+        </div>
+
+        {/* 2-Column Content Body */}
+        <div className="grid flex-1 grid-cols-1 md:grid-cols-12 min-h-0 overflow-hidden">
+          {step === "select" ? (
+            <>
+              {/* Left Column: Search & Provider List */}
+              <div className="flex flex-col md:col-span-5 border-r border-border p-4 min-h-0 overflow-hidden">
+                <ProviderListColumn
+                  templates={PROVIDER_TEMPLATES}
+                  selectedTemplate={selectedType}
+                  onSelect={(tpl) => setSelectedType(tpl)}
+                  onConfirm={(tpl) => selectType(tpl)}
+                  unavailableProtocols={unavailableProtocols}
                 />
               </div>
-              {selectedType?.protocol === "openfree" && (
-                <div className="space-y-3 rounded-xl border border-border bg-background/60 p-3">
-                  <Alert
-                    variant={openfreeCliStatus?.warning && !openfreeCliStatus.path ? "destructive" : "default"}
-                  >
-                    <AlertDescription>
-                      {checkingOpenfreeCli
-                        ? "Checking for OpenCode CLI on the KloveRouter host..."
-                        : openfreeCliStatus?.path
-                          ? <>
-                              {`OpenCode CLI found${openfreeCliStatus.source ? ` (${openfreeCliStatus.source})` : ""}:`}
-                              <br />
-                              <code className="break-all font-mono text-tertiary">{openfreeCliStatus.path}</code>
-                            </>
-                          : openfreeCliStatus
-                            ? "No OpenCode CLI was found on the KloveRouter host. Enter its executable path below."
-                            : "Could not check for the OpenCode CLI."}
-                      {openfreeCliStatus?.warning && <><br />{openfreeCliStatus.warning}</>}
-                    </AlertDescription>
-                  </Alert>
-                  <p className="text-xs text-tertiary">
-                    OpenFREE requires an OpenCode Zen API key. The key is stored encrypted and used for requests; the CLI login is also configured when the CLI and <code>expect</code> are available.
-                  </p>
-                  <div className="space-y-2">
-                    <Label htmlFor="openfree-cli-path">OpenCode CLI executable path</Label>
-                    <Input
-                      id="openfree-cli-path"
-                      value={openfreeCliPath}
-                      onChange={(event) => setOpenfreeCliPath(event.target.value)}
-                      placeholder={openfreeCliStatus?.path ?? "/absolute/path/to/opencode"}
-                      autoComplete="off"
-                      spellCheck={false}
-                    />
-                    <p className="text-xs text-tertiary">
-                      Leave blank to use automatic detection. Saving a path applies it to the KloveRouter host.
-                    </p>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <Button
-                      type="button"
-                      size="sm"
-                      onClick={() => void saveOpenfreeCli(openfreeCliPath)}
-                      disabled={checkingOpenfreeCli || savingOpenfreeCliPath || !openfreeCliPath.trim()}
-                    >
-                      {savingOpenfreeCliPath ? "Saving..." : "Save CLI path"}
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      onClick={() => void saveOpenfreeCli("")}
-                      disabled={checkingOpenfreeCli || savingOpenfreeCliPath || !openfreeCliStatus?.saved_path}
-                    >
-                      Use automatic detection
-                    </Button>
-                  </div>
-                  <div className="space-y-2 border-t border-border pt-3">
-                    <div className="space-y-1">
-                      <p className="text-sm font-medium text-foreground">KloveRouter managed installation</p>
-                      <code className="block break-all font-mono text-xs text-tertiary">
-                        {openfreeCliStatus?.managed_path ?? "Resolving the app data folder..."}
-                      </code>
-                      {openfreeCliStatus?.managed_installed && openfreeCliStatus.managed_version && (
-                        <p className="text-xs text-tertiary">
-                          Managed CLI version {openfreeCliStatus.managed_version} is installed.
-                        </p>
-                      )}
-                    </div>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      onClick={() => void installManagedOpenfreeCli()}
-                      disabled={checkingOpenfreeCli || savingOpenfreeCliPath || installingOpenfreeCli}
-                    >
-                      {installingOpenfreeCli
-                        ? "Installing OpenCode CLI..."
-                        : openfreeCliStatus?.managed_installed
-                          ? "Update managed CLI"
-                          : "Install managed CLI"}
-                    </Button>
-                    <p className="text-xs text-tertiary">
-                      Downloads the official platform package, verifies its integrity, and saves the CLI in this folder.
-                    </p>
-                  </div>
-                  <div className="space-y-2 border-t border-border pt-3">
-                    <Label htmlFor="openfree-zen-api-key">OpenCode Zen API key (required)</Label>
-                    <Input
-                      id="openfree-zen-api-key"
-                      type="password"
-                      autoComplete="new-password"
-                      value={apiKey}
-                      onChange={(event) => setApiKey(event.target.value)}
-                      placeholder="Paste your OpenCode Zen API key"
-                      required
-                    />
-                    <p className="text-xs text-tertiary">
-                      Saving this provider signs the CLI in through its API-key prompt when available and stores the key encrypted in KloveRouter.
-                    </p>
-                  </div>
-                </div>
-              )}
-              {selectedType?.protocol !== "openfree" && <div className="space-y-2">
-                <Label htmlFor="provider-url">Base URL</Label>
-                <Input
-                  id="provider-url"
-                  value={baseUrl}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    setBaseUrl(value);
-                  }}
-                  placeholder={selectedType?.placeholder}
+
+              {/* Right Column: Provider Details Preview & Action */}
+              <div className="flex flex-col md:col-span-7 p-5 min-h-0 overflow-hidden bg-muted/10">
+                <ProviderInfoColumn
+                  template={selectedType}
+                  onSelect={(tpl) => selectType(tpl)}
+                  mode="select"
+                  unavailableProtocols={unavailableProtocols}
                 />
-              </div>}
-              {selectedType?.protocol !== "openfree" && selectedType?.protocol !== "codex" && selectedType?.protocol !== "deepai" &&
-                selectedType?.protocol !== "antigravity" && (
-                  <div className="space-y-2">
-                    {selectedType?.protocol === "conol" ? (
-                      <>
-                        <Label htmlFor="conol-account-id">Account ID</Label>
-                        <Input
-                          id="conol-account-id"
-                          value={conolAccountId}
-                          onChange={(e) => setConolAccountId(e.target.value)}
-                          placeholder="account_id from Conol.ai"
-                        />
-                        <Label htmlFor="provider-key">Cookie</Label>
-                        <Input
-                          id="provider-key"
-                          type="password"
-                          value={authCode}
-                          onChange={(e) => setAuthCode(e.target.value)}
-                          placeholder="Paste the Conol.ai cookie (kept hidden)"
-                        />
-                        <p className="text-xs text-tertiary">Enter Account ID and cookie separately. Cookie stays hidden and is encrypted before storage.</p>
-                        <div className="space-y-3 rounded-xl border border-dashed border-border bg-background/60 p-3 text-xs text-tertiary">
-                          <p className="font-medium text-foreground">How to get your Conol.ai account and session cookie:</p>
-                          <ol className="list-inside list-decimal space-y-1">
-                            <li>Go to <a href="https://conol.ai" target="_blank" rel="noreferrer" className="font-medium text-accent-blue underline underline-offset-2">conol.ai</a> and log in</li>
-                            <li>Open DevTools (<kbd className="rounded-md border border-border bg-surface px-1 font-mono text-foreground">F12</kbd>) → <strong>Network</strong>, then reload the page</li>
-                            <li>Open any request to <code>conol.ai</code>, find the <strong>Cookie</strong> request header, and copy its complete value</li>
-                            <li>Copy and paste this code in the Console to get the Account ID:</li>
-                          </ol>
-                          <div className="relative">
-                            <button
-                              type="button"
-                              onClick={async () => {
-                                const code = `(()=>{\n  if (!location.hostname.endsWith("conol.ai"))\n    return console.error("Use this on conol.ai");\n  const accountId = location.pathname.match(/\\/accounts\\/([^/]+)/)?.[1] || "(not found)";\n  console.log("Account ID: " + accountId);\n})();`;
-                                try {
-                                  await copyToClipboard(code);
-                                  success("Setup code copied");
-                                } catch (e: any) {
-                                  notifyError("Could not copy setup code", e.message);
-                                }
-                              }}
-                              className="absolute right-1 top-1 rounded-md border border-border bg-card px-1.5 py-0.5 text-[10px] font-medium text-tertiary hover:bg-accent hover:text-foreground"
-                            >
-                              Copy
-                            </button>
-                            <pre className="overflow-x-auto rounded-lg border border-border bg-background/60 p-2 pt-5 font-mono text-[11px] leading-relaxed text-foreground">
-{`(()=>{
-  if (!location.hostname.endsWith("conol.ai"))
-    return console.error("Use this on conol.ai");
-  const accountId = location.pathname.match(/\\/accounts\\/([^/]+)/)?.[1] || "(not found)";
-  console.log("Account ID: " + accountId);
-})();`}
-                            </pre>
-                          </div>
-                          <p>Press <kbd className="rounded-md border border-border bg-surface px-1 font-mono text-foreground">Enter</kbd>, then paste the Account ID into the Account ID field and the complete cookie string into the Cookie field above.</p>
-                        </div>
-                      </>
-                    ) : (
-                      <>
-                        {selectedType?.protocol === "chatgpt" ? (
-                          <div>
-                            <Label htmlFor="provider-cookies">cookies.txt (Netscape)</Label>
-                            <Input id="provider-cookies" type="file" accept=".txt,text/plain" onChange={(e) => setCookieFile(e.target.files?.[0] ?? null)} />
-                          </div>
-                        ) : (
-                          <div>
-                            <Label htmlFor="provider-key">
-                              {selectedType?.protocol === "atomesus" ? "Bearer token (optional)" : selectedType?.protocol === "perch" ? "Session JSON or access token (optional)" : selectedType?.protocol === "freebuff" || selectedType?.protocol === "qwen" ? "Auth code (optional)" : "API key (optional)"}
-                            </Label>
-                            <Input id="provider-key" type="password" value={selectedType?.protocol === "freebuff" || selectedType?.protocol === "qwen" || selectedType?.protocol === "atomesus" || selectedType?.protocol === "perch" ? authCode : apiKey} onChange={(e) => selectedType?.protocol === "freebuff" || selectedType?.protocol === "qwen" || selectedType?.protocol === "atomesus" || selectedType?.protocol === "perch" ? setAuthCode(e.target.value) : setApiKey(e.target.value)} placeholder={selectedType?.protocol === "atomesus" ? "Paste your Atomesus bearer token" : selectedType?.protocol === "perch" ? "Paste the perch login session JSON or access token" : selectedType?.protocol === "freebuff" || selectedType?.protocol === "qwen" ? "Paste your auth token" : "sk-..."} />
-                          </div>
-                        )}
-                    {selectedType?.protocol === "chatgpt" ? (
-                      <div className="space-y-2 rounded-xl border border-dashed border-border bg-background/60 p-3 text-xs text-tertiary">
-                        <p className="font-medium text-foreground">ChatGPT cookies.txt</p>
-                        <p>Export your own logged-in ChatGPT cookies in Netscape cookies.txt format. Only chatgpt.com and openai.com cookies are accepted and the resulting Cookie header is encrypted before storage.</p>
-                      </div>
-                    ) : (selectedType?.protocol === "freebuff" || selectedType?.protocol === "qwen" || selectedType?.protocol === "perch") && (
-                      selectedType?.protocol === "qwen" ? (
-                        <div className="space-y-3 rounded-xl border border-dashed border-border bg-background/60 p-3 text-xs text-tertiary">
-                          <p className="font-medium text-foreground">How to get your Qwen token:</p>
-                          <ol className="list-inside list-decimal space-y-1">
-                            <li>Go to <a href="https://chat.qwen.ai" target="_blank" rel="noreferrer" className="font-medium text-accent-blue underline underline-offset-2">chat.qwen.ai</a> and log in</li>
-                            <li>Open browser DevTools (<kbd className="rounded-md border border-border bg-surface px-1 font-mono text-foreground">F12</kbd> → Console)</li>
-                            <li>Copy and paste this code:</li>
-                          </ol>
-                          <div className="relative">
-                            <button
-                              type="button"
-                              onClick={async () => {
-                                const code = `javascript:(()=>{\n  if (location.hostname !== "chat.qwen.ai")\n    return alert("🚀 Use on chat.qwen.ai");\n  const token = localStorage.getItem("token");\n  if (!token)\n    return console.log("❌ Token not found");\n  console.log("🔑 Qwen access_token:\\n", token);\n})();`;
-                                try {
-                                  await copyToClipboard(code);
-                                  success("Setup code copied");
-                                } catch (e: any) {
-                                  notifyError("Could not copy setup code", e.message);
-                                }
-                              }}
-                              className="absolute right-1 top-1 rounded-md border border-border bg-card px-1.5 py-0.5 text-[10px] font-medium text-tertiary hover:bg-accent hover:text-foreground"
-                            >
-                              Copy
-                            </button>
-                            <pre className="overflow-x-auto rounded-lg border border-border bg-background/60 p-2 pt-5 font-mono text-[11px] leading-relaxed text-foreground">
-{`javascript:(()=>{
-  if (location.hostname !== "chat.qwen.ai")
-    return alert("🚀 Use on chat.qwen.ai");
-  const token = localStorage.getItem("token");
-  if (!token)
-    return console.log("❌ Token not found");
-  console.log("🔑 Qwen access_token:\\n", token);
-})();`}
-                            </pre>
-                          </div>
-                          <p>Press <kbd className="rounded-md border border-border bg-surface px-1 font-mono text-foreground">Enter</kbd>, then copy the token that appears in the console and paste it above.</p>
-                          <p className="text-tertiary">The token is encrypted before being stored.</p>
-                        </div>
-                      ) : selectedType?.protocol === "perch" ? (
-                        <div className="space-y-3 rounded-lg border border-dashed p-3 text-xs text-muted-foreground">
-                          <p className="font-medium text-foreground">How to connect Perch AI:</p>
-                          <ol className="list-inside list-decimal space-y-1">
-                            <li>Leave the field empty to use the session created by <code>perch login</code> on the KloveRouter host (<code>~/.perch/cli-auth-session.json</code>).</li>
-                            <li>Or paste the complete <code>cli-auth-session.json</code> content, or just an access token, into the field above.</li>
-                            <li>Save the provider, then sync models to load the Perch catalog.</li>
-                          </ol>
-                          <p className="text-amber-600 dark:text-amber-400">Perch's documentation warns that calling its API outside the official CLI may violate its terms and risk account suspension. Use it only with an account you are permitted to use this way.</p>
-                        </div>
-                      ) : (
-                        <p className="text-xs text-tertiary">
-                          Use the auth code from your Freebuff account or CLI. It is encrypted before being stored.
-                        </p>
-                      )
-                    )}
-                      </>
-                    )}
-                  </div>
-                )}
-              {pendingOAuth && (
-                <div className="space-y-2 rounded-xl border border-dashed border-border bg-background/60 p-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <Label htmlFor="oauth-callback-url">
-                      Complete OAuth manually
-                    </Label>
-                    <a
-                      href={pendingOAuth.authUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-xs font-medium text-accent-blue underline underline-offset-4"
-                    >
-                      Open authorization page
-                    </a>
-                  </div>
-                  <Textarea
-                    id="oauth-callback-url"
-                    className="min-h-24 font-mono text-xs"
-                    value={callbackUrl}
-                    onChange={(e) => setCallbackUrl(e.target.value)}
-                    placeholder={pendingOAuth.protocol === "deepai" ? "http://127.0.0.1:<port>/auth-callback?code=...&state=..." : `http://localhost:1455/${pendingOAuth.protocol === "codex" ? "auth" : "antigravity"}/callback?code=...&state=...`}
+              </div>
+            </>
+          ) : (
+            <>
+              {/* Left Column: Provider Info & Reference Guide */}
+              <div className="flex flex-col md:col-span-5 border-r border-border p-5 min-h-0 overflow-hidden bg-muted/10">
+                <ProviderInfoColumn
+                  template={selectedType}
+                  mode="form"
+                  unavailableProtocols={unavailableProtocols}
+                />
+              </div>
+
+              {/* Right Column: Connection Form Inputs & Actions */}
+              <div className="flex flex-col md:col-span-7 p-5 min-h-0 overflow-hidden">
+                {selectedType && (
+                  <ProviderAuthForm
+                    template={selectedType}
+                    name={name}
+                    setName={setName}
+                    baseUrl={baseUrl}
+                    setBaseUrl={setBaseUrl}
+                    apiKey={apiKey}
+                    setApiKey={setApiKey}
+                    authCode={authCode}
+                    setAuthCode={setAuthCode}
+                    conolAccountId={conolAccountId}
+                    setConolAccountId={setConolAccountId}
+                    cookieFile={cookieFile}
+                    setCookieFile={setCookieFile}
+                    avatar={avatar}
+                    setAvatar={setAvatar}
+                    avatarManuallySet={avatarManuallySet}
+                    setAvatarManuallySet={setAvatarManuallySet}
+                    notifyError={notifyError}
+                    openfreeCliStatus={openfreeCliStatus}
+                    openfreeCliPath={openfreeCliPath}
+                    setOpenfreeCliPath={setOpenfreeCliPath}
+                    checkingOpenfreeCli={checkingOpenfreeCli}
+                    savingOpenfreeCliPath={savingOpenfreeCliPath}
+                    installingOpenfreeCli={installingOpenfreeCli}
+                    onSaveOpenfreeCli={saveOpenfreeCli}
+                    onInstallOpenfreeCli={installManagedOpenfreeCli}
+                    pendingOAuth={pendingOAuth}
+                    callbackUrl={callbackUrl}
+                    setCallbackUrl={setCallbackUrl}
+                    completingOAuth={completingOAuth}
+                    onCompleteOAuthManually={completeOAuthManually}
+                    onRestartOAuth={restartOAuth}
+                    loading={loading}
+                    verifying={verifying}
+                    verificationWarning={verificationWarning}
+                    error={error}
+                    onDismissWarning={() => setVerificationWarning(null)}
+                    onSubmit={submit}
+                    onConnectOAuth={handleOAuthConnect}
                   />
-                  <p className="text-xs text-tertiary">
-                    If the browser callback did not complete automatically, copy its complete URL
-                    from the browser address bar and paste it here. The
-                    automatic login remains active.
-                  </p>
-                </div>
-              )}
-              {verifying && (
-                <Alert>
-                  <AlertDescription>Verifying the credential before saving the provider...</AlertDescription>
-                </Alert>
-              )}
-              {verificationWarning && (
-                <Alert>
-                  <AlertDescription>
-                    We could not verify this credential. The provider may not work with these credentials. Do you want to continue anyway?
-                  </AlertDescription>
-                </Alert>
-              )}
-              {error && (
-                <Alert variant="destructive">
-                  <AlertDescription>{error}</AlertDescription>
-                </Alert>
-              )}
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={close}>
-                Cancel
-              </Button>
-              {pendingOAuth ? (
-                <>
-                  <Button
-                    variant="outline"
-                    onClick={restartOAuth}
-                    disabled={completingOAuth}
-                  >
-                    Restart login
-                  </Button>
-                  <Button
-                    onClick={completeOAuthManually}
-                    disabled={completingOAuth || !callbackUrl.trim()}
-                  >
-                    {completingOAuth ? "Completing..." : "Complete login"}
-                  </Button>
-                </>
-              ) : selectedType?.protocol === "deepai" ? (
-                <Button onClick={startDeepAIConnection} disabled={loading}>
-                  {loading ? "Opening login..." : "Sign in with DeepAI Code"}
-                </Button>
-              ) : selectedType?.protocol === "codex" ? (
-                <Button onClick={connectCodex} disabled={loading}>
-                  {loading ? "Opening login..." : "Connect Codex"}
-                </Button>
-              ) : selectedType?.protocol === "antigravity" ? (
-                <Button onClick={connectAntigravity} disabled={loading}>
-                  {loading ? "Opening login..." : "Connect Google"}
-                </Button>
-              ) : verificationWarning ? (
-                <>
-                  <Button variant="outline" onClick={() => setVerificationWarning(null)} disabled={loading}>
-                    Back
-                  </Button>
-                  <Button onClick={() => submit(true)} disabled={loading}>
-                    Continue anyway
-                  </Button>
-                </>
-              ) : (
-                <Button onClick={() => submit(false)} disabled={loading}>
-                  {verifying ? "Verifying..." : loading ? "Saving..." : "Save provider"}
-                </Button>
-              )}
-            </DialogFooter>
-          </>
-        )}
+                )}
+              </div>
+            </>
+          )}
+        </div>
       </DialogContent>
     </Dialog>
   );

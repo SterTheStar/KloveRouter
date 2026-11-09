@@ -1,0 +1,13 @@
+{
+  "id": "siliconflow",
+  "name": "SiliconFlow",
+  "protocol": "openai",
+  "description": "A model-serving platform offering fast, cost-conscious inference for open and Chinese models.",
+  "website": "https://siliconflow.cn",
+  "docsUrl": "https://docs.siliconflow.cn",
+  "placeholder": "https://api.siliconflow.cn/v1",
+  "logo": "/api/media/avatars/presets/siliconflow.ico",
+  "preset": true,
+  "category": "hosted",
+  "integrationType": "cloud-api"
+}

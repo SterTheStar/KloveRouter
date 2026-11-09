@@ -1,0 +1,13 @@
+{
+  "id": "openfree",
+  "name": "OpenFREE",
+  "protocol": "openfree",
+  "description": "OpenCode's free models through the authenticated OpenCode CLI on the KloveRouter host. No API key is required.",
+  "website": "https://opencode.ai",
+  "docsUrl": "https://opencode.ai/docs",
+  "placeholder": "https://opencode.ai",
+  "logo": "/api/media/avatars/presets/opencode.png",
+  "preset": false,
+  "category": "hosted",
+  "integrationType": "local-bridge"
+}

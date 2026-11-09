@@ -1,0 +1,13 @@
+{
+  "id": "perplexity",
+  "name": "Perplexity",
+  "protocol": "openai",
+  "description": "Perplexity's API for web-grounded search and language model responses.",
+  "website": "https://perplexity.ai",
+  "docsUrl": "https://docs.perplexity.ai",
+  "placeholder": "https://api.perplexity.ai",
+  "logo": "/api/media/avatars/presets/perplexity.ico",
+  "preset": true,
+  "category": "hosted",
+  "integrationType": "cloud-api"
+}

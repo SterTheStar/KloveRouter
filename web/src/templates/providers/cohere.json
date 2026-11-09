@@ -1,0 +1,13 @@
+{
+  "id": "cohere",
+  "name": "Cohere",
+  "protocol": "openai",
+  "description": "Cohere's platform for language generation, embeddings, reranking, and enterprise AI applications.",
+  "website": "https://cohere.com",
+  "docsUrl": "https://docs.cohere.com",
+  "placeholder": "https://api.cohere.com/v1",
+  "logo": "/api/media/avatars/presets/cohere.ico",
+  "preset": true,
+  "category": "hosted",
+  "integrationType": "cloud-api"
+}

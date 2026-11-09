@@ -1,0 +1,13 @@
+{
+  "id": "opencode-zen-go",
+  "name": "Opencode Go",
+  "protocol": "openai",
+  "description": "OpenCode Zen Go's OpenAI-compatible endpoint for supported models.",
+  "website": "https://opencode.ai",
+  "docsUrl": "https://opencode.ai/docs",
+  "placeholder": "https://opencode.ai/zen/go/v1",
+  "logo": "/api/media/avatars/presets/opencode.png",
+  "preset": true,
+  "category": "hosted",
+  "integrationType": "cloud-api"
+}
