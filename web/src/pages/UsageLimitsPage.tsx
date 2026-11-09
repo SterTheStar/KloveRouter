@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   RiLoader4Line as LoaderCircle,
   RiRefreshLine as RefreshCw,
@@ -512,6 +512,31 @@ function creditsFromPayload(payload: any): any[] {
   return [];
 }
 
+function getAccountCardWeight(account: any): number {
+  if (account.provider.protocol === "antigravity") {
+    const groups = account.antigravityQuota?.groups?.length || 1;
+    const buckets =
+      account.antigravityQuota?.groups?.reduce(
+        (sum: number, g: any) => sum + (g.buckets?.length || 0),
+        0,
+      ) || 2;
+    return 160 + groups * 90 + buckets * 35;
+  }
+  if (account.provider.protocol === "freebuff") {
+    return 240;
+  }
+  if (account.provider.protocol === "codex") {
+    return account.credits?.length ? 240 : 200;
+  }
+  if (account.provider.protocol === "perch") {
+    return 220;
+  }
+  if (account.provider.protocol === "deepai") {
+    return 220;
+  }
+  return 190;
+}
+
 export default function UsageLimitsPage() {
   const [accounts, setAccounts] = useState<
     {
@@ -679,6 +704,177 @@ export default function UsageLimitsPage() {
     }
   };
 
+  const [column1, column2] = useMemo(() => {
+    if (accounts.length <= 1) {
+      return [accounts, []];
+    }
+
+    const c1: typeof accounts = [];
+    const c2: typeof accounts = [];
+    let h1 = 0;
+    let h2 = 0;
+
+    for (const account of accounts) {
+      const weight = getAccountCardWeight(account);
+      if (h1 <= h2) {
+        c1.push(account);
+        h1 += weight;
+      } else {
+        c2.push(account);
+        h2 += weight;
+      }
+    }
+
+    return [c1, c2];
+  }, [accounts]);
+
+  const renderAccountCard = ({
+    provider,
+    credential,
+    usage,
+    credits,
+    antigravityQuota,
+    freebuffUsage: freebuffData,
+    perchUsage: perchData,
+    deepaiUsage: deepaiData,
+  }: (typeof accounts)[0]) => (
+    <Card key={credential.id} className="border border-border shadow-none">
+      <CardHeader>
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <ProviderIcon
+              name={provider.name}
+              src={provider.avatar}
+              fallbackLabel={
+                perchData?.profile?.email ||
+                credential.email ||
+                credential.label
+              }
+              className="size-11"
+            />
+            <div>
+              <CardTitle className="text-foreground">
+                {provider.protocol === "antigravity"
+                  ? credential.email || credential.label
+                  : provider.protocol === "perch"
+                    ? perchData?.profile?.email || credential.label
+                    : provider.protocol === "deepai"
+                      ? deepaiData?.summary?.username || credential.label
+                      : credential.label}
+              </CardTitle>
+              {provider.protocol === "freebuff" ? (
+                <div className="text-xs text-tertiary">
+                  Session {freebuffData?.status ?? "none"} · Tier{" "}
+                  {freebuffData?.accessTier ??
+                    freebuffData?.access_tier ??
+                    "unknown"}{" "}
+                  · Country{" "}
+                  {freebuffData?.countryCode ??
+                    freebuffData?.country_code ??
+                    "unknown"}
+                </div>
+              ) : (
+                <div className="text-xs text-tertiary">
+                  {provider.protocol === "perch" ? (
+                    <>
+                      {perchData?.plan?.name ||
+                        perchData?.plan?.code ||
+                        "Perch account"}{" "}
+                      ·{" "}
+                      {perchData?.source === "local"
+                        ? "local KloveRouter usage"
+                        : "Perch usage"}
+                    </>
+                  ) : (
+                    <>
+                      {provider.protocol === "deepai" &&
+                      deepaiData?.summary?.username
+                        ? `DeepAI Code · ${deepaiData.summary.plan ?? "free"}`
+                        : `${accountIdentity(provider, credential)} · ${
+                            provider.protocol === "antigravity"
+                              ? "Antigravity account"
+                              : provider.protocol === "deepai"
+                                ? deepaiData?.summary?.plan ?? "DeepAI account"
+                                : usage?.plan_type ?? "Codex OAuth account"
+                          }`}
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+          {provider.protocol === "freebuff" && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() =>
+                freebuffData?.instance_id
+                  ? unlockFreebuff(credential.id)
+                  : load(true)
+              }
+              disabled={
+                unlocking === credential.id ||
+                refreshing ||
+                !freebuffData?.instance_id
+              }
+            >
+              {unlocking === credential.id || refreshing ? (
+                <LoaderCircle className="size-4 animate-spin" />
+              ) : (
+                <ResetLine className="size-4" />
+              )}
+              {freebuffData?.instance_id
+                ? `Unlock ${freebuffData.model ?? "current model"}`
+                : "No active session"}
+            </Button>
+          )}
+          {provider.protocol === "codex" && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => consume(credential.id, credits[0]?.id)}
+              disabled={consuming || !credits.length}
+            >
+              <ResetLine className="size-4" />
+              {consuming
+                ? "Using..."
+                : `Reset credits (${credits.length})`}
+            </Button>
+          )}
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-5">
+        {provider.protocol === "deepai" ? (
+          <DeepAIUsageSummary usage={deepaiData} />
+        ) : provider.protocol === "freebuff" ? (
+          <FreebuffUsageSummary usage={freebuffData} />
+        ) : provider.protocol === "perch" ? (
+          <PerchUsageSummary usage={perchData} />
+        ) : provider.protocol === "antigravity" ? (
+          antigravityQuota &&
+          (antigravityQuota.groups?.length || antigravityQuota.models?.length) ? (
+            <AntigravityQuotaSummary usage={antigravityQuota} />
+          ) : (
+            <div className="text-sm text-tertiary">
+              No quota data returned.
+            </div>
+          )
+        ) : (
+          <>
+            <UsageWindow
+              title="Primary limit"
+              value={usage?.rate_limit?.primary_window}
+            />
+            <UsageWindow
+              title="Secondary limit"
+              value={usage?.rate_limit?.secondary_window}
+            />
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+
   if (loading)
     return (
       <div className="flex justify-center p-12">
@@ -722,129 +918,24 @@ export default function UsageLimitsPage() {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-5 xl:grid-cols-2 items-start">
-          {accounts.map(
-            ({ provider, credential, usage, credits, antigravityQuota, freebuffUsage: freebuffData, perchUsage: perchData, deepaiUsage: deepaiData }) => (
-        <Card key={credential.id} className="border border-border shadow-none">
-                <CardHeader>
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-3">
-                      <ProviderIcon name={provider.name} src={provider.avatar} fallbackLabel={perchData?.profile?.email || credential.email || credential.label} className="size-11" />
-                      <div>
-                        <CardTitle className="text-foreground">
-                            {provider.protocol === "antigravity"
-                              ? credential.email || credential.label
-                              : provider.protocol === "perch"
-                                ? perchData?.profile?.email || credential.label
-                                : provider.protocol === "deepai"
-                                  ? deepaiData?.summary?.username || credential.label
-                              : credential.label}
-                        </CardTitle>
-                        {provider.protocol === "freebuff" ? (
-                          <div className="text-xs text-tertiary">
-                            Session {freebuffData?.status ?? "none"} · Tier {freebuffData?.accessTier ?? freebuffData?.access_tier ?? "unknown"} · Country {freebuffData?.countryCode ?? freebuffData?.country_code ?? "unknown"}
-                          </div>
-                        ) : (
-                          <div className="text-xs text-tertiary">
-                            {provider.protocol === "perch" ? (
-                              <>
-                                {perchData?.plan?.name ||
-                                  perchData?.plan?.code ||
-                                  "Perch account"}{" "}
-                                ·{" "}
-                                {perchData?.source === "local"
-                                  ? "local KloveRouter usage"
-                                  : "Perch usage"}
-                              </>
-                            ) : (
-                              <>
-                                {provider.protocol === "deepai" && deepaiData?.summary?.username
-                                  ? `DeepAI Code · ${deepaiData.summary.plan ?? "free"}`
-                                  : `${accountIdentity(provider, credential)} · ${
-                                      provider.protocol === "antigravity"
-                                        ? "Antigravity account"
-                                        : provider.protocol === "deepai"
-                                          ? deepaiData?.summary?.plan ?? "DeepAI account"
-                                          : usage?.plan_type ?? "Codex OAuth account"
-                                    }`}
-                              </>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                      {provider.protocol === "freebuff" && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() =>
-                            freebuffData?.instance_id
-                              ? unlockFreebuff(credential.id)
-                              : load(true)
-                          }
-                          disabled={
-                            unlocking === credential.id ||
-                            refreshing ||
-                            !freebuffData?.instance_id
-                          }
-                        >
-                          {unlocking === credential.id || refreshing ? (
-                            <LoaderCircle className="size-4 animate-spin" />
-                          ) : (
-                            <ResetLine className="size-4" />
-                          )}
-                          {freebuffData?.instance_id
-                            ? `Unlock ${freebuffData.model ?? "current model"}`
-                            : "No active session"}
-                        </Button>
-                      )}
-                      {provider.protocol === "codex" && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => consume(credential.id, credits[0]?.id)}
-                        disabled={consuming || !credits.length}
-                      >
-                        <ResetLine className="size-4" />
-                        {consuming
-                          ? "Using..."
-                          : `Reset credits (${credits.length})`}
-                      </Button>
-                    )}
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-5">
-                    {provider.protocol === "deepai" ? (
-                      <DeepAIUsageSummary usage={deepaiData} />
-                    ) : provider.protocol === "freebuff" ? (
-                      <FreebuffUsageSummary usage={freebuffData} />
-                    ) : provider.protocol === "perch" ? (
-                      <PerchUsageSummary usage={perchData} />
-                    ) : provider.protocol === "antigravity" ? (
-                    antigravityQuota && (antigravityQuota.groups?.length || antigravityQuota.models?.length) ? (
-                      <AntigravityQuotaSummary usage={antigravityQuota} />
-                    ) : (
-                      <div className="text-sm text-tertiary">
-                        No quota data returned.
-                      </div>
-                    )
-                  ) : (
-                    <>
-                      <UsageWindow
-                        title="Primary limit"
-                        value={usage?.rate_limit?.primary_window}
-                      />
-                      <UsageWindow
-                        title="Secondary limit"
-                        value={usage?.rate_limit?.secondary_window}
-                      />
-                    </>
-                  )}
-                </CardContent>
-              </Card>
-            ),
-          )}
-        </div>
+        <>
+          {/* Mobile & Tablet view: single column in original order */}
+          <div className="grid gap-5 xl:hidden">
+            {accounts.map(renderAccountCard)}
+          </div>
+
+          {/* Desktop view: balanced 2 columns so columns track each other's height */}
+          <div className="hidden xl:grid xl:grid-cols-2 gap-5 items-start">
+            <div className="flex flex-col gap-5 min-w-0">
+              {column1.map(renderAccountCard)}
+            </div>
+            {column2.length > 0 && (
+              <div className="flex flex-col gap-5 min-w-0">
+                {column2.map(renderAccountCard)}
+              </div>
+            )}
+          </div>
+        </>
       )}
     </div>
   );
