@@ -708,18 +708,53 @@ export const caveman = {
     ),
 };
 
-// Custom Skills
+// Custom Skills & Marketplace
 export const customSkills = {
   list: () =>
     request<import("../types").CustomSkill[]>("/api/custom-skills"),
+  listMarketplace: (params?: { search?: string; category?: string; page?: number; limit?: number }) => {
+    const sp = new URLSearchParams();
+    if (params?.search) sp.set("search", params.search);
+    if (params?.category && params.category !== "All") sp.set("category", params.category);
+    if (params?.page) sp.set("page", String(params.page));
+    if (params?.limit) sp.set("limit", String(params.limit));
+    const qs = sp.toString();
+    return request<import("../types").MarketplaceResponse>(`/api/custom-skills/marketplace${qs ? `?${qs}` : ""}`);
+  },
+  getMarketplace: (slug: string) =>
+    request<import("../types").MarketplaceSkill>(`/api/custom-skills/marketplace/${encodeURIComponent(slug)}`),
+  installMarketplace: (slug: string) =>
+    request<import("../types").CustomSkill>(`/api/custom-skills/marketplace/${encodeURIComponent(slug)}/install`, {
+      method: "POST",
+    }),
+  uninstallMarketplace: (slug: string) =>
+    request<{ success: boolean }>(`/api/custom-skills/marketplace/${encodeURIComponent(slug)}/uninstall`, {
+      method: "POST",
+    }),
   get: (id: string) =>
     request<import("../types").CustomSkill>(`/api/custom-skills/${id}`),
-  create: (data: { name: string; content: string }) =>
+  create: (data: {
+    name: string;
+    content: string;
+    description?: string;
+    category?: string;
+    slug?: string;
+    author?: string;
+  }) =>
     request<import("../types").CustomSkill>("/api/custom-skills", {
       method: "POST",
       body: JSON.stringify(data),
     }),
-  update: (id: string, data: { name?: string; content?: string; is_active?: boolean }) =>
+  update: (
+    id: string,
+    data: {
+      name?: string;
+      content?: string;
+      description?: string;
+      category?: string;
+      is_active?: boolean;
+    },
+  ) =>
     request<import("../types").CustomSkill>(`/api/custom-skills/${id}`, {
       method: "PUT",
       body: JSON.stringify(data),

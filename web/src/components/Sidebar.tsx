@@ -11,6 +11,7 @@ import {
   RiSettings4Line as Settings4Line,
   RiCupLine as CupLine,
   RiChatAiLine as ChatAiLine,
+  RiSparklingLine as SkillsLine,
 } from "@remixicon/react";
 import { Button } from "@/components/ui/button";
 import DisplayAvatar from "./DisplayAvatar";
@@ -23,6 +24,7 @@ const items = [
   { page: "dashboard" as Page, label: "Providers", icon: ProvidersLine },
   { page: "models" as Page, label: "Models", icon: ModelsLine },
   { page: "model-pools" as Page, label: "Compound models", icon: CompoundLine },
+  { page: "skills" as Page, label: "Skills & Prompts", icon: SkillsLine },
   { page: "keys" as Page, label: "API keys", icon: KeysLine },
   { page: "request-logs" as Page, label: "Request logs", icon: LogsLine },
   { page: "stats" as Page, label: "Statistics", icon: StatsLine },

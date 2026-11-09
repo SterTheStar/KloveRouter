@@ -15,6 +15,7 @@ import ApiKeysPage from "./pages/ApiKeysPage";
 import SettingsPage from "./pages/SettingsPage";
 import ModelsPage from "./pages/ModelsPage";
 import ModelPoolsPage from "./pages/ModelPoolsPage";
+import SkillsPage from "./pages/SkillsPage";
 import ChatPage from "./pages/ChatPage";
 import StatsPage from "./pages/StatsPage";
 import UsageLimitsPage from "./pages/UsageLimitsPage";
@@ -340,6 +341,7 @@ export default function App() {
             )}
             {currentPage === "models" && <ModelsPage />}
             {currentPage === "model-pools" && <ModelPoolsPage />}
+            {currentPage === "skills" && <SkillsPage />}
             {currentPage === "stats" && <StatsPage />}
             {currentPage === "usage" && <UsageLimitsPage />}
             {currentPage === "request-logs" && <RequestLogsPage />}

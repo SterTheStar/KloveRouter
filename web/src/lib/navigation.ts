@@ -11,6 +11,7 @@ const pagePaths: Partial<Record<Page, string>> = {
   chat: "/chat",
   models: "/models",
   "model-pools": "/compound-models",
+  skills: "/skills",
   stats: "/stats",
   usage: "/usage",
   "request-logs": "/request-logs",
@@ -60,6 +61,7 @@ export function routeFromPath(pathname: string): AppRoute {
   const staticRoutes: Record<string, Page> = {
     "/models": "models",
     "/compound-models": "model-pools",
+    "/skills": "skills",
     "/stats": "stats",
     "/usage": "usage",
     "/request-logs": "request-logs",
