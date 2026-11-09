@@ -73,10 +73,11 @@ export function avatarResponseHeaders(mimeType: string, hash: string): Headers {
   });
 }
 
-/** Validates a user-supplied avatar: empty (no custom avatar), a supported data image, or an http(s) URL. */
+/** Validates a user-supplied avatar: empty (no custom avatar), a supported data image, relative media URL, or an http(s) URL. */
 export function isValidAvatar(value: string | null | undefined): boolean {
   if (value == null || value === "") return true;
   if (value.startsWith("data:")) return isDataAvatar(value);
+  if (value.startsWith("/api/media/avatars/")) return true;
   try {
     const url = new URL(value);
     return url.protocol === "https:" || url.protocol === "http:";

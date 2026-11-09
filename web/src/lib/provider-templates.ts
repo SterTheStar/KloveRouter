@@ -1,54 +1,6 @@
-import openAiLogo from "../assets/providers/openai.svg";
-import codexLogo from "../assets/providers/codex.png";
-import anthropicLogo from "../assets/providers/anthropic.png";
-import antigravityLogo from "../assets/providers/antigravity.png";
-import agnesLogo from "../assets/providers/agnes.png";
-import bluemindsLogo from "../assets/providers/blueminds.ico";
-import orcaRouterLogo from "../assets/providers/orcarouter.ico";
-import nousPortalLogo from "../assets/providers/nousportal.png";
-import mistralLogo from "../assets/providers/mistral.ico";
-import openRouterLogo from "../assets/providers/openrouter.ico";
-import groqLogo from "../assets/providers/groq.ico";
-import deepSeekLogo from "../assets/providers/deepseek.ico";
-import xaiLogo from "../assets/providers/xai.ico";
-import cohereLogo from "../assets/providers/cohere.ico";
-import ai21Logo from "../assets/providers/ai21.png";
-import moonshotLogo from "../assets/providers/moonshot.png";
-import zhipuLogo from "../assets/providers/zhipu.png";
-import nvidiaLogo from "../assets/providers/nvidia.png";
-import togetherLogo from "../assets/providers/together.png";
-import fireworksLogo from "../assets/providers/fireworks.jpg";
-import cerebrasLogo from "../assets/providers/cerebras.png";
-import googleAiStudioLogo from "../assets/providers/google-ai-studio.png";
-import minimaxLogo from "../assets/providers/minimax.png";
-import stepfunLogo from "../assets/providers/stepfun.png";
-import tencentHunyuanLogo from "../assets/providers/tencent-hunyuan.png";
-import nebiusLogo from "../assets/providers/nebius.png";
-import novitaLogo from "../assets/providers/novita.ico";
-import deepinfraLogo from "../assets/providers/deepinfra.ico";
-import siliconflowLogo from "../assets/providers/siliconflow.ico";
-import friendliLogo from "../assets/providers/friendli.ico";
-import sambanovaLogo from "../assets/providers/sambanova.ico";
-import basetenLogo from "../assets/providers/baseten.ico";
-import huggingfaceLogo from "../assets/providers/huggingface.ico";
-import requestyLogo from "../assets/providers/requesty.ico";
-import parasailLogo from "../assets/providers/parasail.png";
-import replicateLogo from "../assets/providers/replicate.png";
-import portkeyLogo from "../assets/providers/portkey.png";
-import opencodeLogo from "../assets/providers/opencode.png";
-import freebuffLogo from "../assets/providers/freebuff.png";
-import conolLogo from "../assets/providers/conol.png";
-import perplexityLogo from "../assets/providers/perplexity.ico";
-import lambdaAiLogo from "../assets/providers/lambda-ai.ico";
-import ovhcloudAiLogo from "../assets/providers/ovhcloud-ai.ico";
-import lmStudioLogo from "../assets/providers/lm-studio.ico";
-import vllmLogo from "../assets/providers/vllm.ico";
-import tokenharborLogo from "../assets/providers/tokenharbor.ico";
-import hcnsecLogo from "../assets/providers/hcnsec.ico";
-import inferxLogo from "../assets/providers/inferx.ico";
-import xkiroLogo from "../assets/providers/xkiro.ico";
-
 import { faviconForEndpoint, protocolIcon } from "./provider-icons";
+
+export const PRESET_AVATAR_BASE = "/api/media/avatars/presets";
 
 export type ProviderTemplate = {
   id: string;
@@ -60,9 +12,9 @@ export type ProviderTemplate = {
   preset: boolean;
 };
 
-/** Static logo for a template: bundled asset, brand icon, or endpoint favicon. */
+/** Static logo for a template: bundled preset avatar, brand icon, or endpoint favicon. */
 function templateLogo(protocol: string, endpoint: string, bundled?: string): string {
-  return bundled || protocolIcon(protocol) || faviconForEndpoint(endpoint) || openAiLogo;
+  return bundled || protocolIcon(protocol) || faviconForEndpoint(endpoint) || `${PRESET_AVATAR_BASE}/openai.svg`;
 }
 
 const openAiCompatiblePresets = [
@@ -129,49 +81,49 @@ const openAiCompatiblePresets = [
 ] as const;
 
 const presetLogos: Record<string, string> = {
-  agnes: agnesLogo,
-  blueminds: bluemindsLogo,
-  orcarouter: orcaRouterLogo,
-  nousportal: nousPortalLogo,
-  mistral: mistralLogo,
-  "nvidia-nim": nvidiaLogo,
-  openrouter: openRouterLogo,
-  perplexity: perplexityLogo,
-  "lambda-ai": lambdaAiLogo,
-  "ovhcloud-ai": ovhcloudAiLogo,
-  "lm-studio": lmStudioLogo,
-  vllm: vllmLogo,
-  tokenharbor: tokenharborLogo,
-  hcnsec: hcnsecLogo,
-  inferx: inferxLogo,
-  xkiro: xkiroLogo,
-  "together-ai": togetherLogo,
-  "fireworks-ai": fireworksLogo,
-  groq: groqLogo,
-  cerebras: cerebrasLogo,
-  "google-ai-studio": googleAiStudioLogo,
-  deepseek: deepSeekLogo,
-  xai: xaiLogo,
-  cohere: cohereLogo,
-  ai21: ai21Logo,
-  "moonshot-kimi": moonshotLogo,
-  minimax: minimaxLogo,
-  stepfun: stepfunLogo,
-  "tencent-hunyuan": tencentHunyuanLogo,
-  "zhipu-glm": zhipuLogo,
-  "nebius-ai-studio": nebiusLogo,
-  "novita-ai": novitaLogo,
-  deepinfra: deepinfraLogo,
-  siliconflow: siliconflowLogo,
-  parasail: parasailLogo,
-  "friendli-ai": friendliLogo,
-  sambanova: sambanovaLogo,
-  baseten: basetenLogo,
-  replicate: replicateLogo,
-  "hugging-face": huggingfaceLogo,
-  requesty: requestyLogo,
-  portkey: portkeyLogo,
-  opencode: opencodeLogo,
+  agnes: `${PRESET_AVATAR_BASE}/agnes.png`,
+  blueminds: `${PRESET_AVATAR_BASE}/blueminds.ico`,
+  orcarouter: `${PRESET_AVATAR_BASE}/orcarouter.ico`,
+  nousportal: `${PRESET_AVATAR_BASE}/nousportal.png`,
+  mistral: `${PRESET_AVATAR_BASE}/mistral.ico`,
+  "nvidia-nim": `${PRESET_AVATAR_BASE}/nvidia.png`,
+  openrouter: `${PRESET_AVATAR_BASE}/openrouter.ico`,
+  perplexity: `${PRESET_AVATAR_BASE}/perplexity.ico`,
+  "lambda-ai": `${PRESET_AVATAR_BASE}/lambda-ai.ico`,
+  "ovhcloud-ai": `${PRESET_AVATAR_BASE}/ovhcloud-ai.ico`,
+  "lm-studio": `${PRESET_AVATAR_BASE}/lm-studio.ico`,
+  vllm: `${PRESET_AVATAR_BASE}/vllm.ico`,
+  tokenharbor: `${PRESET_AVATAR_BASE}/tokenharbor.ico`,
+  hcnsec: `${PRESET_AVATAR_BASE}/hcnsec.ico`,
+  inferx: `${PRESET_AVATAR_BASE}/inferx.ico`,
+  xkiro: `${PRESET_AVATAR_BASE}/xkiro.ico`,
+  "together-ai": `${PRESET_AVATAR_BASE}/together.png`,
+  "fireworks-ai": `${PRESET_AVATAR_BASE}/fireworks.jpg`,
+  groq: `${PRESET_AVATAR_BASE}/groq.ico`,
+  cerebras: `${PRESET_AVATAR_BASE}/cerebras.png`,
+  "google-ai-studio": `${PRESET_AVATAR_BASE}/google-ai-studio.png`,
+  deepseek: `${PRESET_AVATAR_BASE}/deepseek.ico`,
+  xai: `${PRESET_AVATAR_BASE}/xai.ico`,
+  cohere: `${PRESET_AVATAR_BASE}/cohere.ico`,
+  ai21: `${PRESET_AVATAR_BASE}/ai21.png`,
+  "moonshot-kimi": `${PRESET_AVATAR_BASE}/moonshot.png`,
+  minimax: `${PRESET_AVATAR_BASE}/minimax.png`,
+  stepfun: `${PRESET_AVATAR_BASE}/stepfun.png`,
+  "tencent-hunyuan": `${PRESET_AVATAR_BASE}/tencent-hunyuan.png`,
+  "zhipu-glm": `${PRESET_AVATAR_BASE}/zhipu.png`,
+  "nebius-ai-studio": `${PRESET_AVATAR_BASE}/nebius.png`,
+  "novita-ai": `${PRESET_AVATAR_BASE}/novita.ico`,
+  deepinfra: `${PRESET_AVATAR_BASE}/deepinfra.ico`,
+  siliconflow: `${PRESET_AVATAR_BASE}/siliconflow.ico`,
+  parasail: `${PRESET_AVATAR_BASE}/parasail.png`,
+  "friendli-ai": `${PRESET_AVATAR_BASE}/friendli.ico`,
+  sambanova: `${PRESET_AVATAR_BASE}/sambanova.ico`,
+  baseten: `${PRESET_AVATAR_BASE}/baseten.ico`,
+  replicate: `${PRESET_AVATAR_BASE}/replicate.png`,
+  "hugging-face": `${PRESET_AVATAR_BASE}/huggingface.ico`,
+  requesty: `${PRESET_AVATAR_BASE}/requesty.ico`,
+  portkey: `${PRESET_AVATAR_BASE}/portkey.png`,
+  opencode: `${PRESET_AVATAR_BASE}/opencode.png`,
   "qwen-cloud": protocolIcon("qwen")!,
 };
 
@@ -299,7 +251,7 @@ export const PROVIDER_TEMPLATES: readonly ProviderTemplate[] = [
     protocol: "openai",
     name: "OpenAI Compatible (Chat Completions)",
     description: providerDescriptions.openai,
-    logo: openAiLogo,
+    logo: `${PRESET_AVATAR_BASE}/openai.svg`,
     placeholder: "https://api.openai.com/v1",
     preset: false,
   },
@@ -308,7 +260,7 @@ export const PROVIDER_TEMPLATES: readonly ProviderTemplate[] = [
     protocol: "openai-responses",
     name: "OpenAI Compatible (Responses API)",
     description: providerDescriptions.openaiResponses,
-    logo: openAiLogo,
+    logo: `${PRESET_AVATAR_BASE}/openai.svg`,
     placeholder: "https://api.openai.com/v1",
     preset: false,
   },
@@ -317,7 +269,7 @@ export const PROVIDER_TEMPLATES: readonly ProviderTemplate[] = [
     protocol: "anthropic",
     name: "Anthropic Compatible (Messages API)",
     description: providerDescriptions.anthropic,
-    logo: anthropicLogo,
+    logo: `${PRESET_AVATAR_BASE}/anthropic.png`,
     placeholder: "https://api.anthropic.com",
     preset: false,
   },
@@ -326,7 +278,7 @@ export const PROVIDER_TEMPLATES: readonly ProviderTemplate[] = [
     protocol: "antigravity",
     name: "Google Antigravity",
     description: providerDescriptions.antigravity,
-    logo: antigravityLogo,
+    logo: `${PRESET_AVATAR_BASE}/antigravity.png`,
     placeholder: "https://daily-cloudcode-pa.googleapis.com",
     preset: false,
   },
@@ -335,7 +287,7 @@ export const PROVIDER_TEMPLATES: readonly ProviderTemplate[] = [
     protocol: "codex",
     name: "OpenAI Codex",
     description: providerDescriptions.codex,
-    logo: codexLogo,
+    logo: `${PRESET_AVATAR_BASE}/codex.png`,
     placeholder: "https://chatgpt.com/backend-api/codex",
     preset: false,
   },
@@ -353,7 +305,7 @@ export const PROVIDER_TEMPLATES: readonly ProviderTemplate[] = [
     protocol: "freebuff",
     name: "Freebuff",
     description: providerDescriptions.freebuff,
-    logo: freebuffLogo,
+    logo: `${PRESET_AVATAR_BASE}/freebuff.png`,
     placeholder: "https://www.codebuff.com",
     preset: false,
   },
@@ -362,7 +314,7 @@ export const PROVIDER_TEMPLATES: readonly ProviderTemplate[] = [
     protocol: "openfree",
     name: "OpenFREE",
     description: providerDescriptions.openfree,
-    logo: opencodeLogo,
+    logo: `${PRESET_AVATAR_BASE}/opencode.png`,
     placeholder: "https://opencode.ai",
     preset: false,
   },
@@ -398,7 +350,7 @@ export const PROVIDER_TEMPLATES: readonly ProviderTemplate[] = [
     protocol: "conol",
     name: "Conol.ai",
     description: providerDescriptions.conol,
-    logo: conolLogo,
+    logo: `${PRESET_AVATAR_BASE}/conol.png`,
     placeholder: "https://conol.ai",
     preset: false,
   },

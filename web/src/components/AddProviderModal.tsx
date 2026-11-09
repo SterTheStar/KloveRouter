@@ -354,6 +354,7 @@ export default function AddProviderModal({
     if (avatarManuallySet) return isPersistableAvatar(avatar) ? avatar : undefined;
     const logo = selectedType?.logo;
     if (!logo || isEndpointFavicon(logo)) return undefined;
+    if (logo.startsWith("/api/media/avatars/")) return logo;
     return (await logoToDataUrl(logo)) ?? undefined;
   };
 

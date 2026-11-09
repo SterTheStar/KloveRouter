@@ -31,9 +31,9 @@ export function protocolIcon(protocol: string | undefined): string | null {
   return (protocol && protocolIcons[protocol]) || null;
 }
 
-/** Whether a value is a custom avatar the user may persist (data image or http(s) URL). */
+/** Whether a value is a custom avatar the user may persist (data image, media URL, or http(s) URL). */
 export function isPersistableAvatar(value: string | null | undefined): value is string {
-  return !!value && (/^data:image\//i.test(value) || /^https?:\/\//i.test(value));
+  return !!value && (/^data:image\//i.test(value) || /^https?:\/\//i.test(value) || value.startsWith("/api/media/avatars/"));
 }
 
 /** Whether a logo URL was derived from an endpoint and must not be persisted. */
