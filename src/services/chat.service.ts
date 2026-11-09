@@ -157,6 +157,17 @@ export const chatService = {
     return db.query("DELETE FROM chat_sessions WHERE id = ?").run(id).changes > 0;
   },
 
+  /** Deletes every chat; chat_messages and message_attachments cascade. */
+  deleteAll(): number {
+    const db = getDb();
+    let removed = 0;
+    db.transaction(() => {
+      db.query("DELETE FROM chat_messages_fts").run();
+      removed = db.query("DELETE FROM chat_sessions").run().changes;
+    })();
+    return removed;
+  },
+
   deleteMessage(id: string): boolean {
     const db = getDb();
     const row = db.query("SELECT chat_id FROM chat_messages WHERE id = ?").get(id) as

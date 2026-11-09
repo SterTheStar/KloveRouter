@@ -11,16 +11,24 @@ import {
   RiDownloadLine as DownloadLine,
   RiMore2Line as MoreLine,
   RiLogoutBoxRLine as LogoutLine,
+  RiArrowDownSLine as ChevronDown,
+  RiArrowRightSLine as ChevronRight,
+  RiFilter3Line as FilterLine,
 } from "@remixicon/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import type { ChatSession, Page, UserProfile } from "../types";
+import ConfirmDialog from "./ConfirmDialog";
 import DisplayAvatar from "./DisplayAvatar";
 import ChatCommandPalette from "./ChatCommandPalette";
 import SaturnMark from "./SaturnMark";
@@ -39,15 +47,44 @@ function parseChatTimestamp(value: string): Date {
   return new Date(hasTimezone ? normalized : `${normalized}Z`);
 }
 
-function chatDateGroup(value: string, now: Date): string {
+function daysAgoForTimestamp(value: string, now = new Date()): number | null {
   const date = parseChatTimestamp(value);
-  if (Number.isNaN(date.getTime())) return "Earlier";
+  if (Number.isNaN(date.getTime())) return null;
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const chatDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-  const daysAgo = Math.round((today.getTime() - chatDay.getTime()) / 86_400_000);
+  return Math.round((today.getTime() - chatDay.getTime()) / 86_400_000);
+}
+
+function chatDateGroup(value: string, now: Date): string {
+  const daysAgo = daysAgoForTimestamp(value, now);
+  if (daysAgo === null) return "Earlier";
   if (daysAgo <= 0) return "Today";
   if (daysAgo === 1) return "Yesterday";
-  return CALENDAR_DATE_FORMATTER.format(date);
+  return CALENDAR_DATE_FORMATTER.format(parseChatTimestamp(value));
+}
+
+type RecentsFilter = "all" | "today" | "yesterday" | "week" | "month" | "older";
+
+const RECENTS_FILTERS: Array<{ value: RecentsFilter; label: string }> = [
+  { value: "all", label: "All chats" },
+  { value: "today", label: "Today" },
+  { value: "yesterday", label: "Yesterday" },
+  { value: "week", label: "Last 7 days" },
+  { value: "month", label: "Last 30 days" },
+  { value: "older", label: "Older than 30 days" },
+];
+
+function matchesRecentsFilter(chat: ChatSession, filter: RecentsFilter, now = new Date()): boolean {
+  if (filter === "all") return true;
+  const daysAgo = daysAgoForTimestamp(chat.updated_at || chat.created_at, now);
+  if (daysAgo === null) return filter === "older";
+  switch (filter) {
+    case "today": return daysAgo <= 0;
+    case "yesterday": return daysAgo === 1;
+    case "week": return daysAgo <= 7;
+    case "month": return daysAgo <= 30;
+    case "older": return daysAgo > 30;
+  }
 }
 
 function groupChatsByDate(chats: ChatSession[], now = new Date()) {
@@ -74,6 +111,7 @@ export default function ChatSidebar({
   onSelect,
   onRename,
   onDelete,
+  onDeleteAll,
   onExport,
   onBack,
   onLogout,
@@ -92,6 +130,7 @@ export default function ChatSidebar({
   onSelect: (id: string) => void;
   onRename: (id: string, title: string) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
+  onDeleteAll: () => Promise<void>;
   onExport: (chat: ChatSession) => void;
   onBack: () => void;
   onLogout: () => void;
@@ -107,7 +146,13 @@ export default function ChatSidebar({
   const [title, setTitle] = useState("");
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem("klove_chat_sidebar_collapsed") === "true");
   const [commandOpen, setCommandOpen] = useState(false);
-  const chatGroups = groupChatsByDate(chats);
+  const [recentsCollapsed, setRecentsCollapsed] = useState(() => localStorage.getItem("klove_recents_collapsed") === "true");
+  const [deleteAllOpen, setDeleteAllOpen] = useState(false);
+  const [deletingAll, setDeletingAll] = useState(false);
+  const [deleteAllError, setDeleteAllError] = useState<string | null>(null);
+  const [recentsFilter, setRecentsFilter] = useState<RecentsFilter>("all");
+  const filteredChats = chats.filter((chat) => matchesRecentsFilter(chat, recentsFilter));
+  const chatGroups = groupChatsByDate(filteredChats);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -128,6 +173,14 @@ export default function ChatSidebar({
     });
   };
 
+  const toggleRecents = () => {
+    setRecentsCollapsed((current) => {
+      const next = !current;
+      localStorage.setItem("klove_recents_collapsed", String(next));
+      return next;
+    });
+  };
+
   const startRename = (chat: ChatSession) => {
     setEditing(chat.id);
     setTitle(chat.title);
@@ -142,6 +195,43 @@ export default function ChatSidebar({
       // Keep the editor open so the user can retry or correct the title.
     }
   };
+
+  const openDeleteAll = () => {
+    setDeleteAllError(null);
+    setDeleteAllOpen(true);
+  };
+
+  const handleDeleteAll = async () => {
+    setDeletingAll(true);
+    setDeleteAllError(null);
+    try {
+      await onDeleteAll();
+      setDeleteAllOpen(false);
+    } catch (error: any) {
+      setDeleteAllError(error?.message ?? "Could not delete all chats");
+    } finally {
+      setDeletingAll(false);
+    }
+  };
+
+  const deleteAllDialog = (
+    <ConfirmDialog
+      open={deleteAllOpen}
+      title="Delete all chats?"
+      message={
+        chats.length === 1
+          ? "This permanently deletes the 1 conversation, including all its messages. This cannot be undone."
+          : `This permanently deletes all ${chats.length} conversations, including all their messages. This cannot be undone.`
+      }
+      confirmLabel="Delete all chats"
+      loading={deletingAll}
+      error={deleteAllError}
+      onConfirm={() => void handleDeleteAll()}
+      onCancel={() => {
+        if (!deletingAll) setDeleteAllOpen(false);
+      }}
+    />
+  );
 
   if (collapsed && !mobileOpen) {
     return (
@@ -212,11 +302,13 @@ export default function ChatSidebar({
             onClose={() => setCommandOpen(false)}
           />
         )}
+        {deleteAllDialog}
       </>
     );
   }
 
   return (
+    <>
     <aside
       style={{ width: `${width ?? 288}px`, maxWidth: "85vw" }}
       className={`fixed inset-y-0 left-0 z-40 flex h-svh shrink-0 flex-col border-r border-border bg-sidebar text-sidebar-foreground md:sticky md:z-auto ${
@@ -286,6 +378,7 @@ export default function ChatSidebar({
           <SearchLine className="size-5 shrink-0" />
           <span className="truncate">Search</span>
         </button>
+
       </div>
 
       {commandOpen && (
@@ -298,10 +391,68 @@ export default function ChatSidebar({
       )}
 
       <div className="min-h-0 flex-1 overflow-y-auto px-3">
-        <div className="space-y-3 pb-3">
-          {chatGroups.map(([group, groupedChats]) => (
+        <div className="space-y-1 pb-3">
+          {chats.length > 0 && (
+            <div className="group/recents flex h-7 items-center justify-between px-3">
+              <button
+                type="button"
+                onClick={toggleRecents}
+                aria-expanded={!recentsCollapsed}
+                className="flex h-full items-center gap-1.5 rounded-md text-[13px] font-semibold leading-none text-foreground/80 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
+              >
+                <span className="leading-none">Recents</span>
+                {recentsCollapsed ? <ChevronRight className="size-3.5 shrink-0 translate-y-px" /> : <ChevronDown className="size-3.5 shrink-0 translate-y-px" />}
+              </button>
+              <div className="flex shrink-0 items-center gap-0.5">
+                <DropdownMenu>
+                  <DropdownMenuTrigger
+                    render={
+                      <Button
+                        size="icon-xs"
+                        variant="ghost"
+                        className={`relative size-6 rounded-md opacity-100 transition-opacity hover:bg-accent focus-visible:opacity-100 ${recentsFilter !== "all" ? "text-foreground" : "text-muted-foreground hover:text-foreground md:opacity-0 md:group-hover/recents:opacity-100"}`}
+                        aria-label="Filter recents"
+                        title={recentsFilter === "all" ? "Filter recents" : `Filter recents: ${RECENTS_FILTERS.find((f) => f.value === recentsFilter)?.label}`}
+                      />
+                    }
+                  >
+                    <FilterLine className="size-3.5" />
+                    {recentsFilter !== "all" && (
+                      <span className="absolute right-0.5 top-0.5 size-1.5 rounded-full bg-primary" aria-hidden="true" />
+                    )}
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-52 rounded-lg">
+                    <DropdownMenuGroup>
+                      <DropdownMenuLabel>Filter recents</DropdownMenuLabel>
+                      <DropdownMenuRadioGroup
+                        value={recentsFilter}
+                        onValueChange={(value) => setRecentsFilter(value as RecentsFilter)}
+                      >
+                        {RECENTS_FILTERS.map((option) => (
+                          <DropdownMenuRadioItem key={option.value} value={option.value}>
+                            {option.label}
+                          </DropdownMenuRadioItem>
+                        ))}
+                      </DropdownMenuRadioGroup>
+                    </DropdownMenuGroup>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                <button
+                  type="button"
+                  onClick={openDeleteAll}
+                  disabled={deletingAll}
+                  className="flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground opacity-100 transition-opacity hover:bg-destructive/10 hover:text-destructive focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive/60 disabled:pointer-events-none disabled:opacity-50 md:opacity-0 md:group-hover/recents:opacity-100"
+                  aria-label="Delete all chats"
+                  title="Delete all chats"
+                >
+                  <DeleteLine className="size-3.5" />
+                </button>
+              </div>
+            </div>
+          )}
+          {!recentsCollapsed && chatGroups.map(([group, groupedChats]) => (
             <section key={group} aria-label={group}>
-              <h3 className="px-3 pb-1 pt-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground/70">{group}</h3>
+              <h3 className="px-3 pb-0.5 pt-1 text-xs font-medium text-muted-foreground/70">{group}</h3>
               <div className="flex flex-col gap-0.5">
                 {groupedChats.map((chat) => (
                   <div key={chat.id} className={`chat-sidebar-item group rounded-lg ${activeChatId === chat.id ? "bg-accent" : "hover:bg-accent/60"}`}>
@@ -379,6 +530,18 @@ export default function ChatSidebar({
             </section>
           ))}
           {chats.length === 0 && <p className="px-3 py-8 text-center text-xs text-tertiary">No conversations yet</p>}
+          {chats.length > 0 && filteredChats.length === 0 && !recentsCollapsed && (
+            <div className="px-3 py-8 text-center">
+              <p className="text-xs text-tertiary">No chats match this filter</p>
+              <button
+                type="button"
+                onClick={() => setRecentsFilter("all")}
+                className="mt-2 rounded-md text-xs font-medium text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
+              >
+                Clear filter
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -419,5 +582,7 @@ export default function ChatSidebar({
         />
       )}
     </aside>
+    {deleteAllDialog}
+    </>
   );
 }

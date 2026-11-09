@@ -625,6 +625,8 @@ export const chats = {
     }),
   remove: (id: string) =>
     request<{ success: boolean }>(`/api/chats/${id}`, { method: "DELETE" }),
+  removeAll: () =>
+    request<{ success: boolean; removed: number }>("/api/chats", { method: "DELETE" }),
   search: (query: string) =>
     request<import("../types").ChatSearchResult[]>(
       `/api/chats/search?q=${encodeURIComponent(query)}`,

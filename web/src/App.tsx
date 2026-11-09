@@ -256,6 +256,14 @@ export default function App() {
     setChatSessions(remaining);
     if (activeChatId === id) handleNavigate("chat", remaining[0]?.id);
   };
+  const deleteAllChats = async () => {
+    await chatsApi.removeAll();
+    invalidateChats();
+    manualTitlesRef.current.clear();
+    setGeneratingChats({});
+    setChatSessions([]);
+    if (activeChatId) handleNavigate("chat");
+  };
   const exportChat = async (chat: ChatSession) => {
     try {
       const result = await chatsApi.get(chat.id);
@@ -278,6 +286,7 @@ export default function App() {
               onSelect={(id) => handleNavigate("chat", id)}
               onRename={renameChat}
               onDelete={deleteChat}
+              onDeleteAll={deleteAllChats}
               onExport={(chat) => void exportChat(chat)}
               onBack={() => handleNavigate("dashboard")}
               onLogout={logout}

@@ -97,4 +97,17 @@ describe("chat service", () => {
     chatService.delete(chat.id);
     expect(chatService.search("orphaned searchable text").length).toBe(0);
   });
+
+  test("deleteAll removes every chat and its search index", () => {
+    const first = chatService.create({ title: "All one" });
+    const second = chatService.create({ title: "All two" });
+    chatService.addMessage({ chatId: first.id, role: "user", content: "bulk deletable first" });
+    chatService.addMessage({ chatId: second.id, role: "user", content: "bulk deletable second" });
+    expect(chatService.search("bulk deletable").length).toBe(2);
+
+    expect(chatService.deleteAll()).toBe(2);
+    expect(chatService.list()).toEqual([]);
+    expect(chatService.search("bulk deletable").length).toBe(0);
+    expect(chatService.deleteAll()).toBe(0);
+  });
 });

@@ -16,6 +16,7 @@ export default function ConfirmDialog({
   onConfirm,
   onCancel,
   loading = false,
+  error = null,
 }: {
   open: boolean;
   title: string;
@@ -24,6 +25,7 @@ export default function ConfirmDialog({
   onConfirm: () => void;
   onCancel: () => void;
   loading?: boolean;
+  error?: string | null;
 }) {
   return (
     <Dialog open={open} onOpenChange={(value) => !value && onCancel()}>
@@ -33,6 +35,9 @@ export default function ConfirmDialog({
           <DialogDescription className="min-w-0 break-words text-sm text-muted-foreground [overflow-wrap:anywhere]">
             {message}
           </DialogDescription>
+          {error && (
+            <p className="text-sm text-destructive" role="alert">{error}</p>
+          )}
         </DialogHeader>
         <DialogFooter className="sm:justify-end">
           <Button variant="outline" onClick={onCancel} disabled={loading}>

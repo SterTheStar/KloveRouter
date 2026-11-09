@@ -118,6 +118,10 @@ export const chatsPlugin = (app: Elysia) =>
         body: t.Object({ title: t.Optional(t.String()), model: t.Optional(t.String()) }),
       },
     )
+    .delete("/api/chats", () => ({
+      success: true,
+      removed: chatService.deleteAll(),
+    }))
     .delete(
       "/api/chats/:id",
       ({ params, set }) => {
