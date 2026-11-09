@@ -3,8 +3,9 @@ import { readFile, writeFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { config } from "../../config";
 import { logger } from "../../logger";
-import type { CustomSkill, MarketplaceSkill, MarketplaceResponse } from "./custom-skills.types";
+import type { CustomSkill, MarketplaceSkill, MarketplaceResponse, DesignSkill } from "./custom-skills.types";
 import { BUNDLED_MARKETPLACE_SKILLS } from "./marketplace.catalog";
+import { AWESOME_DESIGN_SKILLS } from "./design-skills.catalog";
 
 const SKILLS_DIR = join(config.dataDir, "custom-skills");
 const MARKETPLACE_DIR = join(config.dataDir, "marketplace-skills");
@@ -43,6 +44,10 @@ async function writeIndex(skills: CustomSkill[]): Promise<void> {
   const dir = skillsDir();
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
   await writeFile(indexFilePath(), JSON.stringify(skills, null, 2));
+}
+
+function isDesignSkill(skill: { category?: string; source?: string }): boolean {
+  return skill.category === "UI Design" || skill.source === "design";
 }
 
 let cachedCatalog: MarketplaceSkill[] | null = null;
@@ -205,7 +210,7 @@ export const customSkillsProxy = {
       description?: string;
       category?: string;
       slug?: string;
-      source?: "custom" | "marketplace";
+      source?: "custom" | "marketplace" | "design";
       author?: string;
     },
   ): Promise<CustomSkill> {
@@ -231,6 +236,13 @@ export const customSkillsProxy = {
     await writeFile(skillFilePath(id), content);
 
     const skills = await readIndex();
+    if (skill.is_active && isDesignSkill(skill)) {
+      for (const other of skills) {
+        if (isDesignSkill(other)) {
+          other.is_active = false;
+        }
+      }
+    }
     skills.push({ ...skill, content: "" });
     await writeIndex(skills);
 
@@ -257,7 +269,16 @@ export const customSkillsProxy = {
     if (data.name !== undefined) skill.name = data.name;
     if (data.description !== undefined) skill.description = data.description;
     if (data.category !== undefined) skill.category = data.category;
-    if (data.is_active !== undefined) skill.is_active = data.is_active;
+    if (data.is_active !== undefined) {
+      skill.is_active = data.is_active;
+      if (data.is_active && isDesignSkill(skill)) {
+        for (const other of skills) {
+          if (other.id !== id && isDesignSkill(other)) {
+            other.is_active = false;
+          }
+        }
+      }
+    }
     skill.updated_at = now();
 
     if (data.content !== undefined) {
@@ -494,6 +515,66 @@ export const customSkillsProxy = {
     if (!match) return false;
 
     return this.remove(match.id);
+  },
+
+  async listDesignSkills(): Promise<DesignSkill[]> {
+    const installed = await readIndex();
+    return AWESOME_DESIGN_SKILLS.map((item) => {
+      const match = installed.find(
+        (inst) => inst.slug === item.slug || (inst.category === "UI Design" && inst.name.toLowerCase() === item.name.toLowerCase()),
+      );
+      return {
+        ...item,
+        is_installed: Boolean(match),
+        installed_id: match?.id,
+        is_active: match ? match.is_active : false,
+      };
+    });
+  },
+
+  async getDesignSkill(slug: string): Promise<DesignSkill | null> {
+    const designs = await this.listDesignSkills();
+    return designs.find((d) => d.slug === slug) || null;
+  },
+
+  async activateDesignSkill(slug: string): Promise<CustomSkill> {
+    const item = AWESOME_DESIGN_SKILLS.find((s) => s.slug === slug);
+    if (!item) {
+      throw new Error(`Design skill '${slug}' not found`);
+    }
+
+    const installed = await readIndex();
+    const match = installed.find((inst) => inst.slug === slug);
+
+    if (match) {
+      // Activate this skill (update will automatically deactivate all other design skills)
+      const updated = await this.update(match.id, { is_active: true });
+      if (!updated) throw new Error(`Failed to activate design skill '${slug}'`);
+      logger.info(`Activated design skill: ${item.name} (${slug})`);
+      return updated;
+    }
+
+    // Install and activate (create will automatically deactivate all other design skills)
+    const created = await this.create(item.name, item.content, {
+      description: item.description,
+      category: "UI Design",
+      slug: item.slug,
+      source: "design",
+      author: item.author,
+    });
+
+    logger.info(`Installed and activated design skill: ${item.name} (${slug})`);
+    return created;
+  },
+
+  async deactivateDesignSkill(slug: string): Promise<boolean> {
+    const installed = await readIndex();
+    const match = installed.find((inst) => inst.slug === slug);
+    if (!match) return false;
+
+    await this.update(match.id, { is_active: false });
+    logger.info(`Deactivated design skill: ${slug}`);
+    return true;
   },
 
   async injectSkills(messages: any[]): Promise<any[]> {

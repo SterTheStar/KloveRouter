@@ -40,7 +40,7 @@ export const cavemanPlugin = (app: Elysia) =>
       }
       setCavemanLevel(level as CavemanLevel);
       logger.info(`Caveman level set to ${level}`);
-      return { success: true, message: `Caveman level set to ${level}`, level };
+      return { success: true, message: `Caveman level set to ${level}`, level: getCavemanLevel() };
     }, { body: t.Object({ level: t.String() }) })
     .post("/api/caveman/install", async ({ set }) => {
       try {

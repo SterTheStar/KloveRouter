@@ -43,6 +43,24 @@ const tabs: Tab[] = [
   { id: "security", label: "Security" },
 ];
 
+const CAVEMAN_LEVELS = [
+  {
+    id: "caveman",
+    label: "caveman",
+    desc: "Default terse mode. Drops filler words and pleasantries, preserves technical substance.",
+  },
+  {
+    id: "ultracave",
+    label: "ultracave",
+    desc: "Aggressive token compression with sentence fragments (~35% extra savings).",
+  },
+  {
+    id: "megacave",
+    label: "megacave",
+    desc: "Classical Chinese (文言文) concise grammar with particle-based structure.",
+  },
+] as const;
+
 export default function SettingsPage({
   darkMode,
   onThemeChange,
@@ -566,20 +584,34 @@ export default function SettingsPage({
                 <div className="space-y-2">
                   <Label>Compression level</Label>
                   <div className={cn("flex flex-wrap gap-2", !cavemanStatus?.enabled && "pointer-events-none opacity-50")}>
-                    {["lite", "full", "ultra", "wenyan-lite", "wenyan-full", "wenyan-ultra"].map((lvl) => (
-                      <Button
-                        key={lvl}
-                        variant={cavemanStatus?.level === lvl ? "default" : "outline"}
-                        size="sm"
-                        onClick={() => changeCavemanLevel(lvl)}
-                      >
-                        {lvl}
-                      </Button>
-                    ))}
+                    {CAVEMAN_LEVELS.map((lvl) => {
+                      const isSelected =
+                        cavemanStatus?.level === lvl.id ||
+                        (lvl.id === "caveman" && (cavemanStatus?.level === "lite" || cavemanStatus?.level === "full")) ||
+                        (lvl.id === "ultracave" && cavemanStatus?.level === "ultra") ||
+                        (lvl.id === "megacave" && (cavemanStatus?.level === "wenyan" || cavemanStatus?.level === "wenyan-lite" || cavemanStatus?.level === "wenyan-full" || cavemanStatus?.level === "wenyan-ultra"));
+                      return (
+                        <Button
+                          key={lvl.id}
+                          variant={isSelected ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => changeCavemanLevel(lvl.id)}
+                        >
+                          {lvl.label}
+                        </Button>
+                      );
+                    })}
                   </div>
-                  {!cavemanStatus?.enabled && (
-                    <p className="text-xs text-tertiary">Enable Caveman to change level</p>
-                  )}
+                  <p className="text-xs text-tertiary">
+                    {!cavemanStatus?.enabled
+                      ? "Enable Caveman to change level"
+                      : CAVEMAN_LEVELS.find((l) =>
+                          cavemanStatus?.level === l.id ||
+                          (l.id === "caveman" && (cavemanStatus?.level === "lite" || cavemanStatus?.level === "full")) ||
+                          (l.id === "ultracave" && cavemanStatus?.level === "ultra") ||
+                          (l.id === "megacave" && (cavemanStatus?.level === "wenyan" || cavemanStatus?.level === "wenyan-lite" || cavemanStatus?.level === "wenyan-full" || cavemanStatus?.level === "wenyan-ultra"))
+                        )?.desc}
+                  </p>
                 </div>
               </>
             )}

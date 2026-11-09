@@ -4,7 +4,7 @@ import { mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { config } from "../../config";
 import { logger } from "../../logger";
-import { CAVEMAN_LEVELS } from "./caveman.prompt";
+import { CAVEMAN_CANONICAL_LEVELS, CAVEMAN_LEVELS } from "./caveman.prompt";
 
 const SKILL_FILE = "SKILL.md";
 const FALLBACK_VERSION = "v4.0.1";
@@ -101,7 +101,7 @@ async function installFromArchive(archivePath: string, version: string): Promise
  * stored skill keeps a single contract for the app.
  */
 export function buildSkillContent(base: string, readSkillFile: (name: string) => string): string {
-  if (CAVEMAN_LEVELS.every((level) => base.includes(`**${level}**`))) return base;
+  if (CAVEMAN_CANONICAL_LEVELS.every((level) => base.includes(`**${level}**`))) return base;
   const promptFor = (name: string): string | null => {
     try {
       return toTablePrompt(readFileSync(readSkillFile(name), "utf8"));
@@ -113,9 +113,13 @@ export function buildSkillContent(base: string, readSkillFile: (name: string) =>
   const ultra = promptFor("ultracave");
   const wenyan = promptFor("megacave");
   const rows: Array<[string, string | null]> = [
+    ["caveman", body],
+    ["ultracave", ultra],
+    ["megacave", wenyan],
+    ["ultra", ultra],
+    ["wenyan", wenyan],
     ["lite", body],
     ["full", body],
-    ["ultra", ultra],
     ["wenyan-lite", wenyan],
     ["wenyan-full", wenyan],
     ["wenyan-ultra", wenyan],
@@ -137,7 +141,7 @@ function toTablePrompt(skillContent: string): string {
 }
 function validateSkill(content: string): void {
   if (!content.trim() || Buffer.byteLength(content, "utf8") > 2 * 1024 * 1024) throw new Error("Caveman SKILL.md is invalid");
-  if (CAVEMAN_LEVELS.some((level) => !content.includes(`**${level}**`))) throw new Error("Caveman SKILL.md missing required levels");
+  if (CAVEMAN_CANONICAL_LEVELS.some((level) => !content.includes(`**${level}**`))) throw new Error("Caveman SKILL.md missing required levels");
 }
 async function latestVersion(): Promise<string | null> {
   if (latestCache && latestCache.expiresAt > Date.now()) return latestCache.value;

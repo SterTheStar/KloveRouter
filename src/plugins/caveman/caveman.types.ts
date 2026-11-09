@@ -1,4 +1,15 @@
-export type CavemanLevel = "lite" | "full" | "ultra" | "wenyan-lite" | "wenyan-full" | "wenyan-ultra";
+export type CavemanCanonicalLevel = "caveman" | "ultracave" | "megacave";
+
+export type CavemanLegacyLevel =
+  | "ultra"
+  | "wenyan"
+  | "lite"
+  | "full"
+  | "wenyan-lite"
+  | "wenyan-full"
+  | "wenyan-ultra";
+
+export type CavemanLevel = CavemanCanonicalLevel | CavemanLegacyLevel;
 
 export interface CavemanStatus {
   enabled: boolean;

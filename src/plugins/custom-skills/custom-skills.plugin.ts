@@ -64,6 +64,34 @@ export const customSkillsPlugin = (app: Elysia) =>
       }
       return { success: true };
     })
+    .get("/api/custom-skills/designs", async () => {
+      return customSkillsProxy.listDesignSkills();
+    })
+    .get("/api/custom-skills/designs/:slug", async ({ params: { slug }, set }) => {
+      const design = await customSkillsProxy.getDesignSkill(slug);
+      if (!design) {
+        set.status = 404;
+        return { error: "Design skill not found" };
+      }
+      return design;
+    })
+    .post("/api/custom-skills/designs/:slug/activate", async ({ params: { slug }, set }) => {
+      try {
+        const activated = await customSkillsProxy.activateDesignSkill(slug);
+        return activated;
+      } catch (err: any) {
+        set.status = 404;
+        return { error: err.message || "Failed to activate design skill" };
+      }
+    })
+    .post("/api/custom-skills/designs/:slug/deactivate", async ({ params: { slug }, set }) => {
+      const ok = await customSkillsProxy.deactivateDesignSkill(slug);
+      if (!ok) {
+        set.status = 404;
+        return { error: "Design skill was not installed" };
+      }
+      return { success: true };
+    })
     .get("/api/custom-skills/:id", async ({ params: { id }, set }) => {
       const skill = await customSkillsProxy.get(id);
       if (!skill) {

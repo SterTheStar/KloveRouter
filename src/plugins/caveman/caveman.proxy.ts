@@ -1,13 +1,22 @@
 import { getDb } from "../../db/connection";
-import { getCavemanPrompt } from "./caveman.prompt";
+import { getCavemanPrompt, CAVEMAN_LEVELS } from "./caveman.prompt";
 import { cavemanBinary } from "./caveman.binary";
 import { logger } from "../../logger";
-import type { CavemanLevel, CavemanStatus } from "./caveman.types";
+import type { CavemanCanonicalLevel, CavemanLevel, CavemanStatus } from "./caveman.types";
 
-const VALID_LEVELS: CavemanLevel[] = [
-  "lite", "full", "ultra",
-  "wenyan-lite", "wenyan-full", "wenyan-ultra",
-];
+export function normalizeCavemanLevel(level: string | null | undefined): CavemanCanonicalLevel {
+  if (level === "ultracave" || level === "ultra") return "ultracave";
+  if (
+    level === "megacave" ||
+    level === "wenyan" ||
+    level === "wenyan-lite" ||
+    level === "wenyan-full" ||
+    level === "wenyan-ultra"
+  ) {
+    return "megacave";
+  }
+  return "caveman";
+}
 
 export function isCavemanEnabled(): boolean {
   const db = getDb();
@@ -17,15 +26,15 @@ export function isCavemanEnabled(): boolean {
   return row?.value === "1";
 }
 
-export function getCavemanLevel(): CavemanLevel {
+export function getCavemanLevel(): CavemanCanonicalLevel {
   const db = getDb();
   const row = db
     .query("SELECT value FROM settings WHERE key = ?")
     .get("caveman_level") as { value: string } | undefined;
-  if (row && VALID_LEVELS.includes(row.value as CavemanLevel)) {
-    return row.value as CavemanLevel;
+  if (row && CAVEMAN_LEVELS.includes(row.value as CavemanLevel)) {
+    return normalizeCavemanLevel(row.value);
   }
-  return "full";
+  return "caveman";
 }
 
 export function setCavemanEnabled(enabled: boolean): void {
@@ -37,10 +46,11 @@ export function setCavemanEnabled(enabled: boolean): void {
 }
 
 export function setCavemanLevel(level: CavemanLevel): void {
+  const normalized = normalizeCavemanLevel(level);
   const db = getDb();
   db.query("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)").run(
     "caveman_level",
-    level,
+    normalized,
   );
 }
 

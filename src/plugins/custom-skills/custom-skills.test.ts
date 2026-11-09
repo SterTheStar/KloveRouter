@@ -127,4 +127,45 @@ describe("Custom Skills & Marketplace", () => {
     expect(emptySearch.total).toBe(0);
     expect(emptySearch.skills.length).toBe(0);
   });
+
+  it("handles awesome design skills and enforces single-active rule", async () => {
+    // 1. List designs
+    const designs = await customSkillsProxy.listDesignSkills();
+    expect(designs.length).toBeGreaterThanOrEqual(10);
+    const neo = designs.find((d) => d.slug === "neobrutalism");
+    expect(neo).toBeDefined();
+    expect(neo?.palette.primary).toBe("#FFE600");
+
+    // 2. Activate Neobrutalism
+    const active1 = await customSkillsProxy.activateDesignSkill("neobrutalism");
+    expect(active1.is_active).toBe(true);
+    expect(active1.category).toBe("UI Design");
+
+    const designsAfter1 = await customSkillsProxy.listDesignSkills();
+    const neoStatus = designsAfter1.find((d) => d.slug === "neobrutalism");
+    expect(neoStatus?.is_active).toBe(true);
+
+    // 3. Activate Glassmorphism -> MUST automatically deactivate Neobrutalism!
+    const active2 = await customSkillsProxy.activateDesignSkill("glassmorphism");
+    expect(active2.is_active).toBe(true);
+
+    const designsAfter2 = await customSkillsProxy.listDesignSkills();
+    const neoStatus2 = designsAfter2.find((d) => d.slug === "neobrutalism");
+    const glassStatus2 = designsAfter2.find((d) => d.slug === "glassmorphism");
+
+    expect(glassStatus2?.is_active).toBe(true);
+    expect(neoStatus2?.is_active).toBe(false); // Verified: only 1 design skill active at a time!
+
+    // 4. Deactivate Glassmorphism
+    const deactivated = await customSkillsProxy.deactivateDesignSkill("glassmorphism");
+    expect(deactivated).toBe(true);
+
+    const designsAfter3 = await customSkillsProxy.listDesignSkills();
+    const glassStatus3 = designsAfter3.find((d) => d.slug === "glassmorphism");
+    expect(glassStatus3?.is_active).toBe(false);
+
+    // Clean up test skills
+    if (active1.id) await customSkillsProxy.remove(active1.id);
+    if (active2.id) await customSkillsProxy.remove(active2.id);
+  });
 });

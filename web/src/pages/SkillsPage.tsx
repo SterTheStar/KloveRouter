@@ -13,9 +13,9 @@ import {
   RiLoader4Line,
   RiInformationLine,
   RiExternalLinkLine,
-  RiFilter3Line,
   RiVerifiedBadgeLine,
   RiCloseLine,
+  RiPaletteLine,
 } from "@remixicon/react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
@@ -35,8 +35,10 @@ import {
 import { Markdown } from "../components/chat/Markdown";
 import { customSkills } from "../api/client";
 import { useToast } from "../components/ui/toast";
-import type { CustomSkill, MarketplaceSkill } from "../types";
+import type { CustomSkill, MarketplaceSkill, DesignSkill } from "../types";
 import { cn } from "@/lib/utils";
+import { DesignMiniCard } from "../components/skills/DesignMiniCard";
+import { DesignPreviewModal } from "../components/skills/DesignPreviewModal";
 
 const PAGE_SIZE = 36;
 
@@ -62,10 +64,20 @@ function parseSkillMarkdown(raw: string) {
   return { meta, body };
 }
 
-export default function SkillsPage() {
-  const { notifySuccess, notifyError } = useToast();
+const DESIGN_AESTHETICS = [
+  "All",
+  "Enterprise",
+  "Modern & Minimal",
+  "Bold & Playful",
+  "Editorial & Tactile",
+  "Dark & Futuristic",
+  "Retro & Digital",
+];
 
-  const [activeTab, setActiveTab] = useState<"installed" | "marketplace">("installed");
+export default function SkillsPage() {
+  const { success: notifySuccess, error: notifyError } = useToast();
+
+  const [activeTab, setActiveTab] = useState<"installed" | "marketplace" | "designs">("installed");
 
   // Installed state
   const [installedSkills, setInstalledSkills] = useState<CustomSkill[]>([]);
@@ -81,6 +93,13 @@ export default function SkillsPage() {
   const [marketplacePage, setMarketplacePage] = useState(1);
   const [marketplaceSearch, setMarketplaceSearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
+
+  // UI Designs (Awesome Design Skills) state
+  const [designSkills, setDesignSkills] = useState<DesignSkill[]>([]);
+  const [designLoading, setDesignLoading] = useState(false);
+  const [designSearch, setDesignSearch] = useState("");
+  const [selectedAesthetic, setSelectedAesthetic] = useState("All");
+  const [previewDesign, setPreviewDesign] = useState<DesignSkill | null>(null);
 
   // View / Details Dialog state
   const [viewSkill, setViewSkill] = useState<{
@@ -128,6 +147,19 @@ export default function SkillsPage() {
     }
   };
 
+  // Load UI design skills
+  const loadDesigns = async () => {
+    setDesignLoading(true);
+    try {
+      const data = await customSkills.listDesigns();
+      setDesignSkills(data);
+    } catch (e: any) {
+      notifyError("Failed to load design systems", e.message);
+    } finally {
+      setDesignLoading(false);
+    }
+  };
+
   // Load marketplace skills from server
   const fetchMarketplace = async (
     page: number,
@@ -165,14 +197,44 @@ export default function SkillsPage() {
 
   useEffect(() => {
     loadInstalled();
+    loadDesigns();
   }, []);
+
+  // Sync preview design with latest designs state
+  useEffect(() => {
+    if (previewDesign) {
+      const updated = designSkills.find((d) => d.slug === previewDesign.slug);
+      if (updated) setPreviewDesign(updated);
+    }
+  }, [designSkills]);
 
   // Fetch marketplace when category or tab changes
   useEffect(() => {
     if (activeTab === "marketplace") {
       fetchMarketplace(1, false, marketplaceSearch, selectedCategory);
+    } else if (activeTab === "designs") {
+      loadDesigns();
     }
   }, [activeTab, selectedCategory]);
+
+  // Filtered UI Designs (client-side)
+  const filteredDesigns = useMemo(() => {
+    return designSkills.filter((d) => {
+      const q = designSearch.toLowerCase().trim();
+      const matchSearch =
+        !q ||
+        d.name.toLowerCase().includes(q) ||
+        d.subtitle.toLowerCase().includes(q) ||
+        d.description.toLowerCase().includes(q) ||
+        d.aesthetic.toLowerCase().includes(q) ||
+        d.rules.some((r) => r.toLowerCase().includes(q));
+
+      const matchAesthetic =
+        selectedAesthetic === "All" || d.aesthetic === selectedAesthetic;
+
+      return matchSearch && matchAesthetic;
+    });
+  }, [designSkills, designSearch, selectedAesthetic]);
 
   // Debounced search for marketplace
   const handleMarketplaceSearchChange = (value: string) => {
@@ -210,8 +272,33 @@ export default function SkillsPage() {
       if (viewSkill && viewSkill.installed_id === id) {
         setViewSkill({ ...viewSkill, is_active: updated.is_active });
       }
+      // If toggled a design skill, reload all designs and installed list
+      await loadInstalled();
+      await loadDesigns();
     } catch (e: any) {
       notifyError("Failed to toggle skill", e.message);
+    } finally {
+      setActionInProgress(null);
+    }
+  };
+
+  // Toggle / Activate / Deactivate Design Skill
+  const handleToggleDesign = async (slug: string) => {
+    const target = designSkills.find((d) => d.slug === slug);
+    if (!target) return;
+    setActionInProgress(slug);
+    try {
+      if (target.is_active) {
+        await customSkills.deactivateDesign(slug);
+        notifySuccess(`Deactivated design: ${target.name}`);
+      } else {
+        await customSkills.activateDesign(slug);
+        notifySuccess(`Activated design: ${target.name} (all other design systems deactivated)`);
+      }
+      await loadDesigns();
+      await loadInstalled();
+    } catch (e: any) {
+      notifyError("Failed to update design system", e.message);
     } finally {
       setActionInProgress(null);
     }
@@ -449,6 +536,19 @@ export default function SkillsPage() {
               {totalMarketplace > 0 ? totalMarketplace.toLocaleString() : "..."}
             </Badge>
           </Button>
+
+          <Button
+            variant={activeTab === "designs" ? "default" : "outline"}
+            size="sm"
+            onClick={() => setActiveTab("designs")}
+            className="gap-2"
+          >
+            <RiPaletteLine className="size-4 text-primary" />
+            <span>UI Designs</span>
+            <Badge variant="secondary" className="px-1.5 py-0 text-[10px]">
+              {designSkills.length || 12}
+            </Badge>
+          </Button>
         </div>
 
         {/* Search input */}
@@ -472,7 +572,7 @@ export default function SkillsPage() {
                 </button>
               )}
             </div>
-          ) : (
+          ) : activeTab === "marketplace" ? (
             <div className="relative w-full">
               <RiSearchLine className="pointer-events-none absolute left-2.5 top-2.5 size-4 text-tertiary z-10" />
               <Input
@@ -495,6 +595,25 @@ export default function SkillsPage() {
                     if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
                     fetchMarketplace(1, false, "", selectedCategory);
                   }}
+                  className="absolute right-2.5 top-2.5 text-tertiary hover:text-foreground z-10"
+                >
+                  <RiCloseLine className="size-4" />
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="relative w-full">
+              <RiSearchLine className="pointer-events-none absolute left-2.5 top-2.5 size-4 text-tertiary z-10" />
+              <Input
+                placeholder="Search UI design systems..."
+                value={designSearch}
+                onChange={(e) => setDesignSearch(e.target.value)}
+                className="pl-8 pr-8 text-xs h-9"
+              />
+              {designSearch && (
+                <button
+                  type="button"
+                  onClick={() => setDesignSearch("")}
                   className="absolute right-2.5 top-2.5 text-tertiary hover:text-foreground z-10"
                 >
                   <RiCloseLine className="size-4" />
@@ -567,12 +686,18 @@ export default function SkillsPage() {
                             {skill.category}
                           </Badge>
                         )}
-                        <Badge
-                          variant={skill.source === "marketplace" ? "secondary" : "default"}
-                          className="text-[10px] py-0 px-1.5 font-normal"
-                        >
-                          {skill.source === "marketplace" ? "Marketplace" : "Custom"}
-                        </Badge>
+                        {skill.source === "design" || skill.category === "UI Design" ? (
+                          <Badge className="text-[10px] py-0 px-1.5 font-normal bg-purple-500/15 text-purple-400 border border-purple-500/30">
+                            UI Design System
+                          </Badge>
+                        ) : (
+                          <Badge
+                            variant={skill.source === "marketplace" ? "secondary" : "default"}
+                            className="text-[10px] py-0 px-1.5 font-normal"
+                          >
+                            {skill.source === "marketplace" ? "Marketplace" : "Custom"}
+                          </Badge>
+                        )}
                       </div>
 
                       <Switch
@@ -639,9 +764,6 @@ export default function SkillsPage() {
         <div className="space-y-4">
           {/* Categories Filter Pills */}
           <div className="flex flex-wrap items-center gap-1.5 pb-1">
-            <span className="flex items-center gap-1 text-xs text-tertiary mr-1">
-              <RiFilter3Line className="size-3.5" /> Category:
-            </span>
             <Button
               variant={selectedCategory === "All" ? "default" : "outline"}
               size="xs"
@@ -788,6 +910,136 @@ export default function SkillsPage() {
                 </div>
               )}
             </>
+          )}
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* UI DESIGNS TAB (Awesome Design Skills) */}
+      {/* ========================================================================= */}
+      {activeTab === "designs" && (
+        <div className="space-y-6">
+          {/* Aesthetic Filter Pills */}
+          <div className="flex flex-wrap items-center gap-1.5 pb-1">
+            {DESIGN_AESTHETICS.map((aes) => (
+              <Button
+                key={aes}
+                variant={selectedAesthetic === aes ? "default" : "outline"}
+                size="xs"
+                onClick={() => setSelectedAesthetic(aes)}
+                className="text-xs rounded-full"
+              >
+                {aes}
+              </Button>
+            ))}
+          </div>
+
+          {/* Design Skills Grid */}
+          {designLoading ? (
+            <div className="flex justify-center p-12">
+              <RiLoader4Line className="size-6 animate-spin text-tertiary" />
+            </div>
+          ) : filteredDesigns.length === 0 ? (
+            <Card className="border-dashed py-12 text-center">
+              <CardContent className="space-y-3">
+                <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-muted">
+                  <RiPaletteLine className="size-6 text-tertiary" />
+                </div>
+                <div className="space-y-1">
+                  <h3 className="text-base font-medium text-foreground">No matching design systems</h3>
+                  <p className="text-xs text-tertiary">Try clearing your search or switching aesthetic filter.</p>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setDesignSearch("");
+                    setSelectedAesthetic("All");
+                  }}
+                >
+                  Reset filters
+                </Button>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {filteredDesigns.map((design) => {
+                const isActive = Boolean(design.is_active);
+                return (
+                  <Card
+                    key={design.slug}
+                    className={cn(
+                      "flex flex-col justify-between transition-all hover:border-border-strong",
+                      isActive
+                        ? "border-foreground/30 bg-muted/20"
+                        : "bg-card/60"
+                    )}
+                  >
+                    <CardHeader className="space-y-3 pb-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <Badge variant="outline" className="text-[10px] py-0 px-1.5 font-normal">
+                          {design.aesthetic}
+                        </Badge>
+
+                        {isActive ? (
+                          <Badge variant="outline" className="text-[10px] py-0 px-2 font-medium text-foreground">
+                            Active
+                          </Badge>
+                        ) : (
+                          <span className="text-[10px] text-tertiary font-mono">v{design.version}</span>
+                        )}
+                      </div>
+
+                      <div className="space-y-1">
+                        <CardTitle className="text-base font-bold flex items-center justify-between">
+                          <span>{design.name}</span>
+                        </CardTitle>
+                        <p className="text-xs text-tertiary line-clamp-2 leading-relaxed">
+                          {design.subtitle}
+                        </p>
+                      </div>
+
+                      {/* Interactive Mini Live Swatch Preview */}
+                      <DesignMiniCard design={design} />
+                    </CardHeader>
+
+                    <CardFooter className="flex items-center justify-between border-t border-border pt-3 text-xs">
+                      <Button
+                        variant="ghost"
+                        size="xs"
+                        onClick={() => setPreviewDesign(design)}
+                        className="gap-1.5 text-xs text-tertiary hover:text-foreground"
+                      >
+                        <RiEyeLine className="size-3.5" />
+                        Preview &amp; Tokens
+                      </Button>
+
+                      <Button
+                        variant={isActive ? "destructive" : "default"}
+                        size="xs"
+                        onClick={() => handleToggleDesign(design.slug)}
+                        disabled={actionInProgress === design.slug}
+                        className="gap-1.5 text-xs"
+                      >
+                        {actionInProgress === design.slug ? (
+                          <RiLoader4Line className="size-3.5 animate-spin" />
+                        ) : isActive ? (
+                          <>
+                            <RiCloseLine className="size-3.5" />
+                            Deactivate
+                          </>
+                        ) : (
+                          <>
+                            <RiCheckLine className="size-3.5" />
+                            Activate
+                          </>
+                        )}
+                      </Button>
+                    </CardFooter>
+                  </Card>
+                );
+              })}
+            </div>
           )}
         </div>
       )}
@@ -1156,6 +1408,14 @@ export default function SkillsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Design System Live Preview Modal */}
+      <DesignPreviewModal
+        design={previewDesign}
+        onClose={() => setPreviewDesign(null)}
+        onToggleActive={handleToggleDesign}
+        isToggling={actionInProgress === previewDesign?.slug}
+      />
     </div>
   );
 }

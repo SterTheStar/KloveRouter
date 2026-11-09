@@ -1,3 +1,5 @@
+export type { DesignSkill, DesignPalette, DesignTokens } from "./design-skills.types";
+
 export interface CustomSkill {
   id: string;
   name: string;
@@ -5,7 +7,7 @@ export interface CustomSkill {
   description?: string;
   category?: string;
   slug?: string;
-  source?: "custom" | "marketplace";
+  source?: "custom" | "marketplace" | "design";
   author?: string;
   is_active: boolean;
   created_at: string;
