@@ -411,13 +411,26 @@ export const customSkillsProxy = {
 
     if (options?.search) {
       const q = options.search.toLowerCase().trim();
-      filtered = filtered.filter(
-        (s) =>
-          s.name.toLowerCase().includes(q) ||
-          s.slug.toLowerCase().includes(q) ||
-          s.description.toLowerCase().includes(q) ||
-          (s.tags && s.tags.some((t) => t.toLowerCase().includes(q))),
-      );
+      const terms = q.split(/\s+/).filter(Boolean);
+      if (terms.length > 0) {
+        filtered = filtered.filter((s) => {
+          const searchable = [
+            s.name,
+            s.title,
+            s.slug,
+            s.description,
+            s.category,
+            s.framework,
+            s.author,
+            ...(Array.isArray(s.tags) ? s.tags : []),
+          ]
+            .filter(Boolean)
+            .join(" ")
+            .toLowerCase();
+
+          return terms.every((t) => searchable.includes(t));
+        });
+      }
     }
 
     const total = filtered.length;

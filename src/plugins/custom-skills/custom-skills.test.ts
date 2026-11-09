@@ -93,4 +93,38 @@ describe("Custom Skills & Marketplace", () => {
     // Clean up
     await customSkillsProxy.remove(skill.id);
   });
+
+  it("filters marketplace by search query and category", async () => {
+    // 1. Single word search
+    const pySearch = await customSkillsProxy.listMarketplace({ search: "python" });
+    expect(pySearch.total).toBeGreaterThan(0);
+    for (const skill of pySearch.skills) {
+      const match =
+        skill.name.toLowerCase().includes("python") ||
+        (skill.description && skill.description.toLowerCase().includes("python")) ||
+        (skill.tags && skill.tags.some((t) => t.toLowerCase().includes("python")));
+      expect(match).toBe(true);
+    }
+
+    // 2. Multi-word search
+    const multiSearch = await customSkillsProxy.listMarketplace({ search: "fastapi clean" });
+    expect(multiSearch.total).toBeGreaterThan(0);
+    const hasFastApi = multiSearch.skills.some((s) => s.slug === "python-fastapi-architect");
+    expect(hasFastApi).toBe(true);
+
+    // 3. Category + search combined
+    const devSearch = await customSkillsProxy.listMarketplace({
+      search: "typescript",
+      category: "Development",
+    });
+    expect(devSearch.total).toBeGreaterThan(0);
+    expect(devSearch.skills.some((s) => s.slug === "typescript-strict-engineer")).toBe(true);
+
+    // 4. Non-matching search returns 0
+    const emptySearch = await customSkillsProxy.listMarketplace({
+      search: "nonexistent-xyz-random-12345",
+    });
+    expect(emptySearch.total).toBe(0);
+    expect(emptySearch.skills.length).toBe(0);
+  });
 });

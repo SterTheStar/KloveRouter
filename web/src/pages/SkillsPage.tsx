@@ -15,6 +15,7 @@ import {
   RiExternalLinkLine,
   RiFilter3Line,
   RiVerifiedBadgeLine,
+  RiCloseLine,
 } from "@remixicon/react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
@@ -127,14 +128,22 @@ export default function SkillsPage() {
   };
 
   // Load marketplace skills from server
-  const fetchMarketplace = async (page: number, append = false) => {
+  const fetchMarketplace = async (
+    page: number,
+    append = false,
+    searchOverride?: string,
+    categoryOverride?: string,
+  ) => {
     if (append) setLoadingMore(true);
     else setMarketplaceLoading(true);
 
+    const query = (searchOverride !== undefined ? searchOverride : marketplaceSearch).trim();
+    const cat = categoryOverride !== undefined ? categoryOverride : selectedCategory;
+
     try {
       const res = await customSkills.listMarketplace({
-        search: marketplaceSearch.trim() || undefined,
-        category: selectedCategory !== "All" ? selectedCategory : undefined,
+        search: query || undefined,
+        category: cat !== "All" ? cat : undefined,
         page,
         limit: PAGE_SIZE,
       });
@@ -160,7 +169,7 @@ export default function SkillsPage() {
   // Fetch marketplace when category or tab changes
   useEffect(() => {
     if (activeTab === "marketplace") {
-      fetchMarketplace(1, false);
+      fetchMarketplace(1, false, marketplaceSearch, selectedCategory);
     }
   }, [activeTab, selectedCategory]);
 
@@ -169,8 +178,8 @@ export default function SkillsPage() {
     setMarketplaceSearch(value);
     if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
     searchDebounceRef.current = setTimeout(() => {
-      fetchMarketplace(1, false);
-    }, 350);
+      fetchMarketplace(1, false, value, selectedCategory);
+    }, 300);
   };
 
   // Filtered installed skills (client-side)
@@ -446,21 +455,54 @@ export default function SkillsPage() {
 
         {/* Search input */}
         <div className="relative w-full sm:w-72">
-          <RiSearchLine className="absolute left-2.5 top-2.5 size-4 text-tertiary" />
           {activeTab === "installed" ? (
-            <Input
-              placeholder="Search installed skills..."
-              value={installedSearch}
-              onChange={(e) => setInstalledSearch(e.target.value)}
-              className="pl-8 text-xs h-9"
-            />
+            <div className="relative w-full">
+              <RiSearchLine className="pointer-events-none absolute left-2.5 top-2.5 size-4 text-tertiary z-10" />
+              <Input
+                placeholder="Search installed skills..."
+                value={installedSearch}
+                onChange={(e) => setInstalledSearch(e.target.value)}
+                className="pl-8 pr-8 text-xs h-9"
+              />
+              {installedSearch && (
+                <button
+                  type="button"
+                  onClick={() => setInstalledSearch("")}
+                  className="absolute right-2.5 top-2.5 text-tertiary hover:text-foreground z-10"
+                >
+                  <RiCloseLine className="size-4" />
+                </button>
+              )}
+            </div>
           ) : (
-            <Input
-              placeholder="Search 3,200+ agent skills..."
-              value={marketplaceSearch}
-              onChange={(e) => handleMarketplaceSearchChange(e.target.value)}
-              className="pl-8 text-xs h-9"
-            />
+            <div className="relative w-full">
+              <RiSearchLine className="pointer-events-none absolute left-2.5 top-2.5 size-4 text-tertiary z-10" />
+              <Input
+                placeholder="Search 3,200+ agent skills..."
+                value={marketplaceSearch}
+                onChange={(e) => handleMarketplaceSearchChange(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+                    fetchMarketplace(1, false, marketplaceSearch, selectedCategory);
+                  }
+                }}
+                className="pl-8 pr-8 text-xs h-9"
+              />
+              {marketplaceSearch && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMarketplaceSearch("");
+                    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+                    fetchMarketplace(1, false, "", selectedCategory);
+                  }}
+                  className="absolute right-2.5 top-2.5 text-tertiary hover:text-foreground z-10"
+                >
+                  <RiCloseLine className="size-4" />
+                </button>
+              )}
+            </div>
           )}
         </div>
       </div>
@@ -754,7 +796,9 @@ export default function SkillsPage() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => fetchMarketplace(marketplacePage + 1, true)}
+                    onClick={() =>
+                      fetchMarketplace(marketplacePage + 1, true, marketplaceSearch, selectedCategory)
+                    }
                     disabled={loadingMore}
                     className="gap-2"
                   >
