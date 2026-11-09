@@ -49,13 +49,45 @@ let cachedCatalog: MarketplaceSkill[] | null = null;
 let lastCatalogFetch = 0;
 const CATALOG_TTL_MS = 1000 * 60 * 60; // 1 hour
 
+function normalizeCategory(cat: unknown): string {
+  if (Array.isArray(cat)) return cat.map(String).join(", ");
+  if (typeof cat === "string" && cat.trim()) return cat.trim();
+  return "General";
+}
+
+function normalizeTags(item: any, catStr: string): string[] {
+  if (Array.isArray(item.tags)) return item.tags.map(String);
+  if (Array.isArray(item.category)) {
+    return item.category
+      .map((c: unknown) => String(c).toLowerCase().replace(/[^a-z0-9]+/g, "-"))
+      .filter(Boolean);
+  }
+  if (catStr && catStr !== "General") {
+    return [catStr.toLowerCase().replace(/[^a-z0-9]+/g, "-")];
+  }
+  return [];
+}
+
+function mergeWithBundled(remoteSkills: MarketplaceSkill[]): MarketplaceSkill[] {
+  const map = new Map<string, MarketplaceSkill>();
+  for (const b of BUNDLED_MARKETPLACE_SKILLS) {
+    map.set(b.slug, b);
+  }
+  for (const r of remoteSkills) {
+    if (!map.has(r.slug)) {
+      map.set(r.slug, r);
+    }
+  }
+  return Array.from(map.values());
+}
+
 async function loadDiskCachedCatalog(): Promise<MarketplaceSkill[] | null> {
   try {
     if (existsSync(CATALOG_CACHE_FILE)) {
       const raw = await readFile(CATALOG_CACHE_FILE, "utf-8");
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed;
+        return mergeWithBundled(parsed);
       }
     }
   } catch {
@@ -80,10 +112,9 @@ async function fetchRemoteOrBundledCatalog(): Promise<MarketplaceSkill[]> {
   }
 
   // 2. Fetch fresh catalog from GitHub in real time
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 20000);
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 6000);
-
     const res = await fetch(
       "https://raw.githubusercontent.com/agentskillexchange/skills/main/skills.json",
       {
@@ -91,28 +122,36 @@ async function fetchRemoteOrBundledCatalog(): Promise<MarketplaceSkill[]> {
         signal: controller.signal,
       },
     );
-    clearTimeout(timeout);
 
     if (res.ok) {
       const data = await res.json();
       const rawList = Array.isArray(data) ? data : data.skills || [];
 
       if (rawList.length > 0) {
-        const mapped: MarketplaceSkill[] = rawList.map((item: any) => ({
-          slug: item.slug || item.id,
-          name: item.name || item.title || item.slug,
-          title: item.title || item.name,
-          description: item.description || "",
-          category: item.category || "General",
-          framework: item.framework || "Multi-Framework",
-          verification: item.verification || "listed",
-          source_url: item.source_url || item.source || `https://github.com/agentskillexchange/skills/tree/main/skills/${item.slug}`,
-          author: item.author || "AgentSkillExchange",
-          tags: item.tags || (item.category ? [item.category.toLowerCase().replace(/[^a-z0-9]+/g, "-")] : []),
-          version: item.version || "1.0.0",
-        }));
+        const mapped: MarketplaceSkill[] = rawList.map((item: any) => {
+          const category = normalizeCategory(item.category);
+          const slug = String(item.slug || item.id || "");
+          const name = String(item.name || item.title || slug);
+          return {
+            slug,
+            name,
+            title: String(item.title || name),
+            description: String(item.description || ""),
+            category,
+            framework: String(item.framework || "Multi-Framework"),
+            verification: String(item.verification || "listed"),
+            source_url:
+              item.source_url ||
+              item.source ||
+              `https://github.com/agentskillexchange/skills/tree/main/skills/${slug}`,
+            author: String(item.author || "AgentSkillExchange"),
+            tags: normalizeTags(item, category),
+            version: String(item.version || "1.0.0"),
+          };
+        });
 
-        cachedCatalog = mapped;
+        const merged = mergeWithBundled(mapped);
+        cachedCatalog = merged;
         lastCatalogFetch = nowMs;
 
         // Persist to disk cache
@@ -123,12 +162,14 @@ async function fetchRemoteOrBundledCatalog(): Promise<MarketplaceSkill[]> {
           // ignore
         }
 
-        logger.info(`Loaded ${mapped.length} skills from Agent Skill Exchange marketplace`);
+        logger.info(`Loaded ${merged.length} skills from Agent Skill Exchange marketplace`);
         return cachedCatalog;
       }
     }
   } catch (err: any) {
     logger.warn(`Could not refresh marketplace catalog: ${err.message}`);
+  } finally {
+    clearTimeout(timeout);
   }
 
   // 3. Fallback to cached or bundled
@@ -280,10 +321,9 @@ export const customSkillsProxy = {
     }
 
     // 2. Fetch live SKILL.md from GitHub
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
     try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 6000);
-
       const res = await fetch(
         `https://raw.githubusercontent.com/agentskillexchange/skills/main/skills/${encodeURIComponent(slug)}/SKILL.md`,
         {
@@ -291,7 +331,6 @@ export const customSkillsProxy = {
           signal: controller.signal,
         },
       );
-      clearTimeout(timeout);
 
       if (res.ok) {
         const text = await res.text();
@@ -303,6 +342,8 @@ export const customSkillsProxy = {
       }
     } catch (e: any) {
       logger.warn(`Could not fetch live SKILL.md for ${slug}: ${e.message}`);
+    } finally {
+      clearTimeout(timeout);
     }
 
     // 3. Check bundled skills
