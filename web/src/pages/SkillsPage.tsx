@@ -16,6 +16,7 @@ import {
   RiVerifiedBadgeLine,
   RiCloseLine,
   RiPaletteLine,
+  RiRefreshLine,
 } from "@remixicon/react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
@@ -74,6 +75,54 @@ const DESIGN_AESTHETICS = [
   "Retro & Digital",
 ];
 
+function DesignCardThumbnail({ design }: { design: DesignSkill }) {
+  const [imgError, setImgError] = useState(false);
+
+  if (!design.image_url || imgError) {
+    return (
+      <div
+        className="relative aspect-[16/9] w-full overflow-hidden rounded-md border border-border/60 flex flex-col items-center justify-center gap-1.5 p-4 text-center select-none shadow-2xs"
+        style={{
+          background: `linear-gradient(135deg, ${design.palette.surface} 0%, ${design.palette.background} 100%)`,
+        }}
+      >
+        <div
+          className="size-8 rounded-full flex items-center justify-center shadow-xs border border-black/10 dark:border-white/10"
+          style={{ backgroundColor: design.palette.primary, color: "#fff" }}
+        >
+          <RiPaletteLine className="size-4" />
+        </div>
+        <div className="space-y-0.5 max-w-[90%]">
+          <div
+            className="text-xs font-bold truncate leading-tight"
+            style={{ color: design.palette.text, fontFamily: design.tokens?.fontFamily ? design.tokens.fontFamily.split(",")[0] : undefined }}
+          >
+            {design.name}
+          </div>
+          <div
+            className="text-[10px] font-mono opacity-65 truncate"
+            style={{ color: design.palette.text }}
+          >
+            {design.aesthetic}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative aspect-[16/9] w-full overflow-hidden rounded-md border border-border/60 bg-muted/20">
+      <img
+        src={design.image_url}
+        alt={design.name}
+        loading="lazy"
+        className="size-full object-cover transition-transform duration-300 hover:scale-105"
+        onError={() => setImgError(true)}
+      />
+    </div>
+  );
+}
+
 export default function SkillsPage() {
   const { success: notifySuccess, error: notifyError } = useToast();
 
@@ -97,9 +146,18 @@ export default function SkillsPage() {
   // UI Designs (Awesome Design Skills) state
   const [designSkills, setDesignSkills] = useState<DesignSkill[]>([]);
   const [designLoading, setDesignLoading] = useState(false);
+  const [designSyncing, setDesignSyncing] = useState(false);
   const [designSearch, setDesignSearch] = useState("");
   const [selectedAesthetic, setSelectedAesthetic] = useState("All");
   const [previewDesign, setPreviewDesign] = useState<DesignSkill | null>(null);
+
+  const availableAesthetics = useMemo(() => {
+    const set = new Set<string>(["All"]);
+    for (const d of designSkills) {
+      if (d.aesthetic) set.add(d.aesthetic);
+    }
+    return Array.from(set);
+  }, [designSkills]);
 
   // View / Details Dialog state
   const [viewSkill, setViewSkill] = useState<{
@@ -148,15 +206,28 @@ export default function SkillsPage() {
   };
 
   // Load UI design skills
-  const loadDesigns = async () => {
+  const loadDesigns = async (forceRefresh = false) => {
     setDesignLoading(true);
     try {
-      const data = await customSkills.listDesigns();
+      const data = await customSkills.listDesigns(forceRefresh);
       setDesignSkills(data);
     } catch (e: any) {
       notifyError("Failed to load design systems", e.message);
     } finally {
       setDesignLoading(false);
+    }
+  };
+
+  const handleSyncDesigns = async () => {
+    setDesignSyncing(true);
+    try {
+      const updated = await customSkills.refreshDesigns();
+      setDesignSkills(updated);
+      notifySuccess(`Synchronized ${updated.length} design systems from repository`);
+    } catch (e: any) {
+      notifyError("Failed to sync design systems", e.message);
+    } finally {
+      setDesignSyncing(false);
     }
   };
 
@@ -301,6 +372,25 @@ export default function SkillsPage() {
       notifyError("Failed to update design system", e.message);
     } finally {
       setActionInProgress(null);
+    }
+  };
+
+  const handleOpenDesignPreview = async (design: DesignSkill) => {
+    setPreviewDesign(design);
+    try {
+      const full = await customSkills.getDesign(design.slug);
+      if (full && full.content) {
+        setPreviewDesign((prev) =>
+          prev && prev.slug === design.slug
+            ? { ...prev, ...full, image_url: full.image_url || prev.image_url || design.image_url }
+            : full
+        );
+        setDesignSkills((prev) =>
+          prev.map((d) => (d.slug === design.slug ? { ...d, content: full.content } : d))
+        );
+      }
+    } catch {
+      // ignore
     }
   };
 
@@ -602,23 +692,36 @@ export default function SkillsPage() {
               )}
             </div>
           ) : (
-            <div className="relative w-full">
-              <RiSearchLine className="pointer-events-none absolute left-2.5 top-2.5 size-4 text-tertiary z-10" />
-              <Input
-                placeholder="Search UI design systems..."
-                value={designSearch}
-                onChange={(e) => setDesignSearch(e.target.value)}
-                className="pl-8 pr-8 text-xs h-9"
-              />
-              {designSearch && (
-                <button
-                  type="button"
-                  onClick={() => setDesignSearch("")}
-                  className="absolute right-2.5 top-2.5 text-tertiary hover:text-foreground z-10"
-                >
-                  <RiCloseLine className="size-4" />
-                </button>
-              )}
+            <div className="flex items-center gap-2 w-full">
+              <div className="relative flex-1">
+                <RiSearchLine className="pointer-events-none absolute left-2.5 top-2.5 size-4 text-tertiary z-10" />
+                <Input
+                  placeholder="Search UI design systems..."
+                  value={designSearch}
+                  onChange={(e) => setDesignSearch(e.target.value)}
+                  className="pl-8 pr-8 text-xs h-9"
+                />
+                {designSearch && (
+                  <button
+                    type="button"
+                    onClick={() => setDesignSearch("")}
+                    className="absolute right-2.5 top-2.5 text-tertiary hover:text-foreground z-10"
+                  >
+                    <RiCloseLine className="size-4" />
+                  </button>
+                )}
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleSyncDesigns}
+                disabled={designSyncing || designLoading}
+                className="h-9 gap-1.5 shrink-0 text-xs"
+                title="Fetch latest designs from awesome-design-skills repository"
+              >
+                <RiRefreshLine className={`size-3.5 ${designSyncing ? "animate-spin" : ""}`} />
+                <span>{designSyncing ? "Syncing..." : "Sync Repo"}</span>
+              </Button>
             </div>
           )}
         </div>
@@ -921,7 +1024,7 @@ export default function SkillsPage() {
         <div className="space-y-6">
           {/* Aesthetic Filter Pills */}
           <div className="flex flex-wrap items-center gap-1.5 pb-1">
-            {DESIGN_AESTHETICS.map((aes) => (
+            {availableAesthetics.map((aes) => (
               <Button
                 key={aes}
                 variant={selectedAesthetic === aes ? "default" : "outline"}
@@ -976,18 +1079,31 @@ export default function SkillsPage() {
                     )}
                   >
                     <CardHeader className="space-y-3 pb-3">
-                      <div className="flex items-center justify-between gap-2">
-                        <Badge variant="outline" className="text-[10px] py-0 px-1.5 font-normal">
-                          {design.aesthetic}
-                        </Badge>
+                      {/* Visual Thumbnail or Themed Placeholder */}
+                      <div
+                        className="cursor-pointer transition-opacity hover:opacity-90"
+                        onClick={() => handleOpenDesignPreview(design)}
+                        title="Click to preview design guidelines & prompt"
+                      >
+                        <DesignCardThumbnail design={design} />
+                      </div>
 
-                        {isActive ? (
-                          <Badge variant="outline" className="text-[10px] py-0 px-2 font-medium text-foreground">
-                            Active
+                      {/* Header row: Aesthetic on left, Palette swatches with tooltip on right (replacing version) */}
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <Badge variant="outline" className="text-[10px] py-0 px-1.5 font-normal">
+                            {design.aesthetic}
                           </Badge>
-                        ) : (
-                          <span className="text-[10px] text-tertiary font-mono">v{design.version}</span>
-                        )}
+
+                          {isActive && (
+                            <Badge variant="default" className="text-[10px] py-0 px-1.5 font-medium">
+                              Active
+                            </Badge>
+                          )}
+                        </div>
+
+                        {/* Minimal Color Palette Swatches with Tooltips */}
+                        <DesignMiniCard design={design} />
                       </div>
 
                       <div className="space-y-1">
@@ -998,20 +1114,17 @@ export default function SkillsPage() {
                           {design.subtitle}
                         </p>
                       </div>
-
-                      {/* Interactive Mini Live Swatch Preview */}
-                      <DesignMiniCard design={design} />
                     </CardHeader>
 
                     <CardFooter className="flex items-center justify-between border-t border-border pt-3 text-xs">
                       <Button
-                        variant="ghost"
+                        variant="outline"
                         size="xs"
-                        onClick={() => setPreviewDesign(design)}
-                        className="gap-1.5 text-xs text-tertiary hover:text-foreground"
+                        onClick={() => handleOpenDesignPreview(design)}
+                        className="gap-1.5 text-xs font-medium border-border/80 hover:bg-muted hover:text-foreground shadow-2xs"
                       >
-                        <RiEyeLine className="size-3.5" />
-                        Preview &amp; Tokens
+                        <RiEyeLine className="size-3.5 text-tertiary" />
+                        Preview &amp; Prompt
                       </Button>
 
                       <Button
@@ -1410,12 +1523,15 @@ export default function SkillsPage() {
       </Dialog>
 
       {/* Design System Live Preview Modal */}
-      <DesignPreviewModal
-        design={previewDesign}
-        onClose={() => setPreviewDesign(null)}
-        onToggleActive={handleToggleDesign}
-        isToggling={actionInProgress === previewDesign?.slug}
-      />
+      {previewDesign && (
+        <DesignPreviewModal
+          key={previewDesign.slug}
+          design={previewDesign}
+          onClose={() => setPreviewDesign(null)}
+          onToggleActive={handleToggleDesign}
+          isToggling={actionInProgress === previewDesign.slug}
+        />
+      )}
     </div>
   );
 }

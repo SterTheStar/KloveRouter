@@ -731,8 +731,14 @@ export const customSkills = {
     request<{ success: boolean }>(`/api/custom-skills/marketplace/${encodeURIComponent(slug)}/uninstall`, {
       method: "POST",
     }),
-  listDesigns: () =>
-    request<import("../types").DesignSkill[]>("/api/custom-skills/designs"),
+  listDesigns: (forceRefresh?: boolean) =>
+    request<import("../types").DesignSkill[]>(
+      `/api/custom-skills/designs${forceRefresh ? "?refresh=true" : ""}`,
+    ),
+  refreshDesigns: () =>
+    request<import("../types").DesignSkill[]>("/api/custom-skills/designs/refresh", {
+      method: "POST",
+    }),
   getDesign: (slug: string) =>
     request<import("../types").DesignSkill>(`/api/custom-skills/designs/${encodeURIComponent(slug)}`),
   activateDesign: (slug: string) =>

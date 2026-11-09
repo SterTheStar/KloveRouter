@@ -168,4 +168,12 @@ describe("Custom Skills & Marketplace", () => {
     if (active1.id) await customSkillsProxy.remove(active1.id);
     if (active2.id) await customSkillsProxy.remove(active2.id);
   });
+
+  it("supports refreshing and querying dynamic design skills", async () => {
+    const designs = await customSkillsProxy.refreshDesignSkills();
+    expect(designs.length).toBeGreaterThanOrEqual(10);
+    const corporate = await customSkillsProxy.getDesignSkill("corporate");
+    expect(corporate).toBeDefined();
+    expect(corporate?.category).toBe("UI Design");
+  });
 });

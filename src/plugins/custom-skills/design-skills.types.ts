@@ -25,6 +25,7 @@ export interface DesignSkill {
   author: string;
   version: string;
   source_url: string;
+  image_url?: string;
   palette: DesignPalette;
   tokens: DesignTokens;
   rules: string[];

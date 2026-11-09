@@ -11,6 +11,7 @@ export const AWESOME_DESIGN_SKILLS: DesignSkill[] = [
     author: "bergside/awesome-design-skills",
     version: "1.0.0",
     source_url: "https://github.com/bergside/awesome-design-skills/tree/main/skills/corporate",
+    image_url: "https://raw.githubusercontent.com/bergside/awesome-design-skills/main/registry-examples/corporate-marketing.png",
     palette: {
       primary: "#2563EB",
       background: "#F8FAFC",
@@ -85,6 +86,7 @@ You are an expert Frontend Architect enforcing the **Corporate Enterprise** desi
     author: "bergside/awesome-design-skills",
     version: "1.0.0",
     source_url: "https://github.com/bergside/awesome-design-skills/tree/main/skills/glassmorphism",
+    image_url: "https://raw.githubusercontent.com/bergside/awesome-design-skills/main/registry-examples/glassmorphism-marketing.png",
     palette: {
       primary: "#8B5CF6",
       background: "#0F172A",
@@ -152,6 +154,7 @@ You are an expert UI Designer enforcing the **Glassmorphism** aesthetic from awe
     author: "bergside/awesome-design-skills",
     version: "1.0.0",
     source_url: "https://github.com/bergside/awesome-design-skills/tree/main/skills/neobrutalism",
+    image_url: "https://raw.githubusercontent.com/bergside/awesome-design-skills/main/registry-examples/neobrutalism-marketing.png",
     palette: {
       primary: "#FFE600",
       background: "#FFFDF5",
@@ -221,6 +224,7 @@ You are an expert UI Engineer enforcing the **Neobrutalism** aesthetic from awes
     author: "bergside/awesome-design-skills",
     version: "1.0.0",
     source_url: "https://github.com/bergside/awesome-design-skills/tree/main/skills/paper",
+    image_url: "https://raw.githubusercontent.com/bergside/awesome-design-skills/main/registry-examples/paper-marketing.png",
     palette: {
       primary: "#854D0E",
       background: "#FBF9F5",
@@ -289,6 +293,7 @@ You are an expert Editorial Designer enforcing the **Paper** aesthetic from awes
     author: "bergside/awesome-design-skills",
     version: "1.0.0",
     source_url: "https://github.com/bergside/awesome-design-skills/tree/main/skills/bento",
+    image_url: "https://raw.githubusercontent.com/bergside/awesome-design-skills/main/registry-examples/bento-marketing.png",
     palette: {
       primary: "#3B82F6",
       background: "#090A0F",
@@ -355,6 +360,7 @@ You are an expert Frontend Architect enforcing the **Bento Grid** design system 
     author: "bergside/awesome-design-skills",
     version: "1.0.0",
     source_url: "https://github.com/bergside/awesome-design-skills/tree/main/skills/minimal",
+    image_url: "https://raw.githubusercontent.com/bergside/awesome-design-skills/main/registry-examples/minimal-marketing.png",
     palette: {
       primary: "#18181B",
       background: "#FAFAFA",
@@ -421,6 +427,7 @@ You are an expert Designer enforcing the **Minimalist Stark** aesthetic from awe
     author: "bergside/awesome-design-skills",
     version: "1.0.0",
     source_url: "https://github.com/bergside/awesome-design-skills/tree/main/skills/cyberpunk",
+    image_url: "https://raw.githubusercontent.com/bergside/awesome-design-skills/main/registry-examples/neon-marketing.png",
     palette: {
       primary: "#00F0FF",
       background: "#080B10",
@@ -487,6 +494,7 @@ You are an expert Sci-Fi Interface Engineer enforcing the **Cyberpunk & Neon HUD
     author: "bergside/awesome-design-skills",
     version: "1.0.0",
     source_url: "https://github.com/bergside/awesome-design-skills/tree/main/skills/material",
+    image_url: "https://raw.githubusercontent.com/bergside/awesome-design-skills/main/registry-examples/material-marketing.png",
     palette: {
       primary: "#6750A4",
       background: "#FEF7FF",
@@ -556,6 +564,7 @@ You are an expert Frontend Architect enforcing Google's **Material Design 3 (M3)
     author: "bergside/awesome-design-skills",
     version: "1.0.0",
     source_url: "https://github.com/bergside/awesome-design-skills/tree/main/skills/dithered",
+    image_url: "https://raw.githubusercontent.com/bergside/awesome-design-skills/main/registry-examples/dithered-marketing.png",
     palette: {
       primary: "#00AA00",
       background: "#1A1A1A",
@@ -620,6 +629,7 @@ You are an expert Retro Computing Interface Designer enforcing the **8-bit & Dit
     author: "bergside/awesome-design-skills",
     version: "1.0.0",
     source_url: "https://github.com/bergside/awesome-design-skills/tree/main/skills/doodle",
+    image_url: "https://raw.githubusercontent.com/bergside/awesome-design-skills/main/registry-examples/doodle-marketing.png",
     palette: {
       primary: "#2563EB",
       background: "#FFFDF0",
@@ -680,6 +690,7 @@ You are an expert Creative Interface Designer enforcing the **Playful Doodle** d
     author: "bergside/awesome-design-skills",
     version: "1.0.0",
     source_url: "https://github.com/bergside/awesome-design-skills/tree/main/skills/skeuomorphic",
+    image_url: "https://raw.githubusercontent.com/bergside/awesome-design-skills/main/registry-examples/skeumorphism-marketing.png",
     palette: {
       primary: "#3B82F6",
       background: "#E5E7EB",
@@ -736,6 +747,7 @@ You are an expert Tactile Interface Designer enforcing the **Modern Skeuomorphis
     author: "bergside/awesome-design-skills",
     version: "1.0.0",
     source_url: "https://github.com/bergside/awesome-design-skills/tree/main/skills/terminal",
+    image_url: "https://raw.githubusercontent.com/bergside/awesome-design-skills/main/registry-examples/matrix-marketing.png",
     palette: {
       primary: "#22C55E",
       background: "#0A0A0A",

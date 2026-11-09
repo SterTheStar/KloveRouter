@@ -64,8 +64,12 @@ export const customSkillsPlugin = (app: Elysia) =>
       }
       return { success: true };
     })
-    .get("/api/custom-skills/designs", async () => {
-      return customSkillsProxy.listDesignSkills();
+    .get("/api/custom-skills/designs", async ({ query }: { query?: { refresh?: string } }) => {
+      const forceRefresh = query?.refresh === "true";
+      return customSkillsProxy.listDesignSkills(forceRefresh);
+    })
+    .post("/api/custom-skills/designs/refresh", async () => {
+      return customSkillsProxy.refreshDesignSkills();
     })
     .get("/api/custom-skills/designs/:slug", async ({ params: { slug }, set }) => {
       const design = await customSkillsProxy.getDesignSkill(slug);

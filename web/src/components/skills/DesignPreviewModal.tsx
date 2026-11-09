@@ -1,12 +1,12 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   RiCloseLine,
   RiFileCopyLine,
   RiCheckLine,
   RiExternalLinkLine,
   RiCheckDoubleLine,
-  RiSparklingLine,
   RiLoader4Line,
+  RiPaletteLine,
 } from "@remixicon/react";
 import {
   Dialog,
@@ -34,7 +34,11 @@ export function DesignPreviewModal({
 }) {
   const [activeTab, setActiveTab] = useState<"showcase" | "skill">("showcase");
   const [copied, setCopied] = useState(false);
-  const [sampleInput, setSampleInput] = useState("Interactive test input");
+  const [imgError, setImgError] = useState(false);
+
+  useEffect(() => {
+    setImgError(false);
+  }, [design?.slug, design?.image_url]);
 
   if (!design) return null;
 
@@ -44,19 +48,9 @@ export function DesignPreviewModal({
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const isNeobrutalism = design.slug === "neobrutalism";
-  const isGlass = design.slug === "glassmorphism";
-  const isCyberpunk = design.slug === "cyberpunk";
-  const isPaper = design.slug === "paper";
-  const isBento = design.slug === "bento";
-  const isTerminal = design.slug === "terminal";
-  const isDithered = design.slug === "dithered";
-  const isDoodle = design.slug === "doodle";
-  const isSkeuomorphic = design.slug === "skeuomorphic";
-
   return (
     <Dialog open={Boolean(design)} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-5xl md:max-w-6xl w-[95vw] max-w-6xl max-md:h-[88vh] md:aspect-[16/9] max-h-[90vh] flex flex-col p-0 gap-0 overflow-hidden">
+      <DialogContent className="sm:max-w-5xl md:max-w-6xl w-[95vw] max-w-6xl h-[88vh] max-h-[92vh] flex flex-col p-0 gap-0 overflow-hidden">
         {/* Header */}
         <DialogHeader className="p-6 border-b border-border bg-card/60 backdrop-blur-sm shrink-0">
           <div className="space-y-1 text-left">
@@ -90,7 +84,7 @@ export function DesignPreviewModal({
                   : "text-tertiary hover:text-foreground hover:bg-muted"
               }`}
             >
-              Live Component Playground
+              Design Tokens &amp; Rules
             </button>
             <button
               type="button"
@@ -107,13 +101,63 @@ export function DesignPreviewModal({
         </DialogHeader>
 
         {/* Dialog Body */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+        <div
+          className={`flex-1 p-6 ${
+            activeTab === "skill"
+              ? "flex flex-col min-h-0 overflow-hidden"
+              : "overflow-y-auto space-y-6"
+          }`}
+        >
           {activeTab === "showcase" ? (
             <div className="space-y-6">
+              {/* Marketing Visual Preview Banner or Themed Placeholder */}
+              {!design.image_url || imgError ? (
+                <div
+                  className="relative aspect-[16/9] w-full max-h-[260px] overflow-hidden rounded-xl border border-border flex flex-col items-center justify-center gap-2 p-6 text-center select-none shadow-xs"
+                  style={{
+                    background: `linear-gradient(135deg, ${design.palette.surface} 0%, ${design.palette.background} 100%)`,
+                  }}
+                >
+                  <div
+                    className="size-12 rounded-full flex items-center justify-center shadow-xs border border-black/10 dark:border-white/10"
+                    style={{ backgroundColor: design.palette.primary, color: "#fff" }}
+                  >
+                    <RiPaletteLine className="size-6" />
+                  </div>
+                  <div className="space-y-1">
+                    <div
+                      className="text-lg font-bold tracking-tight"
+                      style={{
+                        color: design.palette.text,
+                        fontFamily: design.tokens?.fontFamily ? design.tokens.fontFamily.split(",")[0] : undefined,
+                      }}
+                    >
+                      {design.name}
+                    </div>
+                    <div
+                      className="text-xs font-mono opacity-60"
+                      style={{ color: design.palette.text }}
+                    >
+                      {design.aesthetic}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="relative w-full rounded-xl border border-border bg-muted/20 dark:bg-muted/10 overflow-hidden flex items-center justify-center p-2 shadow-xs">
+                  <img
+                    key={design.image_url}
+                    src={design.image_url}
+                    alt={design.name}
+                    className="w-full h-auto max-h-[500px] object-contain rounded-lg"
+                    onError={() => setImgError(true)}
+                  />
+                </div>
+              )}
+
               {/* Color Palette Grid */}
               <div className="space-y-2">
-                <span className="text-xs font-semibold uppercase tracking-wider text-tertiary">
-                  Design Tokens • Color System
+                <span className="text-xs font-semibold text-tertiary">
+                  Design Tokens &amp; Color System
                 </span>
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2.5">
                   {[
@@ -144,191 +188,9 @@ export function DesignPreviewModal({
                 </div>
               </div>
 
-              {/* The Live Interactive Sandbox Preview */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold uppercase tracking-wider text-tertiary">
-                    Live Rendered Components (In-Style)
-                  </span>
-                  <span className="text-[11px] text-tertiary font-mono">
-                    Font: {design.tokens.fontFamily.split(",")[0]}
-                  </span>
-                </div>
-
-                <div
-                  className="p-6 transition-all rounded-xl relative overflow-hidden"
-                  style={{
-                    backgroundColor: design.palette.background,
-                    color: design.palette.text,
-                    fontFamily: design.tokens.fontFamily,
-                  }}
-                >
-                  {/* Glassmorphism ambient gradient orbs */}
-                  {isGlass && (
-                    <>
-                      <div
-                        className="absolute -top-12 -left-12 size-40 blur-2xl opacity-40 pointer-events-none"
-                        style={{ backgroundColor: design.palette.primary }}
-                      />
-                      <div
-                        className="absolute -bottom-12 -right-12 size-48 blur-2xl opacity-40 pointer-events-none"
-                        style={{ backgroundColor: design.palette.accent }}
-                      />
-                    </>
-                  )}
-
-                  <div className="relative z-10 space-y-6 max-w-2xl mx-auto">
-                    {/* Themed Card Component */}
-                    <div
-                      className="p-5 transition-all space-y-4"
-                      style={{
-                        backgroundColor: design.palette.surface,
-                        borderColor: design.palette.border,
-                        borderWidth: isNeobrutalism ? "2.5px" : "1px",
-                        borderStyle: "solid",
-                        borderRadius: isNeobrutalism
-                          ? "4px"
-                          : isBento || isGlass
-                          ? "16px"
-                          : isDoodle
-                          ? "20px 4px 18px 6px"
-                          : isDithered || isTerminal
-                          ? "0px"
-                          : "8px",
-                        boxShadow: isNeobrutalism
-                          ? "4px 4px 0px #000"
-                          : isCyberpunk
-                          ? "0 0 20px rgba(0, 240, 255, 0.2)"
-                          : isTerminal
-                          ? "0 0 12px rgba(34, 197, 94, 0.15)"
-                          : isBento
-                          ? "0 8px 30px rgba(0,0,0,0.4)"
-                          : "0 2px 8px rgba(0,0,0,0.06)",
-                      }}
-                    >
-                      <div className="flex items-center justify-between border-b pb-3" style={{ borderColor: design.palette.border }}>
-                        <div className="space-y-0.5">
-                          <h4
-                            className="font-bold text-sm tracking-tight"
-                            style={{ color: design.palette.text }}
-                          >
-                            {isTerminal ? "> SYSTEM_METRICS.LOG" : "Platform Analytics"}
-                          </h4>
-                          <p className="text-[11px] opacity-75">
-                            Real-time streaming throughput
-                          </p>
-                        </div>
-                        <span
-                          className="px-2 py-0.5 text-[10px] font-mono font-bold uppercase rounded"
-                          style={{
-                            backgroundColor: isNeobrutalism
-                              ? design.palette.accent
-                              : isCyberpunk
-                              ? "rgba(0, 240, 255, 0.15)"
-                              : design.palette.primary,
-                            color: isNeobrutalism ? "#000" : "#FFF",
-                            border: isNeobrutalism ? "1.5px solid #000" : undefined,
-                          }}
-                        >
-                          99.98% OK
-                        </span>
-                      </div>
-
-                      {/* Interactive Form Field */}
-                      <div className="space-y-1.5">
-                        <label className="text-xs font-medium block opacity-85">
-                          {isTerminal ? "$ prompt_input" : "Prompt or Instruction"}
-                        </label>
-                        <input
-                          type="text"
-                          value={sampleInput}
-                          onChange={(e) => setSampleInput(e.target.value)}
-                          className="w-full px-3 py-2 text-xs transition-all focus:outline-none"
-                          style={{
-                            backgroundColor: isTerminal ? "#000" : isGlass ? "rgba(255,255,255,0.05)" : "#FFF",
-                            color: isTerminal ? "#22C55E" : "#000",
-                            borderColor: design.palette.border,
-                            borderWidth: isNeobrutalism ? "2px" : "1px",
-                            borderStyle: "solid",
-                            borderRadius: isNeobrutalism ? "3px" : isTerminal || isDithered ? "0px" : "6px",
-                            boxShadow: isNeobrutalism ? "2px 2px 0px #000" : undefined,
-                          }}
-                        />
-                      </div>
-
-                      {/* Buttons Showcase */}
-                      <div className="pt-2 flex flex-wrap items-center gap-2.5">
-                        {/* Primary Button */}
-                        <button
-                          type="button"
-                          className="px-4 py-2 text-xs font-semibold transition-all cursor-pointer inline-flex items-center gap-1.5"
-                          style={{
-                            backgroundColor: design.palette.primary,
-                            color: isNeobrutalism || isDoodle ? "#000" : "#FFF",
-                            borderRadius: isNeobrutalism
-                              ? "4px"
-                              : isBento || isGlass
-                              ? "10px"
-                              : isDoodle
-                              ? "255px 15px 225px 15px"
-                              : isDithered || isTerminal
-                              ? "0px"
-                              : "6px",
-                            border: isNeobrutalism
-                              ? "2px solid #000"
-                              : isDithered
-                              ? "2px solid #000"
-                              : isTerminal
-                              ? "1px solid #22C55E"
-                              : "none",
-                            boxShadow: isNeobrutalism
-                              ? "3px 3px 0px #000"
-                              : isSkeuomorphic
-                              ? "0 3px 0 #1d4ed8, 0 4px 6px rgba(0,0,0,0.2)"
-                              : isCyberpunk
-                              ? "0 0 12px rgba(0, 240, 255, 0.4)"
-                              : undefined,
-                          }}
-                        >
-                          <RiSparklingLine className="size-3.5" />
-                          <span>{isTerminal ? "[ EXECUTE ]" : isNeobrutalism ? "Submit →" : "Primary Action"}</span>
-                        </button>
-
-                        {/* Secondary Button */}
-                        <button
-                          type="button"
-                          className="px-4 py-2 text-xs font-medium transition-all cursor-pointer"
-                          style={{
-                            backgroundColor: "transparent",
-                            color: isTerminal ? design.palette.primary : design.palette.text,
-                            borderColor: design.palette.border,
-                            borderWidth: "1px",
-                            borderStyle: "solid",
-                            borderRadius: isNeobrutalism ? "4px" : isTerminal || isDithered ? "0px" : "6px",
-                          }}
-                        >
-                          Secondary
-                        </button>
-
-                        {/* Outline / Tag */}
-                        <span
-                          className="text-[11px] font-mono px-2 py-1 rounded"
-                          style={{
-                            backgroundColor: isGlass ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
-                            border: `1px dashed ${design.palette.border}`,
-                          }}
-                        >
-                          radius: {design.tokens.borderRadius}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
               {/* Tokens Table */}
               <div className="space-y-2">
-                <span className="text-xs font-semibold uppercase tracking-wider text-tertiary">
+                <span className="text-xs font-semibold text-tertiary">
                   System Specifications &amp; Rules
                 </span>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -375,10 +237,10 @@ export function DesignPreviewModal({
               </div>
             </div>
           ) : (
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold uppercase tracking-wider text-tertiary">
-                  Raw SKILL.md Agent Instructions
+            <div className="flex-1 flex flex-col min-h-0 space-y-3">
+              <div className="flex items-center justify-between shrink-0">
+                <span className="text-xs font-semibold text-tertiary">
+                  SKILL.md Agent Instructions
                 </span>
                 <Button
                   variant="outline"
@@ -400,8 +262,17 @@ export function DesignPreviewModal({
                 </Button>
               </div>
 
-              <div className="p-4 rounded-lg border border-border bg-card/50 text-xs font-mono leading-relaxed overflow-x-auto max-h-[500px]">
-                <Markdown content={design.content} />
+              <div className="flex-1 min-h-0 p-5 rounded-lg border border-border bg-card/40 text-sm leading-relaxed overflow-y-auto">
+                {design.content ? (
+                  <div className="min-w-0 space-y-3 text-sm leading-relaxed text-foreground">
+                    <Markdown content={design.content} />
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-center h-48 gap-2 text-tertiary">
+                    <RiLoader4Line className="size-4 animate-spin" />
+                    <span>Loading SKILL.md system prompt from repository...</span>
+                  </div>
+                )}
               </div>
             </div>
           )}
