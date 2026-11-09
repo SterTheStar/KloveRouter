@@ -40,41 +40,49 @@ function ProviderSection({
     <section aria-labelledby={`${title.toLowerCase()}-providers-heading`}>
       <button
         type="button"
-        className="mb-3 flex items-center gap-2 rounded-lg text-left outline-none focus-visible:ring-2 focus-visible:ring-border-strong"
+        className="mb-3 flex w-full items-center justify-between gap-2 rounded-lg py-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-border-strong"
         aria-expanded={!collapsed}
         aria-controls={`${title.toLowerCase()}-providers-grid`}
         onClick={() => setCollapsed((value) => !value)}
       >
-        {collapsed ? (
-          <ChevronRight className="size-4 text-tertiary" />
-        ) : (
-          <ChevronDown className="size-4 text-tertiary" />
-        )}
-        <h2
-          id={`${title.toLowerCase()}-providers-heading`}
-          className="font-heading text-base font-semibold tracking-tight text-foreground"
-        >
-          {title}
-        </h2>
-        <span className="text-sm text-tertiary">({count})</span>
-      </button>
-      {!collapsed && (
-        <div
-          id={`${title.toLowerCase()}-providers-grid`}
-          className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3"
-        >
-          {providers.map((provider) => (
-            <ProviderCard
-              key={provider.id}
-              provider={provider}
-              isToggling={togglingProviderId === provider.id}
-              onToggle={onToggle}
-              onEdit={onEdit}
-              onDelete={onDelete}
-            />
-          ))}
+        <div className="flex items-center gap-2">
+          <h2
+            id={`${title.toLowerCase()}-providers-heading`}
+            className="font-heading text-base font-semibold tracking-tight text-foreground"
+          >
+            {title}
+          </h2>
+          <span className="text-sm text-tertiary">({count})</span>
         </div>
-      )}
+        <ChevronDown
+          className={`size-4 text-tertiary transition-transform duration-200 ${
+            collapsed ? "-rotate-90" : "rotate-0"
+          }`}
+        />
+      </button>
+      <div
+        className={`grid transition-all duration-300 ease-in-out ${
+          collapsed ? "grid-rows-[0fr] opacity-0 overflow-hidden" : "grid-rows-[1fr] opacity-150"
+        }`}
+      >
+        <div className="overflow-hidden">
+          <div
+            id={`${title.toLowerCase()}-providers-grid`}
+            className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 pt-1"
+          >
+            {providers.map((provider) => (
+              <ProviderCard
+                key={provider.id}
+                provider={provider}
+                isToggling={togglingProviderId === provider.id}
+                onToggle={onToggle}
+                onEdit={onEdit}
+                onDelete={onDelete}
+              />
+            ))}
+          </div>
+        </div>
+      </div>
     </section>
   );
 }
