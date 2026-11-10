@@ -841,6 +841,7 @@ export const customSkillsProxy = {
 
     return {
       total,
+      catalog_total: catalog.length,
       categories,
       skills,
     };

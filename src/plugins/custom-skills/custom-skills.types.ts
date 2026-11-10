@@ -34,6 +34,7 @@ export interface MarketplaceSkill {
 
 export interface MarketplaceResponse {
   total: number;
+  catalog_total: number;
   categories: string[];
   skills: MarketplaceSkill[];
 }

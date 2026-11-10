@@ -670,6 +670,8 @@ export interface MarketplaceSkill {
 
 export interface MarketplaceResponse {
   total: number;
+  /** Unfiltered catalog size; unaffected by search or category. */
+  catalog_total: number;
   categories: string[];
   skills: MarketplaceSkill[];
 }

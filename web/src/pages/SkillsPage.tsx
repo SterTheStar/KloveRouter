@@ -137,6 +137,7 @@ export default function SkillsPage() {
   const [marketplaceSkills, setMarketplaceSkills] = useState<MarketplaceSkill[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
   const [totalMarketplace, setTotalMarketplace] = useState(0);
+  const [catalogTotal, setCatalogTotal] = useState(0);
   const [marketplaceLoading, setMarketplaceLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [marketplacePage, setMarketplacePage] = useState(1);
@@ -253,6 +254,7 @@ export default function SkillsPage() {
       });
 
       setTotalMarketplace(res.total);
+      setCatalogTotal(res.catalog_total);
       if (res.categories && res.categories.length > 0) {
         setCategories(res.categories);
       }
@@ -266,9 +268,21 @@ export default function SkillsPage() {
     }
   };
 
+  // Preload the unfiltered catalog size and categories so the tab badge is correct before opening it
+  const loadCatalogSummary = async () => {
+    try {
+      const res = await customSkills.listMarketplace({ page: 1, limit: 1 });
+      setCatalogTotal(res.catalog_total);
+      if (res.categories?.length > 0) setCategories(res.categories);
+    } catch {
+      // The count is cosmetic; the marketplace tab reports load errors itself.
+    }
+  };
+
   useEffect(() => {
     loadInstalled();
     loadDesigns();
+    loadCatalogSummary();
   }, []);
 
   // Sync preview design with latest designs state
@@ -623,7 +637,7 @@ export default function SkillsPage() {
             <RiStore2Line className="size-4" />
             <span>Marketplace</span>
             <Badge variant="secondary" className="px-1.5 py-0 text-[10px]">
-              {totalMarketplace > 0 ? totalMarketplace.toLocaleString() : "..."}
+              {catalogTotal > 0 ? catalogTotal.toLocaleString() : "..."}
             </Badge>
           </Button>
 
@@ -873,7 +887,7 @@ export default function SkillsPage() {
               onClick={() => setSelectedCategory("All")}
               className="text-xs rounded-full"
             >
-              All ({totalMarketplace > 0 ? totalMarketplace.toLocaleString() : "..."})
+              All ({catalogTotal > 0 ? catalogTotal.toLocaleString() : "..."})
             </Button>
             {categories.map((cat) => (
               <Button
