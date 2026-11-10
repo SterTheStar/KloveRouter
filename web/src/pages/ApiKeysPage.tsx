@@ -162,7 +162,7 @@ export default function ApiKeysPage() {
   return (
     <div className="w-full space-y-6 p-6">
       <header className="flex items-center justify-between gap-4">
-        <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+        <h1 className="text-2xl font-normal tracking-tight text-foreground">
           API keys
         </h1>
         <Button onClick={() => setCreateOpen(true)}>
@@ -178,7 +178,7 @@ export default function ApiKeysPage() {
       {keys.length === 0 ? (
         <div className="rounded-xl border border-border bg-background/60 px-6 py-10 text-center">
           <KeyRound className="mx-auto size-8 text-tertiary" />
-          <h2 className="mt-3 text-sm font-medium text-foreground">No API keys</h2>
+          <h2 className="mt-3 text-sm font-normal text-foreground">No API keys</h2>
           <p className="mt-1 text-xs text-tertiary">
             Generate a key to use the Saturn proxy.
           </p>
@@ -189,17 +189,17 @@ export default function ApiKeysPage() {
       ) : (
         <Card variant="plain" className="gap-0 overflow-hidden rounded-xl border border-border p-0">
           <CardHeader className="flex flex-row items-center justify-between py-(--card-spacing)">
-            <CardTitle className="text-sm font-medium tracking-tight text-foreground">Active keys ({keys.length})</CardTitle>
+            <CardTitle className="text-sm font-normal tracking-tight text-foreground">Active keys ({keys.length})</CardTitle>
           </CardHeader>
           <Separator />
           <Table>
             <TableHeader>
               <TableRow className="bg-background/60 hover:bg-background/60">
-                <TableHead className="h-9 px-3 py-2 text-xs font-medium text-tertiary">Name</TableHead>
-                <TableHead className="h-9 px-3 py-2 text-xs font-medium text-tertiary">API key</TableHead>
-                <TableHead className="h-9 px-3 py-2 text-xs font-medium text-tertiary">Status</TableHead>
-                <TableHead className="h-9 px-3 py-2 text-xs font-medium text-tertiary">Created</TableHead>
-                <TableHead className="h-9 w-28 px-3 py-2 text-xs font-medium text-tertiary">Actions</TableHead>
+                <TableHead className="h-9 px-3 py-2 text-xs font-normal text-tertiary">Name</TableHead>
+                <TableHead className="h-9 px-3 py-2 text-xs font-normal text-tertiary">API key</TableHead>
+                <TableHead className="h-9 px-3 py-2 text-xs font-normal text-tertiary">Status</TableHead>
+                <TableHead className="h-9 px-3 py-2 text-xs font-normal text-tertiary">Created</TableHead>
+                <TableHead className="h-9 w-28 px-3 py-2 text-xs font-normal text-tertiary">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -207,7 +207,7 @@ export default function ApiKeysPage() {
                 const value = revealed[key.id];
                 return (
                   <TableRow key={key.id}>
-                    <TableCell className="px-3 py-2.5 text-sm font-medium text-foreground">{key.name}</TableCell>
+                    <TableCell className="px-3 py-2.5 text-sm font-normal text-foreground">{key.name}</TableCell>
                     <TableCell className="px-3 py-2.5">
                       <div className="relative max-w-sm">
                         <Input

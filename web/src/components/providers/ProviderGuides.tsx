@@ -38,7 +38,7 @@ export function ConolGuide() {
 
   return (
     <div className="space-y-2 rounded-lg border border-border bg-card p-3 text-xs text-muted-foreground">
-      <div className="flex items-center gap-1.5 font-medium text-foreground">
+      <div className="flex items-center gap-1.5 font-normal text-foreground">
         <RiInformationLine className="size-4 shrink-0 text-muted-foreground" />
         <span>Conol.ai setup instructions</span>
       </div>
@@ -52,7 +52,7 @@ export function ConolGuide() {
         <button
           type="button"
           onClick={handleCopy}
-          className="absolute right-1.5 top-1.5 flex items-center gap-1 rounded border border-border bg-background px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground hover:bg-accent hover:text-foreground"
+          className="absolute right-1.5 top-1.5 flex items-center gap-1 rounded border border-border bg-background px-1.5 py-0.5 text-[10px] font-normal text-muted-foreground hover:bg-accent hover:text-foreground"
         >
           {copied ? <RiCheckLine className="size-3 text-foreground" /> : <RiFileCopyLine className="size-3" />}
           <span>{copied ? "Copied" : "Copy"}</span>
@@ -82,7 +82,7 @@ export function QwenGuide() {
 
   return (
     <div className="space-y-2 rounded-lg border border-border bg-card p-3 text-xs text-muted-foreground">
-      <div className="flex items-center gap-1.5 font-medium text-foreground">
+      <div className="flex items-center gap-1.5 font-normal text-foreground">
         <RiInformationLine className="size-4 shrink-0 text-muted-foreground" />
         <span>Qwen authentication instructions</span>
       </div>
@@ -95,7 +95,7 @@ export function QwenGuide() {
         <button
           type="button"
           onClick={handleCopy}
-          className="absolute right-1.5 top-1.5 flex items-center gap-1 rounded border border-border bg-background px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground hover:bg-accent hover:text-foreground"
+          className="absolute right-1.5 top-1.5 flex items-center gap-1 rounded border border-border bg-background px-1.5 py-0.5 text-[10px] font-normal text-muted-foreground hover:bg-accent hover:text-foreground"
         >
           {copied ? <RiCheckLine className="size-3 text-foreground" /> : <RiFileCopyLine className="size-3" />}
           <span>{copied ? "Copied" : "Copy"}</span>
@@ -122,7 +122,7 @@ export function TermsWarning({
     <div className="flex items-start gap-2.5 rounded-lg border border-amber-500/20 bg-amber-500/10 p-3 text-xs text-amber-800 dark:text-amber-300">
       <RiAlertLine className="size-4 shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" />
       <div className="space-y-1">
-        <p className="font-semibold text-foreground">
+        <p className="font-normal text-foreground">
           Terms of service & ban warning
         </p>
         <p className="leading-relaxed text-[11px] text-muted-foreground">
@@ -142,7 +142,7 @@ export function PerchGuide() {
         detail="Perch explicitly warns that connecting or querying its models outside the official CLI violates their terms of service and risks permanent account suspension or ban. Use strictly at your own discretion."
       />
       <div className="space-y-2 rounded-lg border border-border bg-card p-3 text-xs text-muted-foreground">
-        <div className="flex items-center gap-1.5 font-medium text-foreground">
+        <div className="flex items-center gap-1.5 font-normal text-foreground">
           <RiInformationLine className="size-4 shrink-0 text-muted-foreground" />
           <span>Perch AI session instructions</span>
         </div>
@@ -164,7 +164,7 @@ export function DeepAIGuide() {
         detail="Authenticating via OAuth or calling DeepAI Code models through unauthorized third-party routers violates DeepAI's terms of service and can result in your account being flagged and permanently banned. Proceed only if you understand and accept this risk."
       />
       <div className="space-y-1.5 rounded-lg border border-border bg-card p-3 text-xs text-muted-foreground">
-        <div className="flex items-center gap-1.5 font-medium text-foreground">
+        <div className="flex items-center gap-1.5 font-normal text-foreground">
           <RiInformationLine className="size-4 shrink-0 text-muted-foreground" />
           <span>DeepAI OAuth authorization</span>
         </div>
@@ -179,7 +179,7 @@ export function DeepAIGuide() {
 export function ChatGptCookiesGuide() {
   return (
     <div className="space-y-1.5 rounded-lg border border-border bg-card p-3 text-xs text-muted-foreground">
-      <div className="flex items-center gap-1.5 font-medium text-foreground">
+      <div className="flex items-center gap-1.5 font-normal text-foreground">
         <RiInformationLine className="size-4 shrink-0 text-muted-foreground" />
         <span>Netscape cookies.txt format</span>
       </div>
@@ -200,7 +200,7 @@ export function OAuthInfoGuide({ protocol }: { protocol: "codex" | "antigravity"
 
   return (
     <div className="space-y-1.5 rounded-lg border border-border bg-card p-3 text-xs text-muted-foreground">
-      <div className="flex items-center gap-1.5 font-medium text-foreground">
+      <div className="flex items-center gap-1.5 font-normal text-foreground">
         <RiInformationLine className="size-4 shrink-0 text-muted-foreground" />
         <span>OAuth 2.0 authentication</span>
       </div>

@@ -44,7 +44,7 @@ function UsageWindow({
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-3 text-sm">
         <span className="text-foreground">{title}</span>
-        <span className="font-medium text-foreground tabular-nums">{used.toFixed(0)}% used</span>
+        <span className="font-normal text-foreground tabular-nums">{used.toFixed(0)}% used</span>
       </div>
       <div className="h-2 overflow-hidden rounded-full bg-overlay">
         <div
@@ -77,7 +77,7 @@ function DeepAIUsageSummary({ usage }: { usage: any | null }) {
       <div className="space-y-2">
         <div className="flex items-center justify-between gap-3 text-sm">
           <span className="text-foreground">Theos allowance</span>
-          <span className="font-medium text-foreground tabular-nums">
+          <span className="font-normal text-foreground tabular-nums">
             {hasAllowance ? `${usageNumber(balance)} / ${usageNumber(granted)} remaining` : "Allowance unavailable"}
           </span>
         </div>
@@ -99,10 +99,10 @@ function DeepAIUsageSummary({ usage }: { usage: any | null }) {
       </div>
       {usage.summary && (
         <div className="flex flex-wrap items-center gap-2 text-xs text-tertiary">
-          <span className="font-medium text-foreground">Plan:</span>
+          <span className="font-normal text-foreground">Plan:</span>
           <span>{usage.summary.plan ?? "unknown"}</span>
           {usage.summary.is_pro === true && (
-            <span className="rounded-full bg-accent px-2 py-0.5 text-[10px] font-medium text-foreground">Pro</span>
+            <span className="rounded-full bg-accent px-2 py-0.5 text-[10px] font-normal text-foreground">Pro</span>
           )}
           {usage.allowance_checked_at && <span>· Checked {usageDate(usage.allowance_checked_at)}</span>}
         </div>
@@ -124,7 +124,7 @@ function FreebuffUsageSummary({ usage }: { usage: any }) {
       <div className="space-y-2">
         <div className="flex items-center justify-between gap-3 text-sm">
           <span className="text-foreground">Shared Freebuff account limit</span>
-          <span className="font-medium text-foreground tabular-nums">{hasRateLimit ? `${Math.max(0, remaining).toFixed(1)} remaining` : "Quota data pending"}</span>
+          <span className="font-normal text-foreground tabular-nums">{hasRateLimit ? `${Math.max(0, remaining).toFixed(1)} remaining` : "Quota data pending"}</span>
         </div>
         <div className="h-2 overflow-hidden rounded-full bg-overlay">
           <div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${used}%` }} />
@@ -186,7 +186,7 @@ function PerchRollingLimit({
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-3 text-sm">
         <span>{label}</span>
-        <span className="font-medium">
+        <span className="font-normal">
           {used !== null && cap !== null
             ? `${usageUsd(used)} / ${usageUsd(cap)}`
             : "—"}
@@ -234,7 +234,7 @@ function PerchUsageSummary({ usage }: { usage: PerchUsage | null }) {
         {windows.map(({ label, value }) => (
           <div key={label} className="rounded-lg border bg-muted/30 p-3">
             <div className="text-xs text-muted-foreground">{label}</div>
-            <div className="mt-1 text-lg font-semibold">
+            <div className="mt-1 text-lg font-normal">
               {usageNumber(value.tokens)}{" "}
               <span className="text-xs font-normal text-muted-foreground">
                 tokens
@@ -314,7 +314,7 @@ function AntigravityQuotaBucketBar({
     return (
       <div className="space-y-1">
         <div className="flex items-center justify-between text-xs">
-          <span className="font-medium text-foreground">{windowTitle(bucket)}</span>
+          <span className="font-normal text-foreground">{windowTitle(bucket)}</span>
           <span className="text-tertiary">Not available on plan</span>
         </div>
       </div>
@@ -323,8 +323,8 @@ function AntigravityQuotaBucketBar({
     return (
       <div className="space-y-1">
         <div className="flex items-center justify-between text-xs">
-          <span className="font-medium text-foreground">{windowTitle(bucket)}</span>
-          <span className="text-emerald-500 font-medium">Unlimited</span>
+          <span className="font-normal text-foreground">{windowTitle(bucket)}</span>
+          <span className="text-emerald-500 font-normal">Unlimited</span>
         </div>
       </div>
     );
@@ -332,7 +332,7 @@ function AntigravityQuotaBucketBar({
     return (
       <div className="space-y-1">
         <div className="flex items-center justify-between text-xs">
-          <span className="font-medium text-foreground">{windowTitle(bucket)}</span>
+          <span className="font-normal text-foreground">{windowTitle(bucket)}</span>
           <span className="text-tertiary">
             {bucket.remaining_amount !== null
               ? `${usageNumber(bucket.remaining_amount)} left`
@@ -359,8 +359,8 @@ function AntigravityQuotaBucketBar({
   return (
     <div className="space-y-1.5">
       <div className="flex items-center justify-between gap-2 text-xs">
-        <span className="font-medium text-foreground">{windowTitle(bucket)}</span>
-        <span className="font-semibold text-foreground tabular-nums">
+        <span className="font-normal text-foreground">{windowTitle(bucket)}</span>
+        <span className="font-normal text-foreground tabular-nums">
           {remaining.toFixed(2)}% left
         </span>
       </div>
@@ -388,7 +388,7 @@ function AntigravityQuotaSummary({ usage }: { usage: AntigravityUsage }) {
     <div className="space-y-3.5">
       {groups.length === 0 && usage.models.length > 0 && (
         <div className="space-y-2">
-          <div className="text-xs font-semibold uppercase tracking-wider text-tertiary">
+          <div className="text-xs font-normal uppercase tracking-wider text-tertiary">
             Models Quota
           </div>
           <div className="space-y-1.5">
@@ -397,7 +397,7 @@ function AntigravityQuotaSummary({ usage }: { usage: AntigravityUsage }) {
                 key={model.model_id}
                 className="flex items-center justify-between text-xs py-1 border-b border-border/30 last:border-0"
               >
-                <span className="font-medium text-foreground">
+                <span className="font-normal text-foreground">
                   {model.display_name || model.model_id}
                 </span>
                 <span className="text-tertiary tabular-nums">
@@ -439,7 +439,7 @@ function AntigravityQuotaSummary({ usage }: { usage: AntigravityUsage }) {
           >
             <div className="space-y-0.5">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-foreground">
+                <span className="text-xs font-normal text-foreground">
                   {group.group_name}
                 </span>
                 {!group.available && (
@@ -476,7 +476,7 @@ function AntigravityQuotaSummary({ usage }: { usage: AntigravityUsage }) {
                   className="text-[11px] text-tertiary leading-normal line-clamp-2 hover:line-clamp-none transition-all cursor-pointer"
                   title="Click to expand/collapse models"
                 >
-                  <span className="font-medium text-foreground/80">Models: </span>
+                  <span className="font-normal text-foreground/80">Models: </span>
                   {modelNames.join(", ")}
                 </div>
               </div>
@@ -487,7 +487,7 @@ function AntigravityQuotaSummary({ usage }: { usage: AntigravityUsage }) {
       <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-border/40 text-[11px] text-tertiary">
         <div className="flex items-center gap-1.5">
           {usage.plan && (
-            <span className="inline-flex items-center rounded-md bg-overlay px-2 py-0.5 font-medium text-foreground/90">
+            <span className="inline-flex items-center rounded-md bg-overlay px-2 py-0.5 font-normal text-foreground/90">
               Plan: {usage.plan}
             </span>
           )}
@@ -886,7 +886,7 @@ export default function UsageLimitsPage() {
     <div className="w-full space-y-6 p-6">
       <div className="flex items-center justify-between gap-4">
         <div>
-          <h1 className="font-heading text-2xl font-semibold tracking-tight text-foreground">
+          <h1 className="font-heading text-2xl font-normal tracking-tight text-foreground">
             Usage limits
           </h1>
           <p className="mt-1 text-sm text-tertiary">

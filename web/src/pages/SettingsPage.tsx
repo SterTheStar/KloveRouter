@@ -273,7 +273,7 @@ export default function SettingsPage({
 
   return (
     <div className="w-full space-y-6 p-6">
-      <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+      <h1 className="text-2xl font-normal tracking-tight text-foreground">
         Settings
       </h1>
       <Tabs tabs={tabs} active={activeTab} onChange={setActiveTab} />
@@ -324,7 +324,7 @@ export default function SettingsPage({
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div>
-                    <div className="text-sm font-medium text-foreground">Dark mode</div>
+                    <div className="text-sm font-normal text-foreground">Dark mode</div>
                     <div className="text-xs text-tertiary">
                       {darkMode
                         ? "Dark theme is enabled"
@@ -417,7 +417,7 @@ export default function SettingsPage({
               <div className="flex items-center gap-3">
                 <RobotLine className="size-7 text-tertiary" />
                 <div>
-                  <div className="text-sm font-medium text-foreground">
+                  <div className="text-sm font-normal text-foreground">
                     {rtkStatus?.enabled ? "Enabled" : "Disabled"}
                   </div>
                   <div className="text-xs text-tertiary">
@@ -492,7 +492,7 @@ export default function SettingsPage({
           <CardContent className="space-y-4">
             <div className="flex items-center justify-between">
               <div>
-                <div className="text-sm font-medium text-foreground">
+                <div className="text-sm font-normal text-foreground">
                   {cavemanStatus?.enabled ? "Enabled" : "Disabled"}
                 </div>
                 <div className="text-xs text-tertiary">

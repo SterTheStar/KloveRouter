@@ -78,7 +78,7 @@ export default function ModelListPane({
                     sources={firstModel?.provider_avatar_sources}
                     className="size-4 shrink-0 text-[7px]"
                   />
-                  <span className="min-w-0 flex-1 truncate text-xs font-medium text-tertiary">
+                  <span className="min-w-0 flex-1 truncate text-xs font-normal text-tertiary">
                     {group.name}
                   </span>
                   <span className="text-[11px] tabular-nums text-tertiary">{group.models.length}</span>

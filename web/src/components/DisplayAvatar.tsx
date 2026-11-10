@@ -58,7 +58,7 @@ export default function DisplayAvatar({ name, src, sources, className, fallback 
   return (
     <span
       className={cn(
-        "flex shrink-0 items-center justify-center rounded-lg border border-border bg-surface text-sm font-semibold text-foreground uppercase select-none",
+        "flex shrink-0 items-center justify-center rounded-lg border border-border bg-surface text-sm font-normal text-foreground uppercase select-none",
         className,
       )}
     >

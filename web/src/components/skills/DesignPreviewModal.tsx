@@ -55,7 +55,7 @@ export function DesignPreviewModal({
         <DialogHeader className="p-6 border-b border-border bg-card/60 backdrop-blur-sm shrink-0">
           <div className="space-y-1 text-left">
             <div className="flex items-center gap-2">
-              <DialogTitle className="text-xl font-bold flex items-center gap-2">
+              <DialogTitle className="text-xl font-normal flex items-center gap-2">
                 <span>{design.name}</span>
               </DialogTitle>
               <Badge variant="outline" className="text-xs font-normal">
@@ -78,7 +78,7 @@ export function DesignPreviewModal({
             <button
               type="button"
               onClick={() => setActiveTab("showcase")}
-              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+              className={`px-3 py-1.5 text-xs font-normal rounded-md transition-colors ${
                 activeTab === "showcase"
                   ? "bg-primary text-primary-foreground shadow-xs"
                   : "text-tertiary hover:text-foreground hover:bg-muted"
@@ -89,7 +89,7 @@ export function DesignPreviewModal({
             <button
               type="button"
               onClick={() => setActiveTab("skill")}
-              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+              className={`px-3 py-1.5 text-xs font-normal rounded-md transition-colors ${
                 activeTab === "skill"
                   ? "bg-primary text-primary-foreground shadow-xs"
                   : "text-tertiary hover:text-foreground hover:bg-muted"
@@ -126,7 +126,7 @@ export function DesignPreviewModal({
                   </div>
                   <div className="space-y-1">
                     <div
-                      className="text-lg font-bold tracking-tight"
+                      className="text-lg font-normal tracking-tight"
                       style={{
                         color: design.palette.text,
                         fontFamily: design.tokens?.fontFamily ? design.tokens.fontFamily.split(",")[0] : undefined,
@@ -156,7 +156,7 @@ export function DesignPreviewModal({
 
               {/* Color Palette Grid */}
               <div className="space-y-2">
-                <span className="text-xs font-semibold text-tertiary">
+                <span className="text-xs font-normal text-tertiary">
                   Design Tokens &amp; Color System
                 </span>
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2.5">
@@ -173,14 +173,14 @@ export function DesignPreviewModal({
                       className="p-2.5 rounded-lg border border-border bg-card/40 flex flex-col justify-between space-y-2"
                     >
                       <div className="flex items-center justify-between">
-                        <span className="text-[11px] font-medium text-foreground">{color.label}</span>
+                        <span className="text-[11px] font-normal text-foreground">{color.label}</span>
                         <div
                           className="size-4 rounded-xs border border-black/10 dark:border-white/10 shadow-xs"
                           style={{ backgroundColor: color.hex }}
                         />
                       </div>
                       <div>
-                        <div className="text-xs font-mono font-bold">{color.hex}</div>
+                        <div className="text-xs font-mono font-normal">{color.hex}</div>
                         <div className="text-[10px] text-tertiary">{color.desc}</div>
                       </div>
                     </div>
@@ -190,13 +190,13 @@ export function DesignPreviewModal({
 
               {/* Tokens Table */}
               <div className="space-y-2">
-                <span className="text-xs font-semibold text-tertiary">
+                <span className="text-xs font-normal text-tertiary">
                   System Specifications &amp; Rules
                 </span>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {/* Tokens */}
                   <div className="p-4 rounded-lg border border-border bg-card/40 space-y-2 text-xs">
-                    <span className="font-semibold text-foreground">Design Tokens</span>
+                    <span className="font-normal text-foreground">Design Tokens</span>
                     <div className="divide-y divide-border text-tertiary">
                       <div className="py-1.5 flex justify-between">
                         <span>Font Stack:</span>
@@ -223,7 +223,7 @@ export function DesignPreviewModal({
 
                   {/* Rules Checklist */}
                   <div className="p-4 rounded-lg border border-border bg-card/40 space-y-2 text-xs">
-                    <span className="font-semibold text-foreground">Core Rules for AI Agent</span>
+                    <span className="font-normal text-foreground">Core Rules for AI Agent</span>
                     <ul className="space-y-1.5 text-tertiary list-none">
                       {design.rules.map((rule, idx) => (
                         <li key={idx} className="flex items-start gap-1.5">
@@ -239,7 +239,7 @@ export function DesignPreviewModal({
           ) : (
             <div className="flex-1 flex flex-col min-h-0 space-y-3">
               <div className="flex items-center justify-between shrink-0">
-                <span className="text-xs font-semibold text-tertiary">
+                <span className="text-xs font-normal text-tertiary">
                   SKILL.md Agent Instructions
                 </span>
                 <Button

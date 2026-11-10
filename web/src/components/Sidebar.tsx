@@ -88,7 +88,7 @@ export default function Sidebar({
           <Button
             key={page}
             variant={currentPage === page ? "secondary" : "ghost"}
-            className="h-10 w-full justify-start gap-3 rounded-lg px-3 text-sm font-medium"
+            className="h-10 w-full justify-start gap-3 rounded-lg px-3 text-sm font-normal"
             render={<a href={pathForPage(page)} />}
             onClick={(event) => {
               if (!shouldHandleLinkClick(event)) return;
@@ -99,7 +99,7 @@ export default function Sidebar({
             <Icon className="size-5 shrink-0" />
             <span className="truncate">{label}</span>
             {badge && (
-              <span className="ml-auto rounded-md bg-foreground/10 px-1.5 py-0.5 font-mono text-[10px] font-medium uppercase tracking-wider text-muted-foreground transition-colors group-hover/button:text-foreground">
+              <span className="ml-auto rounded-md bg-foreground/10 px-1.5 py-0.5 font-mono text-[10px] font-normal uppercase tracking-wider text-muted-foreground transition-colors group-hover/button:text-foreground">
                 {badge}
               </span>
             )}
@@ -120,7 +120,7 @@ export default function Sidebar({
               fallback="user"
               className="size-8 rounded-full object-cover"
             />
-            <span className="truncate text-sm font-medium text-foreground">{profile.name}</span>
+            <span className="truncate text-sm font-normal text-foreground">{profile.name}</span>
           </button>
           <Button
             type="button"

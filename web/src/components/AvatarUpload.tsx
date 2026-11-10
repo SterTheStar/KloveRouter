@@ -72,7 +72,7 @@ export default function AvatarUpload({
       </div>
       <div className="min-w-0 flex-1 space-y-2">
         <div>
-          <div className="text-sm font-medium text-foreground">{label}</div>
+          <div className="text-sm font-normal text-foreground">{label}</div>
           <p className="mt-0.5 text-xs text-tertiary">
             {value ? "Custom image" : hasDetected ? "Using detected provider icon" : "Choose an image or use the provider initials"}
             <span className="block">PNG, JPEG, WebP, GIF, SVG or ICO · up to 25 MB</span>

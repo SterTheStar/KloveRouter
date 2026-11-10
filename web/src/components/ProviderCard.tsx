@@ -46,7 +46,7 @@ export default function ProviderCard({
           <div className="flex items-center gap-3">
             <ProviderIcon name={provider.name} src={provider.avatar} sources={provider.avatar_sources} className="size-12" />
             <div>
-              <div className="font-medium text-foreground">{provider.name}</div>
+              <div className="font-normal text-foreground">{provider.name}</div>
               <Badge variant={provider.is_active ? "secondary" : "outline"}>
                 {provider.is_active ? "Enabled" : "Disabled"}
               </Badge>

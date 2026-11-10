@@ -47,7 +47,7 @@ function ProviderSection({
       >
         <h2
           id={`${title.toLowerCase()}-providers-heading`}
-          className="font-heading text-base font-semibold tracking-tight text-foreground"
+          className="font-heading text-base font-normal tracking-tight text-foreground"
         >
           {title}
         </h2>
@@ -148,7 +148,7 @@ export default function DashboardPage({
   return (
     <div className="w-full space-y-6 p-6">
       <div className="flex items-center justify-between gap-4">
-        <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+        <h1 className="text-2xl font-normal tracking-tight text-foreground">
           Providers
         </h1>
         <Button onClick={() => setAddOpen(true)}>
@@ -163,7 +163,7 @@ export default function DashboardPage({
       )}
       {list.length === 0 ? (
         <div className="rounded-xl border border-dashed border-border bg-background/60 px-6 py-10 text-center">
-          <h2 className="text-sm font-medium text-foreground">No providers yet</h2>
+          <h2 className="text-sm font-normal text-foreground">No providers yet</h2>
           <p className="mt-1 text-xs text-tertiary">
             Connect your first provider to start routing requests.
           </p>

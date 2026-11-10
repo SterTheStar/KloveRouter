@@ -107,7 +107,7 @@ function StatusBadge({ log }: { log: RequestLog }) {
       : "text-success";
   const label = pending && log.streaming ? "streaming" : log.status;
   return (
-    <span className={`inline-flex items-center gap-1 text-xs font-medium ${tone}`}>
+    <span className={`inline-flex items-center gap-1 text-xs font-normal ${tone}`}>
       <Icon className={`size-3.5 ${pending ? "animate-spin" : ""}`} />
       <span className="capitalize">{label}</span>
       {log.status_code ? <span className="font-mono text-tertiary">{log.status_code}</span> : null}
@@ -182,7 +182,7 @@ const LogRow = memo(function LogRow({
           {log.streaming && !log.request_kind ? <span className="text-[10px] text-tertiary">· stream</span> : null}
           {log.guardrails_status === "blocked" && (
             <span
-              className="inline-flex items-center gap-1 rounded-md bg-destructive/15 px-1.5 py-0.5 text-[10px] font-semibold text-destructive shadow-xs"
+              className="inline-flex items-center gap-1 rounded-md bg-destructive/15 px-1.5 py-0.5 text-[10px] font-normal text-destructive shadow-xs"
               title="Blocked by Guardrails AI Firewall"
             >
               <ShieldCrossIcon className="size-2.5 shrink-0" />
@@ -191,7 +191,7 @@ const LogRow = memo(function LogRow({
           )}
           {log.guardrails_status === "redacted" && (
             <span
-              className="inline-flex items-center gap-1 rounded-md bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-amber-600 dark:text-amber-400 shadow-xs"
+              className="inline-flex items-center gap-1 rounded-md bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-normal text-amber-600 dark:text-amber-400 shadow-xs"
               title="Sensitive secrets / PII redacted by Guardrails"
             >
               <ShieldIcon className="size-2.5 shrink-0" />
@@ -200,7 +200,7 @@ const LogRow = memo(function LogRow({
           )}
           {log.guardrails_status === "audited" && (
             <span
-              className="inline-flex items-center gap-1 rounded-md bg-sky-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-sky-600 dark:text-sky-400 shadow-xs"
+              className="inline-flex items-center gap-1 rounded-md bg-sky-500/15 px-1.5 py-0.5 text-[10px] font-normal text-sky-600 dark:text-sky-400 shadow-xs"
               title="Security violation audited by Guardrails"
             >
               <ShieldIcon className="size-2.5 shrink-0" />
@@ -218,7 +218,7 @@ const LogRow = memo(function LogRow({
       <td className="px-3 py-2.5">
         <div className="flex items-center gap-1.5">
           <ProviderIcon className="size-3.5 shrink-0 text-tertiary" />
-          <span className="truncate font-medium text-foreground">{log.provider_name}</span>
+          <span className="truncate font-normal text-foreground">{log.provider_name}</span>
         </div>
         <div className="mt-1 flex items-center gap-1">
           <span className="max-w-[220px] truncate font-mono text-xs text-tertiary" title={log.model_name}>
@@ -605,7 +605,7 @@ export default function RequestLogsPage() {
     <div className="w-full space-y-6 p-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+          <h1 className="text-2xl font-normal tracking-tight text-foreground">
             Request logs
           </h1>
           <p className="mt-1 text-sm text-tertiary">
@@ -642,7 +642,7 @@ export default function RequestLogsPage() {
       <Card className="gap-0 overflow-hidden rounded-xl border border-border p-0 shadow-none ring-0">
         <CardHeader className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-card/60 px-4 py-3">
           <div className="flex items-center gap-2.5">
-            <CardTitle className="text-sm font-semibold tracking-tight text-foreground">
+            <CardTitle className="text-sm font-normal tracking-tight text-foreground">
               All requests
             </CardTitle>
             <span className="inline-flex items-center rounded-full bg-muted/80 px-2 py-0.5 font-mono text-xs font-normal text-tertiary border border-border/50">
@@ -684,7 +684,7 @@ export default function RequestLogsPage() {
                   <Button
                     variant="outline"
                     className={`h-9 min-w-32 justify-between gap-2.5 bg-background transition-colors ${
-                      status ? "border-border-strong bg-accent/40 font-medium" : ""
+                      status ? "border-border-strong bg-accent/40 font-normal" : ""
                     }`}
                   />
                 }
@@ -698,7 +698,7 @@ export default function RequestLogsPage() {
                   ) : status === "error" ? (
                     <>
                       <ErrorIcon className="size-3.5 shrink-0 text-destructive" />
-                      <span className="text-destructive font-medium">Error</span>
+                      <span className="text-destructive font-normal">Error</span>
                     </>
                   ) : status === "pending" ? (
                     <>
@@ -729,7 +729,7 @@ export default function RequestLogsPage() {
                       className="flex items-center gap-2 cursor-pointer"
                     >
                       <Icon className={`size-4 shrink-0 ${iconColor} ${value === "pending" ? "animate-spin" : ""}`} />
-                      <span className={status === value ? "font-medium text-foreground" : ""}>
+                      <span className={status === value ? "font-normal text-foreground" : ""}>
                         {label as string}
                       </span>
                     </DropdownMenuItem>
@@ -745,7 +745,7 @@ export default function RequestLogsPage() {
                   <Button
                     variant="outline"
                     className={`h-9 min-w-36 justify-between gap-2 bg-background transition-colors ${
-                      guardrailsFilter ? "border-border-strong bg-accent/40 font-medium" : ""
+                      guardrailsFilter ? "border-border-strong bg-accent/40 font-normal" : ""
                     }`}
                   />
                 }
@@ -754,22 +754,22 @@ export default function RequestLogsPage() {
                   {guardrailsFilter === "violations" ? (
                     <>
                       <ShieldAlertIcon className="size-3.5 shrink-0 text-destructive" />
-                      <span className="text-destructive font-medium">Violations</span>
+                      <span className="text-destructive font-normal">Violations</span>
                     </>
                   ) : guardrailsFilter === "blocked" ? (
                     <>
                       <ShieldCrossIcon className="size-3.5 shrink-0 text-destructive" />
-                      <span className="text-destructive font-medium">Blocked</span>
+                      <span className="text-destructive font-normal">Blocked</span>
                     </>
                   ) : guardrailsFilter === "redacted" ? (
                     <>
                       <ShieldIcon className="size-3.5 shrink-0 text-amber-500" />
-                      <span className="text-amber-600 dark:text-amber-400 font-medium">Redacted</span>
+                      <span className="text-amber-600 dark:text-amber-400 font-normal">Redacted</span>
                     </>
                   ) : guardrailsFilter === "audited" ? (
                     <>
                       <ShieldIcon className="size-3.5 shrink-0 text-sky-500" />
-                      <span className="text-sky-600 dark:text-sky-400 font-medium">Audited</span>
+                      <span className="text-sky-600 dark:text-sky-400 font-normal">Audited</span>
                     </>
                   ) : (
                     <>
@@ -796,7 +796,7 @@ export default function RequestLogsPage() {
                       className="flex items-center gap-2 cursor-pointer"
                     >
                       <Icon className={`size-4 shrink-0 ${iconColor}`} />
-                      <span className={guardrailsFilter === value ? "font-medium text-foreground" : ""}>
+                      <span className={guardrailsFilter === value ? "font-normal text-foreground" : ""}>
                         {label as string}
                       </span>
                     </DropdownMenuItem>
@@ -842,7 +842,7 @@ export default function RequestLogsPage() {
             <div className="overflow-x-auto">
               <table className="w-full min-w-[1100px] text-sm">
                 <thead ref={scrollAnchor}>
-                  <tr className="border-b border-border bg-background/60 text-left text-xs font-medium text-tertiary">
+                  <tr className="border-b border-border bg-background/60 text-left text-xs font-normal text-tertiary">
                     <th className="h-9 px-3 py-2.5">Request</th>
                     <th className="h-9 px-3 py-2.5">Provider / model</th>
                     <th className="h-9 px-3 py-2.5">Requester</th>

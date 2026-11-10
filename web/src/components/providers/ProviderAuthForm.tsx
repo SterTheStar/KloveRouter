@@ -345,12 +345,12 @@ export function ProviderAuthForm({
         {pendingOAuth && (
           <div className="space-y-2 rounded-lg border border-border bg-card p-3 text-xs">
             <div className="flex items-center justify-between gap-2">
-              <span className="font-medium text-foreground">OAuth Manual Callback</span>
+              <span className="font-normal text-foreground">OAuth Manual Callback</span>
               <a
                 href={pendingOAuth.authUrl}
                 target="_blank"
                 rel="noreferrer"
-                className="text-xs font-medium text-foreground underline underline-offset-4"
+                className="text-xs font-normal text-foreground underline underline-offset-4"
               >
                 Open auth page
               </a>

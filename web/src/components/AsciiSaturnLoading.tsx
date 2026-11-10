@@ -196,7 +196,7 @@ export default function AsciiSaturnLoading({
         </pre>
 
         <div className="mt-8 flex flex-col items-center gap-1.5 font-mono text-xs text-muted-foreground">
-          <span className="font-mono text-xs font-medium tracking-wide text-foreground">
+          <span className="font-mono text-xs font-normal tracking-wide text-foreground">
             {status}
           </span>
           <span className="text-[11px] text-tertiary">Connecting gateway services</span>

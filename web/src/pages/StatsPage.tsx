@@ -114,7 +114,7 @@ function ChartTooltipContent({
   return (
     <div className="rounded-lg border border-border bg-popover px-3 py-2 text-xs text-popover-foreground shadow-[0px_4px_16px_0px_rgba(0,0,0,0.05)]">
       {label !== undefined && (
-        <div className="mb-1.5 border-b border-border pb-1 font-medium">
+        <div className="mb-1.5 border-b border-border pb-1 font-normal">
           {typeof label === "string" && /^\d{4}-\d{2}-\d{2}$/.test(label)
             ? formatDate(label)
             : label}
@@ -138,7 +138,7 @@ function ChartTooltipContent({
                 )}
                 {item.name ?? key}
               </span>
-              <span className="font-mono font-medium tabular-nums">
+              <span className="font-mono font-normal tabular-nums">
                 {typeof item.value === "number"
                   ? format
                     ? format(item.value)
@@ -211,7 +211,7 @@ function DonutLegend({
               {item.name}
             </span>
             <span className="font-mono tabular-nums">{format(item.value)}</span>
-            <span className="w-11 text-right font-medium tabular-nums">
+            <span className="w-11 text-right font-normal tabular-nums">
               {share.toFixed(0)}%
             </span>
           </li>
@@ -272,10 +272,10 @@ function DonutChart({
           </PieChart>
         </ResponsiveContainer>
         <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center">
-          <span className="text-xs font-medium text-tertiary">
+          <span className="text-xs font-normal text-tertiary">
             {centerLabel}
           </span>
-          <span className="font-heading text-xl font-semibold tracking-tight tabular-nums text-foreground">
+          <span className="font-heading text-xl font-normal tracking-tight tabular-nums text-foreground">
             {format(total)}
           </span>
         </div>
@@ -299,7 +299,7 @@ function StatCard({ icon: Icon, title, value, sub }: StatCardData) {
         <Icon className="size-9 shrink-0 text-tertiary" />
         <div className="min-w-0">
           <div className="truncate text-xs text-tertiary">{title}</div>
-          <div className="mt-0.5 font-heading text-2xl font-semibold tracking-tight tabular-nums text-foreground">
+          <div className="mt-0.5 font-heading text-2xl font-normal tracking-tight tabular-nums text-foreground">
             {value}
           </div>
           {sub && (
@@ -333,13 +333,13 @@ function TokenBreakdownTooltip({
         {children}
       </TooltipTrigger>
       <TooltipContent side="top" className="flex-col items-stretch gap-1 py-2">
-        <div className="text-xs font-medium text-tertiary">
+        <div className="text-xs font-normal text-tertiary">
           Token breakdown
         </div>
         {rows.map(({ label, value }) => (
           <div key={label} className="flex items-center justify-between gap-6">
             <span className="text-muted-foreground">{label}</span>
-            <span className="font-mono font-medium tabular-nums">
+            <span className="font-mono font-normal tabular-nums">
               {formatNumber(value)}
             </span>
           </div>
@@ -388,7 +388,7 @@ function SortTh({
         type="button"
         onClick={() => onSort(k)}
         className={cn(
-          "flex w-full items-center gap-1 text-xs font-medium text-tertiary transition-colors hover:text-foreground",
+          "flex w-full items-center gap-1 text-xs font-normal text-tertiary transition-colors hover:text-foreground",
           align === "right" ? "justify-end" : "justify-start",
           active && "text-foreground",
         )}
@@ -577,7 +577,7 @@ export default function StatsPage() {
     <div className="w-full space-y-6 p-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="font-heading text-2xl font-semibold tracking-tight text-foreground">
+          <h1 className="font-heading text-2xl font-normal tracking-tight text-foreground">
             {activeTab === "status" ? "Provider status" : "Usage statistics"}
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -593,7 +593,7 @@ export default function StatsPage() {
                 key={label}
                 onClick={() => setDays(value)}
                 className={cn(
-                  "h-7 rounded-md px-2.5 text-xs font-medium transition-colors",
+                  "h-7 rounded-md px-2.5 text-xs font-normal transition-colors",
                   days === value
                     ? "bg-card text-foreground"
                     : "text-tertiary hover:text-foreground",
@@ -643,7 +643,7 @@ export default function StatsPage() {
           {overview.total_requests === 0 ? (
             <div className="rounded-xl border border-dashed border-border bg-background/60 px-6 py-10 text-center">
               <ChartLine className="mx-auto size-8 text-tertiary" />
-              <h2 className="mt-3 font-heading text-sm font-medium text-foreground">
+              <h2 className="mt-3 font-heading text-sm font-normal text-foreground">
                 No usage data yet
               </h2>
               <p className="mt-1 text-xs text-tertiary">
@@ -1001,7 +1001,7 @@ export default function StatsPage() {
                             >
                               {formatNumber(m.tokens_cache_read)}
                             </td>
-                            <td className="px-3 py-2.5 text-right font-medium tabular-nums">
+                            <td className="px-3 py-2.5 text-right font-normal tabular-nums">
                               {formatCost(m.estimated_cost_usd)}
                             </td>
                             <td className="px-3 py-2.5 text-right tabular-nums">
@@ -1014,7 +1014,7 @@ export default function StatsPage() {
                         ))}
                       </tbody>
                       <tfoot>
-                        <tr className="border-t border-border bg-background/60 text-xs font-medium">
+                        <tr className="border-t border-border bg-background/60 text-xs font-normal">
                           <td className="px-3 py-2.5" colSpan={2}>
                             Total · {byModel.length} models
                           </td>

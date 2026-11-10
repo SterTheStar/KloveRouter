@@ -131,7 +131,7 @@ export function HtmlPreview({
         <div className="flex h-10 items-center gap-0.5 px-1.5">
           <button
             type="button"
-            className={`flex h-7 items-center gap-1 rounded-lg px-2 text-xs transition-colors hover:bg-accent hover:text-foreground ${terminalOpen ? "bg-overlay/70 font-medium text-foreground" : "text-tertiary"}`}
+            className={`flex h-7 items-center gap-1 rounded-lg px-2 text-xs transition-colors hover:bg-accent hover:text-foreground ${terminalOpen ? "bg-overlay/70 font-normal text-foreground" : "text-tertiary"}`}
             onClick={() => setTerminalOpen((open) => !open)}
             aria-expanded={terminalOpen}
             aria-controls="html-preview-terminal"

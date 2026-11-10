@@ -89,7 +89,7 @@ export function IntegrationBadge({
 
   if (size === "sm") {
     return (
-      <span className="inline-flex items-center gap-1 rounded-md bg-muted px-1.5 py-0.5 text-[9px] font-medium text-muted-foreground select-none">
+      <span className="inline-flex items-center gap-1 rounded-md bg-muted px-1.5 py-0.5 text-[9px] font-normal text-muted-foreground select-none">
         <Icon className="size-2.5" />
         <span>{info.label}</span>
       </span>
@@ -97,7 +97,7 @@ export function IntegrationBadge({
   }
 
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-md bg-muted px-2 py-0.5 text-[10px] font-medium text-foreground select-none">
+    <span className="inline-flex items-center gap-1.5 rounded-md bg-muted px-2 py-0.5 text-[10px] font-normal text-foreground select-none">
       <Icon className="size-3 text-muted-foreground" />
       <span>{info.label}</span>
     </span>

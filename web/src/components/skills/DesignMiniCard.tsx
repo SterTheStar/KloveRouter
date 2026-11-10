@@ -22,7 +22,7 @@ export function DesignMiniCard({ design }: { design: DesignSkill }) {
             aria-label={`${item.name}: ${item.color}`}
           />
           <TooltipContent side="top" className="text-[11px] py-1 px-2 space-y-0.5">
-            <div className="font-semibold text-foreground">{item.name}</div>
+            <div className="font-normal text-foreground">{item.name}</div>
             <div className="font-mono text-tertiary text-[10px]">{item.color}</div>
           </TooltipContent>
         </Tooltip>

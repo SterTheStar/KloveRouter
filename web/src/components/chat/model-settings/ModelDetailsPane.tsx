@@ -21,7 +21,7 @@ function DetailRow({ label, value, title }: { label: string; value: string; titl
   return (
     <div className="flex h-7 items-center justify-between gap-3 text-xs">
       <span className="shrink-0 text-tertiary">{label}</span>
-      <span className="min-w-0 truncate font-medium text-foreground" title={title ?? value}>{value}</span>
+      <span className="min-w-0 truncate font-normal text-foreground" title={title ?? value}>{value}</span>
     </div>
   );
 }
@@ -47,7 +47,7 @@ export default function ModelDetailsPane({ model, efforts, selectedEffort, onSel
             />
           )}
           <div className="min-w-0">
-            <h3 className="truncate text-sm font-medium text-foreground">
+            <h3 className="truncate text-sm font-normal text-foreground">
               {model?.display_name || (model ? modelDisplayId(model) : "No model selected")}
             </h3>
             <p className="mt-0.5 truncate text-xs text-tertiary">
@@ -76,7 +76,7 @@ export default function ModelDetailsPane({ model, efforts, selectedEffort, onSel
       <div className="flex min-h-0 flex-1 flex-col px-1.5 pb-3">
         <div className="flex shrink-0 items-center justify-between gap-3 px-2.5 pt-3 pb-2">
           <div>
-            <h3 className="text-xs font-medium text-tertiary">Reasoning effort</h3>
+            <h3 className="text-xs font-normal text-tertiary">Reasoning effort</h3>
             <p className="mt-0.5 text-xs text-tertiary/80">Thinking depth</p>
           </div>
           {efforts.length > 0 && (

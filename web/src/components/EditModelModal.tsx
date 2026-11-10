@@ -177,7 +177,7 @@ export default function EditModelModal({
           {activeTab === "general" && (
             <div className="space-y-5 py-1">
               <div>
-                <div className="text-sm font-medium">Model identity</div>
+                <div className="text-sm font-normal">Model identity</div>
                 <p className="mt-1 text-xs text-muted-foreground">
                   Upstream identifier and friendly name shown in Saturn.
                 </p>
@@ -232,7 +232,7 @@ export default function EditModelModal({
             <div className="space-y-4">
               <div className="flex items-start justify-between gap-6 border-b pb-3">
                 <div className="min-w-0 space-y-1">
-                  <div className="text-sm font-medium">Use LiteLLM catalog pricing</div>
+                  <div className="text-sm font-normal">Use LiteLLM catalog pricing</div>
                   <p className="text-xs text-muted-foreground">Use public catalog rates when available. Custom pricing tiers take precedence.</p>
                 </div>
                 <Switch
@@ -263,7 +263,7 @@ export default function EditModelModal({
               )}
               {useLiteLLMPricing && model.catalog_pricing && (model.pricing_source !== "custom" || customPricingWillBeReplaced) && (
                 <div className="rounded-lg border border-border/70 bg-muted/20 px-3 py-2 text-sm">
-                  <span className="font-medium">Catalog rate: </span>
+                  <span className="font-normal">Catalog rate: </span>
                   <span className="text-muted-foreground">{catalogPriceDescription(model.catalog_pricing)}</span>
                 </div>
               )}

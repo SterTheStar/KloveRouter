@@ -94,12 +94,12 @@ export function ProviderListColumn({
 
               <div className="min-w-0 flex-1">
                 <div className="flex items-center justify-between gap-1">
-                  <span className="truncate text-xs font-medium text-foreground">
+                  <span className="truncate text-xs font-normal text-foreground">
                     {type.name}
                   </span>
                   <div className="flex items-center gap-1 shrink-0">
                     {isUnavailable && (
-                      <span className="inline-flex items-center gap-0.5 rounded-md bg-destructive/10 px-1.5 py-0.5 text-[9px] font-medium text-destructive">
+                      <span className="inline-flex items-center gap-0.5 rounded-md bg-destructive/10 px-1.5 py-0.5 text-[9px] font-normal text-destructive">
                         <RiCloseCircleLine className="size-2.5" />
                         <span>Unavailable</span>
                       </span>

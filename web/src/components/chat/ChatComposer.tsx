@@ -89,7 +89,7 @@ export default function ChatComposer({
                   {attachment.kind === "image" && attachment.preview ? (
                     <img src={attachment.preview} alt={`Preview: ${attachment.name}`} className="size-8 rounded-md object-cover" />
                   ) : attachment.kind === "audio" ? <AudioLine className="ml-1 size-4 shrink-0 text-tertiary" /> : attachment.kind === "video" ? <VideoLine className="ml-1 size-4 shrink-0 text-tertiary" /> : attachment.kind === "file" ? <PdfLine className="ml-1 size-4 shrink-0 text-tertiary" /> : <FileTextLine className="ml-1 size-4 shrink-0 text-tertiary" />}
-                  <span className="max-w-40 truncate font-medium">{attachment.name}</span>
+                  <span className="max-w-40 truncate font-normal">{attachment.name}</span>
                   <button
                     type="button"
                     className="inline-flex size-5 shrink-0 items-center justify-center rounded-full text-tertiary transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"

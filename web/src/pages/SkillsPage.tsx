@@ -94,7 +94,7 @@ function DesignCardThumbnail({ design }: { design: DesignSkill }) {
         </div>
         <div className="space-y-0.5 max-w-[90%]">
           <div
-            className="text-xs font-bold truncate leading-tight"
+            className="text-xs font-normal truncate leading-tight"
             style={{ color: design.palette.text, fontFamily: design.tokens?.fontFamily ? design.tokens.fontFamily.split(",")[0] : undefined }}
           >
             {design.name}
@@ -583,7 +583,7 @@ export default function SkillsPage() {
         <div className="space-y-1">
           <div className="flex items-center gap-2">
             <RiSparklingLine className="size-6 text-primary" />
-            <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+            <h1 className="text-2xl font-normal tracking-tight text-foreground">
               Skills &amp; Prompts
             </h1>
           </div>
@@ -743,7 +743,7 @@ export default function SkillsPage() {
                   <RiSparklingLine className="size-6 text-tertiary" />
                 </div>
                 <div className="space-y-1">
-                  <h3 className="text-base font-medium text-foreground">
+                  <h3 className="text-base font-normal text-foreground">
                     {installedSearch ? "No matching skills found" : "No installed skills"}
                   </h3>
                   <p className="text-xs text-tertiary max-w-sm mx-auto">
@@ -812,7 +812,7 @@ export default function SkillsPage() {
                     </div>
 
                     <div className="space-y-1">
-                      <CardTitle className="text-sm font-semibold line-clamp-1">{skill.name}</CardTitle>
+                      <CardTitle className="text-sm font-normal line-clamp-1">{skill.name}</CardTitle>
                       <p className="text-xs text-tertiary line-clamp-3 leading-relaxed">
                         {skill.description ||
                           (skill.content ? skill.content.split("\n")[0] : "No description provided.")}
@@ -896,7 +896,7 @@ export default function SkillsPage() {
           ) : marketplaceSkills.length === 0 ? (
             <Card className="py-12 text-center border-dashed">
               <CardContent className="space-y-2">
-                <p className="text-sm font-medium text-foreground">No marketplace skills found</p>
+                <p className="text-sm font-normal text-foreground">No marketplace skills found</p>
                 <p className="text-xs text-tertiary">
                   Try clearing your search query or choosing another category.
                 </p>
@@ -922,7 +922,7 @@ export default function SkillsPage() {
                             </span>
                           )}
                           {item.is_installed && (
-                            <Badge variant="secondary" className="text-[10px] py-0 px-1.5 gap-1 font-medium">
+                            <Badge variant="secondary" className="text-[10px] py-0 px-1.5 gap-1 font-normal">
                               <RiCheckLine className="size-3 text-primary" />
                               Installed
                             </Badge>
@@ -931,7 +931,7 @@ export default function SkillsPage() {
                       </div>
 
                       <div className="space-y-1">
-                        <CardTitle className="text-sm font-semibold line-clamp-1">{item.name}</CardTitle>
+                        <CardTitle className="text-sm font-normal line-clamp-1">{item.name}</CardTitle>
                         <p className="text-xs text-tertiary line-clamp-3 leading-relaxed">
                           {item.description || "No description provided."}
                         </p>
@@ -1049,7 +1049,7 @@ export default function SkillsPage() {
                   <RiPaletteLine className="size-6 text-tertiary" />
                 </div>
                 <div className="space-y-1">
-                  <h3 className="text-base font-medium text-foreground">No matching design systems</h3>
+                  <h3 className="text-base font-normal text-foreground">No matching design systems</h3>
                   <p className="text-xs text-tertiary">Try clearing your search or switching aesthetic filter.</p>
                 </div>
                 <Button
@@ -1096,7 +1096,7 @@ export default function SkillsPage() {
                           </Badge>
 
                           {isActive && (
-                            <Badge variant="default" className="text-[10px] py-0 px-1.5 font-medium">
+                            <Badge variant="default" className="text-[10px] py-0 px-1.5 font-normal">
                               Active
                             </Badge>
                           )}
@@ -1107,7 +1107,7 @@ export default function SkillsPage() {
                       </div>
 
                       <div className="space-y-1">
-                        <CardTitle className="text-base font-bold flex items-center justify-between">
+                        <CardTitle className="text-base font-normal flex items-center justify-between">
                           <span>{design.name}</span>
                         </CardTitle>
                         <p className="text-xs text-tertiary line-clamp-2 leading-relaxed">
@@ -1121,7 +1121,7 @@ export default function SkillsPage() {
                         variant="outline"
                         size="xs"
                         onClick={() => handleOpenDesignPreview(design)}
-                        className="gap-1.5 text-xs font-medium border-border/80 hover:bg-muted hover:text-foreground shadow-2xs"
+                        className="gap-1.5 text-xs font-normal border-border/80 hover:bg-muted hover:text-foreground shadow-2xs"
                       >
                         <RiEyeLine className="size-3.5 text-tertiary" />
                         Preview &amp; Prompt
@@ -1166,7 +1166,7 @@ export default function SkillsPage() {
             <>
               <DialogHeader className="px-6 py-4 border-b border-border bg-card/40 shrink-0 space-y-2 text-left pr-12">
                 <div className="flex flex-wrap items-center gap-2">
-                  <DialogTitle className="text-xl font-semibold text-foreground">
+                  <DialogTitle className="text-xl font-normal text-foreground">
                     {viewSkill.name}
                   </DialogTitle>
                   {viewSkill.category && (
@@ -1186,7 +1186,7 @@ export default function SkillsPage() {
                     </Badge>
                   )}
                   {viewSkill.is_installed && (
-                    <Badge variant="secondary" className="text-xs gap-1 font-medium">
+                    <Badge variant="secondary" className="text-xs gap-1 font-normal">
                       <RiCheckLine className="size-3 text-primary" />
                       {viewSkill.is_active ? "Installed (Active)" : "Installed (Inactive)"}
                     </Badge>
@@ -1201,7 +1201,7 @@ export default function SkillsPage() {
 
                 <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-tertiary pt-1">
                   <div className="flex items-center gap-4">
-                    {viewSkill.author && <span>Author: <strong>{viewSkill.author}</strong></span>}
+                    {viewSkill.author && <span>Author: <strong className="font-normal">{viewSkill.author}</strong></span>}
                     {viewSkill.slug && <span className="font-mono text-[11px]">slug: {viewSkill.slug}</span>}
                     {viewSkill.source_url && (
                       <a
@@ -1320,7 +1320,7 @@ export default function SkillsPage() {
         <DialogContent className="sm:max-w-5xl md:max-w-6xl w-[95vw] max-w-6xl max-md:h-[88vh] md:aspect-[16/9] max-h-[90vh] flex flex-col p-0 overflow-hidden gap-0">
           <DialogHeader className="px-6 py-4 border-b border-border bg-card/40 shrink-0 space-y-1 text-left pr-12">
             <div className="flex flex-wrap items-center gap-2">
-              <DialogTitle className="text-lg font-semibold text-foreground flex items-center gap-2">
+              <DialogTitle className="text-lg font-normal text-foreground flex items-center gap-2">
                 <RiSparklingLine className="size-5 text-primary" />
                 {editingId ? "Edit custom skill" : "Create custom skill"}
               </DialogTitle>
@@ -1340,7 +1340,7 @@ export default function SkillsPage() {
               {/* Skill Name */}
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
-                  <Label htmlFor="skill-name" className="text-xs font-medium">
+                  <Label htmlFor="skill-name" className="text-xs font-normal">
                     Skill Name <span className="text-destructive">*</span>
                   </Label>
                   <span className="text-[10px] text-tertiary">Required</span>
@@ -1356,7 +1356,7 @@ export default function SkillsPage() {
 
               {/* Category with quick chips */}
               <div className="space-y-2">
-                <Label htmlFor="skill-category" className="text-xs font-medium">
+                <Label htmlFor="skill-category" className="text-xs font-normal">
                   Category
                 </Label>
                 <Input
@@ -1388,7 +1388,7 @@ export default function SkillsPage() {
 
               {/* Short Description */}
               <div className="space-y-1.5">
-                <Label htmlFor="skill-desc" className="text-xs font-medium">
+                <Label htmlFor="skill-desc" className="text-xs font-normal">
                   Short Description <span className="text-[10px] text-tertiary font-normal">(optional)</span>
                 </Label>
                 <Textarea
@@ -1403,7 +1403,7 @@ export default function SkillsPage() {
 
               {/* Best practices guidance card */}
               <div className="rounded-lg border border-border/80 bg-card/60 p-3.5 space-y-2 text-xs">
-                <div className="flex items-center gap-1.5 font-medium text-foreground text-xs">
+                <div className="flex items-center gap-1.5 font-normal text-foreground text-xs">
                   <RiInformationLine className="size-4 text-primary shrink-0" />
                   <span>Skill Prompt Guidelines</span>
                 </div>
@@ -1420,7 +1420,7 @@ export default function SkillsPage() {
               {/* Tab Header & Stats Toolbar */}
               <div className="flex items-center justify-between px-4 py-2.5 border-b border-border bg-card/40 shrink-0">
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-medium text-foreground">
+                  <span className="text-xs font-normal text-foreground">
                     Prompt Instructions <span className="text-destructive">*</span>
                   </span>
                   <div className="flex items-center gap-1.5 text-[11px] font-mono text-tertiary">
@@ -1437,7 +1437,7 @@ export default function SkillsPage() {
                   <button
                     type="button"
                     onClick={() => setEditTab("write")}
-                    className={`flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${
+                    className={`flex items-center gap-1 px-2.5 py-1 text-xs font-normal rounded-md transition-colors ${
                       editTab === "write"
                         ? "bg-background text-foreground shadow-sm"
                         : "text-tertiary hover:text-foreground"
@@ -1449,7 +1449,7 @@ export default function SkillsPage() {
                   <button
                     type="button"
                     onClick={() => setEditTab("preview")}
-                    className={`flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${
+                    className={`flex items-center gap-1 px-2.5 py-1 text-xs font-normal rounded-md transition-colors ${
                       editTab === "preview"
                         ? "bg-background text-foreground shadow-sm"
                         : "text-tertiary hover:text-foreground"
@@ -1479,7 +1479,7 @@ export default function SkillsPage() {
                     ) : (
                       <div className="flex flex-col items-center justify-center h-full text-center p-8 space-y-2">
                         <RiSparklingLine className="size-8 text-tertiary/60" />
-                        <p className="text-xs font-medium text-foreground">No instructions written yet</p>
+                        <p className="text-xs font-normal text-foreground">No instructions written yet</p>
                         <p className="text-[11px] text-tertiary max-w-sm">
                           Switch back to the <strong className="text-foreground">Write</strong> tab to enter your Markdown prompt guidelines.
                         </p>

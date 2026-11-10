@@ -202,32 +202,32 @@ function RoleBadge({ role }: { role: string }) {
   switch (norm) {
     case "system":
       return (
-        <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wider bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20">
+        <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-normal uppercase tracking-wider bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20">
           <SystemIcon className="size-3" /> System
         </span>
       );
     case "user":
       return (
-        <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wider bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
+        <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-normal uppercase tracking-wider bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
           <UserIcon className="size-3" /> User
         </span>
       );
     case "assistant":
       return (
-        <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wider bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+        <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-normal uppercase tracking-wider bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
           <BotIcon className="size-3" /> Assistant
         </span>
       );
     case "tool":
     case "function":
       return (
-        <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wider bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+        <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-normal uppercase tracking-wider bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
           <ToolIcon className="size-3" /> {role}
         </span>
       );
     default:
       return (
-        <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wider bg-muted text-muted-foreground border border-border">
+        <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-normal uppercase tracking-wider bg-muted text-muted-foreground border border-border">
           {role}
         </span>
       );
@@ -261,7 +261,7 @@ function ChatMessageCard({
             <button
               type="button"
               onClick={() => setExpanded(!expanded)}
-              className="text-[11px] font-medium text-primary hover:underline flex items-center gap-0.5 pt-0.5"
+              className="text-[11px] font-normal text-primary hover:underline flex items-center gap-0.5 pt-0.5"
             >
               {expanded ? (
                 <>
@@ -295,7 +295,7 @@ function ChatMessageCard({
             if (block.type === "image_url") {
               return (
                 <div key={bIdx} className="text-xs text-tertiary">
-                  <span className="font-semibold text-foreground">[Image Attachment]</span>
+                  <span className="font-normal text-foreground">[Image Attachment]</span>
                   <div className="mt-1 font-mono text-[11px] truncate max-w-sm text-tertiary">
                     {block.image_url?.url || JSON.stringify(block)}
                   </div>
@@ -319,7 +319,7 @@ function ChatMessageCard({
       if (message.tool_calls) {
         return (
           <div className="space-y-1.5 font-mono text-xs">
-            <span className="text-[11px] font-medium text-amber-500 uppercase tracking-wide">
+            <span className="text-[11px] font-normal text-amber-500 uppercase tracking-wide">
               Tool Calls:
             </span>
             <pre className="p-2 rounded bg-muted/50 text-[11px] overflow-x-auto text-foreground">
@@ -401,11 +401,11 @@ function GuardrailsSection({ detail }: { detail: RequestLogDetails }) {
               }`}
             />
           )}
-          <span className="font-semibold text-xs text-foreground">
+          <span className="font-normal text-xs text-foreground">
             AI Firewall & Guardrails
           </span>
           <span
-            className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${
+            className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-normal uppercase tracking-wider ${
               isBlocked
                 ? "bg-destructive text-destructive-foreground"
                 : isRedacted
@@ -432,7 +432,7 @@ function GuardrailsSection({ detail }: { detail: RequestLogDetails }) {
 
       {violations.length > 0 && (
         <div className="space-y-1.5 pt-1.5 border-t border-border/40">
-          <p className="text-[11px] font-semibold text-foreground">
+          <p className="text-[11px] font-normal text-foreground">
             Violations ({violations.length}):
           </p>
           <div className="space-y-1">
@@ -442,7 +442,7 @@ function GuardrailsSection({ detail }: { detail: RequestLogDetails }) {
                 className="rounded border border-border/60 bg-card/80 p-2 text-xs flex flex-col gap-1"
               >
                 <div className="flex items-center justify-between">
-                  <span className="font-medium text-foreground text-[11px]">{v.description}</span>
+                  <span className="font-normal text-foreground text-[11px]">{v.description}</span>
                   <span className="font-mono text-[9px] uppercase px-1 rounded bg-muted text-muted-foreground">
                     {v.category}
                   </span>
@@ -540,7 +540,7 @@ export function RequestLogDetailsModal({
         <DialogHeader className="p-4 md:px-6 md:py-3.5 border-b border-border bg-card/60 backdrop-blur-xs shrink-0 space-y-2">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2">
-              <DialogTitle className="text-base font-semibold text-foreground tracking-tight">
+              <DialogTitle className="text-base font-normal text-foreground tracking-tight">
                 Request log details
               </DialogTitle>
               {activeLog && (
@@ -562,7 +562,7 @@ export function RequestLogDetailsModal({
               {/* Status Badge */}
               <Badge
                 variant={isError ? "destructive" : isPending ? "secondary" : "default"}
-                className={`gap-1 font-medium capitalize ${
+                className={`gap-1 font-normal capitalize ${
                   !isError && !isPending
                     ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
                     : ""
@@ -577,12 +577,12 @@ export function RequestLogDetailsModal({
                 )}
                 <span>{activeLog.status}</span>
                 {activeLog.status_code && (
-                  <span className="font-mono font-bold">({activeLog.status_code})</span>
+                  <span className="font-mono font-normal">({activeLog.status_code})</span>
                 )}
               </Badge>
 
               {/* Provider / Model */}
-              <div className="inline-flex items-center gap-1.5 rounded-md bg-muted px-2 py-1 text-foreground font-medium">
+              <div className="inline-flex items-center gap-1.5 rounded-md bg-muted px-2 py-1 text-foreground font-normal">
                 <ProviderIcon className="size-3.5 text-muted-foreground" />
                 <span>
                   {activeLog.provider_name} /{" "}
@@ -673,7 +673,7 @@ export function RequestLogDetailsModal({
               {/* Column Header */}
               <div className="h-11 px-4 border-b border-border bg-card flex items-center justify-between shrink-0">
                 <div className="flex items-center gap-2">
-                  <span className="font-semibold text-xs text-foreground uppercase tracking-wider">
+                  <span className="font-normal text-xs text-foreground uppercase tracking-wider">
                     Request
                   </span>
                   {parsedRequest?.method && (
@@ -694,7 +694,7 @@ export function RequestLogDetailsModal({
                       <button
                         type="button"
                         onClick={() => setRequestTab("formatted")}
-                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium transition-colors ${
+                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-normal transition-colors ${
                           requestTab === "formatted"
                             ? "bg-background text-foreground shadow-2xs"
                             : "text-muted-foreground hover:text-foreground"
@@ -706,7 +706,7 @@ export function RequestLogDetailsModal({
                       <button
                         type="button"
                         onClick={() => setRequestTab("raw")}
-                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium transition-colors ${
+                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-normal transition-colors ${
                           requestTab === "raw"
                             ? "bg-background text-foreground shadow-2xs"
                             : "text-muted-foreground hover:text-foreground"
@@ -737,7 +737,7 @@ export function RequestLogDetailsModal({
                       <button
                         type="button"
                         onClick={() => setShowHeaders(!showHeaders)}
-                        className="w-full px-3 py-2 text-xs font-medium text-foreground flex items-center justify-between hover:bg-muted/50 transition-colors"
+                        className="w-full px-3 py-2 text-xs font-normal text-foreground flex items-center justify-between hover:bg-muted/50 transition-colors"
                       >
                         <span className="flex items-center gap-1.5">
                           {showHeaders ? (
@@ -774,7 +774,7 @@ export function RequestLogDetailsModal({
                       {/* Request Parameters Card */}
                       {Object.keys(parsedRequest.params).length > 0 && (
                         <div className="rounded-lg border border-border/70 bg-card p-3 space-y-2.5">
-                          <span className="text-xs font-semibold text-foreground uppercase tracking-wider">
+                          <span className="text-xs font-normal text-foreground uppercase tracking-wider">
                             Parameters
                           </span>
                           <div className="flex flex-wrap gap-1.5">
@@ -801,7 +801,7 @@ export function RequestLogDetailsModal({
                                   title={rawStr}
                                 >
                                   <span className="text-muted-foreground shrink-0">{paramKey}:</span>
-                                  <span className="text-foreground font-medium truncate max-w-[260px] sm:max-w-xs md:max-w-sm">
+                                  <span className="text-foreground font-normal truncate max-w-[260px] sm:max-w-xs md:max-w-sm">
                                     {displayVal}
                                   </span>
                                 </div>
@@ -816,7 +816,7 @@ export function RequestLogDetailsModal({
                                 <button
                                   type="button"
                                   onClick={() => setShowTools((prev) => !prev)}
-                                  className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors cursor-pointer select-none"
+                                  className="flex items-center gap-1.5 text-xs font-normal text-muted-foreground hover:text-foreground transition-colors cursor-pointer select-none"
                                 >
                                   {showTools ? (
                                     <ChevronDown className="size-3.5 text-tertiary" />
@@ -873,7 +873,7 @@ export function RequestLogDetailsModal({
               {/* Column Header */}
               <div className="h-11 px-4 border-b border-border bg-card flex items-center justify-between shrink-0">
                 <div className="flex items-center gap-2">
-                  <span className="font-semibold text-xs text-foreground uppercase tracking-wider">
+                  <span className="font-normal text-xs text-foreground uppercase tracking-wider">
                     {isError ? "Error & Diagnostic" : "Response"}
                   </span>
                   {activeLog?.status_code && (
@@ -892,7 +892,7 @@ export function RequestLogDetailsModal({
                       <button
                         type="button"
                         onClick={() => setResponseTab("parsed")}
-                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium transition-colors ${
+                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-normal transition-colors ${
                           responseTab === "parsed"
                             ? "bg-background text-foreground shadow-2xs"
                             : "text-muted-foreground hover:text-foreground"
@@ -904,7 +904,7 @@ export function RequestLogDetailsModal({
                       <button
                         type="button"
                         onClick={() => setResponseTab("raw")}
-                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium transition-colors ${
+                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-normal transition-colors ${
                           responseTab === "raw"
                             ? "bg-background text-foreground shadow-2xs"
                             : "text-muted-foreground hover:text-foreground"
@@ -951,13 +951,13 @@ export function RequestLogDetailsModal({
                             <ErrorIcon className="size-5 text-destructive shrink-0 mt-0.5" />
                             <div>
                               <div className="flex items-center gap-2">
-                                <h4 className="font-semibold text-sm text-destructive">
+                                <h4 className="font-normal text-sm text-destructive">
                                   {detail.status_code
                                     ? `HTTP ${detail.status_code} Error`
                                     : "Request Execution Failed"}
                                 </h4>
                                 {cleanError?.code && (
-                                  <span className="font-mono text-[10px] uppercase px-1.5 py-0.5 rounded bg-destructive/15 text-destructive font-medium">
+                                  <span className="font-mono text-[10px] uppercase px-1.5 py-0.5 rounded bg-destructive/15 text-destructive font-normal">
                                     {cleanError.code}
                                   </span>
                                 )}
@@ -1005,7 +1005,7 @@ export function RequestLogDetailsModal({
                         <button
                           type="button"
                           onClick={() => setShowTechnicalError(!showTechnicalError)}
-                          className="w-full px-3 py-2 text-xs font-medium text-foreground flex items-center justify-between hover:bg-muted/50 transition-colors"
+                          className="w-full px-3 py-2 text-xs font-normal text-foreground flex items-center justify-between hover:bg-muted/50 transition-colors"
                         >
                           <span className="flex items-center gap-1.5">
                             <BugIcon className="size-3.5 text-muted-foreground" />
@@ -1021,7 +1021,7 @@ export function RequestLogDetailsModal({
                           <div className="border-t border-border p-3 space-y-3 bg-muted/20">
                             {cleanError?.rawStack && (
                               <div className="space-y-1">
-                                <span className="text-[11px] font-semibold text-muted-foreground uppercase">
+                                <span className="text-[11px] font-normal text-muted-foreground uppercase">
                                   Stack Trace
                                 </span>
                                 <pre className="font-mono text-[11px] text-muted-foreground bg-muted p-2.5 rounded overflow-auto whitespace-pre-wrap max-h-48">
@@ -1031,7 +1031,7 @@ export function RequestLogDetailsModal({
                             )}
                             {detail.error_details && (
                               <div className="space-y-1">
-                                <span className="text-[11px] font-semibold text-muted-foreground uppercase">
+                                <span className="text-[11px] font-normal text-muted-foreground uppercase">
                                   Raw Error Details
                                 </span>
                                 <pre className="font-mono text-[11px] text-foreground bg-muted p-2.5 rounded overflow-auto whitespace-pre-wrap max-h-48">
@@ -1041,7 +1041,7 @@ export function RequestLogDetailsModal({
                             )}
                             {detail.response_details && (
                               <div className="space-y-1">
-                                <span className="text-[11px] font-semibold text-muted-foreground uppercase">
+                                <span className="text-[11px] font-normal text-muted-foreground uppercase">
                                   Response Details
                                 </span>
                                 <pre className="font-mono text-[11px] text-foreground bg-muted p-2.5 rounded overflow-auto whitespace-pre-wrap max-h-48">
@@ -1090,7 +1090,7 @@ export function RequestLogDetailsModal({
                     <div className="rounded-xl border border-blue-500/30 bg-blue-500/5 p-6 flex flex-col items-center justify-center text-center space-y-3">
                       <PendingIcon className="size-8 text-blue-500 animate-spin" />
                       <div>
-                        <h4 className="font-semibold text-sm text-foreground">
+                        <h4 className="font-normal text-sm text-foreground">
                           {detail.streaming ? "Streaming in progress..." : "Processing request..."}
                         </h4>
                         <p className="text-xs text-muted-foreground mt-1">

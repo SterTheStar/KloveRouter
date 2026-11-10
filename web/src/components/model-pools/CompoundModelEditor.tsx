@@ -173,7 +173,7 @@ export function CompoundModelEditor({ draft, models, pools, saving, onDraftChang
                 </Field>
                 <Field id="pool-slug" label="Public ID" error={errors.slug} hint={isEditing ? "Changing it breaks clients using the old ID." : "Used in API requests."}>
                   <div className="flex h-9 items-center rounded-lg border border-border bg-background transition-colors hover:border-border-strong focus-within:border-border-strong focus-within:bg-card focus-within:ring-2 focus-within:ring-border-strong">
-                    <span className="select-none px-3 text-sm font-medium text-tertiary">pool/</span>
+                    <span className="select-none px-3 text-sm font-normal text-tertiary">pool/</span>
                     <input id="pool-slug" value={draft.slug} maxLength={80} placeholder="reliable-coding" aria-invalid={Boolean(errors.slug)}
                       onChange={(event) => update({ slug: slugify(event.target.value) })}
                       className="h-full min-w-0 flex-1 bg-transparent px-3 font-mono text-sm text-foreground outline-none placeholder:text-placeholder aria-invalid:text-destructive" />
@@ -201,7 +201,7 @@ export function CompoundModelEditor({ draft, models, pools, saving, onDraftChang
                     <PopoverPrimitive.Popup className="w-[min(34rem,calc(100vw-3rem))] overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground shadow-[0px_4px_16px_0px_rgba(0,0,0,0.05)]">
                       <div className="space-y-3 border-b border-border p-3">
                         <div>
-                          <p className="text-sm font-medium text-foreground">Add member models</p>
+                          <p className="text-sm font-normal text-foreground">Add member models</p>
                           <p className="mt-0.5 text-xs text-tertiary">Search the catalog and select models to add.</p>
                         </div>
                         <div className="flex flex-col gap-2 sm:flex-row">
@@ -223,7 +223,7 @@ export function CompoundModelEditor({ draft, models, pools, saving, onDraftChang
                             className={`flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left outline-none transition-colors focus-visible:ring-2 focus-visible:ring-border-strong ${off ? "bg-accent/60 hover:bg-accent" : "hover:bg-accent"}`}>
                             <ProviderIcon name={model.provider_name} src={model.provider_avatar} sources={model.provider_avatar_sources} className="size-6 shrink-0" />
                             <span className="min-w-0 flex-1">
-                              <span className="block truncate text-sm font-medium text-foreground">{modelLabel(model)}</span>
+                              <span className="block truncate text-sm font-normal text-foreground">{modelLabel(model)}</span>
                               <span className="block truncate text-xs text-tertiary">{model.provider_name} · {model.pretty_id || model.model_id}</span>
                             </span>
                             {off && <span className="shrink-0 text-xs text-tertiary">Disabled</span>}
@@ -237,7 +237,7 @@ export function CompoundModelEditor({ draft, models, pools, saving, onDraftChang
               </PopoverPrimitive.Root>}>
               {draft.members.length === 0 ? (
                 <div className="rounded-xl border border-border bg-background/60 px-4 py-10 text-center">
-                  <p className="text-sm font-medium text-foreground">No members yet</p>
+                  <p className="text-sm font-normal text-foreground">No members yet</p>
                   <p className="mt-1 text-xs text-tertiary">Add at least two models from the list below.</p>
                 </div>
               ) : (
@@ -249,7 +249,7 @@ export function CompoundModelEditor({ draft, models, pools, saving, onDraftChang
                       <span className="w-5 shrink-0 text-center font-mono text-xs tabular-nums text-tertiary">{index + 1}</span>
                       <ProviderIcon name={model.provider_name} src={model.provider_avatar} sources={model.provider_avatar_sources} className="size-7 shrink-0" />
                       <div className="min-w-0 flex-1">
-                        <p className={`truncate text-sm font-medium ${isUnavailable ? "text-muted-foreground" : "text-foreground"}`}>{modelLabel(model)}</p>
+                        <p className={`truncate text-sm font-normal ${isUnavailable ? "text-muted-foreground" : "text-foreground"}`}>{modelLabel(model)}</p>
                         <p className="truncate text-xs text-tertiary">
                           {model.provider_name}
                           {reason ? <span className="ml-2 inline-flex items-center gap-1 text-destructive"><WarningLine className="size-3" />{reason}</span> : null}
@@ -329,7 +329,7 @@ function Section({ title, description, action, children }: { title: string; desc
   return <section className="space-y-4">
     <div className="flex items-start justify-between gap-4">
       <div className="min-w-0">
-        <h3 className="text-sm font-medium tracking-tight text-foreground">{title}</h3>
+        <h3 className="text-sm font-normal tracking-tight text-foreground">{title}</h3>
         <p className="mt-0.5 text-xs text-tertiary">{description}</p>
       </div>
       {action}
@@ -373,7 +373,7 @@ function LimitField({ id, label, value, onChange, memberLimit, limiters, error }
 function StrategyCard({ selected, onSelect, icon, title, description }: { selected: boolean; onSelect: () => void; icon: React.ReactNode; title: string; description: string }) {
   return <button type="button" role="radio" aria-checked={selected} onClick={onSelect}
     className={`flex flex-col gap-2 rounded-xl border p-4 text-left transition-colors outline-none focus-visible:border-border-strong focus-visible:ring-2 focus-visible:ring-border-strong ${selected ? "border-border-strong bg-accent" : "border-border hover:bg-accent/60"}`}>
-    <span className="flex items-center gap-2 text-sm font-medium text-foreground">{icon}{title}</span>
+    <span className="flex items-center gap-2 text-sm font-normal text-foreground">{icon}{title}</span>
     <span className="text-xs leading-relaxed text-tertiary">{description}</span>
   </button>;
 }
@@ -381,7 +381,7 @@ function StrategyCard({ selected, onSelect, icon, title, description }: { select
 function ToggleRow({ title, description, checked, onCheckedChange }: { title: string; description: string; checked: boolean; onCheckedChange: (checked: boolean) => void }) {
   return <label className="flex cursor-pointer items-center justify-between gap-4 rounded-lg border border-border px-4 py-3 transition-colors hover:bg-accent/60">
     <span className="min-w-0">
-      <span className="block text-sm font-medium text-foreground">{title}</span>
+      <span className="block text-sm font-normal text-foreground">{title}</span>
       <span className="mt-0.5 block text-xs text-tertiary">{description}</span>
     </span>
     <Switch checked={checked} onCheckedChange={onCheckedChange} />

@@ -60,7 +60,7 @@ export default function ModelInput({
     <div ref={rootRef} className="relative shrink-0">
       <button
         type="button"
-        className="flex h-9 max-w-64 items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-sm font-medium text-foreground transition-colors hover:bg-accent disabled:pointer-events-none disabled:opacity-50"
+        className="flex h-9 max-w-64 items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-sm font-normal text-foreground transition-colors hover:bg-accent disabled:pointer-events-none disabled:opacity-50"
         onClick={() => setOpen((previous) => !previous)}
         disabled={disabled}
         aria-haspopup="dialog"

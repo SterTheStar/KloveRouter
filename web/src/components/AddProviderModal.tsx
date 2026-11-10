@@ -533,7 +533,7 @@ export default function AddProviderModal({
               </Button>
             )}
             <div>
-              <DialogTitle className="text-sm font-semibold">
+              <DialogTitle className="text-sm font-normal">
                 {step === "select" ? "Add provider" : `Configure ${selectedType?.name || "Provider"}`}
               </DialogTitle>
               <DialogDescription className="text-xs text-muted-foreground">

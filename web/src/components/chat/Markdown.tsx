@@ -60,7 +60,7 @@ function CodeBlock({
                 onClick={() => setActiveTab(tab)}
                 className={`relative h-7 rounded-lg px-2.5 text-xs transition-colors ${
                   activeTab === tab
-                    ? "bg-overlay/70 font-medium text-foreground"
+                    ? "bg-overlay/70 font-normal text-foreground"
                     : "text-tertiary hover:bg-accent hover:text-foreground"
                 }`}
               >
@@ -150,7 +150,7 @@ const inlineCodeClass =
   "rounded bg-muted px-1.5 py-0.5 font-mono text-[0.85em] text-foreground dark:bg-muted/60";
 
 const headingClass =
-  "font-heading font-semibold tracking-tight text-foreground first:mt-0";
+  "font-heading font-normal tracking-tight text-foreground first:mt-0";
 
 const htmlDocumentStart = /(?:<!doctype\s+html\b[^>]*>|<html\b[^>]*>)/gi;
 const htmlDocumentEnd = /<\/html\s*>/i;
@@ -280,13 +280,13 @@ export const Markdown = memo(function Markdown({
               href={href}
               target="_blank"
               rel="noopener noreferrer"
-              className="font-medium text-primary underline underline-offset-2 hover:text-primary/80"
+              className="font-normal text-primary underline underline-offset-2 hover:text-primary/80"
             >
               {children}
             </a>
           ),
           strong: ({ children }) => (
-            <strong className="font-semibold text-foreground">{children}</strong>
+            <strong className="font-normal text-foreground">{children}</strong>
           ),
           ul: ({ children }) => (
             <ul className="my-0 list-disc space-y-1 pl-5 marker:text-muted-foreground">
@@ -326,7 +326,7 @@ export const Markdown = memo(function Markdown({
             </tr>
           ),
           th: ({ children }) => (
-            <th className="px-3 py-2 text-xs font-semibold text-muted-foreground whitespace-nowrap">
+            <th className="px-3 py-2 text-xs font-normal text-muted-foreground whitespace-nowrap">
               {children}
             </th>
           ),

@@ -53,7 +53,7 @@ export function ModelCapabilityBadges({
         <Tooltip>
           <TooltipTrigger
             render={<span />}
-            className="inline-flex h-5 items-center gap-1 rounded-md bg-accent px-1.5 font-mono text-[10px] font-medium text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong"
+            className="inline-flex h-5 items-center gap-1 rounded-md bg-accent px-1.5 font-mono text-[10px] font-normal text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong"
             aria-label={`Context window: ${contextWindow.toLocaleString()} tokens`}
           >
             {formatContextWindow(contextWindow)}
@@ -77,7 +77,7 @@ export function ModelCapabilityBadges({
               <Icon className="size-3" />
             </TooltipTrigger>
             <TooltipContent>
-              <span className="font-medium text-foreground">{meta.label}</span>
+              <span className="font-normal text-foreground">{meta.label}</span>
               <span className="text-tertiary">- {meta.hint}</span>
             </TooltipContent>
           </Tooltip>

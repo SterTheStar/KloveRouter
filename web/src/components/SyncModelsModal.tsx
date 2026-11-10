@@ -34,7 +34,7 @@ function priceLabel(pricing: CatalogPricing): string {
 function ModelSourceDetails({ model }: { model: SyncModelItem }) {
   return (
     <div className="space-y-1">
-      <p className="font-medium text-foreground">Model details</p>
+      <p className="font-normal text-foreground">Model details</p>
       <p className="font-mono text-tertiary">{model.id}</p>
       {model.is_free && <p className="text-success">Free model</p>}
       {model.is_existing && <p className="text-muted-foreground">Already configured</p>}
@@ -125,11 +125,11 @@ export default function SyncModelsModal({
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="gap-3 sm:max-w-2xl">
         <DialogHeader className="pr-8">
-          <DialogTitle className="text-base font-semibold tracking-tight text-foreground">Synchronize provider models</DialogTitle>
+          <DialogTitle className="text-base font-normal tracking-tight text-foreground">Synchronize provider models</DialogTitle>
           <DialogDescription>Select models by type. Existing models stay unchanged unless reset is enabled.</DialogDescription>
         </DialogHeader>
         <div role="tablist" aria-label="Model type" className="flex gap-1 overflow-x-auto border-b border-border">
-          {([ ["all", "All"], ["chat", "Chat"] ] as const).map(([value, label]) => <button key={value} type="button" role="tab" aria-selected={category === value} onClick={() => setCategory(value)} className={`shrink-0 rounded-t-lg border-b-2 px-3 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong ${category === value ? "border-foreground font-medium text-foreground" : "border-transparent text-muted-foreground hover:bg-accent hover:text-foreground"}`}>{label}<span className="ml-1 text-xs text-tertiary">{counts[value]}</span></button>)}
+          {([ ["all", "All"], ["chat", "Chat"] ] as const).map(([value, label]) => <button key={value} type="button" role="tab" aria-selected={category === value} onClick={() => setCategory(value)} className={`shrink-0 rounded-t-lg border-b-2 px-3 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong ${category === value ? "border-foreground font-normal text-foreground" : "border-transparent text-muted-foreground hover:bg-accent hover:text-foreground"}`}>{label}<span className="ml-1 text-xs text-tertiary">{counts[value]}</span></button>)}
         </div>
         <div className="flex items-center gap-2">
           <div className="relative min-w-0 flex-1">
@@ -173,7 +173,7 @@ export default function SyncModelsModal({
               Existing only
             </Button>
             <span className="ml-auto text-sm text-muted-foreground">
-              <strong className="font-mono font-medium text-foreground">{selected.size}</strong> selected of {selectable.length}
+              <strong className="font-mono font-normal text-foreground">{selected.size}</strong> selected of {selectable.length}
             </span>
           </div>
           <div className="max-h-72 overflow-y-auto rounded-xl border border-border">
@@ -207,7 +207,7 @@ export default function SyncModelsModal({
                   </span>
                   <span className="flex min-w-0 flex-1 flex-col gap-0.5 sm:flex-row sm:items-center sm:gap-3">
                     <span className="flex min-w-0 flex-1 items-baseline gap-2">
-                      <span className="shrink-0 truncate text-sm font-medium text-foreground">{model.display_name}</span>
+                      <span className="shrink-0 truncate text-sm font-normal text-foreground">{model.display_name}</span>
                       <span className="hidden min-w-0 truncate font-mono text-[11px] text-tertiary sm:block">{model.id}</span>
                     </span>
                     <span className="flex min-w-0 items-center gap-1.5 sm:shrink-0">
@@ -236,7 +236,7 @@ export default function SyncModelsModal({
           <DialogFooter className="sm:items-center sm:justify-between">
             <label className="mr-auto flex items-center gap-3 rounded-lg border border-border bg-background/60 px-3 py-2 sm:max-w-[70%]">
               <Switch checked={useLiteLLMPricing} onCheckedChange={setUseLiteLLMPricing} />
-              <span className="text-sm font-medium text-foreground">Use LiteLLM pricing</span>
+              <span className="text-sm font-normal text-foreground">Use LiteLLM pricing</span>
             </label>
             <div className="flex shrink-0 items-center justify-end gap-2">
               <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>

@@ -53,7 +53,7 @@ function ModelTooltip({ model }: { model: ModelWithProvider }) {
 
   return (
     <TooltipContent className="flex max-w-sm flex-col items-start gap-1">
-      <span className="font-semibold">{model.display_name || model.model_id}</span>
+      <span className="font-normal">{model.display_name || model.model_id}</span>
       <span>Provider: {model.provider_name}</span>
       <span className="break-all">Model ID: {model.model_id}</span>
       {model.pretty_id && <span className="break-all">Public ID: {model.pretty_id}</span>}
@@ -98,7 +98,7 @@ function ImageAttachment({
             <ImageLine className="size-4" /> {attachment.name}
           </span>
         )}
-        <span className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/40 text-xs font-medium text-white opacity-0 transition-opacity group-hover/image:opacity-100">
+        <span className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/40 text-xs font-normal text-white opacity-0 transition-opacity group-hover/image:opacity-100">
           {loading ? "Loading…" : "View"}
         </span>
       </button>
@@ -155,7 +155,7 @@ function UserAttachments({
           ) : attachment.kind === "file" ? (
             <PdfLine className="size-4 shrink-0 text-muted-foreground" />
           ) : (
-            <span className="flex size-5 shrink-0 items-center justify-center rounded bg-muted text-[8px] font-semibold text-muted-foreground">
+            <span className="flex size-5 shrink-0 items-center justify-center rounded bg-muted text-[8px] font-normal text-muted-foreground">
               TXT
             </span>
           )}
@@ -193,7 +193,7 @@ function ChatStatsFooter({
       </span>
       <span className="font-mono">{formatDuration(stats.duration_ms)}</span>
       {stats.tps > 0 && (
-        <span className="font-mono font-medium text-primary">
+        <span className="font-mono font-normal text-primary">
           {formatTps(stats.tps)}
         </span>
       )}
@@ -213,7 +213,7 @@ function ThinkingBlock({ content, streaming }: { content: string; streaming?: bo
       <button
         type="button"
         onClick={() => setOpen((prev) => !prev)}
-        className="flex items-center gap-1 rounded-md text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+        className="flex items-center gap-1 rounded-md text-xs font-normal text-muted-foreground transition-colors hover:text-foreground"
       >
         {open ? (
           <ChevronDown className="size-3.5" />
@@ -399,7 +399,7 @@ function ChatMessageView({
         <div className="chat-error-panel mt-3 rounded-lg border border-destructive/25 bg-destructive/5 px-3.5 py-3 text-xs text-destructive" role="alert">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <p className="font-medium">{classified.title}</p>
+              <p className="font-normal">{classified.title}</p>
               {classified.hint && classified.kind !== "unknown" && (
                 <p className="mt-0.5 text-destructive/80">{classified.hint}</p>
               )}

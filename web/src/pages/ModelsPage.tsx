@@ -186,7 +186,7 @@ export default function ModelsPage() {
   return (
     <div className="w-full space-y-6 p-6">
       <div className="flex items-center justify-between gap-4">
-        <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+        <h1 className="text-2xl font-normal tracking-tight text-foreground">
           Models
         </h1>
       </div>
@@ -258,7 +258,7 @@ export default function ModelsPage() {
 
       {list.length === 0 ? (
         <div className="rounded-xl border border-border bg-background/60 py-10 text-center">
-          <h2 className="text-sm font-medium text-foreground">No active models</h2>
+          <h2 className="text-sm font-normal text-foreground">No active models</h2>
           <p className="mt-1 text-xs text-tertiary">
             Models from active providers will appear here.
           </p>
@@ -274,7 +274,7 @@ export default function ModelsPage() {
             </CardTitle>
           </CardHeader>
           <Table>
-            <TableHeader className="bg-background/60 [&_th]:h-9 [&_th]:px-3 [&_th]:font-medium [&_th]:text-tertiary">
+            <TableHeader className="bg-background/60 [&_th]:h-9 [&_th]:px-3 [&_th]:font-normal [&_th]:text-tertiary">
               <TableRow>
                 <TableHead>Public ID</TableHead>
                 <TableHead>Display name</TableHead>
@@ -293,7 +293,7 @@ export default function ModelsPage() {
                       className="cursor-pointer bg-background/60"
                       onClick={() => toggleCollapse(providerName)}
                     >
-                      <TableCell colSpan={6} className="px-3 py-2.5 text-sm font-medium">
+                      <TableCell colSpan={6} className="px-3 py-2.5 text-sm font-normal">
                         <div className="flex items-center gap-2">
                           <Button
                             variant="ghost"
@@ -340,7 +340,7 @@ export default function ModelsPage() {
                                   <Tooltip>
                                     <TooltipTrigger
                                       render={<span />}
-                                      className="inline-flex h-5 items-center rounded-md border border-border px-1.5 text-[10px] font-medium text-tertiary"
+                                      className="inline-flex h-5 items-center rounded-md border border-border px-1.5 text-[10px] font-normal text-tertiary"
                                       aria-label="Some limits or capabilities come from the LiteLLM catalog"
                                     >
                                       LiteLLM

@@ -31,7 +31,7 @@ export default function ConfirmDialog({
     <Dialog open={open} onOpenChange={(value) => !value && onCancel()}>
       <DialogContent>
         <DialogHeader className="pr-8">
-          <DialogTitle className="text-base font-semibold tracking-tight text-foreground">{title}</DialogTitle>
+          <DialogTitle className="text-base font-normal tracking-tight text-foreground">{title}</DialogTitle>
           <DialogDescription className="min-w-0 break-words text-sm text-muted-foreground [overflow-wrap:anywhere]">
             {message}
           </DialogDescription>

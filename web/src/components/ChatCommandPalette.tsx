@@ -80,7 +80,7 @@ export default function ChatCommandPalette({
         </div>
         <div className="max-h-96 overflow-y-auto p-1.5">
           {filtered.length > 0 && (
-            <p className="px-2.5 pb-1 pt-2 text-xs font-medium text-tertiary">Conversations</p>
+            <p className="px-2.5 pb-1 pt-2 text-xs font-normal text-tertiary">Conversations</p>
           )}
           {filtered.map((chat) => (
             <button key={chat.id} type="button" onClick={() => { onSelect(chat.id); onClose(); }} className={`flex h-9 w-full items-center gap-2 rounded-lg px-2.5 text-left text-sm transition-colors ${activeChatId === chat.id ? "bg-accent" : "hover:bg-accent/60"}`}>
@@ -90,7 +90,7 @@ export default function ChatCommandPalette({
             </button>
           ))}
           {messageHits.length > 0 && (
-            <p className="px-2.5 pb-1 pt-3 text-xs font-medium text-tertiary">Messages</p>
+            <p className="px-2.5 pb-1 pt-3 text-xs font-normal text-tertiary">Messages</p>
           )}
           {messageHits.map((hit) => (
             <button

@@ -45,7 +45,7 @@ function Metric({ label, value, tone }: { label: string; value: string | number;
   return (
     <div className="min-w-0">
       <div className="truncate text-xs text-tertiary">{label}</div>
-      <div className={cn("mt-1 font-mono text-sm font-medium tabular-nums text-foreground", tone)}>{value}</div>
+      <div className={cn("mt-1 font-mono text-sm font-normal tabular-nums text-foreground", tone)}>{value}</div>
     </div>
   );
 }
@@ -63,7 +63,7 @@ function ModelGroups({ groups }: { groups: StatsUptimeGroup[] }) {
   if (!groups.length) return null;
   return (
     <details className="group mt-4">
-      <summary className="flex w-fit cursor-pointer list-none items-center gap-1 text-xs font-medium text-tertiary transition-colors hover:text-foreground [&::-webkit-details-marker]:hidden">
+      <summary className="flex w-fit cursor-pointer list-none items-center gap-1 text-xs font-normal text-tertiary transition-colors hover:text-foreground [&::-webkit-details-marker]:hidden">
         <ChevronRight className="size-3.5 transition-transform group-open:rotate-90" aria-hidden="true" />
         Models ({groups.length})
       </summary>
@@ -122,7 +122,7 @@ function ProviderRow({ provider, groups }: { provider: StatsProviderHealth; grou
           <div className="col-span-2 flex min-w-0 items-center gap-3 md:col-span-1">
             <ProviderIcon name={provider.provider_name} src={provider.avatar} sources={provider.avatar_sources} className="size-8 shrink-0" />
             <div className="min-w-0 flex-1">
-              <div className="truncate text-sm font-medium text-foreground">{provider.provider_name}</div>
+              <div className="truncate text-sm font-normal text-foreground">{provider.provider_name}</div>
               <div className="text-xs text-tertiary">
                 {provider.is_active ? "Enabled" : "Disabled"} · {provider.active_credential_count} active {provider.active_credential_count === 1 ? "credential" : "credentials"}
               </div>
@@ -157,7 +157,7 @@ export function StatusPanel({ uptime, health }: { uptime: StatsUptime; health: S
     <div className="space-y-7">
       <section className="space-y-4 rounded-xl border border-border bg-card p-5" aria-labelledby="overall-status-title">
         <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-          <h2 id="overall-status-title" className="text-base font-semibold tracking-tight text-foreground">All providers</h2>
+          <h2 id="overall-status-title" className="text-base font-normal tracking-tight text-foreground">All providers</h2>
           <span className="text-xs text-tertiary">{summary.total_requests.toLocaleString()} requests · {summary.success_count.toLocaleString()} succeeded · {summary.error_count.toLocaleString()} failed</span>
         </div>
         <div className="grid grid-cols-2 gap-5 sm:grid-cols-3">
@@ -171,7 +171,7 @@ export function StatusPanel({ uptime, health }: { uptime: StatsUptime; health: S
       <section className="space-y-3">
         <div className="flex items-baseline justify-between gap-3">
           <div>
-            <h2 className="font-heading text-base font-semibold tracking-tight text-foreground">Providers</h2>
+            <h2 className="font-heading text-base font-normal tracking-tight text-foreground">Providers</h2>
           </div>
           {health.providers.length > 0 && <span className="text-sm text-tertiary">{health.providers.length} providers</span>}
         </div>
@@ -182,7 +182,7 @@ export function StatusPanel({ uptime, health }: { uptime: StatsUptime; health: S
         </div>
         {historical.length > 0 && (
           <details className="group rounded-xl border border-border bg-card px-4">
-            <summary className="flex cursor-pointer list-none items-center gap-2 py-4 text-sm font-medium [&::-webkit-details-marker]:hidden">
+            <summary className="flex cursor-pointer list-none items-center gap-2 py-4 text-sm font-normal [&::-webkit-details-marker]:hidden">
               <ChevronRight className="size-4 text-tertiary transition-transform group-open:rotate-90" aria-hidden="true" />
               Historical / unknown providers
               <span className="text-xs font-normal text-tertiary">({historical.length})</span>
@@ -192,7 +192,7 @@ export function StatusPanel({ uptime, health }: { uptime: StatsUptime; health: S
         )}
         {!health.providers.length && !uptime.groups.length && (
           <div className="rounded-xl border border-dashed border-border bg-background/60 px-6 py-10 text-center">
-            <p className="text-sm font-medium text-foreground">No requests in this period.</p>
+            <p className="text-sm font-normal text-foreground">No requests in this period.</p>
             <p className="mt-1 text-xs text-tertiary">Provider health will appear here after the first routed request.</p>
           </div>
         )}

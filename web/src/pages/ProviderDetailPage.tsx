@@ -944,7 +944,7 @@ export default function ProviderDetailPage({
           <ArrowLeft className="size-4" />
           <span className="hidden sm:inline">Back</span>
         </Button>
-        <h1 className="min-w-0 flex-1 truncate font-heading text-lg font-semibold tracking-tight text-foreground sm:text-2xl">{name || provider.name}</h1>
+        <h1 className="min-w-0 flex-1 truncate font-heading text-lg font-normal tracking-tight text-foreground sm:text-2xl">{name || provider.name}</h1>
         <div className="flex shrink-0 gap-1.5 sm:gap-2">
           <Button variant="ghost" size="sm" className="px-2 sm:px-2.5" onClick={discard} disabled={saving} aria-label="Discard changes">
             <CloseLine className="size-4 sm:hidden" />
@@ -1342,7 +1342,7 @@ export default function ProviderDetailPage({
                     <DropdownMenuLabel>Filter models</DropdownMenuLabel>
                     {([['free', 'Free'], ['active', 'Active'], ['manual', 'Manual'], ['synced', 'Synced'], ['capabilities', 'Capabilities present']] as const).map(([key, label]) => <DropdownMenuCheckboxItem key={key} checked={modelFilters[key]} onCheckedChange={(checked) => setModelFilters((current) => ({ ...current, [key]: checked === true }))}>{label}</DropdownMenuCheckboxItem>)}
                   </DropdownMenuGroup>
-                  {contextBounds.max > contextBounds.min && <div className="space-y-3 px-2 py-2"><p className="text-xs font-medium">Context window</p><label className="block text-xs text-tertiary">Min: {formatTokenLimit(minContext ?? contextBounds.min)}<input aria-label="Minimum context window" type="range" min={contextBounds.min} max={contextBounds.max} value={minContext ?? contextBounds.min} onChange={(event) => setMinContext(Number(event.target.value) === contextBounds.min ? null : Number(event.target.value))} className="mt-1 w-full accent-primary" /></label><label className="block text-xs text-tertiary">Max: {formatTokenLimit(maxContext ?? contextBounds.max)}<input aria-label="Maximum context window" type="range" min={contextBounds.min} max={contextBounds.max} value={maxContext ?? contextBounds.max} onChange={(event) => setMaxContext(Number(event.target.value) === contextBounds.max ? null : Number(event.target.value))} className="mt-1 w-full accent-primary" /></label></div>}
+                  {contextBounds.max > contextBounds.min && <div className="space-y-3 px-2 py-2"><p className="text-xs font-normal">Context window</p><label className="block text-xs text-tertiary">Min: {formatTokenLimit(minContext ?? contextBounds.min)}<input aria-label="Minimum context window" type="range" min={contextBounds.min} max={contextBounds.max} value={minContext ?? contextBounds.min} onChange={(event) => setMinContext(Number(event.target.value) === contextBounds.min ? null : Number(event.target.value))} className="mt-1 w-full accent-primary" /></label><label className="block text-xs text-tertiary">Max: {formatTokenLimit(maxContext ?? contextBounds.max)}<input aria-label="Maximum context window" type="range" min={contextBounds.min} max={contextBounds.max} value={maxContext ?? contextBounds.max} onChange={(event) => setMaxContext(Number(event.target.value) === contextBounds.max ? null : Number(event.target.value))} className="mt-1 w-full accent-primary" /></label></div>}
                   {activeFilterCount > 0 && <Button variant="ghost" size="sm" className="mt-1 w-full" onClick={clearFilters}>Clear filters</Button>}
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -1368,7 +1368,7 @@ export default function ProviderDetailPage({
                 const canTest = modelCategories(model).includes("chat");
                 return <div key={model.id} className="min-w-0 rounded-lg border border-border bg-card p-3">
                   <div className="flex min-w-0 items-start justify-between gap-3">
-                    <div className="min-w-0"><p className="break-all font-mono text-xs">{fullId}</p><div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1"><p className="min-w-0 truncate text-sm font-medium">{model.display_name || "Unnamed model"}</p><ModelCapabilityBadges capabilities={model.capabilities} contextWindow={model.context_window} /></div></div>
+                    <div className="min-w-0"><p className="break-all font-mono text-xs">{fullId}</p><div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1"><p className="min-w-0 truncate text-sm font-normal">{model.display_name || "Unnamed model"}</p><ModelCapabilityBadges capabilities={model.capabilities} contextWindow={model.context_window} /></div></div>
                     <Badge variant={model.is_manual ? "outline" : "secondary"}>{model.is_manual ? "Manual" : "Synced"}</Badge>
                   </div>
                   <div className="mt-3 flex items-center justify-between gap-2 border-t border-border pt-3">
@@ -1537,7 +1537,7 @@ export default function ProviderDetailPage({
         <CardContent className="space-y-4">
           {requiresOpenCodeSession && <div className="grid gap-2 rounded-lg border border-border bg-background/60 p-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)_auto]"><div className="flex items-center rounded-lg border border-border bg-background px-3 text-sm font-mono text-foreground">x-opencode-session</div><div className="flex min-h-9 items-center rounded-lg border border-border bg-surface px-3 text-sm text-tertiary">Generated automatically per conversation</div><Badge variant="secondary" className="min-h-9 justify-center">Required</Badge><div className="flex items-center rounded-lg border border-border bg-background px-3 text-sm font-mono text-foreground">X-Session-ID</div><div className="flex min-h-9 items-center rounded-lg border border-border bg-surface px-3 text-sm text-tertiary">Same session ID, sent automatically</div><Badge variant="secondary" className="min-h-9 justify-center">Required</Badge><p className="text-xs text-tertiary sm:col-span-3">Sent automatically to OpenCode. These protected headers cannot be edited or removed.</p></div>}
           {customHeaderRows.map((row) => <div key={row.id} className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)_auto]"><Input aria-label="Header name" placeholder="Header name" autoComplete="off" value={row.name} onChange={(event) => setCustomHeaderRows((rows) => rows.map((item) => item.id === row.id ? { ...item, name: event.target.value } : item))} /><Input aria-label="Header value" placeholder="Value" autoComplete="new-password" value={row.value} onChange={(event) => setCustomHeaderRows((rows) => rows.map((item) => item.id === row.id ? { ...item, value: event.target.value } : item))} /><Button type="button" variant="ghost" size="icon" aria-label={`Remove ${row.name || "header"}`} onClick={() => setCustomHeaderRows((rows) => rows.filter((item) => item.id !== row.id))}><Trash2 className="size-4" /></Button></div>)}
-          {!customHeaderRows.length && <div className="rounded-xl border border-dashed border-border bg-background/60 py-10 text-center"><p className="text-sm font-medium text-foreground">No custom headers</p><p className="mt-1 text-xs text-tertiary">Add headers required by this provider's gateway.</p></div>}
+          {!customHeaderRows.length && <div className="rounded-xl border border-dashed border-border bg-background/60 py-10 text-center"><p className="text-sm font-normal text-foreground">No custom headers</p><p className="mt-1 text-xs text-tertiary">Add headers required by this provider's gateway.</p></div>}
           <div className="flex flex-wrap items-center justify-between gap-3"><p className="text-xs text-tertiary">Values are encrypted at rest. Authorization/protocol headers are managed separately. OpenCode receives a stable session ID per conversation.</p><Button type="button" variant="outline" onClick={addCustomHeader}><Add className="size-4" />Add header</Button></div>
         </CardContent>
       </Card>}
@@ -1629,7 +1629,7 @@ export default function ProviderDetailPage({
                   href={manualOAuth.authUrl}
                   target="_blank"
                   rel="noreferrer"
-                  className="text-xs font-medium text-accent-blue underline underline-offset-4"
+                  className="text-xs font-normal text-accent-blue underline underline-offset-4"
                 >
                   Open authorization page
                 </a>

@@ -349,7 +349,7 @@ export default function ChatSidebar({
         <button
           type="button"
           onClick={onNew}
-          className="group flex h-10 w-full shrink-0 items-center gap-3 overflow-hidden rounded-lg px-3 text-start text-sm font-medium text-sidebar-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
+          className="group flex h-10 w-full shrink-0 items-center gap-3 overflow-hidden rounded-lg px-3 text-start text-sm font-normal text-sidebar-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
         >
           <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-neutral-800 text-white transition-colors group-hover:bg-neutral-900 dark:bg-white/10 dark:text-white dark:group-hover:bg-white/15">
             <RiAddLine className="size-3.5" />
@@ -364,7 +364,7 @@ export default function ChatSidebar({
             event.preventDefault();
             onBack();
           }}
-          className="flex h-10 w-full shrink-0 items-center gap-3 overflow-hidden rounded-lg px-3 text-start text-sm font-medium text-sidebar-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
+          className="flex h-10 w-full shrink-0 items-center gap-3 overflow-hidden rounded-lg px-3 text-start text-sm font-normal text-sidebar-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
         >
           <HomeLine className="size-5 shrink-0" />
           <span className="truncate">Home</span>
@@ -373,7 +373,7 @@ export default function ChatSidebar({
         <button
           type="button"
           onClick={() => setCommandOpen(true)}
-          className="flex h-10 w-full shrink-0 items-center gap-3 overflow-hidden rounded-lg px-3 text-start text-sm font-medium text-sidebar-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
+          className="flex h-10 w-full shrink-0 items-center gap-3 overflow-hidden rounded-lg px-3 text-start text-sm font-normal text-sidebar-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
         >
           <SearchLine className="size-5 shrink-0" />
           <span className="truncate">Search</span>
@@ -398,7 +398,7 @@ export default function ChatSidebar({
                 type="button"
                 onClick={toggleRecents}
                 aria-expanded={!recentsCollapsed}
-                className="flex h-full items-center gap-1.5 rounded-md text-[13px] font-semibold leading-none text-foreground/80 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
+                className="flex h-full items-center gap-1.5 rounded-md text-[13px] font-normal leading-none text-foreground/80 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
               >
                 <span className="leading-none">Recents</span>
                 {recentsCollapsed ? <ChevronRight className="size-3.5 shrink-0 translate-y-px" /> : <ChevronDown className="size-3.5 shrink-0 translate-y-px" />}
@@ -452,7 +452,7 @@ export default function ChatSidebar({
           )}
           {!recentsCollapsed && chatGroups.map(([group, groupedChats]) => (
             <section key={group} aria-label={group}>
-              <h3 className="px-3 pb-0.5 pt-1 text-xs font-medium text-muted-foreground/70">{group}</h3>
+              <h3 className="px-3 pb-0.5 pt-1 text-xs font-normal text-muted-foreground/70">{group}</h3>
               <div className="flex flex-col gap-0.5">
                 {groupedChats.map((chat) => (
                   <div key={chat.id} className={`chat-sidebar-item group rounded-lg ${activeChatId === chat.id ? "bg-accent" : "hover:bg-accent/60"}`}>
@@ -536,7 +536,7 @@ export default function ChatSidebar({
               <button
                 type="button"
                 onClick={() => setRecentsFilter("all")}
-                className="mt-2 rounded-md text-xs font-medium text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
+                className="mt-2 rounded-md text-xs font-normal text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
               >
                 Clear filter
               </button>
@@ -558,7 +558,7 @@ export default function ChatSidebar({
               fallback="user"
               className="size-8 rounded-full object-cover"
             />
-            <span className="truncate text-sm font-medium text-foreground">{profile.name}</span>
+            <span className="truncate text-sm font-normal text-foreground">{profile.name}</span>
           </button>
           <Button
             type="button"

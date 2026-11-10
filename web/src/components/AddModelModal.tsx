@@ -141,7 +141,7 @@ export default function AddModelModal({
           {activeTab === "general" && (
             <div className="space-y-5 py-1">
               <div>
-                <div className="text-sm font-medium text-foreground">Model identity</div>
+                <div className="text-sm font-normal text-foreground">Model identity</div>
                 <p className="mt-1 text-xs text-muted-foreground">
                   Upstream identifier and friendly name shown in Saturn.
                 </p>
@@ -260,22 +260,22 @@ export function MediaSettingsEditor({ value, onChange, modelIdentity = "" }: { v
   const activeModalities = modalityChoices.filter(({ key, category }) => value.capabilities[key] === true || (value.capabilities[key] == null && detectedTypes.includes(category)));
   const chatSelected = activeModalities.length === 0 && detectedTypes.includes("chat");
   const configSection = (title: string, description: string, fields: React.ReactNode) => <section key={title} className="space-y-3 rounded-lg border border-border p-4">
-    <div><h3 className="text-sm font-medium">{title}</h3><p className="mt-1 text-xs text-tertiary">{description}</p></div>
+    <div><h3 className="text-sm font-normal">{title}</h3><p className="mt-1 text-xs text-tertiary">{description}</p></div>
     <div className="grid gap-3 sm:grid-cols-2">{fields}</div>
   </section>;
   return <div className="space-y-4 py-1">
-    <div><h3 className="text-sm font-medium">Supported generation types</h3><p className="mt-1 text-xs text-tertiary">Select only the modalities this model supports. Configuration fields appear only for enabled types.</p></div>
+    <div><h3 className="text-sm font-normal">Supported generation types</h3><p className="mt-1 text-xs text-tertiary">Select only the modalities this model supports. Configuration fields appear only for enabled types.</p></div>
     <div className="grid gap-2 sm:grid-cols-3">
       {modalityChoices.map(({ key, title, hint }) => {
         const state = value.capabilities[key] ?? null;
         return <button key={key} type="button" onClick={() => updateCapability(key)} aria-pressed={state === true} aria-label={`${title}: ${state === null ? "unknown" : state ? "supported" : "unsupported"}`} className={`rounded-xl border border-border p-3 text-left transition-colors ${state === true ? "border-primary/50 bg-primary/10" : state === false ? "bg-muted/30 text-tertiary" : "border-dashed text-tertiary"}`}>
-          <span className="flex items-center justify-between gap-2 text-sm font-medium"><span>{title}</span><span className="text-[10px] uppercase tracking-wide">{state === true ? "On" : state === false ? "Off" : "Auto"}</span></span>
+          <span className="flex items-center justify-between gap-2 text-sm font-normal"><span>{title}</span><span className="text-[10px] uppercase tracking-wide">{state === true ? "On" : state === false ? "Off" : "Auto"}</span></span>
           <span className="mt-1 block text-xs opacity-80">{hint}</span>
         </button>;
       })}
     </div>
     {activeModalities.length ? <div className="space-y-3 border-t pt-4">
-      <div><h3 className="text-sm font-medium">Defaults for supported types</h3><p className="mt-1 text-xs text-tertiary">Defaults are applied only when the request does not include a value.</p></div>
+      <div><h3 className="text-sm font-normal">Defaults for supported types</h3><p className="mt-1 text-xs text-tertiary">Defaults are applied only when the request does not include a value.</p></div>
       {value.capabilities.image_generation === true && configSection("Image", "Image size, quality, and output format.", <>{field("image", "size", "Default size", "e.g. 1024x1024")}{field("image", "quality", "Default quality", "e.g. auto, high, standard")}{field("image", "output_format", "Output format", "e.g. png, jpeg, webp")}</>)}
       {value.capabilities.text_to_speech === true && configSection("Text to speech", "Default voice, audio format, and speed.", <>{field("text_to_speech", "voice", "Default voice", "e.g. alloy")}{field("text_to_speech", "response_format", "Audio format", "e.g. mp3, wav, opus")}{field("text_to_speech", "speed", "Speed", "1", "number", 0.25, 4, 0.05)}</>)}
       {value.capabilities.video_generation === true && configSection("Video", "Default frame size and duration.", <>{field("video", "size", "Default size", "e.g. 1280x720")}{field("video", "seconds", "Duration (seconds)", "e.g. 4", "number", 0.1, 600, 0.1)}</>)}
@@ -408,7 +408,7 @@ export function ModelMetadataEditor({
   return (
     <div className="space-y-5 py-1">
       <div>
-        <div className="text-sm font-medium text-foreground">Model metadata</div>
+        <div className="text-sm font-normal text-foreground">Model metadata</div>
         <p className="mt-1 text-xs text-muted-foreground">
           Limits, request modes, and reasoning options exposed to clients.
         </p>
@@ -447,7 +447,7 @@ export function ModelMetadataEditor({
                 aria-label={`${capabilityLabels[key]}: ${state === null ? "unknown" : state ? "supported" : "unsupported"}`}
               >
                 <span>{capabilityLabels[key]}</span>
-                <span className="text-xs font-medium">{state === null ? "Unknown" : state ? "Yes" : "No"}</span>
+                <span className="text-xs font-normal">{state === null ? "Unknown" : state ? "Yes" : "No"}</span>
               </button>
             );
           })}
@@ -513,7 +513,7 @@ export function ThinkTagModeEditor({
   return (
     <div className="space-y-4 py-1">
       <div>
-        <div className="text-sm font-medium text-foreground">Think tag handling</div>
+        <div className="text-sm font-normal text-foreground">Think tag handling</div>
         <p className="mt-1 text-xs text-muted-foreground">
           How Saturn should treat responses that omit the opening &lt;think&gt;
           tag.
@@ -530,7 +530,7 @@ export function ThinkTagModeEditor({
               className={`w-full rounded-lg border p-3 text-left text-sm transition-colors ${selected ? "border-border-strong bg-accent" : "border-dashed border-border hover:bg-accent"}`}
               aria-pressed={selected}
             >
-              <div className="font-medium text-foreground">{option.title}</div>
+              <div className="font-normal text-foreground">{option.title}</div>
               <p className="mt-1 text-xs text-muted-foreground">
                 {option.description}
               </p>
@@ -551,7 +551,7 @@ export function ThinkTagModeEditor({
         <div className="flex items-start gap-2 rounded-lg border border-border bg-surface p-3 text-xs text-muted-foreground">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-foreground" />
           <span>
-            <span className="font-medium text-foreground">Use with caution.</span>{" "}
+            <span className="font-normal text-foreground">Use with caution.</span>{" "}
             This mode always prefixes the first content and never inspects the
             response. If the model already emits an opening &lt;think&gt; tag,
             the output will contain a duplicate tag and may be parsed incorrectly
@@ -599,7 +599,7 @@ export function PricingEditor({
   return (
     <div className="min-w-0 space-y-5 py-1">
       <div>
-        <div className="text-sm font-medium text-foreground">Pricing per 1M tokens</div>
+        <div className="text-sm font-normal text-foreground">Pricing per 1M tokens</div>
         <div className="mt-1 text-xs text-muted-foreground">
           Create a pricing tab for each input-token range. The closest range
           below the request size is applied.

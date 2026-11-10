@@ -574,7 +574,7 @@ export default function ChatPage({
       {loadingModels ? (
         <LoaderCircle className="size-5 animate-spin text-muted-foreground" />
       ) : (
-        <h2 className="chat-greeting-title font-serif text-[32px] font-bold leading-10 tracking-[-0.192px] text-foreground sm:text-[40px]">
+        <h2 className="chat-greeting-title font-serif text-[32px] font-normal leading-10 tracking-[-0.192px] text-foreground sm:text-[40px]">
           <span className="chat-greeting-hello" data-text="Hello,">Hello,</span>{" "}
           <span className="chat-greeting-name">{username}</span>
         </h2>

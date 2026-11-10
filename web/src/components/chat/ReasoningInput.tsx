@@ -39,7 +39,7 @@ export default function ReasoningInput({
     <div ref={rootRef} className="relative shrink-0">
       <button
         type="button"
-        className="flex h-8 max-w-36 items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium text-foreground/80 transition-colors hover:bg-accent disabled:pointer-events-none disabled:opacity-50"
+        className="flex h-8 max-w-36 items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-normal text-foreground/80 transition-colors hover:bg-accent disabled:pointer-events-none disabled:opacity-50"
         onClick={() => setOpen((previous) => !previous)}
         disabled={disabled}
         aria-haspopup="menu"
@@ -52,7 +52,7 @@ export default function ReasoningInput({
 
       {open && (
         <div className="absolute right-0 bottom-11 z-50 w-56 overflow-hidden rounded-xl border border-border bg-card p-2 text-card-foreground shadow-[0px_4px_16px_0px_rgba(0,0,0,0.05)]">
-          <div className="px-2.5 pb-1.5 pt-1 text-xs font-medium text-tertiary">Reasoning effort</div>
+          <div className="px-2.5 pb-1.5 pt-1 text-xs font-normal text-tertiary">Reasoning effort</div>
           <div className="space-y-0.5">
             {efforts.map((effort) => {
               const selected = effort.effort === current?.effort;

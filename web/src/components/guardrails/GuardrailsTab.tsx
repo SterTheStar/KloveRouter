@@ -157,7 +157,7 @@ export default function GuardrailsTab() {
             </div>
 
             <div className="flex items-center gap-2.5 self-end sm:self-auto">
-              <span className="text-xs font-medium text-foreground">
+              <span className="text-xs font-normal text-foreground">
                 {config?.enabled ? "Enabled" : "Disabled"}
               </span>
               <Switch
@@ -176,29 +176,29 @@ export default function GuardrailsTab() {
         <CardContent className="p-0">
           <div className="grid grid-cols-2 divide-y divide-border sm:grid-cols-4 sm:divide-y-0 sm:divide-x">
             <div className="p-4">
-              <span className="text-xs font-medium text-tertiary">Scanned Requests</span>
-              <p className="mt-1 font-mono text-xl font-semibold tracking-tight text-foreground">
+              <span className="text-xs font-normal text-tertiary">Scanned Requests</span>
+              <p className="mt-1 font-mono text-xl font-normal tracking-tight text-foreground">
                 {stats ? stats.scannedRequests.toLocaleString() : "0"}
               </p>
             </div>
 
             <div className="p-4">
-              <span className="text-xs font-medium text-tertiary">Blocked</span>
-              <p className="mt-1 font-mono text-xl font-semibold tracking-tight text-foreground">
+              <span className="text-xs font-normal text-tertiary">Blocked</span>
+              <p className="mt-1 font-mono text-xl font-normal tracking-tight text-foreground">
                 {stats ? stats.blockedRequests.toLocaleString() : "0"}
               </p>
             </div>
 
             <div className="p-4">
-              <span className="text-xs font-medium text-tertiary">Redacted</span>
-              <p className="mt-1 font-mono text-xl font-semibold tracking-tight text-foreground">
+              <span className="text-xs font-normal text-tertiary">Redacted</span>
+              <p className="mt-1 font-mono text-xl font-normal tracking-tight text-foreground">
                 {stats ? stats.redactedRequests.toLocaleString() : "0"}
               </p>
             </div>
 
             <div className="p-4">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-medium text-tertiary">Active Rules</span>
+                <span className="text-xs font-normal text-tertiary">Active Rules</span>
                 <Button
                   variant="ghost"
                   size="icon-xs"
@@ -210,7 +210,7 @@ export default function GuardrailsTab() {
                   <RefreshLine className={cn("size-3", loadingStats && "animate-spin")} />
                 </Button>
               </div>
-              <p className="mt-1 font-mono text-xl font-semibold tracking-tight text-foreground">
+              <p className="mt-1 font-mono text-xl font-normal tracking-tight text-foreground">
                 {activeRulesCount} <span className="font-sans text-xs font-normal text-tertiary">/ 5</span>
               </p>
             </div>
@@ -223,7 +223,7 @@ export default function GuardrailsTab() {
         {/* 3. Enforcement Policy & Traffic Scope */}
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-semibold">Enforcement Policy</CardTitle>
+            <CardTitle className="text-sm font-normal">Enforcement Policy</CardTitle>
             <CardDescription className="text-xs">
               Configure how detected security violations are handled and what traffic directions are scanned.
             </CardDescription>
@@ -247,7 +247,7 @@ export default function GuardrailsTab() {
                     )}
                   >
                     <div className="flex w-full items-center justify-between">
-                      <span className="text-sm font-semibold">{action.label}</span>
+                      <span className="text-sm font-normal">{action.label}</span>
                       {isSelected && (
                         <CheckLine className="size-3.5 text-primary" />
                       )}
@@ -264,13 +264,13 @@ export default function GuardrailsTab() {
 
             {/* Traffic Scope */}
             <div>
-              <span className="text-xs font-medium text-foreground">Inspection Scope</span>
+              <span className="text-xs font-normal text-foreground">Inspection Scope</span>
               <div className="mt-2.5 divide-y divide-border rounded-lg border border-border">
                 <div className="flex items-center justify-between gap-4 p-3.5">
                   <div className="flex items-center gap-3 min-w-0">
                     <ArrowDownLine className="size-4 shrink-0 text-muted-foreground" />
                     <div>
-                      <p className="text-sm font-medium text-foreground">Inbound Filtering</p>
+                      <p className="text-sm font-normal text-foreground">Inbound Filtering</p>
                       <p className="text-xs text-tertiary">
                         Scans incoming prompts, system instructions, and tool call parameters before reaching the AI provider.
                       </p>
@@ -288,7 +288,7 @@ export default function GuardrailsTab() {
                   <div className="flex items-center gap-3 min-w-0">
                     <ArrowUpLine className="size-4 shrink-0 text-muted-foreground" />
                     <div>
-                      <p className="text-sm font-medium text-foreground">Outbound Filtering</p>
+                      <p className="text-sm font-normal text-foreground">Outbound Filtering</p>
                       <p className="text-xs text-tertiary">
                         Scans generated assistant completions to prevent the model from regurgitating sensitive tokens or PII.
                       </p>
@@ -311,7 +311,7 @@ export default function GuardrailsTab() {
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
               <div>
-                <CardTitle className="text-sm font-semibold">Detection Rules</CardTitle>
+                <CardTitle className="text-sm font-normal">Detection Rules</CardTitle>
                 <CardDescription className="text-xs">
                   Active security engines for sensitive data prevention and jailbreak protection.
                 </CardDescription>
@@ -331,7 +331,7 @@ export default function GuardrailsTab() {
                     <div className="flex items-center gap-3.5 min-w-0">
                       <Icon className="size-5 shrink-0 text-muted-foreground" />
                       <div className="space-y-0.5 min-w-0">
-                        <p className="text-sm font-medium text-foreground">{rule.name}</p>
+                        <p className="text-sm font-normal text-foreground">{rule.name}</p>
                         <p className="text-xs leading-relaxed text-tertiary">{rule.description}</p>
                         <p className="font-mono text-[11px] text-muted-foreground">
                           <span className="text-tertiary/70">Coverage: </span>{rule.examples}

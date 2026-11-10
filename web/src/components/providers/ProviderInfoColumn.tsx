@@ -45,7 +45,7 @@ export function ProviderInfoColumn({
     return (
       <div className="flex h-full min-h-[300px] flex-col items-center justify-center rounded-lg border border-dashed border-border p-8 text-center text-muted-foreground">
         <RiShieldKeyholeLine className="size-8 text-muted-foreground/60" />
-        <p className="mt-2 text-sm font-medium text-foreground">Select a provider</p>
+        <p className="mt-2 text-sm font-normal text-foreground">Select a provider</p>
         <p className="mt-1 text-xs text-muted-foreground">
           Choose a provider from the list to view its description, official website, and connection parameters.
         </p>
@@ -107,9 +107,9 @@ export function ProviderInfoColumn({
           </div>
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-1.5">
-              <h3 className="font-semibold text-foreground leading-tight">{template.name}</h3>
+              <h3 className="font-normal text-foreground leading-tight">{template.name}</h3>
               {isUnavailable && (
-                <span className="inline-flex items-center gap-1 rounded-md bg-destructive/10 px-2 py-0.5 text-[10px] font-medium text-destructive">
+                <span className="inline-flex items-center gap-1 rounded-md bg-destructive/10 px-2 py-0.5 text-[10px] font-normal text-destructive">
                   <RiCloseCircleLine className="size-3" />
                   <span>Unavailable</span>
                 </span>
@@ -124,7 +124,7 @@ export function ProviderInfoColumn({
 
         {/* Description */}
         <div className="space-y-1">
-          <span className="text-xs font-medium text-muted-foreground">
+          <span className="text-xs font-normal text-muted-foreground">
             Overview
           </span>
           <p className="text-xs leading-relaxed text-foreground">
@@ -171,7 +171,7 @@ export function ProviderInfoColumn({
                 <RiBookOpenLine className="size-4 shrink-0 text-muted-foreground/40" />
                 <span className="truncate">API Documentation</span>
               </div>
-              <span className="inline-flex items-center gap-1 rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+              <span className="inline-flex items-center gap-1 rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-normal text-muted-foreground">
                 <RiCloseCircleLine className="size-2.5" />
                 <span>Unavailable</span>
               </span>
@@ -182,7 +182,7 @@ export function ProviderInfoColumn({
         {/* Base Endpoint */}
         {template.placeholder && (
           <div className="space-y-1.5">
-            <span className="text-xs font-medium text-muted-foreground">
+            <span className="text-xs font-normal text-muted-foreground">
               Default endpoint
             </span>
             <div className="flex items-center justify-between gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2">
