@@ -419,18 +419,22 @@ export async function toGoogleBody(
       const call = calls.get(String(message.tool_call_id ?? ""));
       const decoded =
         call ?? decodeFunctionCall(message.tool_call_id, message.name);
-      contents.push({
-        role: "user",
-        parts: [
-          {
-            functionResponse: {
-              id: decoded.id,
-              name: decoded.name,
-              response: { result: functionResult(message.content) },
-            },
-          },
-        ],
-      });
+      const fnResponsePart = {
+        functionResponse: {
+          id: decoded.id,
+          name: decoded.name,
+          response: { result: functionResult(message.content) },
+        },
+      };
+      const last = contents[contents.length - 1];
+      if (last && last.role === "user") {
+        last.parts.push(fnResponsePart);
+      } else {
+        contents.push({
+          role: "user",
+          parts: [fnResponsePart],
+        });
+      }
       continue;
     }
     const parts = await contentParts(message.content);
@@ -477,10 +481,17 @@ export async function toGoogleBody(
         });
       }
     }
-    contents.push({
-      role: message.role === "assistant" ? "model" : "user",
-      parts: parts.length ? parts : [{ text: "." }],
-    });
+    const targetRole = message.role === "assistant" ? "model" : "user";
+    const finalParts = parts.length ? parts : [{ text: "." }];
+    const last = contents[contents.length - 1];
+    if (last && last.role === targetRole) {
+      last.parts.push(...finalParts);
+    } else {
+      contents.push({
+        role: targetRole,
+        parts: finalParts,
+      });
+    }
   }
 
   const generationConfig: any = {};
@@ -611,43 +622,83 @@ export async function toGoogleBody(
   };
 }
 
-export function googleEventToOpenAI(data: any, model: string, id: string) {
+export type GoogleStreamToolState = {
+  nextIndex: number;
+  idToIndex: Map<string, number>;
+  hasToolCalls: boolean;
+};
+
+export function createGoogleStreamToolState(): GoogleStreamToolState {
+  return {
+    nextIndex: 0,
+    idToIndex: new Map<string, number>(),
+    hasToolCalls: false,
+  };
+}
+
+export function googleEventToOpenAI(
+  data: any,
+  model: string,
+  id: string,
+  toolState?: GoogleStreamToolState,
+) {
   const value = data.response ?? data;
   const candidate = value.candidates?.[0];
   const parts = candidate?.content?.parts ?? [];
   const delta: any = {};
+  const toolCalls: any[] = [];
+
   for (const part of parts) {
     if (part.text)
       delta[part.thought ? "reasoning_content" : "content"] =
         `${delta[part.thought ? "reasoning_content" : "content"] ?? ""}${part.text}`;
-    if (part.functionCall)
-      delta.tool_calls = [
-        {
-          index: 0,
-          id: encodeFunctionCallId(
-            part.functionCall.id,
-            part.functionCall.name,
-            part.thoughtSignature ??
-              part.thought_signature ??
-              part.functionCall.thoughtSignature ??
-              part.functionCall.thought_signature,
-          ),
-          type: "function",
-          function: {
-            name: part.functionCall.name,
-            arguments: JSON.stringify(part.functionCall.args ?? {}),
-          },
+    if (part.functionCall) {
+      let index = 0;
+      if (toolState) {
+        toolState.hasToolCalls = true;
+        const rawId = part.functionCall.id;
+        if (rawId && toolState.idToIndex.has(rawId)) {
+          index = toolState.idToIndex.get(rawId)!;
+        } else {
+          index = toolState.nextIndex++;
+          if (rawId) toolState.idToIndex.set(rawId, index);
+        }
+      } else {
+        index = toolCalls.length;
+      }
+
+      toolCalls.push({
+        index,
+        id: encodeFunctionCallId(
+          part.functionCall.id,
+          part.functionCall.name,
+          part.thoughtSignature ??
+            part.thought_signature ??
+            part.functionCall.thoughtSignature ??
+            part.functionCall.thought_signature,
+        ),
+        type: "function",
+        function: {
+          name: part.functionCall.name,
+          arguments: JSON.stringify(part.functionCall.args ?? {}),
         },
-      ];
+      });
+    }
   }
+
+  if (toolCalls.length > 0) {
+    delta.tool_calls = toolCalls;
+  }
+
+  const hasToolCalls = Boolean(toolState?.hasToolCalls || toolCalls.length > 0);
   const reason = candidate?.finishReason;
   const finish_reason =
     reason === "STOP"
-      ? "stop"
+      ? (hasToolCalls ? "tool_calls" : "stop")
       : reason === "MAX_TOKENS"
         ? "length"
         : reason
-          ? "stop"
+          ? (hasToolCalls ? "tool_calls" : "stop")
           : null;
   const usageMetadata = value.usageMetadata;
   const promptTokens = usageMetadata?.promptTokenCount ?? 0;
@@ -692,6 +743,7 @@ export function googleStreamToOpenAI(
   let buffer = "";
   let firstDeltaLogged = false;
   let finishEmitted = false;
+  const toolState = createGoogleStreamToolState();
 
   return new Response(
     new ReadableStream({
@@ -709,7 +761,7 @@ export function googleStreamToOpenAI(
             .trim();
           if (!raw || raw === "[DONE]") return;
           try {
-            const event = googleEventToOpenAI(JSON.parse(raw), model, id);
+            const event = googleEventToOpenAI(JSON.parse(raw), model, id, toolState);
             const choice = event.choices[0];
             const hasDelta =
               choice.delta.content ||
@@ -749,7 +801,7 @@ export function googleStreamToOpenAI(
               object: "chat.completion.chunk",
               created: Math.floor(Date.now() / 1000),
               model,
-              choices: [{ index: 0, delta: {}, finish_reason: "stop" }],
+              choices: [{ index: 0, delta: {}, finish_reason: toolState.hasToolCalls ? "tool_calls" : "stop" }],
             });
           }
         } catch (error: any) {

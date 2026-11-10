@@ -917,9 +917,8 @@ export function chatSseToAnthropic(response: Response, model: string, onCancel?:
         if (!messageStarted) startMessage({});
         for (const index of [reasoningIndex, textIndex].filter((item) => item >= 0)) stopBlock(index);
         for (const tool of toolByIndex.values()) stopBlock(tool.blockIndex);
-        if (stopReason === "tool_use") {
-          const tools = [...toolByIndex.values()];
-          if (tools.length) stopReason = "tool_use";
+        if (toolByIndex.size > 0 && stopReason !== "max_tokens") {
+          stopReason = "tool_use";
         }
         if (!sawStreamError) {
           write(controller, "message_delta", { type: "message_delta", delta: { stop_reason: stopReason ?? "end_turn", stop_sequence: null }, usage: { output_tokens: outputTokens } });

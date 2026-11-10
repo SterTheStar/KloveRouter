@@ -93,6 +93,60 @@ describe("googleStreamToOpenAI", () => {
 
     expect(text.match(/"finish_reason":"stop"/g)?.length).toBe(1);
   });
+
+  test("assigns sequential indexes and finish_reason tool_calls for multiple tool calls in separate chunks", async () => {
+    const response = googleStreamToOpenAI(
+      upstream([
+        'data: {"response":{"candidates":[{"content":{"parts":[{"functionCall":{"name":"edit","args":{"path":"ChatSidebar.tsx"}}}]}}]}}\n\n',
+        'data: {"response":{"candidates":[{"content":{"parts":[{"functionCall":{"name":"edit","args":{"path":"Sidebar.tsx"}}}]}}]}}\n\n',
+        'data: {"response":{"candidates":[{"finishReason":"STOP"}]}}\n\n',
+      ]),
+      "claude-opus",
+      "chatcmpl-test",
+    );
+    const text = await response.text();
+    const events = text
+      .split("\n\n")
+      .filter((line) => line.startsWith("data:") && !line.includes("[DONE]"))
+      .map((line) => JSON.parse(line.slice(5).trim()));
+
+    const toolEvents = events.filter((e) => e.choices?.[0]?.delta?.tool_calls);
+    expect(toolEvents.length).toBe(2);
+    expect(toolEvents[0].choices[0].delta.tool_calls[0].index).toBe(0);
+    expect(toolEvents[0].choices[0].delta.tool_calls[0].function.arguments).toBe(
+      JSON.stringify({ path: "ChatSidebar.tsx" }),
+    );
+    expect(toolEvents[1].choices[0].delta.tool_calls[0].index).toBe(1);
+    expect(toolEvents[1].choices[0].delta.tool_calls[0].function.arguments).toBe(
+      JSON.stringify({ path: "Sidebar.tsx" }),
+    );
+
+    const finishEvent = events.find((e) => e.choices?.[0]?.finish_reason);
+    expect(finishEvent.choices[0].finish_reason).toBe("tool_calls");
+  });
+
+  test("preserves all tool calls when multiple functionCall parts exist in a single chunk", async () => {
+    const response = googleStreamToOpenAI(
+      upstream([
+        'data: {"response":{"candidates":[{"content":{"parts":[{"functionCall":{"name":"fn1","args":{"a":1}}},{"functionCall":{"name":"fn2","args":{"b":2}}}]},"finishReason":"STOP"}]}}\n\n',
+      ]),
+      "claude-opus",
+      "chatcmpl-test",
+    );
+    const text = await response.text();
+    const event = text
+      .split("\n\n")
+      .filter((line) => line.startsWith("data:") && !line.includes("[DONE]"))
+      .map((line) => JSON.parse(line.slice(5).trim()))[0];
+
+    const calls = event.choices[0].delta.tool_calls;
+    expect(calls.length).toBe(2);
+    expect(calls[0].index).toBe(0);
+    expect(calls[0].function.name).toBe("fn1");
+    expect(calls[1].index).toBe(1);
+    expect(calls[1].function.name).toBe("fn2");
+    expect(event.choices[0].finish_reason).toBe("tool_calls");
+  });
 });
 
 describe("toGoogleBody", () => {
@@ -338,6 +392,32 @@ describe("toGoogleBody", () => {
     });
     const assistantMsg = transformed.request.contents.find((c: any) => c.role === "model");
     expect(assistantMsg.parts[0].thoughtSignature).toBe("skip_thought_signature_validator");
+  });
+
+  test("consolidates consecutive tool result messages into a single user turn", async () => {
+    const transformed = await toGoogleBody({
+      model: "claude-opus",
+      messages: [
+        { role: "user", content: "read files" },
+        {
+          role: "assistant",
+          tool_calls: [
+            { id: "call_1", function: { name: "readFile", arguments: '{"path":"a"}' } },
+            { id: "call_2", function: { name: "readFile", arguments: '{"path":"b"}' } },
+          ],
+        },
+        { role: "tool", tool_call_id: "call_1", name: "readFile", content: "content of a" },
+        { role: "tool", tool_call_id: "call_2", name: "readFile", content: "content of b" },
+      ],
+    }, "project");
+
+    const userTurns = transformed.request.contents.filter((c: any) => c.role === "user");
+    // Initial user turn + consolidated tool response turn
+    expect(userTurns.length).toBe(2);
+    const toolTurn = userTurns[1];
+    expect(toolTurn.parts.length).toBe(2);
+    expect(toolTurn.parts[0].functionResponse.response.result).toBe("content of a");
+    expect(toolTurn.parts[1].functionResponse.response.result).toBe("content of b");
   });
 
   test("drops telemetry keys recursively", () => {

@@ -200,5 +200,38 @@ describe("protocol conversion SDK", () => {
     const failedAnthropic = await chatSseToAnthropic(new Response('data: {"error":{"message":"bad request"}}\n\n'), "model").text();
     expect(failedAnthropic).toContain('"type":"error"');
     expect(failedAnthropic).not.toContain('"type":"message_stop"');
+
+    const multiToolChat = [
+      'data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_1","type":"function","function":{"name":"edit","arguments":"{\\"path\\":\\"a.ts\\"}"}}]}}]}\n\n',
+      'data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":1,"id":"call_2","type":"function","function":{"name":"read","arguments":"{\\"path\\":\\"b.ts\\"}"}}]}}]}\n\n',
+      'data: {"choices":[{"index":0,"delta":{},"finish_reason":"tool_calls"}]}\n\n',
+      'data: [DONE]\n\n',
+    ].join("");
+    const convertedAnthropic = await chatSseToAnthropic(new Response(multiToolChat), "claude-opus").text();
+    const anthropicBlocks = convertedAnthropic
+      .split("\n\n")
+      .filter((line) => line.includes("data: "))
+      .map((line) => {
+        const raw = line.slice(line.indexOf("data: ") + 6).trim();
+        return raw ? JSON.parse(raw) : null;
+      })
+      .filter(Boolean);
+
+    const starts = anthropicBlocks.filter((b) => b.type === "content_block_start" && b.content_block?.type === "tool_use");
+    expect(starts.length).toBe(2);
+    expect(starts[0].index).toBe(0);
+    expect(starts[0].content_block.name).toBe("edit");
+    expect(starts[1].index).toBe(1);
+    expect(starts[1].content_block.name).toBe("read");
+
+    const deltas = anthropicBlocks.filter((b) => b.type === "content_block_delta");
+    expect(deltas.length).toBe(2);
+    expect(deltas[0].index).toBe(0);
+    expect(deltas[0].delta.partial_json).toBe('{"path":"a.ts"}');
+    expect(deltas[1].index).toBe(1);
+    expect(deltas[1].delta.partial_json).toBe('{"path":"b.ts"}');
+
+    const msgDelta = anthropicBlocks.find((b) => b.type === "message_delta");
+    expect(msgDelta.delta.stop_reason).toBe("tool_use");
   });
 });
