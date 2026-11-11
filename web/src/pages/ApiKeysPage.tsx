@@ -124,6 +124,11 @@ export default function ApiKeysPage() {
     try {
       await apiKeys.remove(removeTarget.id);
       setKeys((items) => items.filter((item) => item.id !== removeTarget.id));
+      setRevealed((items) => {
+        const next = { ...items };
+        delete next[removeTarget.id];
+        return next;
+      });
       setRemoveTarget(null);
       success("API key revoked");
     } catch (e: any) {
