@@ -157,6 +157,38 @@ function normalizeErrorForDetails(error: unknown, depth = 0): unknown {
   return error;
 }
 
+function resolveInitialBilling(
+  providerId?: string | null,
+  modelName?: string | null,
+): ProviderBillingType {
+  if (!providerId) return "pay_as_you_go";
+  try {
+    const prov = getDb()
+      .query(
+        "SELECT p.protocol, p.name, p.base_url, p.billing_type AS provider_billing, m.billing_type AS model_billing FROM providers p LEFT JOIN models m ON m.provider_id = p.id AND (m.model_id = ? OR m.pretty_id = ?) WHERE p.id = ?",
+      )
+      .get(modelName ?? "", modelName ?? "", providerId) as {
+      protocol: string;
+      name: string;
+      base_url: string;
+      provider_billing?: string;
+      model_billing?: string;
+    } | null;
+    if (prov) {
+      const defaultBilling = defaultBillingTypeForProvider(
+        prov.protocol,
+        prov.name,
+        prov.base_url,
+      );
+      return prov.model_billing && prov.model_billing !== "inherit"
+        ? (prov.model_billing as ProviderBillingType)
+        : (prov.provider_billing as ProviderBillingType | undefined) ??
+            defaultBilling;
+    }
+  } catch {}
+  return "pay_as_you_go";
+}
+
 function requestId() {
   const stamp = new Date()
     .toISOString()
@@ -210,9 +242,10 @@ export const requestLogService = {
     guardrailsDetails?: unknown;
   }) {
     const id = requestId();
+    const billingType = resolveInitialBilling(input.providerId, input.modelName);
     getDb()
       .query(
-        "INSERT INTO request_logs (id, provider_id, provider_name, model_name, client_ip, requester_name, api_key_prefix, request_details, streaming, guardrails_status, guardrails_details) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO request_logs (id, provider_id, provider_name, model_name, client_ip, requester_name, api_key_prefix, request_details, streaming, guardrails_status, guardrails_details, billing_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
       )
       .run(
         id,
@@ -226,6 +259,7 @@ export const requestLogService = {
         input.streaming ? 1 : 0,
         input.guardrailsStatus ?? null,
         input.guardrailsDetails ? serializeDetail(input.guardrailsDetails) : null,
+        billingType,
       );
     try {
       const log = requireLog(id);
@@ -446,9 +480,10 @@ export const requestLogService = {
         normalizedDetails !== undefined
           ? { message: error, ...(typeof normalizedDetails === "object" && normalizedDetails !== null && !Array.isArray(normalizedDetails) ? normalizedDetails as Record<string, unknown> : { detail: normalizedDetails }), rejected: true }
           : { message: error, rejected: true };
+      const billingType = resolveInitialBilling(input.providerId, input.modelName);
       getDb()
         .query(
-          "INSERT INTO request_logs (id, provider_id, provider_name, model_name, client_ip, requester_name, api_key_prefix, status, status_code, error_message, request_details, response_details, error_details, streaming, duration_ms, completed_at, guardrails_status, guardrails_details) VALUES (?, ?, ?, ?, ?, ?, ?, 'error', ?, ?, ?, ?, ?, ?, ?, datetime('now'), ?, ?)",
+          "INSERT INTO request_logs (id, provider_id, provider_name, model_name, client_ip, requester_name, api_key_prefix, status, status_code, error_message, request_details, response_details, error_details, streaming, duration_ms, completed_at, guardrails_status, guardrails_details, billing_type) VALUES (?, ?, ?, ?, ?, ?, ?, 'error', ?, ?, ?, ?, ?, ?, ?, datetime('now'), ?, ?, ?)",
         )
         .run(
           id,
@@ -467,6 +502,7 @@ export const requestLogService = {
           input.durationMs ?? null,
           input.guardrailsStatus ?? null,
           input.guardrailsDetails ? serializeDetail(input.guardrailsDetails) : null,
+          billingType,
         );
       try {
         const log = requireLog(id);
@@ -551,7 +587,7 @@ export const requestLogService = {
     const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
     const rows = db
       .query(
-        `${LIST_SQL} ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`,
+        `${LIST_SQL} ${where} ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?`,
       )
       .all(...values, limit, offset) as (RequestLog & { request_kind: string | null; output_bytes: number | null })[];
     for (const row of rows) hydrateRow(row);

@@ -376,8 +376,8 @@ export default function RequestLogsPage() {
   const scrollAnchor = useRef<HTMLTableSectionElement>(null);
 
   useEffect(() => {
-    filtersRef.current = { search, status, guardrails: guardrailsFilter };
-  }, [search, status, guardrailsFilter]);
+    filtersRef.current = { search, status, guardrails: guardrailsFilter, billing: billingFilter };
+  }, [search, status, guardrailsFilter, billingFilter]);
 
   const flushPendingUpdates = useCallback(() => {
     flushTimer.current = undefined;
@@ -412,6 +412,7 @@ export default function RequestLogsPage() {
       if (filtersRef.current.guardrails === "violations" && !log.guardrails_status) return;
       if (["blocked", "redacted", "audited"].includes(filtersRef.current.guardrails) && log.guardrails_status !== filtersRef.current.guardrails) return;
     }
+    if (filtersRef.current.billing && log.billing_type !== filtersRef.current.billing) return;
 
     if (pausedRef.current) {
       if (event.type === "created") {

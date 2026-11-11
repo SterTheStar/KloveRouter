@@ -230,6 +230,9 @@ describe("Subscription & Pay-As-You-Go Billing Support", () => {
       modelName: model.model_id,
     });
 
+    const pendingLog = requestLogService.get(reqId);
+    expect(pendingLog?.billing_type).toBe("subscription");
+
     requestLogService.complete(reqId, {
       promptTokens: 2000,
       completionTokens: 1000,
