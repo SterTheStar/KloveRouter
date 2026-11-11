@@ -68,8 +68,14 @@ function sampleSaturnGrid(cols: number, rows: number): number[][] {
 
 export default function AsciiSaturnLoading({
   status = "Initializing Saturn",
+  progress,
+  step,
 }: {
   status?: string;
+  /** 0..1 real boot progress. Omit to hide the progress bar. */
+  progress?: number;
+  /** Optional "completed/total" counter shown next to the bar. */
+  step?: { completed: number; total: number };
 }) {
   const [asciiArt, setAsciiArt] = useState<string>("");
   const gridRef = useRef<number[][] | null>(null);
@@ -199,7 +205,27 @@ export default function AsciiSaturnLoading({
           <span className="font-mono text-xs font-normal tracking-wide text-foreground">
             {status}
           </span>
-          <span className="text-[11px] text-tertiary">Connecting gateway services</span>
+          {progress === undefined ? (
+            <span className="text-[11px] text-tertiary">Connecting gateway services</span>
+          ) : (
+            <div className="mt-1 flex w-56 flex-col items-center gap-1.5">
+              <div
+                role="progressbar"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={Math.round(progress * 100)}
+                className="h-0.5 w-full overflow-hidden rounded-full bg-muted"
+              >
+                <div
+                  className="h-full rounded-full bg-foreground transition-[width] duration-300 ease-out"
+                  style={{ width: `${Math.round(progress * 100)}%` }}
+                />
+              </div>
+              <span className="text-[11px] tabular-nums text-tertiary">
+                {step ? `${step.completed}/${step.total}` : `${Math.round(progress * 100)}%`}
+              </span>
+            </div>
+          )}
         </div>
       </div>
     </div>

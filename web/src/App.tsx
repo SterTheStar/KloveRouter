@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { RiLoader4Line as LoaderCircle } from "@remixicon/react";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useAuth } from "./hooks/useAuth";
+import { useBoot } from "./hooks/useBoot";
 import Sidebar from "./components/Sidebar";
 import ChatSidebar from "./components/ChatSidebar";
 import { chats as chatsApi } from "./api/client";
@@ -23,7 +24,6 @@ import RequestLogsPage from "./pages/RequestLogsPage";
 import DocsPage from "./pages/DocsPage";
 import type { Page } from "./types";
 import { ToastProvider } from "./components/ui/toast";
-import { settings, updates } from "./api/client";
 import type { UserProfile } from "./types";
 import { queryCache, queryKeys, invalidateChats } from "./lib/query-cache";
 import { navigateToRoute, pathForRoute, routeFromPath, type AppRoute } from "./lib/navigation";
@@ -66,7 +66,6 @@ export default function App() {
     startResizing: startSidebarResize,
     resetWidth: resetSidebarWidth,
   } = useSidebarWidth();
-  const [minLoadingElapsed, setMinLoadingElapsed] = useState(false);
   const [updateInfo, setUpdateInfo] = useState<{
     hasUpdate: boolean;
     latestRelease: import("./types").GitHubReleaseInfo | null;
@@ -75,13 +74,18 @@ export default function App() {
     latestRelease: null,
   });
   const [settingsTab, setSettingsTab] = useState<string>("general");
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      setMinLoadingElapsed(true);
-    }, 5000);
-    return () => window.clearTimeout(timer);
-  }, []);
+  const boot = useBoot({
+    authLoading: loading,
+    isAuth,
+    handlers: {
+      onProfile: setProfile,
+      onUpdateStatus: (data) => {
+        if (data.hasUpdate) {
+          setUpdateInfo({ hasUpdate: true, latestRelease: data.latestRelease });
+        }
+      },
+    },
+  });
 
   useEffect(() => {
     const syncRoute = () => {
@@ -141,27 +145,6 @@ export default function App() {
   useEffect(() => {
     setMobileSidebarOpen(false);
   }, [currentPage, activeChatId]);
-
-  useEffect(() => {
-    if (isAuth) {
-      settings
-        .profile()
-        .then(setProfile)
-        .catch(() => undefined);
-
-      updates
-        .status()
-        .then((data) => {
-          if (data && data.hasUpdate) {
-            setUpdateInfo({
-              hasUpdate: true,
-              latestRelease: data.latestRelease,
-            });
-          }
-        })
-        .catch(() => undefined);
-    }
-  }, [isAuth]);
 
   useEffect(() => {
     if (!isAuth || currentPage !== "chat") return;
@@ -239,8 +222,14 @@ export default function App() {
     if (isAuth && currentPage === "login") navigateToRoute({ page: "dashboard" }, true);
   }, [isAuth, currentPage]);
 
-  if (loading || !minLoadingElapsed) {
-    return <AsciiSaturnLoading />;
+  if (boot.booting) {
+    return (
+      <AsciiSaturnLoading
+        status={boot.label}
+        progress={boot.progress}
+        step={{ completed: boot.completedSteps, total: boot.totalSteps }}
+      />
+    );
   }
 
   if (!isAuth) {
