@@ -28,6 +28,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs } from "@/components/ui/tabs";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { cn } from "@/lib/utils";
 import { pathForPage, shouldHandleLinkClick } from "../lib/navigation";
 import {
   Table,
@@ -1348,7 +1349,7 @@ export default function ProviderDetailPage({
               </DropdownMenu>
             </div>
             {list.length > 0 && <Tooltip><TooltipTrigger render={<Button variant="destructive" size="icon" aria-label="Delete all models" title="Delete all models" onClick={() => setClearOpen(true)} />}><Trash2 className="size-4" /></TooltipTrigger><TooltipContent>Delete all models</TooltipContent></Tooltip>}
-            <Button variant="outline" size="sm" onClick={openSync} disabled={syncing} aria-label="Sync models">{syncing ? <LoaderCircle className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}<span className="hidden sm:inline">Sync</span></Button>
+            <Button variant="outline" size="sm" onClick={openSync} disabled={syncing} aria-label="Sync models"><RefreshCw className={cn("size-4", syncing && "animate-spin")} /><span className="hidden sm:inline">Sync</span></Button>
             <Button variant="default" size="sm" onClick={() => setAddOpen(true)}>Add model</Button>
           </div>
         </CardHeader>

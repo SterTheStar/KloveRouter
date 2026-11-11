@@ -90,6 +90,7 @@ export function HtmlPreview({
   const [terminalOpen, setTerminalOpen] = useState(false);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [reloadKey, setReloadKey] = useState(0);
+  const [reloading, setReloading] = useState(false);
   const srcDoc = useMemo(
     () => injectBridge(code, makeBridge(tokenRef.current)),
     [code, streaming],
@@ -142,10 +143,14 @@ export function HtmlPreview({
           <button
             type="button"
             className="ml-auto flex h-7 items-center gap-1 rounded-lg px-2 text-xs text-tertiary transition-colors hover:bg-accent hover:text-foreground"
-            onClick={() => setReloadKey((key) => key + 1)}
+            onClick={() => {
+              setReloading(true);
+              setReloadKey((key) => key + 1);
+              setTimeout(() => setReloading(false), 500);
+            }}
             aria-label="Reload preview"
           >
-            <RiRefreshLine className="size-3.5" /> Reload
+            <RiRefreshLine className={cn("size-3.5", reloading && "animate-spin")} /> Reload
           </button>
           {terminalOpen && (
             <button

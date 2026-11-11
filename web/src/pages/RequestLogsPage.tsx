@@ -40,6 +40,7 @@ import { RequestLogDetailsModal } from "@/components/RequestLogDetailsModal";
 import { requestLogs } from "../api/client";
 import type { RequestLog, RequestLogDetails } from "../types";
 import { copyToClipboard } from "../lib/clipboard";
+import { cn } from "@/lib/utils";
 
 const PAGE_SIZE = 50;
 // Upper bound on in-memory rows so a long live session cannot grow the DOM
@@ -614,11 +615,7 @@ export default function RequestLogsPage() {
         </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={() => void fetchPage()} disabled={loading || refreshing}>
-            {refreshing ? (
-              <LoaderCircle className="size-4 animate-spin" />
-            ) : (
-              <RefreshIcon className="size-4" />
-            )}
+            <RefreshIcon className={cn("size-4", (refreshing || loading) && "animate-spin")} />
             Refresh
           </Button>
           <Button

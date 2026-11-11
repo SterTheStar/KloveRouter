@@ -7,6 +7,7 @@ import {
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
 import { antigravity, codex, deepai, freebuff, perch, providers } from "../api/client";
 import type {
   AntigravityQuotaBucket,
@@ -898,11 +899,7 @@ export default function UsageLimitsPage() {
           onClick={() => load(true)}
           disabled={refreshing}
         >
-          {refreshing ? (
-            <LoaderCircle className="size-4 animate-spin" />
-          ) : (
-            <RefreshCw className="size-4" />
-          )}
+          <RefreshCw className={cn("size-4", (refreshing || loading) && "animate-spin")} />
           Refresh
         </Button>
       </div>

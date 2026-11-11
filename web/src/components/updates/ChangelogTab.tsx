@@ -14,6 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { updates } from "@/api/client";
 import type { GitHubReleaseInfo } from "@/types";
+import { cn } from "@/lib/utils";
 import MarkdownRenderer from "./MarkdownRenderer";
 
 export default function ChangelogTab() {
@@ -123,11 +124,7 @@ export default function ChangelogTab() {
                 disabled={refreshing}
                 className="h-8 text-xs gap-1.5"
               >
-                {refreshing ? (
-                  <LoaderCircle className="size-3.5 animate-spin" />
-                ) : (
-                  <Refresh className="size-3.5" />
-                )}
+                <Refresh className={cn("size-3.5", refreshing && "animate-spin")} />
                 Refresh
               </Button>
             </div>

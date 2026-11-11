@@ -16,6 +16,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/components/ui/toast";
+import { cn } from "@/lib/utils";
 import { updates } from "@/api/client";
 import type {
   AppUpdateStatusResponse,
@@ -207,11 +208,7 @@ export default function UpdatesTab() {
                 disabled={checking}
                 className="gap-2"
               >
-                {checking ? (
-                  <LoaderCircle className="size-4 animate-spin" />
-                ) : (
-                  <Refresh className="size-4" />
-                )}
+                <Refresh className={cn("size-4", checking && "animate-spin")} />
                 Check for updates
               </Button>
             </div>

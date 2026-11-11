@@ -609,11 +609,7 @@ export default function StatsPage() {
             onClick={() => load(true)}
             disabled={refreshing}
           >
-            {refreshing ? (
-              <LoaderCircle className="size-3.5 animate-spin" />
-            ) : (
-              <RefreshIcon className="size-3.5" />
-            )}
+            <RefreshIcon className={cn("size-3.5", refreshing && "animate-spin")} />
             Refresh
           </Button>
         </div>
