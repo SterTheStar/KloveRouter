@@ -96,6 +96,7 @@ export default function Sidebar({
             variant={currentPage === page ? "secondary" : "ghost"}
             className="h-10 w-full justify-start gap-3 rounded-lg px-3 text-sm font-normal"
             render={<a href={pathForPage(page)} />}
+            nativeButton={false}
             onClick={(event) => {
               if (!shouldHandleLinkClick(event)) return;
               event.preventDefault();

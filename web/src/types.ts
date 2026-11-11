@@ -222,6 +222,9 @@ export interface DailyStats {
   date: string;
   requests: number;
   tokens_total: number;
+  tokens_prompt?: number;
+  tokens_completion?: number;
+  tokens_cache_read?: number;
   estimated_cost_usd: number;
 }
 

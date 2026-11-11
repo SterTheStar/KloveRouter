@@ -937,7 +937,7 @@ export default function ProviderDetailPage({
   return (
     <div className="mx-auto w-full max-w-7xl space-y-6 p-4 sm:p-6">
       <header className="flex min-w-0 items-center gap-2 border-b border-border pb-4 sm:gap-3">
-        <Button variant="outline" size="sm" className="shrink-0" render={<a href={pathForPage("dashboard")} />} onClick={(event) => {
+        <Button variant="outline" size="sm" className="shrink-0" render={<a href={pathForPage("dashboard")} />} nativeButton={false} onClick={(event) => {
           if (!shouldHandleLinkClick(event)) return;
           event.preventDefault();
           onBack();

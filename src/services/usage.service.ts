@@ -55,6 +55,9 @@ export interface DailyStats {
   date: string;
   requests: number;
   tokens_total: number;
+  tokens_prompt?: number;
+  tokens_completion?: number;
+  tokens_cache_read?: number;
   estimated_cost_usd: number;
 }
 
@@ -209,8 +212,11 @@ export const usageService = {
         `SELECT
            DATE(created_at) as date,
            COUNT(*) as requests,
-            COALESCE(SUM(tokens_total), 0) as tokens_total
-            ,COALESCE(SUM(estimated_cost_usd), 0) as estimated_cost_usd
+           COALESCE(SUM(tokens_total), 0) as tokens_total,
+           COALESCE(SUM(tokens_prompt), 0) as tokens_prompt,
+           COALESCE(SUM(tokens_completion), 0) as tokens_completion,
+           COALESCE(SUM(tokens_cache_read), 0) as tokens_cache_read,
+           COALESCE(SUM(estimated_cost_usd), 0) as estimated_cost_usd
          FROM usage_log
           ${dateFilter}
          GROUP BY DATE(created_at)

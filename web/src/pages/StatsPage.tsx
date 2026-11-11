@@ -1,405 +1,23 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  RiArrowDownLine as ArrowDown,
-  RiArrowUpLine as ArrowUp,
-  RiDatabase2Line as DatabaseLine,
-  RiExchangeLine as ExchangeLine,
-  RiFileList3Line as FileListLine,
-  RiLineChartLine as ChartLine,
   RiLoader4Line as LoaderCircle,
-  RiMoneyDollarCircleLine as CoinsLine,
-  RiNumbersLine as NumbersLine,
   RiRefreshLine as RefreshIcon,
-  RiSpeedLine as SpeedLine,
-  RiTimeLine as TimeLine,
 } from "@remixicon/react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardAction,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { Tabs } from "@/components/ui/tabs";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { StatusPanel } from "@/components/stats/StatusPanel";
+import { UsagePanel } from "@/components/stats/usage/UsagePanel";
 import { stats } from "../api/client";
 import type {
-  StatsOverview,
-  StatsByProvider,
-  StatsByModel,
   DailyStats,
-  StatsUptime,
+  StatsByModel,
+  StatsByProvider,
   StatsHealth,
+  StatsOverview,
+  StatsUptime,
 } from "../types";
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip as ChartTooltip,
-  ResponsiveContainer,
-  AreaChart,
-  Area,
-  Line,
-  PieChart,
-  Pie,
-  Cell,
-} from "recharts";
-
-const COLORS = [
-  "#5BCEFA",
-  "#F5A9B8",
-  "#FFD700",
-  "#80C080",
-  "#FF8C42",
-  "#A78BFA",
-  "#F472B6",
-  "#34D399",
-];
-const TOKENS_COLOR = "#5BCEFA";
-const COST_COLOR = "#F5A9B8";
-const AXIS = { fontSize: 11, fill: "currentColor" };
-
-function formatNumber(n: number): string {
-  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + "M";
-  if (n >= 1_000) return (n / 1_000).toFixed(1) + "K";
-  return n.toLocaleString();
-}
-
-function formatCost(value: number): string {
-  return `$${value.toFixed(value < 0.01 && value > 0 ? 4 : 2)}`;
-}
-
-function formatDuration(ms: number): string {
-  if (ms >= 1000) return (ms / 1000).toFixed(1) + "s";
-  return ms.toFixed(0) + "ms";
-}
-
-function formatDate(value: string): string {
-  const date = new Date(`${value}T00:00:00`);
-  return Number.isNaN(date.getTime())
-    ? value
-    : date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
-}
-
-type ChartFormatters = Record<string, (value: number) => string>;
-
-function ChartTooltipContent({
-  active,
-  payload,
-  label,
-  formatters,
-}: {
-  active?: boolean;
-  payload?: any[];
-  label?: string | number;
-  formatters?: ChartFormatters;
-}) {
-  if (!active || !payload?.length) return null;
-  const rows = payload.filter(
-    (item) => item.value !== undefined && item.value !== null,
-  );
-  if (!rows.length) return null;
-  return (
-    <div className="rounded-lg border border-border bg-popover px-3 py-2 text-xs text-popover-foreground shadow-[0px_4px_16px_0px_rgba(0,0,0,0.05)]">
-      {label !== undefined && (
-        <div className="mb-1.5 border-b border-border pb-1 font-normal">
-          {typeof label === "string" && /^\d{4}-\d{2}-\d{2}$/.test(label)
-            ? formatDate(label)
-            : label}
-        </div>
-      )}
-      <div className="space-y-1">
-        {rows.map((item, index) => {
-          const key = String(item.dataKey ?? item.name);
-          const format = formatters?.[key];
-          return (
-            <div
-              key={`${key}-${index}`}
-              className="flex items-center justify-between gap-6"
-            >
-              <span className="flex items-center gap-1.5 text-muted-foreground">
-                {item.color && (
-                  <span
-                    className="size-2 shrink-0 rounded-full"
-                    style={{ background: item.color }}
-                  />
-                )}
-                {item.name ?? key}
-              </span>
-              <span className="font-mono font-normal tabular-nums">
-                {typeof item.value === "number"
-                  ? format
-                    ? format(item.value)
-                    : item.value.toLocaleString()
-                  : item.value}
-              </span>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-function ChartPanel({
-  title,
-  description,
-  action,
-  children,
-  className = "",
-}: {
-  title: string;
-  description: string;
-  action?: ReactNode;
-  children: ReactNode;
-  className?: string;
-}) {
-  return (
-    <Card className={`overflow-hidden ${className}`}>
-      <CardHeader className="border-b border-border">
-        <CardTitle>{title}</CardTitle>
-        <CardDescription>{description}</CardDescription>
-        {action ? <CardAction>{action}</CardAction> : null}
-      </CardHeader>
-      <CardContent className="pt-4">{children}</CardContent>
-    </Card>
-  );
-}
-
-type DonutItem = {
-  name: string;
-  value: number;
-  color: string;
-};
-
-function DonutLegend({
-  items,
-  total,
-  format,
-}: {
-  items: DonutItem[];
-  total: number;
-  format: (value: number) => string;
-}) {
-  return (
-    <ul className="flex flex-col gap-1.5">
-      {items.map((item) => {
-        const share = total > 0 ? (item.value / total) * 100 : 0;
-        return (
-          <li
-            key={item.name}
-            className="flex items-start gap-2 text-xs"
-            title={item.name}
-          >
-            <span
-              className="size-2.5 shrink-0 rounded-sm"
-              style={{ background: item.color }}
-            />
-            <span className="min-w-0 flex-1 break-words text-muted-foreground">
-              {item.name}
-            </span>
-            <span className="font-mono tabular-nums">{format(item.value)}</span>
-            <span className="w-11 text-right font-normal tabular-nums">
-              {share.toFixed(0)}%
-            </span>
-          </li>
-        );
-      })}
-    </ul>
-  );
-}
-
-function DonutChart({
-  data,
-  dataKey,
-  nameKey,
-  format,
-  centerLabel,
-}: {
-  data: StatsByProvider[];
-  dataKey: keyof StatsByProvider;
-  nameKey: keyof StatsByProvider;
-  format: (value: number) => string;
-  centerLabel: string;
-}) {
-  const items: DonutItem[] = data
-    .map((entry, index) => ({
-      name: String(entry[nameKey] ?? ""),
-      value: Number(entry[dataKey]) || 0,
-      color: COLORS[index % COLORS.length],
-    }))
-    .filter((item) => item.value > 0)
-    .sort((a, b) => b.value - a.value);
-  const total = items.reduce((sum, item) => sum + item.value, 0);
-  if (!items.length) return null;
-
-  return (
-    <div className="flex h-full flex-col gap-5">
-      <div className="relative mx-auto aspect-square w-44 sm:w-52">
-        <ResponsiveContainer width="100%" height="100%">
-          <PieChart>
-            <Pie
-              data={items}
-              dataKey="value"
-              nameKey="name"
-              cx="50%"
-              cy="50%"
-              innerRadius="70%"
-              outerRadius="100%"
-              paddingAngle={2}
-              cornerRadius={6}
-              strokeWidth={0}
-            >
-              {items.map((item) => (
-                <Cell key={item.name} fill={item.color} />
-              ))}
-            </Pie>
-            <ChartTooltip
-              content={<ChartTooltipContent formatters={{ value: format }} />}
-            />
-          </PieChart>
-        </ResponsiveContainer>
-        <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center">
-          <span className="text-xs font-normal text-tertiary">
-            {centerLabel}
-          </span>
-          <span className="font-heading text-xl font-normal tracking-tight tabular-nums text-foreground">
-            {format(total)}
-          </span>
-        </div>
-      </div>
-      <DonutLegend items={items} total={total} format={format} />
-    </div>
-  );
-}
-
-type StatCardData = {
-  icon: typeof ExchangeLine;
-  title: string;
-  value: string;
-  sub?: string;
-};
-
-function StatCard({ icon: Icon, title, value, sub }: StatCardData) {
-  return (
-    <Card className="gap-0">
-      <CardContent className="flex flex-1 items-center gap-4">
-        <Icon className="size-9 shrink-0 text-tertiary" />
-        <div className="min-w-0">
-          <div className="truncate text-xs text-tertiary">{title}</div>
-          <div className="mt-0.5 font-heading text-2xl font-normal tracking-tight tabular-nums text-foreground">
-            {value}
-          </div>
-          {sub && (
-            <div className="truncate text-xs text-tertiary">{sub}</div>
-          )}
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-function TokenBreakdownTooltip({
-  prompt,
-  completion,
-  cache,
-  children,
-}: {
-  prompt: number;
-  completion: number;
-  cache: number;
-  children: ReactNode;
-}) {
-  const rows = [
-    { label: "Input", value: prompt },
-    { label: "Output", value: completion },
-    { label: "Cached", value: cache },
-  ];
-  return (
-    <Tooltip>
-      <TooltipTrigger render={<span className="cursor-help" />}>
-        {children}
-      </TooltipTrigger>
-      <TooltipContent side="top" className="flex-col items-stretch gap-1 py-2">
-        <div className="text-xs font-normal text-tertiary">
-          Token breakdown
-        </div>
-        {rows.map(({ label, value }) => (
-          <div key={label} className="flex items-center justify-between gap-6">
-            <span className="text-muted-foreground">{label}</span>
-            <span className="font-mono font-normal tabular-nums">
-              {formatNumber(value)}
-            </span>
-          </div>
-        ))}
-      </TooltipContent>
-    </Tooltip>
-  );
-}
-
-type ModelSortKey =
-  | "model_name"
-  | "provider_name"
-  | "requests"
-  | "tokens_total"
-  | "tokens_cache_read"
-  | "estimated_cost_usd"
-  | "avg_duration_ms"
-  | "tps";
-
-function SortTh({
-  label,
-  k,
-  sortKey,
-  sortDir,
-  onSort,
-  align = "left",
-}: {
-  label: string;
-  k: ModelSortKey;
-  sortKey: ModelSortKey;
-  sortDir: "asc" | "desc";
-  onSort: (k: ModelSortKey) => void;
-  align?: "left" | "right";
-}) {
-  const active = sortKey === k;
-  const icon = active ? (
-    sortDir === "asc" ? (
-      <ArrowUp className="size-3" />
-    ) : (
-      <ArrowDown className="size-3" />
-    )
-  ) : null;
-  return (
-    <th className="px-3 py-2.5 whitespace-nowrap">
-      <button
-        type="button"
-        onClick={() => onSort(k)}
-        className={cn(
-          "flex w-full items-center gap-1 text-xs font-normal text-tertiary transition-colors hover:text-foreground",
-          align === "right" ? "justify-end" : "justify-start",
-          active && "text-foreground",
-        )}
-      >
-        {align === "right" && icon}
-        {label}
-        {align === "left" && icon}
-      </button>
-    </th>
-  );
-}
 
 export default function StatsPage() {
   const [overview, setOverview] = useState<StatsOverview | null>(null);
@@ -413,13 +31,7 @@ export default function StatsPage() {
   const [activeTab, setActiveTab] = useState("usage");
   const [uptime, setUptime] = useState<StatsUptime | null>(null);
   const [health, setHealth] = useState<StatsHealth | null>(null);
-  const [sortKey, setSortKey] = useState<ModelSortKey>("tokens_total");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const loadingRef = useRef(false);
-  const providerAxisWidth = Math.max(
-    96,
-    ...byProvider.map((provider) => Math.ceil(provider.provider_name.length * 7.5 + 16)),
-  );
 
   const load = useCallback(async (background = false) => {
     if (loadingRef.current) return;
@@ -464,108 +76,6 @@ export default function StatsPage() {
     { label: "All", value: null },
   ];
 
-  const statCards = useMemo<StatCardData[]>(() => {
-    if (!overview) return [];
-    const daysWithData = daily.length;
-    const cacheShare =
-      overview.total_tokens > 0
-        ? (overview.total_tokens_cache / overview.total_tokens) * 100
-        : 0;
-    return [
-      {
-        icon: ExchangeLine,
-        title: "Requests",
-        value: formatNumber(overview.total_requests),
-        sub:
-          daysWithData > 1
-            ? `${formatNumber(Math.round(overview.total_requests / daysWithData))} / day avg`
-            : undefined,
-      },
-      {
-        icon: NumbersLine,
-        title: "Total tokens",
-        value: formatNumber(overview.total_tokens),
-        sub: `${formatNumber(overview.total_tokens_prompt)} in · ${formatNumber(overview.total_tokens_completion)} out`,
-      },
-      {
-        icon: DatabaseLine,
-        title: "Cached tokens",
-        value: formatNumber(overview.total_tokens_cache),
-        sub: `${cacheShare.toFixed(0)}% of all tokens`,
-      },
-      {
-        icon: FileListLine,
-        title: "Avg tokens/req",
-        value: formatNumber(Math.round(overview.avg_tokens_per_request)),
-      },
-      {
-        icon: SpeedLine,
-        title: "Avg duration",
-        value: formatDuration(overview.avg_duration_ms),
-      },
-      {
-        icon: CoinsLine,
-        title: "Estimated cost",
-        value: formatCost(overview.estimated_cost_usd),
-        sub:
-          overview.total_requests > 0
-            ? `${formatCost(overview.estimated_cost_usd / overview.total_requests)} / request avg`
-            : undefined,
-      },
-    ];
-  }, [overview, daily.length]);
-
-  const sortedModels = useMemo(() => {
-    const arr = [...byModel];
-    arr.sort((a, b) => {
-      const av = a[sortKey];
-      const bv = b[sortKey];
-      const cmp =
-        typeof av === "number" && typeof bv === "number"
-          ? av - bv
-          : String(av ?? "").localeCompare(String(bv ?? ""));
-      return sortDir === "asc" ? cmp : -cmp;
-    });
-    return arr;
-  }, [byModel, sortKey, sortDir]);
-
-  const modelTotals = useMemo(() => {
-    let requests = 0;
-    let tokens = 0;
-    let prompt = 0;
-    let completion = 0;
-    let cache = 0;
-    let cost = 0;
-    let weightedDuration = 0;
-    for (const m of byModel) {
-      requests += m.requests;
-      tokens += m.tokens_total;
-      prompt += m.tokens_prompt;
-      completion += m.tokens_completion;
-      cache += m.tokens_cache_read;
-      cost += m.estimated_cost_usd;
-      weightedDuration += m.avg_duration_ms * m.requests;
-    }
-    return {
-      requests,
-      tokens,
-      prompt,
-      completion,
-      cache,
-      cost,
-      avgDuration: requests > 0 ? weightedDuration / requests : 0,
-    };
-  }, [byModel]);
-
-  const handleSort = (k: ModelSortKey) => {
-    if (k === sortKey) {
-      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-    } else {
-      setSortKey(k);
-      setSortDir(k === "model_name" || k === "provider_name" ? "asc" : "desc");
-    }
-  };
-
   if (loading)
     return (
       <div className="flex justify-center p-12">
@@ -575,6 +85,7 @@ export default function StatsPage() {
 
   return (
     <div className="w-full space-y-6 p-6">
+      {/* Page Header */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="font-heading text-2xl font-normal tracking-tight text-foreground">
@@ -582,10 +93,11 @@ export default function StatsPage() {
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
             {activeTab === "status"
-              ? "Request outcomes for the selected period."
-              : "Token usage, cost and performance across your providers."}
+              ? "Request outcomes for the selected period"
+              : "Token usage, cost and performance across your providers"}
           </p>
         </div>
+
         <div className="flex items-center gap-2">
           <div className="flex items-center rounded-lg border border-border bg-surface p-0.5">
             {daysOptions.map(({ label, value }) => (
@@ -596,13 +108,14 @@ export default function StatsPage() {
                   "h-7 rounded-md px-2.5 text-xs font-normal transition-colors",
                   days === value
                     ? "bg-card text-foreground"
-                    : "text-tertiary hover:text-foreground",
+                    : "text-tertiary hover:text-foreground"
                 )}
               >
                 {label}
               </button>
             ))}
           </div>
+
           <Button
             variant="outline"
             size="sm"
@@ -621,6 +134,7 @@ export default function StatsPage() {
         </Alert>
       )}
 
+      {/* Tabs */}
       <Tabs
         tabs={[
           { id: "usage", label: "Usage" },
@@ -630,422 +144,19 @@ export default function StatsPage() {
         onChange={setActiveTab}
       />
 
+      {/* Tab Panels */}
       {activeTab === "status" && uptime && health ? (
         <StatusPanel uptime={uptime} health={health} />
       ) : null}
 
-      {activeTab === "usage" && overview && (
-        <>
-          {overview.total_requests === 0 ? (
-            <div className="rounded-xl border border-dashed border-border bg-background/60 px-6 py-10 text-center">
-              <ChartLine className="mx-auto size-8 text-tertiary" />
-              <h2 className="mt-3 font-heading text-sm font-normal text-foreground">
-                No usage data yet
-              </h2>
-              <p className="mt-1 text-xs text-tertiary">
-                Token usage will appear here after you make requests through the
-                API proxy.
-              </p>
-            </div>
-          ) : (
-            <>
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
-                {statCards.map(({ icon: Icon, title, value, sub }) => (
-                  <StatCard
-                    key={title}
-                    icon={Icon}
-                    title={title}
-                    value={value}
-                    sub={sub}
-                  />
-                ))}
-              </div>
-
-              {daily.length > 0 && (
-                <ChartPanel
-                  title="Daily usage"
-                  description="Token volume and estimated cost per day"
-                  className="min-h-[22rem]"
-                  action={
-                    <div className="flex items-center gap-4 text-xs text-tertiary">
-                      <span className="flex items-center gap-1.5">
-                        <span
-                          className="size-2 rounded-full"
-                          style={{ background: TOKENS_COLOR }}
-                        />
-                        Tokens
-                      </span>
-                      <span className="flex items-center gap-1.5">
-                        <span
-                          className="size-2 rounded-full"
-                          style={{ background: COST_COLOR }}
-                        />
-                        Est. cost
-                      </span>
-                    </div>
-                  }
-                >
-                  <div className="h-72">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart
-                        data={daily}
-                        margin={{ top: 8, right: 8, left: 4, bottom: 0 }}
-                      >
-                        <defs>
-                          <linearGradient
-                            id="tokensGradient"
-                            x1="0"
-                            y1="0"
-                            x2="0"
-                            y2="1"
-                          >
-                            <stop
-                              offset="0%"
-                              stopColor={TOKENS_COLOR}
-                              stopOpacity={0.35}
-                            />
-                            <stop
-                              offset="100%"
-                              stopColor={TOKENS_COLOR}
-                              stopOpacity={0}
-                            />
-                          </linearGradient>
-                        </defs>
-                        <CartesianGrid
-                          vertical={false}
-                          strokeDasharray="4 4"
-                          className="stroke-border"
-                        />
-                        <XAxis
-                          dataKey="date"
-                          tickFormatter={formatDate}
-                          tick={AXIS}
-                          axisLine={false}
-                          tickLine={false}
-                          interval="preserveStartEnd"
-                          minTickGap={24}
-                        />
-                        <YAxis
-                          yAxisId="tokens"
-                          tick={AXIS}
-                          axisLine={false}
-                          tickLine={false}
-                          tickFormatter={formatNumber}
-                          width={48}
-                        />
-                        <YAxis
-                          yAxisId="cost"
-                          orientation="right"
-                          tick={AXIS}
-                          axisLine={false}
-                          tickLine={false}
-                          tickFormatter={formatCost}
-                          width={52}
-                        />
-                        <ChartTooltip
-                          content={
-                            <ChartTooltipContent
-                              formatters={{
-                                tokens_total: formatNumber,
-                                estimated_cost_usd: formatCost,
-                              }}
-                            />
-                          }
-                        />
-                        <Area
-                          yAxisId="tokens"
-                          type="monotone"
-                          dataKey="tokens_total"
-                          stroke={TOKENS_COLOR}
-                          strokeWidth={2.5}
-                          fill="url(#tokensGradient)"
-                          name="Tokens"
-                          dot={false}
-                          activeDot={{
-                            r: 4,
-                            strokeWidth: 2,
-                            fill: "var(--popover)",
-                          }}
-                        />
-                        <Line
-                          yAxisId="cost"
-                          type="monotone"
-                          dataKey="estimated_cost_usd"
-                          stroke={COST_COLOR}
-                          strokeWidth={2}
-                          dot={false}
-                          activeDot={{
-                            r: 4,
-                            strokeWidth: 2,
-                            fill: "var(--popover)",
-                          }}
-                          name="Est. cost"
-                        />
-                      </AreaChart>
-                    </ResponsiveContainer>
-                  </div>
-                </ChartPanel>
-              )}
-
-              {byProvider.length > 0 && (
-                <ChartPanel
-                  title="By provider"
-                  description="Token volume grouped by provider"
-                >
-                  <div className="h-72 overflow-x-auto">
-                    <div className="h-full" style={{ minWidth: `${providerAxisWidth + 220}px` }}>
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart
-                        data={byProvider}
-                        layout="vertical"
-                        margin={{ top: 8, right: 16, left: 8, bottom: 8 }}
-                      >
-                        <CartesianGrid
-                          horizontal={false}
-                          strokeDasharray="4 4"
-                          className="stroke-border"
-                        />
-                        <XAxis
-                          type="number"
-                          tick={AXIS}
-                          axisLine={false}
-                          tickLine={false}
-                          tickFormatter={formatNumber}
-                        />
-                        <YAxis
-                          type="category"
-                          dataKey="provider_name"
-                          tick={AXIS}
-                          axisLine={false}
-                          tickLine={false}
-                          width={providerAxisWidth}
-                        />
-                        <ChartTooltip
-                          content={
-                            <ChartTooltipContent
-                              formatters={{ tokens_total: formatNumber }}
-                            />
-                          }
-                          cursor={{ fill: "var(--accent)", opacity: 1 }}
-                        />
-                        <Bar
-                          dataKey="tokens_total"
-                          name="Tokens"
-                          radius={[0, 6, 6, 0]}
-                          maxBarSize={26}
-                        >
-                          {byProvider.map((_, index) => (
-                            <Cell
-                              key={index}
-                              fill={COLORS[index % COLORS.length]}
-                            />
-                          ))}
-                        </Bar>
-                      </BarChart>
-                    </ResponsiveContainer>
-                    </div>
-                  </div>
-                </ChartPanel>
-              )}
-
-              {byProvider.length > 0 && (
-                <div className="grid gap-6 md:grid-cols-2">
-                  <ChartPanel
-                    title="Token share"
-                    description="Share of total tokens by provider"
-                  >
-                    <div className="min-h-80">
-                      <DonutChart
-                        data={byProvider}
-                        dataKey="tokens_total"
-                        nameKey="provider_name"
-                        format={formatNumber}
-                        centerLabel="Tokens"
-                      />
-                    </div>
-                  </ChartPanel>
-
-                  <ChartPanel
-                    title="Requests by provider"
-                    description="Request distribution by provider"
-                  >
-                    <div className="min-h-80">
-                      <DonutChart
-                        data={byProvider}
-                        dataKey="requests"
-                        nameKey="provider_name"
-                        format={formatNumber}
-                        centerLabel="Requests"
-                      />
-                    </div>
-                  </ChartPanel>
-                </div>
-              )}
-
-              {byModel.length > 0 && (
-                <Card className="gap-0 overflow-hidden p-0">
-                  <CardHeader className="py-(--card-spacing)">
-                    <CardTitle>By model</CardTitle>
-                    <CardAction>
-                      <span className="text-xs text-tertiary">
-                        {byModel.length} models
-                      </span>
-                    </CardAction>
-                  </CardHeader>
-                  <div className="max-h-[30rem] overflow-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-y border-border bg-background/60 text-left">
-                          <SortTh
-                            label="Model"
-                            k="model_name"
-                            sortKey={sortKey}
-                            sortDir={sortDir}
-                            onSort={handleSort}
-                          />
-                          <SortTh
-                            label="Provider"
-                            k="provider_name"
-                            sortKey={sortKey}
-                            sortDir={sortDir}
-                            onSort={handleSort}
-                          />
-                          <SortTh
-                            label="Requests"
-                            k="requests"
-                            sortKey={sortKey}
-                            sortDir={sortDir}
-                            onSort={handleSort}
-                            align="right"
-                          />
-                          <SortTh
-                            label="Tokens"
-                            k="tokens_total"
-                            sortKey={sortKey}
-                            sortDir={sortDir}
-                            onSort={handleSort}
-                            align="right"
-                          />
-                          <SortTh
-                            label="Cache"
-                            k="tokens_cache_read"
-                            sortKey={sortKey}
-                            sortDir={sortDir}
-                            onSort={handleSort}
-                            align="right"
-                          />
-                          <SortTh
-                            label="Est. cost"
-                            k="estimated_cost_usd"
-                            sortKey={sortKey}
-                            sortDir={sortDir}
-                            onSort={handleSort}
-                            align="right"
-                          />
-                          <SortTh
-                            label="Avg duration"
-                            k="avg_duration_ms"
-                            sortKey={sortKey}
-                            sortDir={sortDir}
-                            onSort={handleSort}
-                            align="right"
-                          />
-                          <SortTh
-                            label="TPS"
-                            k="tps"
-                            sortKey={sortKey}
-                            sortDir={sortDir}
-                            onSort={handleSort}
-                            align="right"
-                          />
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {sortedModels.map((m) => (
-                          <tr
-                            key={m.model_id}
-                            className="border-b border-border last:border-0 hover:bg-accent/60"
-                          >
-                            <td
-                              className="max-w-56 truncate px-3 py-2.5 font-mono text-xs"
-                              title={m.model_name}
-                            >
-                              {m.model_name}
-                            </td>
-                            <td className="px-3 py-2.5 text-muted-foreground">
-                              {m.provider_name}
-                            </td>
-                            <td className="px-3 py-2.5 text-right font-mono tabular-nums">
-                              {formatNumber(m.requests)}
-                            </td>
-                            <td className="px-3 py-2.5 text-right font-mono tabular-nums">
-                              <TokenBreakdownTooltip
-                                prompt={m.tokens_prompt}
-                                completion={m.tokens_completion}
-                                cache={m.tokens_cache_read}
-                              >
-                                {formatNumber(m.tokens_total)}
-                              </TokenBreakdownTooltip>
-                            </td>
-                            <td
-                              className="px-3 py-2.5 text-right tabular-nums text-muted-foreground"
-                              title={
-                                m.tokens_total > 0
-                                  ? `${((m.tokens_cache_read / m.tokens_total) * 100).toFixed(0)}% cached`
-                                  : undefined
-                              }
-                            >
-                              {formatNumber(m.tokens_cache_read)}
-                            </td>
-                            <td className="px-3 py-2.5 text-right font-normal tabular-nums">
-                              {formatCost(m.estimated_cost_usd)}
-                            </td>
-                            <td className="px-3 py-2.5 text-right tabular-nums">
-                              {formatDuration(m.avg_duration_ms)}
-                            </td>
-                            <td className="px-3 py-2.5 text-right font-mono text-xs tabular-nums">
-                              {m.tps !== null ? m.tps.toFixed(1) : "—"}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                      <tfoot>
-                        <tr className="border-t border-border bg-background/60 text-xs font-normal">
-                          <td className="px-3 py-2.5" colSpan={2}>
-                            Total · {byModel.length} models
-                          </td>
-                          <td className="px-3 py-2.5 text-right font-mono tabular-nums">
-                            {formatNumber(modelTotals.requests)}
-                          </td>
-                          <td className="px-3 py-2.5 text-right font-mono tabular-nums">
-                            <TokenBreakdownTooltip
-                              prompt={modelTotals.prompt}
-                              completion={modelTotals.completion}
-                              cache={modelTotals.cache}
-                            >
-                              {formatNumber(modelTotals.tokens)}
-                            </TokenBreakdownTooltip>
-                          </td>
-                          <td className="px-3 py-2.5 text-right font-mono tabular-nums">
-                            {formatNumber(modelTotals.cache)}
-                          </td>
-                          <td className="px-3 py-2.5 text-right font-mono tabular-nums">
-                            {formatCost(modelTotals.cost)}
-                          </td>
-                          <td className="px-3 py-2.5 text-right font-mono tabular-nums">
-                            {formatDuration(modelTotals.avgDuration)}
-                          </td>
-                          <td className="px-3 py-2.5 text-right">—</td>
-                        </tr>
-                      </tfoot>
-                    </table>
-                  </div>
-                </Card>
-              )}
-            </>
-          )}
-        </>
-      )}
+      {activeTab === "usage" && overview ? (
+        <UsagePanel
+          overview={overview}
+          byProvider={byProvider}
+          byModel={byModel}
+          daily={daily}
+        />
+      ) : null}
     </div>
   );
 }
