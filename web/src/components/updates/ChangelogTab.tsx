@@ -21,7 +21,7 @@ export default function ChangelogTab() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [releases, setReleases] = useState<GitHubReleaseInfo[]>([]);
-  const [currentVersion, setCurrentVersion] = useState("0.1.1-beta");
+  const [currentVersion, setCurrentVersion] = useState("0.1.2-beta");
   const [searchQuery, setSearchQuery] = useState("");
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
 
@@ -33,7 +33,7 @@ export default function ChangelogTab() {
       const res = await updates.releases();
       const list = res.releases || [];
       setReleases(list);
-      setCurrentVersion(res.currentVersion || "0.1.1-beta");
+      setCurrentVersion(res.currentVersion || "0.1.2-beta");
       // By default expand the newest release
       if (list.length > 0 && !isManual) {
         setExpandedIds(new Set([list[0].id]));
