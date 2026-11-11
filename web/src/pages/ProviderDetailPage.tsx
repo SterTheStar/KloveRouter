@@ -1439,6 +1439,16 @@ export default function ProviderDetailPage({
                         )}
                       </span>
                       <ModelCapabilityBadges capabilities={model.capabilities} contextWindow={model.context_window} />
+                      {model.effective_billing_type === "subscription" && (
+                        <Badge variant="outline" className="border-purple-500/20 bg-purple-500/10 text-purple-600 dark:text-purple-300 text-[10px] font-normal">
+                          Subscription
+                        </Badge>
+                      )}
+                      {model.effective_billing_type === "free" && (
+                        <Badge variant="outline" className="border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300 text-[10px] font-normal">
+                          Free
+                        </Badge>
+                      )}
                     </div>
                   </TableCell>
                   <TableCell>

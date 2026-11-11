@@ -250,4 +250,43 @@ describe("Subscription & Pay-As-You-Go Billing Support", () => {
     const filteredPayg = requestLogService.list({ billing_type: "pay_as_you_go" });
     expect(filteredPayg.data.some((l) => l.id === reqId)).toBe(false);
   });
+
+  test("free models automatically default to free billing_type and zero litellm pricing", () => {
+    const provider = providerService.create({
+      name: "OpenRouter Provider",
+      base_url: "https://openrouter.ai/api/v1",
+      protocol: "openai",
+      billing_type: "pay_as_you_go",
+    });
+
+    // 1. Model with :free suffix defaults to "free" billing_type
+    const freeModel = modelService.create({
+      provider_id: provider.id,
+      model_id: "google/gemini-2.0-flash-thinking-exp:free",
+    });
+    expect(freeModel.billing_type).toBe("free");
+    expect(freeModel.effective_billing_type).toBe("free");
+    expect(freeModel.use_litellm_pricing).toBe(0);
+
+    // 2. Model with -free suffix defaults to "free" billing_type
+    const freeModelHyphen = modelService.create({
+      provider_id: provider.id,
+      model_id: "jev-1.13-free",
+    });
+    expect(freeModelHyphen.billing_type).toBe("free");
+    expect(freeModelHyphen.effective_billing_type).toBe("free");
+
+    // 3. Regular non-free model still defaults to "inherit"
+    const paidModel = modelService.create({
+      provider_id: provider.id,
+      model_id: "meta-llama/llama-3.3-70b-instruct",
+    });
+    expect(paidModel.billing_type).toBe("inherit");
+    expect(paidModel.effective_billing_type).toBe("pay_as_you_go");
+
+    // 4. Request on free model records zero cost
+    const freeLog = usageService.record(provider.id, freeModel.id, freeModel.model_id, 2000, 1000, 500);
+    expect(freeLog.billing_type).toBe("free");
+    expect(freeLog.estimated_cost_usd).toBe(0);
+  });
 });

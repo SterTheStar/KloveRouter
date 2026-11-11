@@ -8,3 +8,9 @@ export function modelPublicId(model: Pick<Model, "model_id" | "pretty_id"> & { p
 export function modelDisplayId(model: Pick<Model, "model_id" | "pretty_id">): string {
   return model.pretty_id || model.model_id;
 }
+
+export function isFreeModelId(id: string): boolean {
+  const trimmed = id.trim();
+  if (!trimmed) return false;
+  return /(?:^|[:/_.-])free(?:$|[:/_.-]|\b)/i.test(trimmed);
+}

@@ -20,6 +20,7 @@ import { useToast } from "../ui/toast";
 import { invalidateModels } from "../../lib/query-cache";
 import { generateDisplayName } from "../../lib/model-name";
 import { modelCategories } from "../../lib/model-modality";
+import { isFreeModelId } from "../../lib/model-id";
 import type {
   Model,
   ModelBillingType,
@@ -66,6 +67,7 @@ export function ModelModal({
   const [thinkOpeningTagMode, setThinkOpeningTagMode] =
     useState<ThinkOpeningTagMode>("off");
   const [billingType, setBillingType] = useState<ModelBillingType>("inherit");
+  const [billingEdited, setBillingEdited] = useState(false);
   const [metadata, setMetadata] = useState<ModelMetadataInput>(() =>
     emptyModelMetadata(),
   );
@@ -111,6 +113,7 @@ export function ModelModal({
           (model.fix_missing_think_opening_tag ? "detect" : "off"),
       );
       setBillingType(model.billing_type ?? "inherit");
+      setBillingEdited(false);
       setUseLiteLLMPricing(model.use_litellm_pricing === 1);
       setPricingEdited(false);
       setMetadata({
@@ -143,6 +146,7 @@ export function ModelModal({
       setDisplayEdited(false);
       setThinkOpeningTagMode("off");
       setBillingType("inherit");
+      setBillingEdited(false);
       setMetadata(emptyModelMetadata());
       setPricingTiers(defaultPricingTiers());
       setPricingEdited(false);
@@ -151,6 +155,18 @@ export function ModelModal({
       setActiveTab("general");
     }
   }, [isOpen, isEdit, model]);
+
+  const handleModelIdChange = (newId: string) => {
+    setModelId(newId);
+    if (!isEdit && !billingEdited) {
+      if (isFreeModelId(newId)) {
+        setBillingType("free");
+        setUseLiteLLMPricing(false);
+      } else {
+        setBillingType("inherit");
+      }
+    }
+  };
 
   const handleClose = () => {
     if (loading) return;
@@ -294,7 +310,7 @@ export function ModelModal({
               {activeTab === "general" && (
                 <GeneralTab
                   modelId={modelId}
-                  onModelIdChange={setModelId}
+                  onModelIdChange={handleModelIdChange}
                   prettyId={prettyId}
                   onPrettyIdChange={setPrettyId}
                   displayName={displayName}
@@ -331,7 +347,10 @@ export function ModelModal({
               {activeTab === "pricing" && (
                 <PricingTab
                   billingType={billingType}
-                  onBillingTypeChange={setBillingType}
+                  onBillingTypeChange={(type) => {
+                    setBillingEdited(true);
+                    setBillingType(type);
+                  }}
                   providerBillingType={effectiveProviderBilling}
                   pricingTiers={pricingTiers}
                   onPricingTiersChange={setPricingTiers}

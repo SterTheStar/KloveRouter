@@ -36,9 +36,9 @@ function ModelSourceDetails({ model }: { model: SyncModelItem }) {
     <div className="space-y-1">
       <p className="font-normal text-foreground">Model details</p>
       <p className="font-mono text-tertiary">{model.id}</p>
-      {model.is_free && <p className="text-success">Free model</p>}
+      {model.is_free && <p className="text-success font-medium">Free model ($0.00)</p>}
       {model.is_existing && <p className="text-muted-foreground">Already configured</p>}
-      {model.pricing ? <>{model.pricing.rates.map((rate) => <p key={rate.field} className="text-muted-foreground">{rate.label}: {formatUsd(rate.display_usd)} / {rate.display_unit}</p>)}</> : <p className="text-tertiary">No LiteLLM catalog price found</p>}
+      {model.is_free ? null : model.pricing ? <>{model.pricing.rates.map((rate) => <p key={rate.field} className="text-muted-foreground">{rate.label}: {formatUsd(rate.display_usd)} / {rate.display_unit}</p>)}</> : <p className="text-tertiary">No LiteLLM catalog price found</p>}
     </div>
   );
 }
@@ -214,8 +214,8 @@ export default function SyncModelsModal({
                       <span className="flex shrink-0 items-center gap-1">
                         {modelCategories(model).map((item) => <Badge key={item} variant="outline" className="border-border bg-overlay px-1.5 py-0 text-[10px] text-muted-foreground">{modelCategoryBadge(item)}</Badge>)}
                       </span>
-                      <span className="min-w-0 truncate text-xs text-tertiary sm:max-w-40" title={model.pricing ? priceLabel(model.pricing) : "No LiteLLM catalog price found"}>
-                        {model.pricing ? priceLabel(model.pricing) : "No catalog price"}
+                      <span className="min-w-0 truncate text-xs text-tertiary sm:max-w-40" title={model.is_free ? "Free ($0.00)" : model.pricing ? priceLabel(model.pricing) : "No LiteLLM catalog price found"}>
+                        {model.is_free ? "Free ($0.00)" : model.pricing ? priceLabel(model.pricing) : "No catalog price"}
                       </span>
                     </span>
                   </span>

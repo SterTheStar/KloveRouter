@@ -43,6 +43,7 @@ import { convertResponse } from "../sdk/protocol-converter";
 import { upstreamProviderHeaders } from "../services/provider-headers";
 import { getLiteLLMPricing, refreshLiteLLMPricing, getLiteLLMModelInfo } from "../services/litellm-pricing";
 import { deepaiModels, deepaiTest } from "../integrations/deepai";
+import { isFreeModel } from "../services/model-billing.helper";
 
 const nullableBoolean = t.Union([t.Boolean(), t.Null()]);
 const capabilitiesSchema = t.Object({
@@ -190,14 +191,15 @@ export const modelsPlugin = (app: Elysia) =>
             capabilities: body.capabilities,
             reasoning_efforts: body.reasoning_efforts,
           }, getLiteLLMModelInfo(provider.protocol, body.model_id, liteLLMHint), "manual");
+          const isFree = isFreeModel({ model_id: body.model_id });
           const model = modelService.create({
             provider_id: id,
             model_id: body.model_id,
             pretty_id: body.pretty_id,
             display_name: body.display_name || generateDisplayName(body.model_id),
-            pricing_tiers: body.pricing_tiers,
-            use_litellm_pricing: body.use_litellm_pricing,
-            billing_type: body.billing_type,
+            pricing_tiers: isFree && !body.pricing_tiers?.length ? [] : body.pricing_tiers,
+            use_litellm_pricing: isFree && body.use_litellm_pricing === undefined ? false : body.use_litellm_pricing,
+            billing_type: body.billing_type && body.billing_type !== "inherit" ? body.billing_type : (isFree ? "free" : (body.billing_type ?? "inherit")),
             context_window: enriched.context_window,
             max_output_tokens: enriched.max_output_tokens,
             fix_missing_think_opening_tag: body.fix_missing_think_opening_tag,
@@ -285,15 +287,16 @@ export const modelsPlugin = (app: Elysia) =>
         );
         const saveSyncedModel = (input: Parameters<typeof modelService.upsert>[0]) => {
           const enriched = enrichWithLiteLLM(input as any);
+          const isFree = isFreeModel({ id: input.model_id, model_id: input.model_id, is_free: (input as any).is_free });
           const withPricingOption = {
             ...enriched,
-            use_litellm_pricing: useLiteLLMPricing,
-            billing_type: (enriched as any).billing_type ?? "inherit",
+            use_litellm_pricing: isFree ? false : useLiteLLMPricing,
+            billing_type: (enriched as any).billing_type && (enriched as any).billing_type !== "inherit"
+              ? (enriched as any).billing_type
+              : (isFree ? "free" : "inherit"),
           };
           return resetExisting ? modelService.resetExisting(withPricingOption) : modelService.upsert(withPricingOption);
         };
-        const isFreeModel = (model: { id: string; is_free?: boolean }) =>
-          model.is_free === true || /(?:^|[:-])free(?:$|\b)/i.test(model.id);
         const selectModels = <T extends { id: string; is_free?: boolean }>(available: T[]) => {
           const catalog = requestedIds
             ? available.filter((model) => requestedIds.includes(model.id))
@@ -311,14 +314,15 @@ export const modelsPlugin = (app: Elysia) =>
           const selected = freeOnly ? freeModels : catalog;
           const items = selected.map((model) => {
             const enriched = enrichWithLiteLLM({ ...model, model_id: model.id } as any);
+            const isFree = isFreeModel(model);
             return {
               id: model.id,
               display_name: model.display_name || generateDisplayName(model.id),
               context_window: (enriched as any).context_window,
               capabilities: (enriched as any).capabilities,
-              is_free: isFreeModel(model),
+              is_free: isFree,
               is_existing: existingIds.has(model.id),
-              pricing: useLiteLLMPricing && !isSubscriptionOrFreeProvider ? getLiteLLMPricing(provider.protocol, model.id, `${provider.name} ${provider.base_url}`) : null,
+              pricing: !isFree && useLiteLLMPricing && !isSubscriptionOrFreeProvider ? getLiteLLMPricing(provider.protocol, model.id, `${provider.name} ${provider.base_url}`) : null,
             };
           });
           const existingModels = items.filter((model) => model.is_existing).length;

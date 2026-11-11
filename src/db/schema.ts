@@ -3,6 +3,7 @@ import { config } from "../config";
 import { encryptSecret } from "../services/secret.service";
 import { textContentOf } from "../services/chat-content";
 import { storeMessageAttachments, type ClientAttachment } from "../services/chat-attachments";
+import { isFreeModel } from "../services/model-billing.helper";
 
 function parseJsonColumn(value: string | null): unknown {
   if (!value) return "";
@@ -535,6 +536,21 @@ export function initSchema(db: Database): void {
           AND base_url = 'https://cloudcode-pa.googleapis.com'`).run();
       db.query("INSERT INTO settings (key, value) VALUES (?, ?)")
         .run("migration_antigravity_daily_endpoint", "true");
+    })();
+  }
+
+  const freeModelsBillingMigration = db.query("SELECT value FROM settings WHERE key = ?")
+    .get("migration_free_models_billing_type_free") as { value: string } | undefined;
+  if (!freeModelsBillingMigration) {
+    db.transaction(() => {
+      const inheritModels = db.query("SELECT id, model_id FROM models WHERE billing_type = 'inherit'").all() as { id: string; model_id: string }[];
+      for (const m of inheritModels) {
+        if (isFreeModel({ model_id: m.model_id })) {
+          db.query("UPDATE models SET billing_type = 'free', use_litellm_pricing = 0, updated_at = datetime('now') WHERE id = ?").run(m.id);
+        }
+      }
+      db.query("INSERT INTO settings (key, value) VALUES (?, ?)")
+        .run("migration_free_models_billing_type_free", "true");
     })();
   }
 

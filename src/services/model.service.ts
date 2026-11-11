@@ -10,6 +10,9 @@ import { defaultBillingTypeForProvider, type ProviderBillingType } from "./provi
 import { getLiteLLMPricing } from "./litellm-pricing";
 import type { LiteLLMPricing } from "./litellm-pricing";
 import type { ModelMetadataSource, MetadataSourceTag } from "./model-metadata";
+import { isFreeModel } from "./model-billing.helper";
+
+export { isFreeModel };
 
 export type ModelBillingType = "inherit" | "subscription" | "pay_as_you_go" | "free";
 
@@ -604,6 +607,9 @@ export const modelService = {
       .query("SELECT * FROM models WHERE provider_id = ? AND model_id = ?")
       .get(input.provider_id, input.model_id) as Model | null;
 
+    const isFree = isFreeModel({ model_id: input.model_id, is_free: (input as any).is_free });
+    const defaultBillingType = isFree ? "free" : "inherit";
+
     if (requestedPrettyId) {
       const duplicate = db.query("SELECT id FROM models WHERE provider_id = ? AND pretty_id = ? AND id != ?").get(input.provider_id, requestedPrettyId, existing?.id ?? "") as { id: string } | null;
       if (duplicate) throw new DuplicatePrettyModelIdError(requestedPrettyId);
@@ -620,14 +626,20 @@ export const modelService = {
           input,
           existing.think_opening_tag_mode,
         );
+        const resolvedBillingType = input.billing_type !== undefined
+          ? input.billing_type
+          : (isFree && existing.billing_type === "inherit" ? "free" : null);
+        const resolvedLiteLLM = input.use_litellm_pricing !== undefined
+          ? (input.use_litellm_pricing ? 1 : 0)
+          : (isFree && existing.billing_type === "inherit" ? 0 : null);
         db.query("UPDATE models SET pretty_id = ?, display_name = ?, is_active = ?, think_opening_tag_mode = ?, fix_missing_think_opening_tag = ?, use_litellm_pricing = COALESCE(?, use_litellm_pricing), billing_type = COALESCE(?, billing_type), updated_at = datetime('now') WHERE id = ?").run(
           prettyId,
           displayName,
           syncingManualModel ? existing.is_active : input.is_active ?? existing.is_active,
           resolvedMode,
           resolvedMode !== "off" ? 1 : 0,
-          input.use_litellm_pricing === undefined ? null : input.use_litellm_pricing ? 1 : 0,
-          input.billing_type ?? null,
+          resolvedLiteLLM,
+          resolvedBillingType,
           existing.id,
         );
         const hasPricing = Boolean(
@@ -656,8 +668,8 @@ export const modelService = {
         resolvedMode,
         input.is_manual ?? 0,
         input.is_active ?? 1,
-        input.use_litellm_pricing ? 1 : 0,
-        input.billing_type ?? "inherit",
+        input.use_litellm_pricing === undefined ? (isFree ? 0 : 0) : (input.use_litellm_pricing ? 1 : 0),
+        input.billing_type ?? defaultBillingType,
       );
       savePricing(id, pricingTiers);
       saveMetadata(id, metadataInput);
@@ -677,16 +689,19 @@ export const modelService = {
       const duplicate = db.query("SELECT id FROM models WHERE provider_id = ? AND pretty_id = ? AND id != ?").get(input.provider_id, requestedPrettyId, existing.id) as { id: string } | null;
       if (duplicate) throw new DuplicatePrettyModelIdError(requestedPrettyId);
     }
+    const isFree = isFreeModel({ model_id: input.model_id, is_free: (input as any).is_free });
+    const defaultBillingType = isFree ? "free" : null;
     const pricingTiers = input.pricing_tiers;
     db.transaction(() => {
       db.query(
-        "UPDATE models SET pretty_id = ?, display_name = ?, is_manual = 0, is_active = ?, use_litellm_pricing = ?, billing_type = COALESCE(?, billing_type), context_window = NULL, max_output_tokens = NULL, max_output_tokens_source = 'auto', media_settings = NULL, metadata_source = '{}', updated_at = datetime('now') WHERE id = ?",
+        "UPDATE models SET pretty_id = ?, display_name = ?, is_manual = 0, is_active = ?, use_litellm_pricing = ?, billing_type = COALESCE(?, ?, billing_type), context_window = NULL, max_output_tokens = NULL, max_output_tokens_source = 'auto', media_settings = NULL, metadata_source = '{}', updated_at = datetime('now') WHERE id = ?",
       ).run(
         requestedPrettyId ?? existing.pretty_id,
         input.display_name?.trim() || generateDisplayName(input.model_id),
         input.is_active ?? existing.is_active,
-        input.use_litellm_pricing ? 1 : 0,
+        input.use_litellm_pricing === undefined ? (isFree ? 0 : existing.use_litellm_pricing) : (input.use_litellm_pricing ? 1 : 0),
         input.billing_type ?? null,
+        defaultBillingType,
         existing.id,
       );
       db.query("DELETE FROM model_capabilities WHERE model_id = ?").run(existing.id);
