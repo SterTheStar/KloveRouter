@@ -158,11 +158,33 @@ async function extractBinary(archivePath: string): Promise<string> {
   const stagedBin = join(dir, `${BINARY_NAME}.new-${crypto.randomUUID()}`);
 
   try {
+    const { execFileSync } = await import("node:child_process");
     if (archivePath.endsWith(".zip")) {
-      const { execFileSync } = await import("node:child_process");
-      execFileSync("unzip", ["-o", archivePath, "-d", extractDir], { stdio: "pipe" });
+      let extracted = false;
+      try {
+        execFileSync("tar", ["-xf", archivePath, "-C", extractDir], { stdio: "pipe" });
+        extracted = true;
+      } catch {
+        // Fallback below
+      }
+
+      if (!extracted) {
+        if (process.platform === "win32") {
+          execFileSync(
+            "powershell",
+            [
+              "-NoProfile",
+              "-NonInteractive",
+              "-Command",
+              `Expand-Archive -Force -LiteralPath '${archivePath.replace(/'/g, "''")}' -DestinationPath '${extractDir.replace(/'/g, "''")}'`,
+            ],
+            { stdio: "pipe" },
+          );
+        } else {
+          execFileSync("unzip", ["-o", archivePath, "-d", extractDir], { stdio: "pipe" });
+        }
+      }
     } else {
-      const { execFileSync } = await import("node:child_process");
       execFileSync("tar", ["-xzf", archivePath, "-C", extractDir], { stdio: "pipe" });
     }
 
