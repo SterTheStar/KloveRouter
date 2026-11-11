@@ -14,6 +14,7 @@ const protocolKinds: Record<ProviderProtocol, CredentialKind> = {
   conol: "conol",
   perch: "perch",
   openfree: "openfree",
+  "claude-agent": "claude-agent",
   deepai: "api_key",
 };
 
@@ -26,6 +27,7 @@ const secretKinds = new Set<CredentialKind>([
   "conol",
   "perch",
   "openfree",
+  "claude-agent",
 ]);
 
 export class CredentialValidationError extends Error {

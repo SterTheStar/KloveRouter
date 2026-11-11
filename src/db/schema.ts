@@ -432,7 +432,7 @@ export function initSchema(db: Database): void {
     db.exec(`
       UPDATE providers
       SET billing_type = 'subscription'
-      WHERE protocol IN ('antigravity', 'codex', 'chatgpt', 'perch', 'deepai')
+      WHERE protocol IN ('antigravity', 'codex', 'chatgpt', 'perch', 'claude-agent', 'deepai')
          OR LOWER(name) LIKE '%perch%'
          OR LOWER(name) LIKE '%deepcode%'
          OR LOWER(name) LIKE '%antigravity%'

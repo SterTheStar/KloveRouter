@@ -18,7 +18,10 @@ export function defaultBillingTypeForProvider(protocol: string, name?: string, b
     normProto === "codex" ||
     normProto === "chatgpt" ||
     normProto === "perch" ||
+    normProto === "claude-agent" ||
     normProto === "deepai" ||
+    normName.includes("claude-agent") ||
+    normName.includes("claude agent") ||
     normName.includes("perch") ||
     normName.includes("deepcode") ||
     normName.includes("antigravity") ||
@@ -273,6 +276,8 @@ export const providerService = {
                  ? "Perch session"
                 : protocol === "openfree"
                   ? "OpenCode Zen account"
+                : protocol === "claude-agent"
+                  ? "Claude Code login"
         : protocol === "deepai"
           ? "DeepAI Code account"
                 : "Default API key",
@@ -294,6 +299,8 @@ export const providerService = {
                  ? "perch"
                : protocol === "openfree"
                  ? "openfree"
+               : protocol === "claude-agent"
+                 ? "claude-agent"
                : "api_key",
       protocol === "antigravity" ? null : encryptedApiKey,
       input.account_id ?? null,
@@ -351,7 +358,7 @@ export const providerService = {
       updates.push("api_key = ?");
       values.push(encryptedApiKey);
       db.query(
-        "UPDATE provider_credentials SET secret = ?, updated_at = datetime('now') WHERE provider_id = ? AND id = COALESCE((SELECT fixed_credential_id FROM providers WHERE id = ?), id) AND kind IN ('api_key', 'codex', 'chatgpt', 'freebuff', 'qwen', 'atomesus', 'perch', 'openfree')",
+        "UPDATE provider_credentials SET secret = ?, updated_at = datetime('now') WHERE provider_id = ? AND id = COALESCE((SELECT fixed_credential_id FROM providers WHERE id = ?), id) AND kind IN ('api_key', 'codex', 'chatgpt', 'freebuff', 'qwen', 'atomesus', 'perch', 'openfree', 'claude-agent')",
       ).run(encryptedApiKey, id, id);
     }
     if (input.avatar !== undefined) {

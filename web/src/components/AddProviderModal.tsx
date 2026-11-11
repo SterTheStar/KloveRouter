@@ -39,8 +39,11 @@ function defaultBillingForTemplate(template: ProviderTemplate | null): ProviderB
     template.protocol === "codex" ||
     template.protocol === "chatgpt" ||
     template.protocol === "perch" ||
+    template.protocol === "claude-agent" ||
     template.protocol === "deepai" ||
     normName.includes("perch") ||
+    normName.includes("claude-agent") ||
+    normName.includes("claude agent") ||
     normName.includes("deepcode")
   ) {
     return "subscription";

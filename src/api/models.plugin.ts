@@ -23,6 +23,7 @@ import { logger } from "../logger";
 import { generateDisplayName } from "../services/model-name";
 import { freebuffModels, freebuffResponses } from "../integrations/freebuff";
 import { openfreeModels, openfreeResponses } from "../integrations/openfree";
+import { claudeAgentModels, claudeAgentTest } from "../integrations/claude-agent";
 import { qwenModels, qwenResponses } from "../integrations/qwen";
 import { atomesusModels, atomesusTest } from "../integrations/atomesus";
 import { conolModels, conolResponses } from "../integrations/conol";
@@ -410,6 +411,25 @@ export const modelsPlugin = (app: Elysia) =>
             return { success: true, models_found: selected.length, message: `Synced ${selected.length} OpenFREE models from ${provider.name}` };
           }
 
+          if (provider.protocol === "claude-agent") {
+            const available = await claudeAgentModels();
+            if (query.preview === true) return preview(available);
+            const selected = selectModels(available);
+            for (const model of selected)
+              saveSyncedModel({
+                provider_id: id,
+                model_id: model.id,
+                display_name: model.display_name,
+                is_manual: 0,
+                ...(await resolveModelMetadata(provider.protocol, model.id, model)),
+              });
+            return {
+              success: true,
+              models_found: selected.length,
+              message: `Synced ${selected.length} Claude Agent models from ${provider.name}`,
+            };
+          }
+
           if (provider.protocol === "deepai") {
             // A model is free when the lane 4 catalog prices it at 0 Theos:
             // per-request "0", all per-second tiers "0", or not premier when
@@ -749,6 +769,8 @@ export const modelsPlugin = (app: Elysia) =>
                   )
               : provider.protocol === "openfree"
               ? await openfreeTest(model.model_id, credential)
+              : provider.protocol === "claude-agent"
+              ? await claudeAgentTest(model.model_id, credential, provider)
               : provider.protocol === "freebuff"
                    ? await freebuffTest(model.model_id, credential, provider.base_url)
                  : provider.protocol === "qwen"

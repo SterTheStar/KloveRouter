@@ -33,7 +33,14 @@ export function resolveIntegrationType(template: ProviderTemplate): IntegrationT
   ) {
     return "oauth";
   }
-  if (template.protocol === "perch" || template.id === "perch") return "cli-session";
+  if (
+    template.protocol === "perch" ||
+    template.id === "perch" ||
+    template.protocol === "claude-agent" ||
+    template.id === "claude-agent"
+  ) {
+    return "cli-session";
+  }
   if (template.category === "local" || template.id === "lm-studio" || template.id === "vllm") return "local-server";
   return "cloud-api";
 }

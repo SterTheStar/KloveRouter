@@ -227,7 +227,7 @@ export default function ProviderDetailPage({
     () =>
       credentials.filter((credential) => {
         if (!credential.is_active) return false;
-        if (credential.kind === "perch") return true;
+        if (credential.kind === "perch" || credential.kind === "claude-agent") return true;
         if (credential.kind === "api_key" || credential.kind === "chatgpt" || credential.kind === "freebuff" || credential.kind === "qwen" || credential.kind === "atomesus" || credential.kind === "conol")
           return Boolean(credential.masked_secret);
         if (credential.kind === "openfree") return Boolean(credential.masked_secret);

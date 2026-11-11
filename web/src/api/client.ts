@@ -104,7 +104,7 @@ export const openfreeCli = {
 export const providers = {
   validateCredential: (data: {
     base_url: string;
-    protocol?: "openai" | "openai-responses" | "anthropic" | "codex" | "chatgpt" | "antigravity" | "freebuff" | "qwen" | "atomesus" | "conol" | "perch" | "openfree" | "deepai";
+    protocol?: "openai" | "openai-responses" | "anthropic" | "codex" | "chatgpt" | "antigravity" | "freebuff" | "qwen" | "atomesus" | "conol" | "perch" | "openfree" | "claude-agent" | "deepai";
     api_key?: string;
     auth_code?: string;
     secret?: string;
@@ -127,7 +127,7 @@ export const providers = {
     avatar?: string;
     custom_headers?: unknown;
     billing_type?: import("../types").ProviderBillingType;
-    protocol?: "openai" | "openai-responses" | "anthropic" | "codex" | "chatgpt" | "antigravity" | "freebuff" | "qwen" | "atomesus" | "conol" | "perch" | "openfree" | "deepai";
+    protocol?: "openai" | "openai-responses" | "anthropic" | "codex" | "chatgpt" | "antigravity" | "freebuff" | "qwen" | "atomesus" | "conol" | "perch" | "openfree" | "claude-agent" | "deepai";
    }) =>
      request<import("../types").Provider>("/api/providers", {
        method: "POST",
@@ -142,7 +142,7 @@ export const providers = {
        avatar?: string | null;
        custom_headers?: unknown;
        billing_type?: import("../types").ProviderBillingType;
-       protocol?: "openai" | "openai-responses" | "anthropic" | "codex" | "chatgpt" | "antigravity" | "freebuff" | "qwen" | "atomesus" | "conol" | "perch" | "openfree" | "deepai";
+       protocol?: "openai" | "openai-responses" | "anthropic" | "codex" | "chatgpt" | "antigravity" | "freebuff" | "qwen" | "atomesus" | "conol" | "perch" | "openfree" | "claude-agent" | "deepai";
       credential_mode?: "fixed" | "round_robin" | "failover";
       fixed_credential_id?: string | null;
       is_active?: number;
@@ -177,7 +177,7 @@ export const providers = {
     id: string,
     data: {
       label: string;
-       kind?: "api_key" | "codex" | "chatgpt" | "antigravity" | "freebuff" | "qwen" | "atomesus" | "conol" | "perch" | "openfree";
+       kind?: "api_key" | "codex" | "chatgpt" | "antigravity" | "freebuff" | "qwen" | "atomesus" | "conol" | "perch" | "openfree" | "claude-agent";
       secret?: string;
       access_token?: string;
       refresh_token?: string;

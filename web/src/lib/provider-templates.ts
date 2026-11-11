@@ -13,6 +13,7 @@ export type ProviderProtocol =
   | "conol"
   | "perch"
   | "openfree"
+  | "claude-agent"
   | "deepai";
 
 export type ProviderCategory = "official" | "hosted" | "local" | "aggregator";
@@ -37,6 +38,7 @@ export type ProviderTemplate = {
   preset: boolean;
   category?: ProviderCategory;
   integrationType?: IntegrationType;
+  disabled?: boolean;
 };
 
 const modules = import.meta.glob<ProviderTemplate>("../templates/providers/*.json", {
@@ -62,7 +64,9 @@ const PRIORITY_ORDER: string[] = [
 
 const loadedTemplates: ProviderTemplate[] = Object.values(modules);
 
-export const PROVIDER_TEMPLATES: readonly ProviderTemplate[] = [...loadedTemplates].sort(
+export const PROVIDER_TEMPLATES: readonly ProviderTemplate[] = [...loadedTemplates]
+  .filter((template) => !template.disabled)
+  .sort(
   (a, b) => {
     const idxA = PRIORITY_ORDER.indexOf(a.id);
     const idxB = PRIORITY_ORDER.indexOf(b.id);

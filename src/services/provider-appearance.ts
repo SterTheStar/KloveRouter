@@ -11,6 +11,7 @@ export type ProviderProtocol =
   | "conol"
   | "perch"
   | "openfree"
+  | "claude-agent"
   | "deepai";
 
 export function isOpenAICompatibleProtocol(protocol: ProviderProtocol): boolean {

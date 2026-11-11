@@ -1,0 +1,14 @@
+{
+  "id": "claude-agent",
+  "name": "Claude Agent",
+  "protocol": "claude-agent",
+  "description": "Runs Claude models through your local Claude Code login using Anthropic's Claude Agent SDK.",
+  "website": "https://claude.ai",
+  "docsUrl": "https://code.claude.com/docs/en/agent-sdk/overview",
+  "placeholder": "https://api.anthropic.com",
+  "logo": "/api/media/avatars/presets/anthropic.png",
+  "preset": false,
+  "category": "hosted",
+  "integrationType": "cli-session",
+  "disabled": true
+}

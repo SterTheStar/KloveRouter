@@ -145,6 +145,17 @@ export function ProviderAuthForm({
             detail="Connecting Perch AI outside the official CLI violates Perch's terms of service and can result in an immediate account ban."
           />
         )}
+        {template.protocol === "claude-agent" && (
+          <div className="rounded-lg border border-border bg-muted/40 p-3 text-xs text-muted-foreground space-y-1">
+            <p className="font-medium text-foreground">Claude Code Local Session</p>
+            <p>
+              Runs through your local Claude Code login. Sign in with <code className="font-mono text-[11px] bg-background px-1 py-0.5 rounded border border-border">claude auth login</code> in your terminal.
+            </p>
+            <p>
+              Optionally, you can enter an Anthropic API key below to override terminal auth.
+            </p>
+          </div>
+        )}
 
         {/* Name input */}
         <div className="space-y-1.5">
@@ -392,6 +403,8 @@ export function ProviderAuthForm({
                   ? "Paste your Atomesus bearer token"
                   : template.protocol === "perch"
                     ? "Paste perch session JSON or leave blank"
+                    : template.protocol === "claude-agent"
+                      ? "Optional: leave blank to use terminal login, or enter API key"
                     : template.protocol === "freebuff" || template.protocol === "qwen"
                       ? "Paste token / auth code"
                       : "sk-..."

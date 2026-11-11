@@ -4,7 +4,7 @@ import { logger } from "../logger";
 import { validateCredential } from "./credential-validation";
 import type { ProviderProtocol } from "./provider-appearance";
 
-export type CredentialKind = "api_key" | "codex" | "chatgpt" | "antigravity" | "freebuff" | "qwen" | "atomesus" | "conol" | "perch" | "openfree";
+export type CredentialKind = "api_key" | "codex" | "chatgpt" | "antigravity" | "freebuff" | "qwen" | "atomesus" | "conol" | "perch" | "openfree" | "claude-agent";
 export type CredentialMode = "fixed" | "round_robin" | "failover";
 
 export interface ProviderCredential {
@@ -108,7 +108,8 @@ export const credentialService = {
         credential.kind === "conol" ||
         credential.kind === "openfree"
           ? Boolean(credential.secret)
-          : credential.kind === "perch"
+          : credential.kind === "perch" ||
+            credential.kind === "claude-agent"
             ? true
             : Boolean(credential.access_token),
       account_id: credential.account_id,
@@ -318,6 +319,8 @@ export const credentialService = {
                  ? `${alias}.kind = 'perch'`
                 : provider?.protocol === "openfree"
                   ? `${alias}.kind = 'openfree' AND ${alias}.secret IS NOT NULL`
+                : provider?.protocol === "claude-agent"
+                  ? `${alias}.kind IN ('claude-agent', 'api_key')`
                 : provider?.protocol === "deepai"
                   ? `${alias}.kind = 'api_key' AND ${alias}.secret IS NOT NULL`
                 : `${alias}.kind = 'api_key' AND (${alias}.secret IS NOT NULL OR NOT EXISTS (SELECT 1 FROM provider_credentials configured WHERE configured.provider_id = ${alias}.provider_id AND configured.kind = 'api_key' AND configured.is_active = 1 AND configured.secret IS NOT NULL))`;

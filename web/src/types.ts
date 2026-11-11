@@ -8,7 +8,7 @@ export interface Provider {
   avatar: string | null;
   avatar_sources: string[];
   avatar_override?: string | null;
-  protocol: "openai" | "openai-responses" | "anthropic" | "codex" | "chatgpt" | "antigravity" | "freebuff" | "qwen" | "atomesus" | "conol" | "perch" | "openfree" | "deepai";
+  protocol: "openai" | "openai-responses" | "anthropic" | "codex" | "chatgpt" | "antigravity" | "freebuff" | "qwen" | "atomesus" | "conol" | "perch" | "openfree" | "claude-agent" | "deepai";
   is_active: number;
   billing_type?: ProviderBillingType;
   created_at: string;
@@ -27,7 +27,7 @@ export interface ProviderCredential {
   id: string;
   provider_id: string;
   label: string;
-  kind: "api_key" | "codex" | "chatgpt" | "antigravity" | "freebuff" | "qwen" | "atomesus" | "conol" | "perch" | "openfree";
+  kind: "api_key" | "codex" | "chatgpt" | "antigravity" | "freebuff" | "qwen" | "atomesus" | "conol" | "perch" | "openfree" | "claude-agent";
   account_id: string | null;
   email?: string | null;
   project_id?: string | null;

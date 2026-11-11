@@ -101,7 +101,7 @@ export const providersPlugin = (app: Elysia) =>
       {
         body: t.Object({
           base_url: t.String({ minLength: 1 }),
-           protocol: t.Optional(t.Union([t.Literal("openai"), t.Literal("openai-responses"), t.Literal("anthropic"), t.Literal("codex"), t.Literal("chatgpt"), t.Literal("antigravity"), t.Literal("freebuff"), t.Literal("qwen"), t.Literal("atomesus"), t.Literal("conol"), t.Literal("perch"), t.Literal("openfree"), t.Literal("deepai")])),
+           protocol: t.Optional(t.Union([t.Literal("openai"), t.Literal("openai-responses"), t.Literal("anthropic"), t.Literal("codex"), t.Literal("chatgpt"), t.Literal("antigravity"), t.Literal("freebuff"), t.Literal("qwen"), t.Literal("atomesus"), t.Literal("conol"), t.Literal("perch"), t.Literal("openfree"), t.Literal("claude-agent"), t.Literal("deepai")])),
           api_key: t.Optional(t.String()),
           auth_code: t.Optional(t.String()),
           secret: t.Optional(t.String()),
@@ -183,6 +183,7 @@ export const providersPlugin = (app: Elysia) =>
               t.Literal("conol"),
               t.Literal("perch"),
               t.Literal("openfree"),
+              t.Literal("claude-agent"),
               t.Literal("deepai"),
             ]),
           ),
@@ -248,6 +249,7 @@ export const providersPlugin = (app: Elysia) =>
               t.Literal("conol"),
               t.Literal("perch"),
               t.Literal("openfree"),
+              t.Literal("claude-agent"),
               t.Literal("deepai"),
             ]),
           ),
@@ -288,7 +290,7 @@ export const providersPlugin = (app: Elysia) =>
           !credential ||
           credential.provider_id !== id ||
             credential.kind === "chatgpt" ||
-            credential.kind !== "api_key" && credential.kind !== "freebuff" && credential.kind !== "qwen" && credential.kind !== "atomesus" && credential.kind !== "conol" && credential.kind !== "perch"
+            credential.kind !== "api_key" && credential.kind !== "freebuff" && credential.kind !== "qwen" && credential.kind !== "atomesus" && credential.kind !== "conol" && credential.kind !== "perch" && credential.kind !== "claude-agent"
         ) {
           set.status = 404;
           return { error: "Credential secret not found" };
@@ -364,6 +366,7 @@ export const providersPlugin = (app: Elysia) =>
               t.Literal("conol"),
               t.Literal("perch"),
               t.Literal("openfree"),
+              t.Literal("claude-agent"),
             ]),
           ),
           secret: t.Optional(t.String()),
@@ -409,6 +412,7 @@ export const providersPlugin = (app: Elysia) =>
               t.Literal("conol"),
               t.Literal("perch"),
               t.Literal("openfree"),
+              t.Literal("claude-agent"),
             ]),
           ),
           secret: t.Optional(t.Union([t.String(), t.Null()])),
