@@ -1,3 +1,6 @@
+import { logger } from "../logger";
+import { normalizeToolName } from "./tool-names";
+
 export type OpenAIStreamStats = {
   promptTokens: number;
   completionTokens: number;
@@ -202,7 +205,11 @@ export function openAIStreamResponse(
             clearInterval(keepAlive);
             if (options.signal && abortListener)
               options.signal.removeEventListener("abort", abortListener);
-            if (!cancelled) controller.close();
+            try {
+              controller.close();
+            } catch {
+              /* Ignore already-closed controller */
+            }
           }
         })();
       },
@@ -226,5 +233,3 @@ export function openAIStreamResponse(
     },
   );
 }
-import { logger } from "../logger";
-import { normalizeToolName } from "./tool-names";

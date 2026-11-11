@@ -157,16 +157,20 @@ export async function openAICompletionFromSse(
     }
   };
 
-  while (true) {
-    const { done, value } = await reader.read();
-    buffer += decoder.decode(value ?? new Uint8Array(), { stream: !done });
-    const events = buffer.split(/\r\n\r\n|\n\n|\r\r/);
-    buffer = events.pop() ?? "";
-    for (const event of events) processEvent(event);
-    if (done) {
-      if (buffer.trim()) processEvent(buffer);
-      break;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      buffer += decoder.decode(value ?? new Uint8Array(), { stream: !done });
+      const events = buffer.split(/\r\n\r\n|\n\n|\r\r/);
+      buffer = events.pop() ?? "";
+      for (const event of events) processEvent(event);
+      if (done) {
+        if (buffer.trim()) processEvent(buffer);
+        break;
+      }
     }
+  } finally {
+    void reader.cancel().catch(() => {});
   }
 
   const resultChoices = [...choices.values()]
