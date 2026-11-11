@@ -1,6 +1,4 @@
 import { useEffect, useState } from "react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 import {
   RiCheckLine as Check,
   RiDownload2Line as Download,
@@ -25,6 +23,7 @@ import type {
   UpdateSettings,
 } from "@/types";
 import UpdateProgressModal from "./UpdateProgressModal";
+import MarkdownRenderer from "./MarkdownRenderer";
 
 export default function UpdatesTab() {
   const { success: notifySuccess, error: notifyError, info: notifyInfo } = useToast();
@@ -181,7 +180,7 @@ export default function UpdatesTab() {
     );
   }
 
-  const currentVersion = statusData?.currentVersion || "0.1.0-beta.1";
+  const currentVersion = statusData?.currentVersion || "0.1.0-beta";
   const hasUpdate = Boolean(statusData?.hasUpdate && statusData?.latestRelease);
   const latestRelease = statusData?.latestRelease;
 
@@ -273,26 +272,27 @@ export default function UpdatesTab() {
 
       {/* Available Update Card */}
       {hasUpdate && latestRelease && (
-        <Card className="border-primary/40 bg-primary/5 shadow-sm">
+        <Card className="border-border shadow-xs">
           <CardHeader>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <Sparkling className="size-5 text-primary" />
-                  <CardTitle className="text-lg">
-                    {latestRelease.name || latestRelease.tag}
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Sparkling className="size-4 text-primary" />
+                  <CardTitle className="text-base font-semibold">
+                    {latestRelease.name || `Saturn Router ${latestRelease.tag}`}
                   </CardTitle>
-                  <Badge variant="secondary" className="font-mono text-xs">
-                    {latestRelease.tag}
-                  </Badge>
                   {latestRelease.prerelease && (
-                    <Badge variant="outline" className="text-xs text-amber-500">
+                    <Badge variant="outline" className="text-[11px] font-normal text-muted-foreground border-border h-5 px-1.5">
                       Pre-release
                     </Badge>
                   )}
                 </div>
-                <CardDescription>
-                  Published on {new Date(latestRelease.publishedAt).toLocaleDateString()}
+                <CardDescription className="text-xs">
+                  Published on {new Date(latestRelease.publishedAt).toLocaleDateString(undefined, {
+                    year: "numeric",
+                    month: "short",
+                    day: "numeric",
+                  })}
                 </CardDescription>
               </div>
 
@@ -301,34 +301,32 @@ export default function UpdatesTab() {
                   <Button
                     variant="outline"
                     size="sm"
-                    className="gap-1.5"
+                    className="h-8 text-xs gap-1.5"
                     onClick={() => window.open(latestRelease.htmlUrl, "_blank")}
                   >
-                    <ExternalLink className="size-3.5" />
+                    <ExternalLink className="size-3" />
                     GitHub
                   </Button>
                 )}
                 <Button
                   size="sm"
-                  className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90"
+                  className="h-8 text-xs gap-1.5 bg-primary text-primary-foreground hover:bg-primary/90"
                   onClick={() => handleStartUpdate(latestRelease.tag)}
                 >
-                  <Download className="size-4" />
+                  <Download className="size-3.5" />
                   Update to {latestRelease.tag}
                 </Button>
               </div>
             </div>
           </CardHeader>
           <CardContent>
-            <div className="space-y-3">
-              <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            <div className="space-y-2.5">
+              <span className="text-xs font-medium text-muted-foreground">
                 Release Notes
               </span>
-              <div className="max-h-72 overflow-y-auto rounded-lg border border-border bg-card p-4 text-sm text-foreground prose dark:prose-invert max-w-none">
+              <div className="max-h-72 overflow-y-auto rounded-lg border border-border bg-card p-4">
                 {latestRelease.body ? (
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                    {latestRelease.body}
-                  </ReactMarkdown>
+                  <MarkdownRenderer content={latestRelease.body} stripFirstH1={true} />
                 ) : (
                   <p className="text-muted-foreground italic text-xs">
                     No detailed release notes provided for this release.
