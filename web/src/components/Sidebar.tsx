@@ -16,6 +16,7 @@ import {
 import { Button } from "@/components/ui/button";
 import DisplayAvatar from "./DisplayAvatar";
 import SaturnMark from "./SaturnMark";
+import SaturnBetaBadge from "./SaturnBetaBadge";
 import SidebarResizeHandle from "./SidebarResizeHandle";
 import type { Page } from "../types";
 import type { UserProfile } from "../types";
@@ -71,15 +72,18 @@ export default function Sidebar({
             event.preventDefault();
             onNavigate("dashboard");
           }}
-          className="flex min-w-0 items-center gap-3 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
+          className="flex min-w-0 items-center gap-2.5 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
         >
           <SaturnMark className="size-8 shrink-0 text-foreground" />
-          <span
-            className="truncate text-2xl font-semibold tracking-tight text-foreground"
-            style={{ fontFamily: "'Playwrite NZ Basic', cursive" }}
-          >
-            Saturn
-          </span>
+          <div className="flex min-w-0 items-baseline gap-2">
+            <span
+              className="truncate text-2xl font-semibold tracking-tight text-foreground"
+              style={{ fontFamily: "'Playwrite NZ Basic', cursive" }}
+            >
+              Saturn
+            </span>
+            <SaturnBetaBadge />
+          </div>
         </a>
       </div>
 

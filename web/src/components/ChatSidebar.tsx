@@ -3,7 +3,6 @@ import type React from "react";
 import {
   RiAddLine,
   RiHome4Line as HomeLine,
-  RiLayoutLeftLine as CollapseLine,
   RiSearchLine as SearchLine,
   RiCheckLine as CheckLine,
   RiDeleteBinLine as DeleteLine,
@@ -32,6 +31,7 @@ import ConfirmDialog from "./ConfirmDialog";
 import DisplayAvatar from "./DisplayAvatar";
 import ChatCommandPalette from "./ChatCommandPalette";
 import SaturnMark from "./SaturnMark";
+import SaturnBetaBadge from "./SaturnBetaBadge";
 import SidebarResizeHandle from "./SidebarResizeHandle";
 import { pathForPage, shouldHandleLinkClick } from "../lib/navigation";
 
@@ -323,26 +323,19 @@ export default function ChatSidebar({
             event.preventDefault();
             onBack();
           }}
-          className="flex min-w-0 items-center gap-3 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
+          className="flex min-w-0 items-center gap-2.5 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
         >
           <SaturnMark className="size-8 shrink-0 text-foreground" />
-          <span
-            className="truncate text-2xl font-semibold tracking-tight text-foreground"
-            style={{ fontFamily: "'Playwrite NZ Basic', cursive" }}
-          >
-            Saturn
-          </span>
+          <div className="flex min-w-0 items-baseline gap-2">
+            <span
+              className="truncate text-2xl font-semibold tracking-tight text-foreground"
+              style={{ fontFamily: "'Playwrite NZ Basic', cursive" }}
+            >
+              Saturn
+            </span>
+            <SaturnBetaBadge />
+          </div>
         </a>
-        <Button
-          size="icon-sm"
-          variant="ghost"
-          onClick={toggleCollapsed}
-          className="absolute right-3 rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground"
-          title="Collapse sidebar"
-          aria-label="Collapse sidebar"
-        >
-          <CollapseLine className="size-4" />
-        </Button>
       </div>
 
       <div className="shrink-0 space-y-1 p-3 pb-2">
