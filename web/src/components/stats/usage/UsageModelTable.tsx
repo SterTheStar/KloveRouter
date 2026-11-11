@@ -11,6 +11,7 @@ import {
   RiSparklingLine,
   RiSpeedUpLine,
   RiTimeLine,
+  RiVipCrownLine,
 } from "@remixicon/react";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -26,6 +27,7 @@ import { formatNumber, formatCost, formatDuration } from "./usage-utils";
 export type ModelSortKey =
   | "model_name"
   | "provider_name"
+  | "effective_billing_type"
   | "requests"
   | "tokens_total"
   | "tokens_cache_read"
@@ -126,6 +128,7 @@ function SortTh({
 
 export function UsageModelTable({ byModel }: UsageModelTableProps) {
   const [search, setSearch] = useState("");
+  const [billingFilter, setBillingFilter] = useState<"all" | "subscription" | "pay_as_you_go" | "free">("all");
   const [sortKey, setSortKey] = useState<ModelSortKey>("tokens_total");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
@@ -134,19 +137,24 @@ export function UsageModelTable({ byModel }: UsageModelTableProps) {
       setSortDir((current) => (current === "asc" ? "desc" : "asc"));
     } else {
       setSortKey(key);
-      setSortDir(key === "model_name" || key === "provider_name" ? "asc" : "desc");
+      setSortDir(key === "model_name" || key === "provider_name" || key === "effective_billing_type" ? "asc" : "desc");
     }
   };
 
   const filteredModels = useMemo(() => {
-    if (!search.trim()) return byModel;
-    const query = search.toLowerCase();
-    return byModel.filter(
-      (m) =>
+    return byModel.filter((m) => {
+      if (billingFilter !== "all") {
+        const eff = m.effective_billing_type ?? "pay_as_you_go";
+        if (eff !== billingFilter) return false;
+      }
+      if (!search.trim()) return true;
+      const query = search.toLowerCase();
+      return (
         m.model_name.toLowerCase().includes(query) ||
         m.provider_name.toLowerCase().includes(query)
-    );
-  }, [byModel, search]);
+      );
+    });
+  }, [byModel, search, billingFilter]);
 
   const sortedModels = useMemo(() => {
     return [...filteredModels].sort((a, b) => {
@@ -190,14 +198,59 @@ export function UsageModelTable({ byModel }: UsageModelTableProps) {
           </p>
         </div>
 
-        <div className="relative w-full sm:w-56">
-          <RiSearchLine className="absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search model or provider..."
-            className="h-8 pl-8 text-xs"
-          />
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="inline-flex rounded-lg border border-border p-0.5 text-xs">
+            <button
+              type="button"
+              onClick={() => setBillingFilter("all")}
+              className={cn(
+                "rounded-md px-2.5 py-1 transition-colors",
+                billingFilter === "all" ? "bg-accent text-foreground font-normal" : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              All
+            </button>
+            <button
+              type="button"
+              onClick={() => setBillingFilter("subscription")}
+              className={cn(
+                "rounded-md px-2.5 py-1 transition-colors",
+                billingFilter === "subscription" ? "bg-purple-500/15 text-purple-700 dark:text-purple-300 font-normal" : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              Subscription
+            </button>
+            <button
+              type="button"
+              onClick={() => setBillingFilter("pay_as_you_go")}
+              className={cn(
+                "rounded-md px-2.5 py-1 transition-colors",
+                billingFilter === "pay_as_you_go" ? "bg-blue-500/15 text-blue-700 dark:text-blue-300 font-normal" : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              Pay-as-you-go
+            </button>
+            <button
+              type="button"
+              onClick={() => setBillingFilter("free")}
+              className={cn(
+                "rounded-md px-2.5 py-1 transition-colors",
+                billingFilter === "free" ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 font-normal" : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              Free
+            </button>
+          </div>
+
+          <div className="relative w-full sm:w-52">
+            <RiSearchLine className="absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search model or provider..."
+              className="h-8 pl-8 text-xs"
+            />
+          </div>
         </div>
       </div>
 
@@ -218,6 +271,14 @@ export function UsageModelTable({ byModel }: UsageModelTableProps) {
                 icon={RiCloudLine}
                 label="Provider"
                 k="provider_name"
+                sortKey={sortKey}
+                sortDir={sortDir}
+                onSort={handleSort}
+              />
+              <SortTh
+                icon={RiVipCrownLine}
+                label="Billing"
+                k="effective_billing_type"
                 sortKey={sortKey}
                 sortDir={sortDir}
                 onSort={handleSort}
@@ -302,6 +363,22 @@ export function UsageModelTable({ byModel }: UsageModelTableProps) {
                     </Badge>
                   </td>
 
+                  <td className="px-3.5 py-3 whitespace-nowrap">
+                    {m.effective_billing_type === "subscription" ? (
+                      <Badge className="border-purple-500/20 bg-purple-500/10 text-[10px] font-normal text-purple-600 dark:text-purple-300">
+                        Subscription
+                      </Badge>
+                    ) : m.effective_billing_type === "free" ? (
+                      <Badge className="border-emerald-500/20 bg-emerald-500/10 text-[10px] font-normal text-emerald-600 dark:text-emerald-300">
+                        Free
+                      </Badge>
+                    ) : (
+                      <Badge className="border-blue-500/20 bg-blue-500/10 text-[10px] font-normal text-blue-600 dark:text-blue-300">
+                        Pay-as-you-go
+                      </Badge>
+                    )}
+                  </td>
+
                   <td className="px-3.5 py-3 text-right font-mono text-xs tabular-nums text-foreground">
                     {m.requests.toLocaleString()}
                   </td>
@@ -327,7 +404,23 @@ export function UsageModelTable({ byModel }: UsageModelTableProps) {
                   </td>
 
                   <td className="px-3.5 py-3 text-right font-mono text-xs tabular-nums text-foreground">
-                    {formatCost(m.estimated_cost_usd)}
+                    {m.effective_billing_type === "subscription" ? (
+                      <div className="flex items-center justify-end gap-1 font-mono text-xs tabular-nums text-muted-foreground">
+                        <span>$0.00</span>
+                        <span className="rounded bg-purple-500/10 px-1 py-0.5 text-[9px] font-sans text-purple-600 dark:text-purple-300">
+                          Sub
+                        </span>
+                      </div>
+                    ) : m.effective_billing_type === "free" ? (
+                      <div className="flex items-center justify-end gap-1 font-mono text-xs tabular-nums text-muted-foreground">
+                        <span>$0.00</span>
+                        <span className="rounded bg-emerald-500/10 px-1 py-0.5 text-[9px] font-sans text-emerald-600 dark:text-emerald-300">
+                          Free
+                        </span>
+                      </div>
+                    ) : (
+                      formatCost(m.estimated_cost_usd)
+                    )}
                   </td>
 
                   <td className="px-3.5 py-3 text-right font-mono text-xs tabular-nums text-muted-foreground">
@@ -344,7 +437,7 @@ export function UsageModelTable({ byModel }: UsageModelTableProps) {
             {sortedModels.length === 0 && (
               <tr>
                 <td
-                  colSpan={8}
+                  colSpan={9}
                   className="py-8 text-center text-xs text-muted-foreground"
                 >
                   No models match the filter &ldquo;{search}&rdquo;.
@@ -356,7 +449,7 @@ export function UsageModelTable({ byModel }: UsageModelTableProps) {
           {/* Aggregated Totals Footer */}
           <tfoot>
             <tr className="border-t border-border bg-background/60 text-xs font-normal">
-              <td className="px-3.5 py-3" colSpan={2}>
+              <td className="px-3.5 py-3" colSpan={3}>
                 Total ({sortedModels.length} models)
               </td>
               <td className="px-3.5 py-3 text-right font-mono tabular-nums text-foreground">

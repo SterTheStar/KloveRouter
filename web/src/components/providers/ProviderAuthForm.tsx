@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { RiCoinsLine, RiVipCrownLine, RiCheckLine } from "@remixicon/react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -8,6 +9,7 @@ import AvatarUpload from "@/components/AvatarUpload";
 import type { ProviderTemplate } from "@/lib/provider-templates";
 import { faviconForEndpoint } from "@/lib/provider-icons";
 import type { OpenFreeCliStatus } from "@/api/client";
+import type { ProviderBillingType } from "@/types";
 import { TermsWarning } from "./ProviderGuides";
 
 type Props = {
@@ -28,6 +30,8 @@ type Props = {
   setAvatar: (a: string | null) => void;
   avatarManuallySet: boolean;
   setAvatarManuallySet: (b: boolean) => void;
+  billingType?: ProviderBillingType;
+  setBillingType?: (b: ProviderBillingType) => void;
   notifyError: (title: string, message: string) => void;
 
   // OpenFREE
@@ -81,6 +85,8 @@ export function ProviderAuthForm({
   setAvatar,
   avatarManuallySet,
   setAvatarManuallySet,
+  billingType,
+  setBillingType,
   notifyError,
   openfreeCliStatus,
   openfreeCliPath,
@@ -163,6 +169,60 @@ export function ProviderAuthForm({
               placeholder={template.placeholder}
               className="h-9 text-xs"
             />
+          </div>
+        )}
+
+        {/* Billing & Quota Mode */}
+        {setBillingType && (
+          <div className="space-y-1.5">
+            <Label className="text-xs">Billing & Quota Mode</Label>
+            <div className="grid grid-cols-3 gap-2">
+              <button
+                type="button"
+                onClick={() => setBillingType("subscription")}
+                className={`flex flex-col items-start rounded-lg border p-2 text-left transition-all text-xs cursor-pointer ${
+                  billingType === "subscription"
+                    ? "border-purple-500 bg-purple-500/10 text-foreground"
+                    : "border-border bg-card hover:border-border-strong text-muted-foreground"
+                }`}
+              >
+                <div className="flex items-center gap-1 font-normal text-xs text-foreground">
+                  <RiVipCrownLine className="size-3 text-purple-500" />
+                  Subscription
+                </div>
+                <span className="text-[10px] text-muted-foreground mt-0.5">Quota · $0 direct</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setBillingType("pay_as_you_go")}
+                className={`flex flex-col items-start rounded-lg border p-2 text-left transition-all text-xs cursor-pointer ${
+                  billingType === "pay_as_you_go"
+                    ? "border-blue-500 bg-blue-500/10 text-foreground"
+                    : "border-border bg-card hover:border-border-strong text-muted-foreground"
+                }`}
+              >
+                <div className="flex items-center gap-1 font-normal text-xs text-foreground">
+                  <RiCoinsLine className="size-3 text-blue-500" />
+                  Pay-As-You-Go
+                </div>
+                <span className="text-[10px] text-muted-foreground mt-0.5">Commercial API</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setBillingType("free")}
+                className={`flex flex-col items-start rounded-lg border p-2 text-left transition-all text-xs cursor-pointer ${
+                  billingType === "free"
+                    ? "border-emerald-500 bg-emerald-500/10 text-foreground"
+                    : "border-border bg-card hover:border-border-strong text-muted-foreground"
+                }`}
+              >
+                <div className="flex items-center gap-1 font-normal text-xs text-foreground">
+                  <RiCheckLine className="size-3 text-emerald-500" />
+                  Free
+                </div>
+                <span className="text-[10px] text-muted-foreground mt-0.5">Zero cost</span>
+              </button>
+            </div>
           </div>
         )}
 

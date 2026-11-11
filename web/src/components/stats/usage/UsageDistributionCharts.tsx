@@ -131,7 +131,11 @@ function ProviderCustomTooltip({ active, payload }: any) {
         <div className="flex items-center justify-between">
           <span className="text-muted-foreground">Estimated spend</span>
           <span className="font-mono tabular-nums font-normal text-foreground">
-            {formatCost(provider.estimated_cost_usd)} ({costShare}%)
+            {provider.billing_type === "subscription"
+              ? "$0.00 (Subscription plan)"
+              : provider.billing_type === "free"
+                ? "$0.00 (Free)"
+                : `${formatCost(provider.estimated_cost_usd)} (${costShare}%)`}
           </span>
         </div>
 
@@ -441,6 +445,16 @@ export function UsageDistributionCharts({
                       <span className="font-normal text-foreground truncate max-w-44 sm:max-w-64">
                         {p.provider_name}
                       </span>
+                      {p.billing_type === "subscription" && (
+                        <span className="rounded bg-purple-500/10 px-1 py-0.5 text-[9px] text-purple-600 dark:text-purple-300 font-sans">
+                          Sub
+                        </span>
+                      )}
+                      {p.billing_type === "free" && (
+                        <span className="rounded bg-emerald-500/10 px-1 py-0.5 text-[9px] text-emerald-600 dark:text-emerald-300 font-sans">
+                          Free
+                        </span>
+                      )}
                     </div>
                     <div className="flex items-center gap-3 font-mono text-xs tabular-nums shrink-0">
                       <span className="text-muted-foreground hidden sm:inline">
@@ -448,7 +462,11 @@ export function UsageDistributionCharts({
                       </span>
                       <span className="font-normal text-foreground">
                         {metric === "cost"
-                          ? formatCost(p.estimated_cost_usd)
+                          ? p.billing_type === "subscription"
+                            ? "$0.00 (Sub)"
+                            : p.billing_type === "free"
+                              ? "$0.00 (Free)"
+                              : formatCost(p.estimated_cost_usd)
                           : formatNumber(p.tokens_total) + " tokens"}
                       </span>
                       <span className="w-12 text-right text-tertiary">

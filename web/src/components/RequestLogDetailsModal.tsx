@@ -23,6 +23,7 @@ import {
   RiCodeLine as CodeIcon,
   RiListUnordered as ListIcon,
   RiBugLine as BugIcon,
+  RiVipCrownLine,
 } from "@remixicon/react";
 import {
   Dialog,
@@ -620,13 +621,22 @@ export function RequestLogDetailsModal({
                 </div>
               )}
 
-              {/* Cost */}
-              {activeLog.estimated_cost_usd > 0 && (
+              {/* Cost / Billing Mode */}
+              {activeLog.billing_type === "subscription" ? (
+                <div className="inline-flex items-center gap-1 rounded-md border border-purple-500/20 bg-purple-500/10 px-2 py-1 text-purple-700 dark:text-purple-300">
+                  <RiVipCrownLine className="size-3.5" />
+                  <span>Subscription (No per-token charge)</span>
+                </div>
+              ) : activeLog.billing_type === "free" ? (
+                <div className="inline-flex items-center gap-1 rounded-md border border-emerald-500/20 bg-emerald-500/10 px-2 py-1 text-emerald-700 dark:text-emerald-300">
+                  <span>Free</span>
+                </div>
+              ) : activeLog.estimated_cost_usd > 0 ? (
                 <div className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-1 text-muted-foreground">
                   <CostIcon className="size-3.5" />
                   <span>{formatCost(activeLog.estimated_cost_usd)}</span>
                 </div>
-              )}
+              ) : null}
 
               {/* Credential / Requester */}
               {(activeLog.credential_label || activeLog.requester_name || activeLog.client_ip) && (

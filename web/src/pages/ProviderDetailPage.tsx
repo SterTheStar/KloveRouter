@@ -18,6 +18,8 @@ import {
   RiSearchLine as Search,
   RiFilter3Line as Filter,
   RiPlayCircleLine as PlayCircleLine,
+  RiCoinsLine,
+  RiVipCrownLine,
 } from "@remixicon/react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -79,6 +81,7 @@ import {
 import type {
   Model,
   ModelCapabilities,
+  ProviderBillingType,
   ProviderCredential,
   ProviderDetail,
 } from "../types";
@@ -162,6 +165,7 @@ export default function ProviderDetailPage({
   const [success, setSuccess] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [baseUrl, setBaseUrl] = useState("");
+  const [billingType, setBillingType] = useState<ProviderBillingType>("pay_as_you_go");
   const [customHeaderRows, setCustomHeaderRows] = useState<Array<{ id: string; name: string; value: string }>>([]);
   const [activeTab, setActiveTab] = useState("models");
   const requiresOpenCodeSession = Boolean(provider && (
@@ -248,6 +252,7 @@ export default function ProviderDetailPage({
       setList(models);
       setName(current.name);
       setBaseUrl(current.base_url);
+      setBillingType(current.billing_type ?? "pay_as_you_go");
       setCustomHeaderRows(Object.entries(current.custom_headers ?? {}).map(([headerName, value], index) => ({ id: `${index}-${headerName}`, name: headerName, value })));
       setAvatar(current.avatar_override ?? null);
       originalAvatarRef.current = current.avatar_override ?? null;
@@ -284,6 +289,7 @@ export default function ProviderDetailPage({
   const discard = () => {
     setName(provider?.name ?? "");
     setBaseUrl(provider?.base_url ?? "");
+    setBillingType(provider?.billing_type ?? "pay_as_you_go");
     setCustomHeaderRows(Object.entries(provider?.custom_headers ?? {}).map(([headerName, value], index) => ({ id: `${index}-${headerName}`, name: headerName, value: String(value) })));
     setAvatar(provider?.avatar_override ?? null);
     setError(null);
@@ -328,6 +334,7 @@ export default function ProviderDetailPage({
         name,
         base_url: baseUrl,
         custom_headers: customHeaders,
+        billing_type: billingType,
         ...(avatar !== originalAvatarRef.current ? { avatar } : {}),
       });
       setProvider(updated);
@@ -986,6 +993,7 @@ export default function ProviderDetailPage({
         tabs={[
           { id: "models", label: `Models (${list.length})` },
           { id: "credentials", label: "Credentials" },
+          { id: "billing", label: "Billing & Plans" },
           { id: "headers", label: `Headers${headerCount ? ` (${headerCount})` : ""}` },
         ]}
         active={activeTab}
@@ -1533,6 +1541,176 @@ export default function ProviderDetailPage({
         )}
       </Card>
       </>}
+      {activeTab === "billing" && (
+        <Card className="overflow-hidden border border-border shadow-none">
+          <CardHeader>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <CardTitle>Billing & Quota Mode</CardTitle>
+                <p className="mt-1 text-sm text-tertiary">
+                  Configure how token usage and costs are accounted for this provider and its models.
+                </p>
+              </div>
+              <Badge
+                variant="outline"
+                className={cn(
+                  "font-normal text-xs px-2.5 py-1",
+                  billingType === "subscription"
+                    ? "border-purple-500/30 bg-purple-500/10 text-purple-700 dark:text-purple-300"
+                    : billingType === "free"
+                      ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+                      : "border-blue-500/30 bg-blue-500/10 text-blue-700 dark:text-blue-300",
+                )}
+              >
+                {billingType === "subscription" ? "Subscription Active" : billingType === "free" ? "Free Tier Active" : "Pay-As-You-Go Active"}
+              </Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="grid gap-4 md:grid-cols-3">
+              {/* Subscription Option */}
+              <button
+                type="button"
+                onClick={() => setBillingType("subscription")}
+                className={cn(
+                  "relative flex flex-col justify-between rounded-xl border p-4 text-left transition-all cursor-pointer",
+                  billingType === "subscription"
+                    ? "border-purple-500 bg-purple-500/[0.07] ring-1 ring-purple-500 shadow-sm"
+                    : "border-border bg-card/60 hover:border-border-strong hover:bg-card",
+                )}
+              >
+                <div>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="flex size-8 items-center justify-center rounded-lg bg-purple-500/15 text-purple-600 dark:text-purple-400">
+                        <RiVipCrownLine className="size-4" />
+                      </div>
+                      <span className="font-normal text-sm text-foreground">Subscription</span>
+                    </div>
+                    <span className="rounded-full bg-purple-500/15 px-2 py-0.5 text-[10px] font-normal text-purple-700 dark:text-purple-300">
+                      $0 direct
+                    </span>
+                  </div>
+                  <p className="mt-3 text-xs text-muted-foreground leading-relaxed">
+                    Designed for flat-rate subscriptions, fixed quotas, and included accounts (e.g. PerchAI, Deepcode, Codex, Antigravity, ChatGPT Team/Plus).
+                  </p>
+                </div>
+                <div className="mt-4 space-y-1.5 border-t border-border/50 pt-3 text-[11px] text-tertiary">
+                  <div className="flex items-center gap-1.5">
+                    <Check className="size-3 text-purple-500" />
+                    <span>No per-token API charges</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <Check className="size-3 text-purple-500" />
+                    <span>LiteLLM pricing disabled</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <Check className="size-3 text-purple-500" />
+                    <span>Tracked in Subscription volume</span>
+                  </div>
+                </div>
+              </button>
+
+              {/* Pay-As-You-Go Option */}
+              <button
+                type="button"
+                onClick={() => setBillingType("pay_as_you_go")}
+                className={cn(
+                  "relative flex flex-col justify-between rounded-xl border p-4 text-left transition-all cursor-pointer",
+                  billingType === "pay_as_you_go"
+                    ? "border-blue-500 bg-blue-500/[0.07] ring-1 ring-blue-500 shadow-sm"
+                    : "border-border bg-card/60 hover:border-border-strong hover:bg-card",
+                )}
+              >
+                <div>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="flex size-8 items-center justify-center rounded-lg bg-blue-500/15 text-blue-600 dark:text-blue-400">
+                        <RiCoinsLine className="size-4" />
+                      </div>
+                      <span className="font-normal text-sm text-foreground">Pay-As-You-Go</span>
+                    </div>
+                    <span className="rounded-full bg-blue-500/15 px-2 py-0.5 text-[10px] font-normal text-blue-700 dark:text-blue-300">
+                      Per-token
+                    </span>
+                  </div>
+                  <p className="mt-3 text-xs text-muted-foreground leading-relaxed">
+                    For commercial APIs billed strictly on consumption (e.g. direct OpenAI, Anthropic, OpenRouter, Groq, Mistral, Together).
+                  </p>
+                </div>
+                <div className="mt-4 space-y-1.5 border-t border-border/50 pt-3 text-[11px] text-tertiary">
+                  <div className="flex items-center gap-1.5">
+                    <Check className="size-3 text-blue-500" />
+                    <span>LiteLLM catalog rates active</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <Check className="size-3 text-blue-500" />
+                    <span>Custom tiered pricing supported</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <Check className="size-3 text-blue-500" />
+                    <span>Calculates USD ($) spend</span>
+                  </div>
+                </div>
+              </button>
+
+              {/* Free Option */}
+              <button
+                type="button"
+                onClick={() => setBillingType("free")}
+                className={cn(
+                  "relative flex flex-col justify-between rounded-xl border p-4 text-left transition-all cursor-pointer",
+                  billingType === "free"
+                    ? "border-emerald-500 bg-emerald-500/[0.07] ring-1 ring-emerald-500 shadow-sm"
+                    : "border-border bg-card/60 hover:border-border-strong hover:bg-card",
+                )}
+              >
+                <div>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="flex size-8 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
+                        <Check className="size-4" />
+                      </div>
+                      <span className="font-normal text-sm text-foreground">Free Tier</span>
+                    </div>
+                    <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-normal text-emerald-700 dark:text-emerald-300">
+                      100% Free
+                    </span>
+                  </div>
+                  <p className="mt-3 text-xs text-muted-foreground leading-relaxed">
+                    For complimentary community models or local inference endpoints (e.g. OpenFREE, Ollama, vLLM, LM Studio).
+                  </p>
+                </div>
+                <div className="mt-4 space-y-1.5 border-t border-border/50 pt-3 text-[11px] text-tertiary">
+                  <div className="flex items-center gap-1.5">
+                    <Check className="size-3 text-emerald-500" />
+                    <span>Zero cost calculation ($0.00)</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <Check className="size-3 text-emerald-500" />
+                    <span>Pricing lookups disabled</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <Check className="size-3 text-emerald-500" />
+                    <span>Free community tag</span>
+                  </div>
+                </div>
+              </button>
+            </div>
+
+            {/* Explanatory summary footer */}
+            <div className="rounded-xl border border-border/70 bg-muted/20 p-4 text-xs text-muted-foreground space-y-1.5">
+              <div className="font-normal text-foreground">How this affects models under {provider.name}:</div>
+              <p>
+                Models set to <span className="font-mono text-foreground font-normal">Inherit</span> will automatically adopt this billing mode. You can still customize or override individual models to have their own billing behavior in the Model Settings modal.
+              </p>
+              <p className="text-[11px] text-tertiary pt-1">
+                Click <strong>Save changes</strong> in the top header to apply this mode.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
       {activeTab === "headers" && <Card>
         <CardHeader><CardTitle>Custom headers</CardTitle><p className="text-sm text-tertiary">Headers sent with requests to this provider. Authentication and protocol headers stay managed separately.</p></CardHeader>
         <CardContent className="space-y-4">
@@ -1669,6 +1847,7 @@ export default function ProviderDetailPage({
         onClose={() => setAddOpen(false)}
         onSuccess={load}
         providerId={providerId}
+        providerBillingType={provider?.billing_type}
       />
       <EditModelModal
         isOpen={!!editTarget}

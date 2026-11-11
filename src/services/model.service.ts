@@ -3,10 +3,12 @@ import { isBlockedAntigravityModel } from "../integrations/antigravity/antigravi
 import { generateDisplayName } from "./model-name";
 import type { ProviderProtocol } from "./provider-appearance";
 import { publicAvatar } from "./avatar.service";
+import { defaultBillingTypeForProvider, type ProviderBillingType } from "./provider.service";
 import { getLiteLLMPricing } from "./litellm-pricing";
 import type { LiteLLMPricing } from "./litellm-pricing";
 import type { ModelMetadataSource, MetadataSourceTag } from "./model-metadata";
 
+export type ModelBillingType = "inherit" | "subscription" | "pay_as_you_go" | "free";
 
 export type ThinkOpeningTagMode = "off" | "detect" | "force";
 export type MaxOutputTokensSource = "auto" | "api" | "manual";
@@ -22,6 +24,8 @@ export interface Model {
   is_manual: number;
   is_active: number;
   use_litellm_pricing: number;
+  billing_type: ModelBillingType;
+  effective_billing_type?: ProviderBillingType;
   created_at: string;
   updated_at: string;
   context_window: number | null;
@@ -73,6 +77,7 @@ export interface ReasoningEffort {
 
 export interface ModelMetadataInput {
   use_litellm_pricing?: boolean;
+  billing_type?: ModelBillingType;
   context_window?: number | null;
   max_output_tokens?: number | null;
   max_output_tokens_source?: MaxOutputTokensSource;
@@ -98,6 +103,7 @@ export interface ModelWithProvider extends Model {
   provider_is_active: number;
   provider_avatar: string | null;
   provider_avatar_sources: string[];
+  effective_billing_type: ProviderBillingType;
 }
 
 export type CreateModelInput = ModelMetadataInput & {
@@ -398,11 +404,13 @@ function mapModelsWithProvider(rows: ProviderJoinedModelRow[]): ModelWithProvide
         protocol: provider_protocol,
         baseUrl: provider_base_url,
       });
+      const hydrated = hydrate(model as Model)!;
       return {
-        ...hydrate(model as Model)!,
+        ...hydrated,
         provider_is_active,
         provider_avatar: avatar.avatar,
         provider_avatar_sources: avatar.sources,
+        effective_billing_type: hydrated.effective_billing_type ?? "pay_as_you_go",
       } as ModelWithProvider;
     });
 }
@@ -413,10 +421,19 @@ function hydrate(model: Model | null): Model | null {
   const storedPricing = db
     .query("SELECT id, threshold_tokens, input_per_million, output_per_million, cache_read_per_million, cache_write_per_million FROM model_pricing_tiers WHERE model_id = ? ORDER BY threshold_tokens ASC")
     .all(model.id) as PricingTier[];
-  const provider = storedPricing.length ? null : db
-    .query("SELECT protocol, name, base_url FROM providers WHERE id = ?")
-    .get(model.provider_id) as { protocol: ProviderProtocol; name: string; base_url: string } | null;
-  const externalPricing = model.use_litellm_pricing && provider ? getLiteLLMPricing(provider.protocol, model.model_id, `${provider.name} ${provider.base_url}`) : null;
+  const provider = db
+    .query("SELECT protocol, name, base_url, billing_type FROM providers WHERE id = ?")
+    .get(model.provider_id) as { protocol: ProviderProtocol; name: string; base_url: string; billing_type?: ProviderBillingType } | null;
+
+  const rawBilling = model.billing_type as ModelBillingType | undefined;
+  const effectiveBillingType: ProviderBillingType =
+    rawBilling && rawBilling !== "inherit"
+      ? (rawBilling as ProviderBillingType)
+      : (provider?.billing_type ?? defaultBillingTypeForProvider(provider?.protocol ?? "openai", provider?.name, provider?.base_url));
+
+  const isSubscriptionOrFree = effectiveBillingType === "subscription" || effectiveBillingType === "free";
+  const allowLiteLLM = !isSubscriptionOrFree && Boolean(model.use_litellm_pricing) && !storedPricing.length;
+  const externalPricing = allowLiteLLM && provider ? getLiteLLMPricing(provider.protocol, model.model_id, `${provider.name} ${provider.base_url}`) : null;
   const capabilities = db
     .query("SELECT reasoning, tools, vision, audio_input, audio_output, video, image_generation, text_to_speech, video_generation, attachments, streaming, non_streaming FROM model_capabilities WHERE model_id = ?")
     .get(model.id) as Record<(typeof capabilityKeys)[number], number | null> | null;
@@ -431,6 +448,8 @@ function hydrate(model: Model | null): Model | null {
   }
   return {
     ...model,
+    billing_type: model.billing_type ?? "inherit",
+    effective_billing_type: effectiveBillingType,
     media_settings: (() => { try { return model.media_settings ? JSON.parse(model.media_settings as unknown as string) : {}; } catch { return {}; } })(),
     context_window: model.context_window ?? null,
     max_output_tokens: model.max_output_tokens,
@@ -585,13 +604,14 @@ export const modelService = {
           input,
           existing.think_opening_tag_mode,
         );
-        db.query("UPDATE models SET pretty_id = ?, display_name = ?, is_active = ?, think_opening_tag_mode = ?, fix_missing_think_opening_tag = ?, use_litellm_pricing = COALESCE(?, use_litellm_pricing), updated_at = datetime('now') WHERE id = ?").run(
+        db.query("UPDATE models SET pretty_id = ?, display_name = ?, is_active = ?, think_opening_tag_mode = ?, fix_missing_think_opening_tag = ?, use_litellm_pricing = COALESCE(?, use_litellm_pricing), billing_type = COALESCE(?, billing_type), updated_at = datetime('now') WHERE id = ?").run(
           prettyId,
           displayName,
           syncingManualModel ? existing.is_active : input.is_active ?? existing.is_active,
           resolvedMode,
           resolvedMode !== "off" ? 1 : 0,
           input.use_litellm_pricing === undefined ? null : input.use_litellm_pricing ? 1 : 0,
+          input.billing_type ?? null,
           existing.id,
         );
         const hasPricing = Boolean(
@@ -609,7 +629,7 @@ export const modelService = {
     db.transaction(() => {
       const resolvedMode = resolveThinkOpeningTagMode(input);
       db.query(
-        "INSERT INTO models (id, provider_id, model_id, pretty_id, display_name, fix_missing_think_opening_tag, think_opening_tag_mode, is_manual, is_active, use_litellm_pricing, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))",
+        "INSERT INTO models (id, provider_id, model_id, pretty_id, display_name, fix_missing_think_opening_tag, think_opening_tag_mode, is_manual, is_active, use_litellm_pricing, billing_type, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))",
       ).run(
         id,
         input.provider_id,
@@ -621,6 +641,7 @@ export const modelService = {
         input.is_manual ?? 0,
         input.is_active ?? 1,
         input.use_litellm_pricing ? 1 : 0,
+        input.billing_type ?? "inherit",
       );
       savePricing(id, pricingTiers);
       saveMetadata(id, metadataInput);
@@ -643,12 +664,13 @@ export const modelService = {
     const pricingTiers = input.pricing_tiers;
     db.transaction(() => {
       db.query(
-        "UPDATE models SET pretty_id = ?, display_name = ?, is_manual = 0, is_active = ?, use_litellm_pricing = ?, context_window = NULL, max_output_tokens = NULL, max_output_tokens_source = 'auto', media_settings = NULL, metadata_source = '{}', updated_at = datetime('now') WHERE id = ?",
+        "UPDATE models SET pretty_id = ?, display_name = ?, is_manual = 0, is_active = ?, use_litellm_pricing = ?, billing_type = COALESCE(?, billing_type), context_window = NULL, max_output_tokens = NULL, max_output_tokens_source = 'auto', media_settings = NULL, metadata_source = '{}', updated_at = datetime('now') WHERE id = ?",
       ).run(
         requestedPrettyId ?? existing.pretty_id,
         input.display_name?.trim() || generateDisplayName(input.model_id),
         input.is_active ?? existing.is_active,
         input.use_litellm_pricing ? 1 : 0,
+        input.billing_type ?? null,
         existing.id,
       );
       db.query("DELETE FROM model_capabilities WHERE model_id = ?").run(existing.id);
@@ -730,6 +752,10 @@ export const modelService = {
     if (input.use_litellm_pricing !== undefined) {
       updates.push("use_litellm_pricing = ?");
       values.push(input.use_litellm_pricing ? 1 : 0);
+    }
+    if (input.billing_type !== undefined) {
+      updates.push("billing_type = ?");
+      values.push(input.billing_type);
     }
     if (input.fix_missing_think_opening_tag !== undefined) {
       updates.push("fix_missing_think_opening_tag = ?");

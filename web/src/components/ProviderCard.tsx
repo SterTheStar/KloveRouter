@@ -47,9 +47,24 @@ export default function ProviderCard({
             <ProviderIcon name={provider.name} src={provider.avatar} sources={provider.avatar_sources} className="size-12" />
             <div>
               <div className="font-normal text-foreground">{provider.name}</div>
-              <Badge variant={provider.is_active ? "secondary" : "outline"}>
-                {provider.is_active ? "Enabled" : "Disabled"}
-              </Badge>
+              <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                <Badge variant={provider.is_active ? "secondary" : "outline"}>
+                  {provider.is_active ? "Enabled" : "Disabled"}
+                </Badge>
+                {provider.billing_type === "subscription" ? (
+                  <Badge variant="outline" className="border-purple-500/30 bg-purple-500/10 text-purple-600 dark:text-purple-300 font-normal text-[10px]">
+                    Subscription
+                  </Badge>
+                ) : provider.billing_type === "free" ? (
+                  <Badge variant="outline" className="border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300 font-normal text-[10px]">
+                    Free
+                  </Badge>
+                ) : (
+                  <Badge variant="outline" className="border-blue-500/30 bg-blue-500/10 text-blue-600 dark:text-blue-300 font-normal text-[10px]">
+                    Pay-as-you-go
+                  </Badge>
+                )}
+              </div>
             </div>
           </div>
           <div

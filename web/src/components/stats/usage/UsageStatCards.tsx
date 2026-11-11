@@ -1,10 +1,10 @@
 import {
   RiPulseLine,
   RiSwapLine,
-  RiFileTextLine,
-  RiSparklingLine,
   RiHardDrive2Line,
   RiMoneyDollarCircleLine,
+  RiVipCrownLine,
+  RiTimeLine,
 } from "@remixicon/react";
 import type { StatsOverview } from "@/types";
 import { formatNumber, formatCost, formatDuration } from "./usage-utils";
@@ -22,17 +22,26 @@ export function UsageStatCards({ overview }: UsageStatCardsProps) {
       : "0";
 
   const totalRequests = overview.total_requests ?? 0;
-  const avgCostPerReq =
-    totalRequests > 0
-      ? (overview.estimated_cost_usd ?? 0) / totalRequests
+  const paygRequests = overview.requests_pay_as_you_go ?? totalRequests;
+  const avgCostPerPaygReq =
+    paygRequests > 0
+      ? (overview.estimated_cost_usd ?? 0) / paygRequests
       : 0;
+
+  const subTokens = overview.tokens_subscription ?? 0;
+  const subPercent =
+    overview.total_tokens > 0
+      ? ((subTokens / overview.total_tokens) * 100).toFixed(0)
+      : "0";
 
   const statCards = [
     {
       icon: RiPulseLine,
       title: "Total requests",
       value: (overview.total_requests ?? 0).toLocaleString(),
-      sub: `${formatDuration(overview.avg_duration_ms)} avg latency`,
+      sub: overview.requests_subscription !== undefined && overview.requests_subscription > 0
+        ? `${overview.requests_subscription.toLocaleString()} sub · ${(overview.requests_pay_as_you_go ?? 0).toLocaleString()} payg`
+        : `${formatDuration(overview.avg_duration_ms)} avg latency`,
     },
     {
       icon: RiSwapLine,
@@ -41,16 +50,16 @@ export function UsageStatCards({ overview }: UsageStatCardsProps) {
       sub: `${formatNumber(overview.avg_tokens_per_request)} per request`,
     },
     {
-      icon: RiFileTextLine,
-      title: "Prompt tokens",
-      value: formatNumber(overview.total_tokens_prompt),
-      sub: `${overview.total_tokens > 0 ? (((overview.total_tokens_prompt ?? 0) / overview.total_tokens) * 100).toFixed(0) : 0}% of volume`,
+      icon: RiVipCrownLine,
+      title: "Subscription tokens",
+      value: formatNumber(subTokens),
+      sub: `${subPercent}% of tokens · $0 direct API`,
     },
     {
-      icon: RiSparklingLine,
-      title: "Completion tokens",
-      value: formatNumber(overview.total_tokens_completion),
-      sub: `${overview.total_tokens > 0 ? (((overview.total_tokens_completion ?? 0) / overview.total_tokens) * 100).toFixed(0) : 0}% of volume`,
+      icon: RiMoneyDollarCircleLine,
+      title: "Pay-as-you-go spend",
+      value: formatCost(overview.estimated_cost_usd),
+      sub: `${formatCost(avgCostPerPaygReq)} direct avg / req`,
     },
     {
       icon: RiHardDrive2Line,
@@ -59,10 +68,10 @@ export function UsageStatCards({ overview }: UsageStatCardsProps) {
       sub: `${cachePercent}% prompt hit rate`,
     },
     {
-      icon: RiMoneyDollarCircleLine,
-      title: "Estimated cost",
-      value: formatCost(overview.estimated_cost_usd),
-      sub: `${formatCost(avgCostPerReq)} avg / req`,
+      icon: RiTimeLine,
+      title: "Avg latency",
+      value: formatDuration(overview.avg_duration_ms),
+      sub: `${formatNumber(promptTokens)} in · ${formatNumber(overview.total_tokens_completion)} out`,
     },
   ];
 

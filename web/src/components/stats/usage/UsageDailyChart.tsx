@@ -71,6 +71,15 @@ function DailyCustomTooltip({ active, payload }: any) {
           </span>
         </div>
 
+        {data.tokens_subscription !== undefined && data.tokens_subscription > 0 && (
+          <div className="flex items-center justify-between text-purple-600 dark:text-purple-400">
+            <span>Subscription volume:</span>
+            <span className="font-mono font-normal tabular-nums">
+              {formatNumber(data.tokens_subscription)}
+            </span>
+          </div>
+        )}
+
         {/* Prompt / Completion Breakdown */}
         {data.tokens_prompt !== undefined && data.tokens_completion !== undefined && (
           <div className="rounded-lg bg-background/60 p-2 space-y-1 text-muted-foreground">

@@ -196,6 +196,7 @@ export const modelsPlugin = (app: Elysia) =>
             display_name: body.display_name || generateDisplayName(body.model_id),
             pricing_tiers: body.pricing_tiers,
             use_litellm_pricing: body.use_litellm_pricing,
+            billing_type: body.billing_type,
             context_window: enriched.context_window,
             max_output_tokens: enriched.max_output_tokens,
             fix_missing_think_opening_tag: body.fix_missing_think_opening_tag,
@@ -248,6 +249,7 @@ export const modelsPlugin = (app: Elysia) =>
             ),
           ),
           use_litellm_pricing: t.Optional(t.Boolean()),
+          billing_type: t.Optional(t.Union([t.Literal("inherit"), t.Literal("subscription"), t.Literal("pay_as_you_go"), t.Literal("free")])),
         }),
       },
     )
@@ -272,14 +274,21 @@ export const modelsPlugin = (app: Elysia) =>
         const freeOnly = body?.free_only === true || query.free_only === true;
         const existingOnly = query.existing_only === true;
         const resetExisting = body?.reset_existing === true || query.reset_existing === true;
-        const useLiteLLMPricing = body?.use_litellm_pricing !== false;
+        const isSubscriptionOrFreeProvider = provider.billing_type === "subscription" || provider.billing_type === "free";
+        const useLiteLLMPricing = body?.use_litellm_pricing !== undefined
+          ? body.use_litellm_pricing
+          : !isSubscriptionOrFreeProvider;
         if (useLiteLLMPricing && provider.protocol !== "openfree") await refreshLiteLLMPricing();
         const existingIds = new Set(
           modelService.findByProvider(id).map((model) => model.model_id),
         );
         const saveSyncedModel = (input: Parameters<typeof modelService.upsert>[0]) => {
           const enriched = enrichWithLiteLLM(input as any);
-          const withPricingOption = { ...enriched, use_litellm_pricing: useLiteLLMPricing };
+          const withPricingOption = {
+            ...enriched,
+            use_litellm_pricing: useLiteLLMPricing,
+            billing_type: (enriched as any).billing_type ?? "inherit",
+          };
           return resetExisting ? modelService.resetExisting(withPricingOption) : modelService.upsert(withPricingOption);
         };
         const isFreeModel = (model: { id: string; is_free?: boolean }) =>
@@ -308,7 +317,7 @@ export const modelsPlugin = (app: Elysia) =>
               capabilities: (enriched as any).capabilities,
               is_free: isFreeModel(model),
               is_existing: existingIds.has(model.id),
-              pricing: useLiteLLMPricing ? getLiteLLMPricing(provider.protocol, model.id, `${provider.name} ${provider.base_url}`) : null,
+              pricing: useLiteLLMPricing && !isSubscriptionOrFreeProvider ? getLiteLLMPricing(provider.protocol, model.id, `${provider.name} ${provider.base_url}`) : null,
             };
           });
           const existingModels = items.filter((model) => model.is_existing).length;
@@ -881,6 +890,7 @@ export const modelsPlugin = (app: Elysia) =>
             ),
           ),
           use_litellm_pricing: t.Optional(t.Boolean()),
+          billing_type: t.Optional(t.Union([t.Literal("inherit"), t.Literal("subscription"), t.Literal("pay_as_you_go"), t.Literal("free")])),
         }),
       },
     )

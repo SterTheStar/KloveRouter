@@ -99,6 +99,7 @@ describe("chat service", () => {
   });
 
   test("deleteAll removes every chat and its search index", () => {
+    chatService.deleteAll();
     const first = chatService.create({ title: "All one" });
     const second = chatService.create({ title: "All two" });
     chatService.addMessage({ chatId: first.id, role: "user", content: "bulk deletable first" });

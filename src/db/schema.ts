@@ -26,6 +26,7 @@ export function initSchema(db: Database): void {
       credential_mode TEXT NOT NULL DEFAULT 'fixed',
       fixed_credential_id TEXT,
       is_active   INTEGER NOT NULL DEFAULT 1,
+      billing_type TEXT NOT NULL DEFAULT 'pay_as_you_go',
       created_at  TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at  TEXT NOT NULL DEFAULT (datetime('now')),
       last_test_at TEXT,
@@ -49,6 +50,7 @@ export function initSchema(db: Database): void {
       think_opening_tag_mode TEXT NOT NULL DEFAULT 'off',
       is_manual     INTEGER NOT NULL DEFAULT 0,
       is_active     INTEGER NOT NULL DEFAULT 1,
+      billing_type  TEXT NOT NULL DEFAULT 'inherit',
       use_litellm_pricing INTEGER NOT NULL DEFAULT 0,
       created_at    TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at    TEXT NOT NULL DEFAULT (datetime('now')),
@@ -202,6 +204,7 @@ export function initSchema(db: Database): void {
       estimated_cost_usd REAL NOT NULL DEFAULT 0,
       duration_ms       INTEGER NOT NULL DEFAULT 0,
       generation_duration_ms INTEGER NOT NULL DEFAULT 0,
+      billing_type      TEXT NOT NULL DEFAULT 'pay_as_you_go',
       created_at        TEXT NOT NULL DEFAULT (datetime('now')),
       FOREIGN KEY (provider_id) REFERENCES providers(id) ON DELETE CASCADE
     );
@@ -351,6 +354,7 @@ export function initSchema(db: Database): void {
       tokens_cache_write INTEGER NOT NULL DEFAULT 0,
       tokens_total INTEGER NOT NULL DEFAULT 0,
       estimated_cost_usd REAL NOT NULL DEFAULT 0,
+      billing_type TEXT NOT NULL DEFAULT 'pay_as_you_go',
       tps REAL,
       duration_ms INTEGER,
       error_message TEXT,
@@ -390,6 +394,7 @@ export function initSchema(db: Database): void {
     ["api_key_prefix", "ALTER TABLE request_logs ADD COLUMN api_key_prefix TEXT"],
     ["guardrails_status", "ALTER TABLE request_logs ADD COLUMN guardrails_status TEXT"],
     ["guardrails_details", "ALTER TABLE request_logs ADD COLUMN guardrails_details TEXT"],
+    ["billing_type", "ALTER TABLE request_logs ADD COLUMN billing_type TEXT NOT NULL DEFAULT 'pay_as_you_go'"],
   ] as const) {
     if (!requestLogCols.find((column) => column.name === name)) db.exec(sql);
   }
@@ -421,6 +426,23 @@ export function initSchema(db: Database): void {
   }
   if (!cols.find((c) => c.name === "custom_headers")) {
     db.exec("ALTER TABLE providers ADD COLUMN custom_headers TEXT NOT NULL DEFAULT 'enc:v1:'");
+  }
+  if (!cols.find((c) => c.name === "billing_type")) {
+    db.exec("ALTER TABLE providers ADD COLUMN billing_type TEXT NOT NULL DEFAULT 'pay_as_you_go'");
+    db.exec(`
+      UPDATE providers
+      SET billing_type = 'subscription'
+      WHERE protocol IN ('antigravity', 'codex', 'chatgpt', 'perch', 'deepai')
+         OR LOWER(name) LIKE '%perch%'
+         OR LOWER(name) LIKE '%deepcode%'
+         OR LOWER(name) LIKE '%antigravity%'
+         OR LOWER(name) LIKE '%codex%'
+    `);
+    db.exec(`
+      UPDATE providers
+      SET billing_type = 'free'
+      WHERE protocol = 'openfree'
+    `);
   }
   for (const [name, sql] of [
     ["last_test_at", "ALTER TABLE providers ADD COLUMN last_test_at TEXT"],
@@ -461,6 +483,14 @@ export function initSchema(db: Database): void {
   }
   if (!modelCols.find((c) => c.name === "use_litellm_pricing"))
     db.exec("ALTER TABLE models ADD COLUMN use_litellm_pricing INTEGER NOT NULL DEFAULT 0");
+  if (!modelCols.find((c) => c.name === "billing_type")) {
+    db.exec("ALTER TABLE models ADD COLUMN billing_type TEXT NOT NULL DEFAULT 'inherit'");
+    db.exec(`
+      UPDATE models
+      SET use_litellm_pricing = 0
+      WHERE provider_id IN (SELECT id FROM providers WHERE billing_type IN ('subscription', 'free'))
+    `);
+  }
   if (!modelCols.find((c) => c.name === "media_settings"))
     db.exec("ALTER TABLE models ADD COLUMN media_settings TEXT");
   if (!modelCols.find((c) => c.name === "updated_at")) {
@@ -664,9 +694,27 @@ export function initSchema(db: Database): void {
       "estimated_cost_usd",
       "ALTER TABLE usage_log ADD COLUMN estimated_cost_usd REAL NOT NULL DEFAULT 0",
     ],
+    [
+      "billing_type",
+      "ALTER TABLE usage_log ADD COLUMN billing_type TEXT NOT NULL DEFAULT 'pay_as_you_go'",
+    ],
   ];
   for (const [name, sql] of usageMigrations)
-    if (!usageCols.find((c) => c.name === name)) db.exec(sql);
+    if (!usageCols.find((c) => c.name === name)) {
+      db.exec(sql);
+      if (name === "billing_type") {
+        db.exec(`
+          UPDATE usage_log
+          SET billing_type = 'subscription', estimated_cost_usd = 0
+          WHERE provider_id IN (SELECT id FROM providers WHERE billing_type = 'subscription')
+        `);
+        db.exec(`
+          UPDATE usage_log
+          SET billing_type = 'free', estimated_cost_usd = 0
+          WHERE provider_id IN (SELECT id FROM providers WHERE billing_type = 'free')
+        `);
+      }
+    }
 
   // Fill costs for request logs created before cost calculation was wired in.
   db.exec(`
@@ -687,6 +735,17 @@ export function initSchema(db: Database): void {
       LIMIT 1
     ), estimated_cost_usd)
     WHERE estimated_cost_usd = 0 AND tokens_total > 0
+  `);
+
+  db.exec(`
+    UPDATE request_logs
+    SET billing_type = 'subscription', estimated_cost_usd = 0
+    WHERE provider_id IN (SELECT id FROM providers WHERE billing_type = 'subscription')
+  `);
+  db.exec(`
+    UPDATE request_logs
+    SET billing_type = 'free', estimated_cost_usd = 0
+    WHERE provider_id IN (SELECT id FROM providers WHERE billing_type = 'free')
   `);
 
   const rotationCols = db

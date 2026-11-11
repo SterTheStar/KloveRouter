@@ -1,3 +1,6 @@
+export type ProviderBillingType = "pay_as_you_go" | "subscription" | "free";
+export type ModelBillingType = "inherit" | "subscription" | "pay_as_you_go" | "free";
+
 export interface Provider {
   id: string;
   name: string;
@@ -7,6 +10,7 @@ export interface Provider {
   avatar_override?: string | null;
   protocol: "openai" | "openai-responses" | "anthropic" | "codex" | "chatgpt" | "antigravity" | "freebuff" | "qwen" | "atomesus" | "conol" | "perch" | "openfree" | "deepai";
   is_active: number;
+  billing_type?: ProviderBillingType;
   created_at: string;
   updated_at: string;
   api_key?: string;
@@ -58,6 +62,8 @@ export interface Model {
   display_name: string | null;
   is_manual: number;
   is_active: number;
+  billing_type?: ModelBillingType;
+  effective_billing_type?: ProviderBillingType;
   use_litellm_pricing: number;
   created_at: string;
   context_window: number | null;
@@ -108,6 +114,7 @@ export interface ReasoningEffort {
 
 export interface ModelMetadataInput {
   use_litellm_pricing?: boolean;
+  billing_type?: ModelBillingType;
   context_window: number | null;
   max_output_tokens: number | null;
   think_opening_tag_mode?: ThinkOpeningTagMode;
@@ -136,6 +143,7 @@ export interface ModelWithProvider extends Model {
   provider_is_active?: number;
   provider_avatar: string | null;
   provider_avatar_sources: string[];
+  effective_billing_type?: ProviderBillingType;
   model_pool?: boolean;
   pool_id?: string;
   strategy?: ModelPoolStrategy;
@@ -193,6 +201,10 @@ export interface StatsOverview {
   avg_duration_ms: number;
   estimated_cost_usd: number;
   total_tokens_cache: number;
+  tokens_subscription?: number;
+  tokens_pay_as_you_go?: number;
+  requests_subscription?: number;
+  requests_pay_as_you_go?: number;
 }
 
 export interface StatsByProvider {
@@ -201,6 +213,9 @@ export interface StatsByProvider {
   requests: number;
   tokens_total: number;
   estimated_cost_usd: number;
+  billing_type?: ProviderBillingType;
+  tokens_subscription?: number;
+  tokens_pay_as_you_go?: number;
 }
 
 export interface StatsByModel {
@@ -216,6 +231,10 @@ export interface StatsByModel {
   tps: number | null;
   tokens_cache_read: number;
   estimated_cost_usd: number;
+  billing_type?: ModelBillingType;
+  effective_billing_type?: ProviderBillingType;
+  tokens_subscription?: number;
+  tokens_pay_as_you_go?: number;
 }
 
 export interface DailyStats {
@@ -226,6 +245,8 @@ export interface DailyStats {
   tokens_completion?: number;
   tokens_cache_read?: number;
   estimated_cost_usd: number;
+  tokens_subscription?: number;
+  tokens_pay_as_you_go?: number;
 }
 
 export interface StatsUptimeGroup {
@@ -452,6 +473,7 @@ export interface RequestLog {
   streamed_bytes?: number;
   request_kind?: string | null;
   output_bytes?: number | null;
+  billing_type?: ProviderBillingType;
   guardrails_status?: "blocked" | "redacted" | "audited" | null;
 }
 

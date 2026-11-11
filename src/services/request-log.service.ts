@@ -1,5 +1,6 @@
 import { getDb } from "../db/connection";
 import { getLiteLLMPricing } from "./litellm-pricing";
+import { defaultBillingTypeForProvider, type ProviderBillingType } from "./provider.service";
 
 export type RequestLogStatus = "pending" | "success" | "error";
 
@@ -32,6 +33,7 @@ export interface RequestLog {
   streamed_bytes?: number;
   request_kind?: string | null;
   output_bytes?: number | null;
+  billing_type?: ProviderBillingType;
   guardrails_status?: "blocked" | "redacted" | "audited" | null;
 }
 
@@ -57,7 +59,7 @@ function publish(event: RequestLogEvent) {
 }
 
 /** Columns needed to render the request log table (details are loaded on demand). */
-const LIST_COLUMNS = "id, provider_id, provider_name, model_name, client_ip, requester_name, api_key_prefix, credential_label, credential_identity, credential_kind, status, status_code, tokens_prompt, tokens_completion, tokens_cache_read, tokens_cache_write, tokens_total, estimated_cost_usd, tps, duration_ms, error_message, created_at, completed_at, streaming, streamed_chars, streamed_bytes, guardrails_status";
+const LIST_COLUMNS = "id, provider_id, provider_name, model_name, client_ip, requester_name, api_key_prefix, credential_label, credential_identity, credential_kind, status, status_code, tokens_prompt, tokens_completion, tokens_cache_read, tokens_cache_write, tokens_total, estimated_cost_usd, billing_type, tps, duration_ms, error_message, created_at, completed_at, streaming, streamed_chars, streamed_bytes, guardrails_status";
 
 const LIST_SQL = `SELECT ${LIST_COLUMNS},
   CASE WHEN request_details IS NULL THEN NULL ELSE json_extract(request_details, '$.saturn.media_type') END AS request_kind,
@@ -305,11 +307,23 @@ export const requestLogService = {
     const cacheRead = input.cacheRead ?? 0;
     const cacheWrite = input.cacheWrite ?? 0;
     let cost = input.cost;
-    // Supplies provider/protocol needed for pricing.
+    // Supplies provider/protocol needed for pricing and billing type.
     const request = db
-      .query("SELECT r.provider_id, r.provider_name, r.model_name, p.protocol, p.name AS name, p.base_url, m.use_litellm_pricing, r.error_details FROM request_logs r LEFT JOIN providers p ON p.id = r.provider_id LEFT JOIN models m ON m.provider_id = r.provider_id AND m.model_id = r.model_name WHERE r.id = ?")
-      .get(id) as { provider_id: string | null; provider_name: string | null; model_name: string; protocol: string | null; name: string | null; base_url: string | null; use_litellm_pricing: number | null; error_details: string | null } | null;
-    if (cost === undefined && prompt + completion > 0) {
+      .query("SELECT r.provider_id, r.provider_name, r.model_name, p.protocol, p.name AS name, p.base_url, p.billing_type AS provider_billing, m.billing_type AS model_billing, m.use_litellm_pricing, r.error_details FROM request_logs r LEFT JOIN providers p ON p.id = r.provider_id LEFT JOIN models m ON m.provider_id = r.provider_id AND m.model_id = r.model_name WHERE r.id = ?")
+      .get(id) as { provider_id: string | null; provider_name: string | null; model_name: string; protocol: string | null; name: string | null; base_url: string | null; provider_billing?: string; model_billing?: string; use_litellm_pricing: number | null; error_details: string | null } | null;
+
+    const defaultProviderBilling = request?.protocol
+      ? defaultBillingTypeForProvider(request.protocol, request.name ?? undefined, request.base_url ?? undefined)
+      : "pay_as_you_go";
+
+    const effectiveBilling: ProviderBillingType =
+      request?.model_billing && request.model_billing !== "inherit"
+        ? (request.model_billing as ProviderBillingType)
+        : (request?.provider_billing as ProviderBillingType | undefined) ?? defaultProviderBilling;
+
+    if (effectiveBilling !== "pay_as_you_go") {
+      cost = 0;
+    } else if (cost === undefined && prompt + completion > 0) {
       const tier = request?.provider_id
         ? (db
             .query(
@@ -346,7 +360,7 @@ export const requestLogService = {
       errorDetails = null;
     }
     db.query(
-      "UPDATE request_logs SET status = ?, status_code = ?, tokens_prompt = ?, tokens_completion = ?, tokens_cache_read = ?, tokens_cache_write = ?, tokens_total = ?, estimated_cost_usd = ?, duration_ms = ?, tps = ?, error_message = ?, response_details = COALESCE(?, response_details), error_details = COALESCE(?, error_details), completed_at = datetime('now') WHERE id = ? AND status = 'pending'",
+      "UPDATE request_logs SET status = ?, status_code = ?, tokens_prompt = ?, tokens_completion = ?, tokens_cache_read = ?, tokens_cache_write = ?, tokens_total = ?, estimated_cost_usd = ?, duration_ms = ?, tps = ?, error_message = ?, response_details = COALESCE(?, response_details), error_details = COALESCE(?, error_details), billing_type = ?, completed_at = datetime('now') WHERE id = ? AND status = 'pending'",
     ).run(
       status,
       statusCode,
@@ -364,6 +378,7 @@ export const requestLogService = {
       typeof redactLogDetail(input.error) === "string" ? redactLogDetail(input.error) as string : input.error ? JSON.stringify(redactLogDetail(input.error)) : null,
       responseDetails,
       errorDetails,
+      effectiveBilling,
       id,
     );
     // Completing an already-finished row is a no-op; skip the event.
@@ -486,6 +501,7 @@ export const requestLogService = {
       provider?: string;
       search?: string;
       guardrails?: string;
+      billing_type?: string;
       /** Keyset cursor: only return logs created strictly before this timestamp. */
       before?: string;
       /** Total row count is expensive on large tables; only compute it when asked. */
@@ -516,6 +532,10 @@ export const requestLogService = {
         clauses.push("guardrails_status = ?");
         values.push(input.guardrails);
       }
+    }
+    if (input.billing_type && ["pay_as_you_go", "subscription", "free"].includes(input.billing_type)) {
+      clauses.push("billing_type = ?");
+      values.push(input.billing_type);
     }
     if (input.search) {
       clauses.push(

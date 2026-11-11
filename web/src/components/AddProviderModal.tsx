@@ -21,6 +21,7 @@ import {
   PROVIDER_TEMPLATES,
   type ProviderTemplate,
 } from "../lib/provider-templates";
+import type { ProviderBillingType } from "@/types";
 import { isEndpointFavicon, isPersistableAvatar, logoToDataUrl } from "@/lib/provider-icons";
 import { invalidateProviders } from "../lib/query-cache";
 import {
@@ -28,6 +29,24 @@ import {
   ProviderInfoColumn,
   ProviderAuthForm,
 } from "./providers";
+
+function defaultBillingForTemplate(template: ProviderTemplate | null): ProviderBillingType {
+  if (!template) return "pay_as_you_go";
+  if (template.protocol === "openfree") return "free";
+  const normName = template.name.toLowerCase();
+  if (
+    template.protocol === "antigravity" ||
+    template.protocol === "codex" ||
+    template.protocol === "chatgpt" ||
+    template.protocol === "perch" ||
+    template.protocol === "deepai" ||
+    normName.includes("perch") ||
+    normName.includes("deepcode")
+  ) {
+    return "subscription";
+  }
+  return "pay_as_you_go";
+}
 
 export default function AddProviderModal({
   isOpen,
@@ -42,6 +61,9 @@ export default function AddProviderModal({
   const [step, setStep] = useState<"select" | "form">("select");
   const [selectedType, setSelectedType] = useState<ProviderTemplate | null>(
     () => PROVIDER_TEMPLATES[0] ?? null,
+  );
+  const [billingType, setBillingType] = useState<ProviderBillingType>(() =>
+    defaultBillingForTemplate(PROVIDER_TEMPLATES[0] ?? null),
   );
   const [name, setName] = useState("");
   const [baseUrl, setBaseUrl] = useState("");
@@ -267,6 +289,7 @@ export default function AddProviderModal({
     setSelectedType(type);
     setName(type.name);
     setBaseUrl(type.placeholder);
+    setBillingType(defaultBillingForTemplate(type));
     setAvatar(null);
     setAvatarManuallySet(false);
     setError(null);
@@ -284,6 +307,7 @@ export default function AddProviderModal({
         name,
         base_url: baseUrl,
         protocol: "deepai",
+        billing_type: billingType,
         avatar: await resolveAvatarPayload(),
       });
       createdProviderId = created.id;
@@ -313,6 +337,7 @@ export default function AddProviderModal({
         name: name.trim() || "antigravity",
         base_url: baseUrl || "https://daily-cloudcode-pa.googleapis.com",
         protocol: "antigravity",
+        billing_type: billingType,
         avatar: await resolveAvatarPayload(),
       });
       createdProviderId = provider.id;
@@ -341,6 +366,7 @@ export default function AddProviderModal({
         base_url: baseUrl || "https://chatgpt.com/backend-api/codex",
         api_key: "codex-session",
         protocol: "codex",
+        billing_type: billingType,
         avatar: await resolveAvatarPayload(),
       });
       createdProviderId = provider.id;
@@ -483,6 +509,7 @@ export default function AddProviderModal({
                 ? { secret: authCode, account_id: conolParsedAccountId }
                 : { api_key: apiKey }),
         protocol: selectedType?.protocol,
+        billing_type: billingType,
         avatar: await resolveAvatarPayload(),
       });
 
@@ -602,6 +629,8 @@ export default function AddProviderModal({
                     setAvatar={setAvatar}
                     avatarManuallySet={avatarManuallySet}
                     setAvatarManuallySet={setAvatarManuallySet}
+                    billingType={billingType}
+                    setBillingType={setBillingType}
                     notifyError={notifyError}
                     openfreeCliStatus={openfreeCliStatus}
                     openfreeCliPath={openfreeCliPath}

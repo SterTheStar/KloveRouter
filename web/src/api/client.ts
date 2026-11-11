@@ -126,7 +126,8 @@ export const providers = {
     account_id?: string;
     avatar?: string;
     custom_headers?: unknown;
-      protocol?: "openai" | "openai-responses" | "anthropic" | "codex" | "chatgpt" | "antigravity" | "freebuff" | "qwen" | "atomesus" | "conol" | "perch" | "openfree" | "deepai";
+    billing_type?: import("../types").ProviderBillingType;
+    protocol?: "openai" | "openai-responses" | "anthropic" | "codex" | "chatgpt" | "antigravity" | "freebuff" | "qwen" | "atomesus" | "conol" | "perch" | "openfree" | "deepai";
    }) =>
      request<import("../types").Provider>("/api/providers", {
        method: "POST",
@@ -139,7 +140,8 @@ export const providers = {
        base_url?: string;
        api_key?: string;
        avatar?: string | null;
-        custom_headers?: unknown;
+       custom_headers?: unknown;
+       billing_type?: import("../types").ProviderBillingType;
        protocol?: "openai" | "openai-responses" | "anthropic" | "codex" | "chatgpt" | "antigravity" | "freebuff" | "qwen" | "atomesus" | "conol" | "perch" | "openfree" | "deepai";
       credential_mode?: "fixed" | "round_robin" | "failover";
       fixed_credential_id?: string | null;
@@ -496,6 +498,7 @@ export const requestLogs = {
       provider?: string;
       search?: string;
       guardrails?: string;
+      billing_type?: string;
       before?: string;
       withTotal?: boolean;
     } = {},

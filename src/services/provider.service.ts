@@ -5,6 +5,32 @@ import { publicAvatar } from "./avatar.service";
 import { decryptSecret, encryptSecret } from "./secret.service";
 import { credentialKindForProtocol, validateCredential } from "./credential-validation";
 
+export type ProviderBillingType = "pay_as_you_go" | "subscription" | "free";
+
+export function defaultBillingTypeForProvider(protocol: string, name?: string, baseUrl?: string): ProviderBillingType {
+  const normProto = (protocol || "").toLowerCase();
+  const normName = (name || "").toLowerCase();
+  const normUrl = (baseUrl || "").toLowerCase();
+
+  if (normProto === "openfree") return "free";
+  if (
+    normProto === "antigravity" ||
+    normProto === "codex" ||
+    normProto === "chatgpt" ||
+    normProto === "perch" ||
+    normProto === "deepai" ||
+    normName.includes("perch") ||
+    normName.includes("deepcode") ||
+    normName.includes("antigravity") ||
+    normName.includes("codex") ||
+    normUrl.includes("perch") ||
+    normUrl.includes("deepcode")
+  ) {
+    return "subscription";
+  }
+  return "pay_as_you_go";
+}
+
 export interface Provider {
   id: string;
   name: string;
@@ -15,6 +41,7 @@ export interface Provider {
   custom_headers: Record<string, string> | string;
   credential_mode: CredentialMode;
   fixed_credential_id: string | null;
+  billing_type: ProviderBillingType;
   is_active: number;
   created_at: string;
   updated_at: string;
@@ -33,6 +60,7 @@ export interface ProviderPublic {
   protocol: ProviderProtocol;
   credential_mode: CredentialMode;
   fixed_credential_id: string | null;
+  billing_type: ProviderBillingType;
   is_active: number;
   created_at: string;
   updated_at: string;
@@ -48,6 +76,7 @@ export type CreateProviderInput = {
   custom_headers?: Record<string, string>;
   credential_mode?: CredentialMode;
   fixed_credential_id?: string | null;
+  billing_type?: ProviderBillingType;
 };
 
 export type UpdateProviderInput = {
@@ -59,6 +88,7 @@ export type UpdateProviderInput = {
   custom_headers?: Record<string, string>;
   credential_mode?: CredentialMode;
   fixed_credential_id?: string | null;
+  billing_type?: ProviderBillingType;
   is_active?: number;
 };
 
@@ -117,6 +147,7 @@ function toPublic(p: Provider): ProviderPublic {
     protocol: p.protocol ?? "openai",
     credential_mode: p.credential_mode ?? "fixed",
     fixed_credential_id: p.fixed_credential_id ?? null,
+    billing_type: p.billing_type ?? defaultBillingTypeForProvider(p.protocol ?? "openai", p.name, p.base_url),
     is_active: p.is_active,
     created_at: p.created_at,
     updated_at: p.updated_at,
@@ -205,8 +236,9 @@ export const providerService = {
       ? encryptSecret(input.api_key)
       : null;
     const encryptedHeaders = encryptSecret(JSON.stringify(validateCustomHeaders(input.custom_headers ?? {})));
+    const billingType = input.billing_type ?? defaultBillingTypeForProvider(protocol, input.name, input.base_url);
     db.query(
-      "INSERT INTO providers (id, name, base_url, api_key, avatar, protocol, custom_headers) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      "INSERT INTO providers (id, name, base_url, api_key, avatar, protocol, custom_headers, billing_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
     ).run(
       id,
       input.name,
@@ -215,6 +247,7 @@ export const providerService = {
       input.avatar ?? null,
       protocol,
       encryptedHeaders,
+      billingType,
     );
     const credentialId = crypto.randomUUID();
     db.query(
@@ -353,6 +386,10 @@ export const providerService = {
     if (input.is_active !== undefined) {
       updates.push("is_active = ?");
       values.push(input.is_active);
+    }
+    if (input.billing_type !== undefined) {
+      updates.push("billing_type = ?");
+      values.push(input.billing_type);
     }
 
     if (updates.length === 0) return this.findPublicById(id);

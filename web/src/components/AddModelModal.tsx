@@ -13,14 +13,17 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlertTriangle, Info } from "lucide-react";
+import { RiVipCrownLine, RiCheckLine } from "@remixicon/react";
 import { Tabs } from "@/components/ui/tabs";
 import { models } from "../api/client";
 import { useToast } from "./ui/toast";
 import type {
   MetadataSource,
+  ModelBillingType,
   ModelCapabilities,
   ModelMetadataInput,
   PricingTier,
+  ProviderBillingType,
   ReasoningEffort,
   ThinkOpeningTagMode,
 } from "../types";
@@ -33,11 +36,13 @@ export default function AddModelModal({
   onClose,
   onSuccess,
   providerId,
+  providerBillingType,
 }: {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
   providerId: string;
+  providerBillingType?: ProviderBillingType;
 }) {
   const { success, error: notifyError } = useToast();
   const [modelId, setModelId] = useState("");
@@ -58,6 +63,7 @@ export default function AddModelModal({
       cache_write_per_million: 0,
     },
   ]);
+  const [billingType, setBillingType] = useState<ModelBillingType>("inherit");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState("general");
@@ -73,6 +79,7 @@ export default function AddModelModal({
     setDisplayName("");
     setDisplayEdited(false);
     setThinkOpeningTagMode("off");
+    setBillingType("inherit");
     setMetadata(emptyModelMetadata());
     setPricingTiers([
       {
@@ -108,6 +115,7 @@ export default function AddModelModal({
         pretty_id: prettyId.trim() || null,
         display_name: displayName || undefined,
         think_opening_tag_mode: thinkOpeningTagMode,
+        billing_type: billingType,
         pricing_tiers: pricingTiers,
         ...metadata,
       });
@@ -196,11 +204,114 @@ export default function AddModelModal({
             />
           )}
           {activeTab === "pricing" && (
-            <PricingEditor
-              tiers={pricingTiers}
-              updateTier={updateTier}
-              setTiers={setPricingTiers}
-            />
+            <div className="space-y-5">
+              <div className="space-y-2 border-b pb-4">
+                <div className="space-y-1">
+                  <div className="text-sm font-normal">Billing & Quota Mode</div>
+                  <p className="text-xs text-muted-foreground">
+                    Configure how requests are tracked. Subscription models draw from plan quota without calculating per-token dollar costs.
+                  </p>
+                </div>
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  <button
+                    type="button"
+                    onClick={() => setBillingType("inherit")}
+                    className={`flex flex-col items-start rounded-lg border p-2.5 text-left text-xs transition-all cursor-pointer ${
+                      billingType === "inherit"
+                        ? "border-primary bg-primary/10 text-foreground ring-1 ring-primary"
+                        : "border-border bg-card hover:border-border-strong text-muted-foreground"
+                    }`}
+                  >
+                    <span className="font-normal text-foreground">Inherit</span>
+                    <span className="text-[10px] text-muted-foreground mt-0.5">
+                      Provider default ({providerBillingType ?? "pay_as_you_go"})
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBillingType("subscription")}
+                    className={`flex flex-col items-start rounded-lg border p-2.5 text-left text-xs transition-all cursor-pointer ${
+                      billingType === "subscription"
+                        ? "border-purple-500 bg-purple-500/10 text-foreground ring-1 ring-purple-500"
+                        : "border-border bg-card hover:border-border-strong text-muted-foreground"
+                    }`}
+                  >
+                    <span className="font-normal text-foreground">Subscription</span>
+                    <span className="text-[10px] text-muted-foreground mt-0.5">Quota · $0 direct</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBillingType("pay_as_you_go")}
+                    className={`flex flex-col items-start rounded-lg border p-2.5 text-left text-xs transition-all cursor-pointer ${
+                      billingType === "pay_as_you_go"
+                        ? "border-blue-500 bg-blue-500/10 text-foreground ring-1 ring-blue-500"
+                        : "border-border bg-card hover:border-border-strong text-muted-foreground"
+                    }`}
+                  >
+                    <span className="font-normal text-foreground">Pay-As-You-Go</span>
+                    <span className="text-[10px] text-muted-foreground mt-0.5">Pay per token</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBillingType("free")}
+                    className={`flex flex-col items-start rounded-lg border p-2.5 text-left text-xs transition-all cursor-pointer ${
+                      billingType === "free"
+                        ? "border-emerald-500 bg-emerald-500/10 text-foreground ring-1 ring-emerald-500"
+                        : "border-border bg-card hover:border-border-strong text-muted-foreground"
+                    }`}
+                  >
+                    <span className="font-normal text-foreground">Free</span>
+                    <span className="text-[10px] text-muted-foreground mt-0.5">Zero cost</span>
+                  </button>
+                </div>
+                {(billingType === "subscription" || (billingType === "inherit" && providerBillingType === "subscription")) && (
+                  <p className="rounded-md bg-purple-500/10 p-2 text-xs text-purple-700 dark:text-purple-300">
+                    This model runs as a subscription. Token requests draw from your subscription quota ($0 direct cost) and public LiteLLM rates are excluded.
+                  </p>
+                )}
+              </div>
+
+              {(billingType === "subscription" || (billingType === "inherit" && providerBillingType === "subscription") || billingType === "free" || (billingType === "inherit" && providerBillingType === "free")) ? (
+                <div className="rounded-xl border border-dashed border-border/80 bg-muted/20 p-5 text-center space-y-3">
+                  <div className="mx-auto flex size-10 items-center justify-center rounded-full bg-purple-500/10 text-purple-600 dark:text-purple-400">
+                    {(billingType === "subscription" || (billingType === "inherit" && providerBillingType === "subscription")) ? (
+                      <RiVipCrownLine className="size-5" />
+                    ) : (
+                      <RiCheckLine className="size-5 text-emerald-500" />
+                    )}
+                  </div>
+                  <div className="space-y-1">
+                    <h4 className="text-sm font-normal text-foreground">
+                      {(billingType === "subscription" || (billingType === "inherit" && providerBillingType === "subscription"))
+                        ? "Subscription mode active — pricing disabled"
+                        : "Free tier active — pricing disabled"}
+                    </h4>
+                    <p className="text-xs text-muted-foreground max-w-md mx-auto leading-relaxed">
+                      {(billingType === "subscription" || (billingType === "inherit" && providerBillingType === "subscription"))
+                        ? "Token requests on this model consume from your subscription quota with $0 direct per-token API charges. Pricing tiers are disabled."
+                        : "This model is 100% free ($0.00). Per-token charges and pricing tiers are disabled."}
+                    </p>
+                  </div>
+                  <div className="pt-1">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setBillingType("pay_as_you_go")}
+                      className="text-xs"
+                    >
+                      Switch to Pay-As-You-Go to configure token prices
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <PricingEditor
+                  tiers={pricingTiers}
+                  updateTier={updateTier}
+                  setTiers={setPricingTiers}
+                />
+              )}
+            </div>
           )}
           {error && (
             <Alert variant="destructive" className="mt-5">

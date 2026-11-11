@@ -1,5 +1,7 @@
 import { getDb } from "../db/connection";
 import { getLiteLLMPricing } from "./litellm-pricing";
+import { defaultBillingTypeForProvider, type ProviderBillingType } from "./provider.service";
+import type { ModelBillingType } from "./model.service";
 
 export interface UsageLog {
   id: string;
@@ -14,6 +16,7 @@ export interface UsageLog {
   total_tokens_cache: number;
   duration_ms: number;
   generation_duration_ms: number;
+  billing_type?: ProviderBillingType;
   created_at: string;
 }
 
@@ -26,6 +29,10 @@ export interface StatsOverview {
   avg_duration_ms: number;
   estimated_cost_usd: number;
   tokens_cache_read: number;
+  tokens_subscription: number;
+  tokens_pay_as_you_go: number;
+  requests_subscription: number;
+  requests_pay_as_you_go: number;
 }
 
 export interface StatsByProvider {
@@ -34,6 +41,9 @@ export interface StatsByProvider {
   requests: number;
   tokens_total: number;
   estimated_cost_usd: number;
+  billing_type: ProviderBillingType;
+  tokens_subscription: number;
+  tokens_pay_as_you_go: number;
 }
 
 export interface StatsByModel {
@@ -49,6 +59,10 @@ export interface StatsByModel {
   tps: number | null;
   tokens_cache_read: number;
   estimated_cost_usd: number;
+  billing_type: ModelBillingType;
+  effective_billing_type: ProviderBillingType;
+  tokens_subscription: number;
+  tokens_pay_as_you_go: number;
 }
 
 export interface DailyStats {
@@ -59,6 +73,8 @@ export interface DailyStats {
   tokens_completion?: number;
   tokens_cache_read?: number;
   estimated_cost_usd: number;
+  tokens_subscription?: number;
+  tokens_pay_as_you_go?: number;
 }
 
 export interface ProviderUsageWindow {
@@ -89,29 +105,56 @@ export const usageService = {
     const total = tokensPrompt + tokensCompletion;
     const cacheRead = details.cacheRead ?? 0;
     const cacheWrite = details.cacheWrite ?? 0;
-    const tier = db
-      .query(
-        "SELECT * FROM model_pricing_tiers WHERE model_id = ? AND threshold_tokens <= ? ORDER BY threshold_tokens DESC LIMIT 1",
-      )
-      .get(modelId, tokensPrompt) as {
-      input_per_million: number;
-      output_per_million: number;
-      cache_read_per_million: number;
-      cache_write_per_million: number;
+    const info = db.query(`
+      SELECT p.protocol, p.name, p.base_url, p.billing_type as provider_billing,
+             m.billing_type as model_billing, m.use_litellm_pricing
+      FROM providers p
+      LEFT JOIN models m ON m.provider_id = p.id AND (m.id = ? OR m.model_id = ?)
+      WHERE p.id = ?
+    `).get(modelId, modelName, providerId) as {
+      protocol: string;
+      name: string;
+      base_url: string;
+      provider_billing?: string;
+      model_billing?: string;
+      use_litellm_pricing?: number;
+    } | null;
+
+    const defaultProviderBilling = info
+      ? defaultBillingTypeForProvider(info.protocol, info.name, info.base_url)
+      : "pay_as_you_go";
+
+    const effectiveBilling: ProviderBillingType =
+      info?.model_billing && info.model_billing !== "inherit"
+        ? (info.model_billing as ProviderBillingType)
+        : (info?.provider_billing as ProviderBillingType | undefined) ?? defaultProviderBilling;
+
+    let estimatedCost = 0;
+    if (effectiveBilling === "pay_as_you_go") {
+      const tier = db
+        .query(
+          "SELECT * FROM model_pricing_tiers WHERE model_id = ? AND threshold_tokens <= ? ORDER BY threshold_tokens DESC LIMIT 1",
+        )
+        .get(modelId, tokensPrompt) as {
+        input_per_million: number;
+        output_per_million: number;
+        cache_read_per_million: number;
+        cache_write_per_million: number;
       } | null;
-    const provider = tier ? null : db.query("SELECT p.protocol, p.name, p.base_url, m.use_litellm_pricing FROM providers p JOIN models m ON m.provider_id = p.id WHERE p.id = ? AND m.id = ?").get(providerId, modelId) as { protocol: string; name: string; base_url: string; use_litellm_pricing: number } | null;
-    const catalogPrices = provider?.use_litellm_pricing ? getLiteLLMPricing(provider.protocol, modelName, `${provider.name} ${provider.base_url}`) : null;
-    const prices = tier ?? (catalogPrices?.billing_unit === "token" ? catalogPrices : null);
-    const uncachedPrompt = Math.max(0, tokensPrompt - cacheRead);
-    const estimatedCost = prices
-      ? (uncachedPrompt * prices.input_per_million +
-          tokensCompletion * prices.output_per_million +
-          cacheRead * prices.cache_read_per_million +
-          cacheWrite * prices.cache_write_per_million) /
-        1_000_000
-      : 0;
+      const catalogPrices = info?.use_litellm_pricing ? getLiteLLMPricing(info.protocol, modelName, `${info.name} ${info.base_url}`) : null;
+      const prices = tier ?? (catalogPrices?.billing_unit === "token" ? catalogPrices : null);
+      const uncachedPrompt = Math.max(0, tokensPrompt - cacheRead);
+      estimatedCost = prices
+        ? (uncachedPrompt * prices.input_per_million +
+            tokensCompletion * prices.output_per_million +
+            cacheRead * prices.cache_read_per_million +
+            cacheWrite * prices.cache_write_per_million) /
+          1_000_000
+        : 0;
+    }
+
     db.query(
-      `INSERT INTO usage_log (id, provider_id, model_id, model_name, tokens_prompt, tokens_completion, tokens_cache_read, tokens_cache_write, tokens_total, estimated_cost_usd, duration_ms, generation_duration_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO usage_log (id, provider_id, model_id, model_name, tokens_prompt, tokens_completion, tokens_cache_read, tokens_cache_write, tokens_total, estimated_cost_usd, duration_ms, generation_duration_ms, billing_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       id,
       providerId,
@@ -125,6 +168,7 @@ export const usageService = {
       estimatedCost,
       durationMs,
       generationDurationMs,
+      effectiveBilling,
     );
     return db.query("SELECT * FROM usage_log WHERE id = ?").get(id) as UsageLog;
   },
@@ -137,15 +181,19 @@ export const usageService = {
       .query(
         `SELECT
            COUNT(*) as total_requests,
-            COALESCE(SUM(tokens_total), 0) as total_tokens,
+           COALESCE(SUM(tokens_total), 0) as total_tokens,
            COALESCE(SUM(tokens_prompt), 0) as total_tokens_prompt,
-            COALESCE(SUM(tokens_completion), 0) as total_tokens_completion,
-            COALESCE(SUM(estimated_cost_usd), 0) as estimated_cost_usd,
-            COALESCE(SUM(tokens_cache_read), 0) as total_tokens_cache,
+           COALESCE(SUM(tokens_completion), 0) as total_tokens_completion,
+           COALESCE(SUM(estimated_cost_usd), 0) as estimated_cost_usd,
+           COALESCE(SUM(tokens_cache_read), 0) as total_tokens_cache,
+           COALESCE(SUM(CASE WHEN billing_type = 'subscription' THEN tokens_total ELSE 0 END), 0) as tokens_subscription,
+           COALESCE(SUM(CASE WHEN billing_type = 'pay_as_you_go' OR billing_type IS NULL THEN tokens_total ELSE 0 END), 0) as tokens_pay_as_you_go,
+           COALESCE(SUM(CASE WHEN billing_type = 'subscription' THEN 1 ELSE 0 END), 0) as requests_subscription,
+           COALESCE(SUM(CASE WHEN billing_type = 'pay_as_you_go' OR billing_type IS NULL THEN 1 ELSE 0 END), 0) as requests_pay_as_you_go,
            COALESCE(CAST(SUM(tokens_total) AS REAL) / MAX(COUNT(*), 1), 0) as avg_tokens_per_request,
            COALESCE(CAST(SUM(duration_ms) AS REAL) / MAX(COUNT(*), 1), 0) as avg_duration_ms
-          FROM usage_log
-          ${dateFilter}`,
+         FROM usage_log
+         ${dateFilter}`,
       )
       .get(...(days > 0 ? [`-${days}`] : [])) as StatsOverview;
     return row;
@@ -160,12 +208,15 @@ export const usageService = {
         `SELECT
            u.provider_id,
            p.name as provider_name,
+           COALESCE(p.billing_type, 'pay_as_you_go') as billing_type,
            COUNT(*) as requests,
-            COALESCE(SUM(u.tokens_total), 0) as tokens_total
-            ,COALESCE(SUM(u.estimated_cost_usd), 0) as estimated_cost_usd
+           COALESCE(SUM(u.tokens_total), 0) as tokens_total,
+           COALESCE(SUM(u.estimated_cost_usd), 0) as estimated_cost_usd,
+           COALESCE(SUM(CASE WHEN u.billing_type = 'subscription' THEN u.tokens_total ELSE 0 END), 0) as tokens_subscription,
+           COALESCE(SUM(CASE WHEN u.billing_type = 'pay_as_you_go' OR u.billing_type IS NULL THEN u.tokens_total ELSE 0 END), 0) as tokens_pay_as_you_go
          FROM usage_log u
          JOIN providers p ON p.id = u.provider_id
-          ${dateFilter}
+         ${dateFilter}
          GROUP BY u.provider_id
          ORDER BY tokens_total DESC`,
       )
@@ -183,20 +234,29 @@ export const usageService = {
            u.model_name,
            u.provider_id,
            p.name as provider_name,
+           COALESCE(m.billing_type, 'inherit') as billing_type,
+           CASE
+             WHEN m.billing_type IS NOT NULL AND m.billing_type != 'inherit' THEN m.billing_type
+             WHEN p.billing_type IS NOT NULL THEN p.billing_type
+             ELSE 'pay_as_you_go'
+           END as effective_billing_type,
            COUNT(*) as requests,
            COALESCE(SUM(u.tokens_total), 0) as tokens_total,
            COALESCE(SUM(u.tokens_prompt), 0) as tokens_prompt,
-            COALESCE(SUM(u.tokens_completion), 0) as tokens_completion,
-            COALESCE(SUM(u.tokens_cache_read), 0) as tokens_cache_read,
-            COALESCE(SUM(u.estimated_cost_usd), 0) as estimated_cost_usd,
+           COALESCE(SUM(u.tokens_completion), 0) as tokens_completion,
+           COALESCE(SUM(u.tokens_cache_read), 0) as tokens_cache_read,
+           COALESCE(SUM(u.estimated_cost_usd), 0) as estimated_cost_usd,
+           COALESCE(SUM(CASE WHEN u.billing_type = 'subscription' THEN u.tokens_total ELSE 0 END), 0) as tokens_subscription,
+           COALESCE(SUM(CASE WHEN u.billing_type = 'pay_as_you_go' OR u.billing_type IS NULL THEN u.tokens_total ELSE 0 END), 0) as tokens_pay_as_you_go,
            COALESCE(CAST(SUM(u.duration_ms) AS REAL) / MAX(COUNT(*), 1), 0) as avg_duration_ms,
-            CASE WHEN SUM(u.generation_duration_ms) > 0
-              THEN CAST(SUM(u.tokens_completion) AS REAL) / (CAST(SUM(u.generation_duration_ms) AS REAL) / 1000.0)
-             ELSE NULL
+           CASE WHEN SUM(u.generation_duration_ms) > 0
+             THEN CAST(SUM(u.tokens_completion) AS REAL) / (CAST(SUM(u.generation_duration_ms) AS REAL) / 1000.0)
+            ELSE NULL
            END as tps
          FROM usage_log u
          JOIN providers p ON p.id = u.provider_id
-          ${dateFilter}
+         LEFT JOIN models m ON m.id = u.model_id OR (m.provider_id = u.provider_id AND m.model_id = u.model_name)
+         ${dateFilter}
          GROUP BY u.model_id, u.model_name
          ORDER BY tokens_total DESC`,
       )
@@ -216,9 +276,11 @@ export const usageService = {
            COALESCE(SUM(tokens_prompt), 0) as tokens_prompt,
            COALESCE(SUM(tokens_completion), 0) as tokens_completion,
            COALESCE(SUM(tokens_cache_read), 0) as tokens_cache_read,
-           COALESCE(SUM(estimated_cost_usd), 0) as estimated_cost_usd
+           COALESCE(SUM(estimated_cost_usd), 0) as estimated_cost_usd,
+           COALESCE(SUM(CASE WHEN billing_type = 'subscription' THEN tokens_total ELSE 0 END), 0) as tokens_subscription,
+           COALESCE(SUM(CASE WHEN billing_type = 'pay_as_you_go' OR billing_type IS NULL THEN tokens_total ELSE 0 END), 0) as tokens_pay_as_you_go
          FROM usage_log
-          ${dateFilter}
+         ${dateFilter}
          GROUP BY DATE(created_at)
          ORDER BY date ASC`,
       )

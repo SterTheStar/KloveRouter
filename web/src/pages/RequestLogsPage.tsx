@@ -24,6 +24,7 @@ import {
   RiShieldCheckLine as ShieldCheckIcon,
   RiFilter3Line as FilterIcon,
   RiCloseLine as CloseIcon,
+  RiVipCrownLine,
 } from "@remixicon/react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -302,10 +303,23 @@ const LogRow = memo(function LogRow({
         )}
       </td>
       <td className="px-3 py-2.5 align-middle">
-        <span className="inline-flex items-center gap-1 text-sm tabular-nums text-foreground">
-          <CostIcon className="size-3.5 text-tertiary" />
-          {formatCost(log.estimated_cost_usd)}
-        </span>
+        {log.billing_type === "subscription" ? (
+          <span className="inline-flex items-center gap-1.5 text-sm tabular-nums text-muted-foreground" title="Subscription plan (no per-token charge)">
+            <RiVipCrownLine className="size-3.5 text-purple-500" />
+            <span>$0.00</span>
+            <span className="rounded bg-purple-500/10 px-1 py-0.5 text-[10px] font-sans text-purple-600 dark:text-purple-300">Sub</span>
+          </span>
+        ) : log.billing_type === "free" ? (
+          <span className="inline-flex items-center gap-1.5 text-sm tabular-nums text-muted-foreground">
+            <span>$0.00</span>
+            <span className="rounded bg-emerald-500/10 px-1 py-0.5 text-[10px] font-sans text-emerald-600 dark:text-emerald-300">Free</span>
+          </span>
+        ) : (
+          <span className="inline-flex items-center gap-1 text-sm tabular-nums text-foreground">
+            <CostIcon className="size-3.5 text-tertiary" />
+            {formatCost(log.estimated_cost_usd)}
+          </span>
+        )}
       </td>
       <td className="px-3 py-2.5 align-middle tabular-nums">
         <div className="flex items-center gap-1.5">
@@ -336,6 +350,7 @@ export default function RequestLogsPage() {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
   const [guardrailsFilter, setGuardrailsFilter] = useState("");
+  const [billingFilter, setBillingFilter] = useState("");
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -353,7 +368,7 @@ export default function RequestLogsPage() {
   const listGeneration = useRef(0);
   const loadingMoreRef = useRef(false);
   // Mirror of state the stream handler reads outside React's render cycle.
-  const filtersRef = useRef({ search, status, guardrails: guardrailsFilter });
+  const filtersRef = useRef({ search, status, guardrails: guardrailsFilter, billing: billingFilter });
   const pausedRef = useRef(false);
   const pendingNewRef = useRef(0);
   const pendingUpdates = useRef(new Map<string, RequestLog>());
@@ -467,6 +482,7 @@ export default function RequestLogsPage() {
         status: status || undefined,
         search: search || undefined,
         guardrails: guardrailsFilter || undefined,
+        billing_type: billingFilter || undefined,
         before,
         withTotal: isFirstPage,
       });
@@ -492,13 +508,13 @@ export default function RequestLogsPage() {
         setLoadingMore(false);
       }
     }
-  }, [guardrailsFilter, logs.length, search, status]);
+  }, [billingFilter, guardrailsFilter, logs.length, search, status]);
 
   // Reload the first page whenever filters change (search is already debounced).
   useEffect(() => {
     void fetchPage();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search, status, guardrailsFilter]);
+  }, [search, status, guardrailsFilter, billingFilter]);
 
   // Debounce the search input so each keystroke does not hit the API.
   useEffect(() => {
@@ -802,14 +818,76 @@ export default function RequestLogsPage() {
               </DropdownMenuContent>
             </DropdownMenu>
 
+            {/* Billing Filter */}
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={
+                  <Button
+                    variant="outline"
+                    className={`h-9 min-w-36 justify-between gap-2 bg-background transition-colors ${
+                      billingFilter ? "border-border-strong bg-accent/40 font-normal" : ""
+                    }`}
+                  />
+                }
+              >
+                <span className="flex items-center gap-1.5 truncate">
+                  {billingFilter === "subscription" ? (
+                    <>
+                      <RiVipCrownLine className="size-3.5 shrink-0 text-purple-500" />
+                      <span className="text-purple-600 dark:text-purple-300 font-normal">Subscription</span>
+                    </>
+                  ) : billingFilter === "pay_as_you_go" ? (
+                    <>
+                      <CostIcon className="size-3.5 shrink-0 text-blue-500" />
+                      <span className="text-blue-600 dark:text-blue-300 font-normal">Pay-as-you-go</span>
+                    </>
+                  ) : billingFilter === "free" ? (
+                    <>
+                      <FilterIcon className="size-3.5 shrink-0 text-emerald-500" />
+                      <span className="text-emerald-600 dark:text-emerald-300 font-normal">Free</span>
+                    </>
+                  ) : (
+                    <>
+                      <FilterIcon className="size-3.5 shrink-0 text-tertiary" />
+                      <span>All billing</span>
+                    </>
+                  )}
+                </span>
+                <ArrowDown className="size-4 shrink-0 text-tertiary" />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-44">
+                {[
+                  ["", "All billing", FilterIcon, "text-tertiary"],
+                  ["subscription", "Subscription", RiVipCrownLine, "text-purple-500"],
+                  ["pay_as_you_go", "Pay-as-you-go", CostIcon, "text-blue-500"],
+                  ["free", "Free", FilterIcon, "text-emerald-500"],
+                ].map(([value, label, IconComponent, iconColor]) => {
+                  const Icon = IconComponent as any;
+                  return (
+                    <DropdownMenuItem
+                      key={label as string}
+                      onClick={() => setBillingFilter(value as string)}
+                      className="flex items-center gap-2 cursor-pointer"
+                    >
+                      <Icon className={`size-4 shrink-0 ${iconColor}`} />
+                      <span className={billingFilter === value ? "font-normal text-foreground" : ""}>
+                        {label as string}
+                      </span>
+                    </DropdownMenuItem>
+                  );
+                })}
+              </DropdownMenuContent>
+            </DropdownMenu>
+
             {/* Clear active filters */}
-            {(status || guardrailsFilter || searchInput) && (
+            {(status || guardrailsFilter || billingFilter || searchInput) && (
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={() => {
                   setStatus("");
                   setGuardrailsFilter("");
+                  setBillingFilter("");
                   setSearchInput("");
                 }}
                 className="h-9 px-2.5 text-xs text-tertiary hover:text-foreground transition-colors cursor-pointer"
