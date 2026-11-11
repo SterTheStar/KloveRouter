@@ -2,7 +2,7 @@ import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { getDb } from "../../db/connection";
 import { logger } from "../../logger";
-import { CURRENT_VERSION } from "../../version";
+import { CURRENT_VERSION, isPrereleaseVersion } from "../../version";
 import {
   checkForUpdates,
   DEFAULT_REPO,
@@ -35,6 +35,8 @@ export interface UpdateProgressState {
 export interface UpdateSettings {
   autoCheck: boolean;
   includePrerelease: boolean;
+  /** True when running a beta/prerelease build, which always follows prereleases. */
+  includePrereleaseLocked: boolean;
   lastCheck: string | null;
 }
 
@@ -88,13 +90,12 @@ export function getUpdateSettings(): UpdateSettings {
     ) as Array<{ key: string; value: string }>;
 
   const map = Object.fromEntries(rows.map((r) => [r.key, r.value]));
+  const locked = isPrereleaseVersion(CURRENT_VERSION);
 
   return {
     autoCheck: map.update_auto_check !== "false", // default true
-    includePrerelease:
-      map.update_include_prerelease !== undefined
-        ? map.update_include_prerelease === "true"
-        : Boolean(CURRENT_VERSION.includes("-") || CURRENT_VERSION.includes("beta")),
+    includePrerelease: locked || map.update_include_prerelease === "true",
+    includePrereleaseLocked: locked,
     lastCheck: map.update_last_check || null,
   };
 }
@@ -115,10 +116,14 @@ export function saveUpdateSettings(settings: Partial<UpdateSettings>): UpdateSet
       "update_auto_check",
       String(merged.autoCheck),
     );
-    db.query("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)").run(
-      "update_include_prerelease",
-      String(merged.includePrerelease),
-    );
+    // On a prerelease build the option is forced on, so the stored preference is
+    // left untouched and applies again once the user is back on a stable build.
+    if (!current.includePrereleaseLocked) {
+      db.query("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)").run(
+        "update_include_prerelease",
+        String(merged.includePrerelease),
+      );
+    }
     if (merged.lastCheck) {
       db.query("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)").run(
         "update_last_check",

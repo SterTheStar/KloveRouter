@@ -50,6 +50,7 @@ export default function UpdatesTab() {
   // Settings
   const [autoCheck, setAutoCheck] = useState(true);
   const [includePrerelease, setIncludePrerelease] = useState(false);
+  const [includePrereleaseLocked, setIncludePrereleaseLocked] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
 
   const fetchStatus = async () => {
@@ -58,6 +59,7 @@ export default function UpdatesTab() {
       setStatusData(data);
       setAutoCheck(data.settings.autoCheck);
       setIncludePrerelease(data.settings.includePrerelease);
+      setIncludePrereleaseLocked(data.settings.includePrereleaseLocked);
       if (data.progress) {
         setProgressState(data.progress);
         if (
@@ -165,6 +167,7 @@ export default function UpdatesTab() {
       const updated = await updates.updateSettings(updatesPayload);
       setAutoCheck(updated.autoCheck);
       setIncludePrerelease(updated.includePrerelease);
+      setIncludePrereleaseLocked(updated.includePrereleaseLocked);
       notifySuccess("Update settings saved");
     } catch (e: any) {
       notifyError("Failed to save update settings", e?.message);
@@ -371,7 +374,9 @@ export default function UpdatesTab() {
             <div className="space-y-0.5">
               <Label htmlFor="include-prereleases">Include Beta / Pre-releases</Label>
               <p className="text-xs text-muted-foreground">
-                Check and update to preview and pre-release builds.
+                {includePrereleaseLocked
+                  ? "Always on while running a beta or pre-release build."
+                  : "Check and update to preview and pre-release builds."}
               </p>
             </div>
             <Switch
@@ -381,7 +386,7 @@ export default function UpdatesTab() {
                 setIncludePrerelease(checked);
                 handleSaveSettings({ includePrerelease: checked });
               }}
-              disabled={savingSettings}
+              disabled={savingSettings || includePrereleaseLocked}
             />
           </div>
         </CardContent>

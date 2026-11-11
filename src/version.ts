@@ -34,6 +34,15 @@ export function parseSemver(version: string): ParsedSemver | null {
 }
 
 /**
+ * Returns true if the version carries a prerelease suffix (e.g. "0.1.2-beta").
+ */
+export function isPrereleaseVersion(version: string): boolean {
+  const parsed = parseSemver(version);
+  if (parsed) return parsed.prerelease !== null;
+  return version.includes("-");
+}
+
+/**
  * Compares two semver strings.
  * Returns:
  *   1 if v1 > v2

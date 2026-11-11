@@ -5,8 +5,24 @@ import {
   resetUpdateState,
   saveUpdateSettings,
 } from "./updater.service";
+import { CURRENT_VERSION, isPrereleaseVersion } from "../../version";
 
 describe("updater service", () => {
+  it("forces includePrerelease on when running a prerelease build", () => {
+    const original = getUpdateSettings();
+    const locked = isPrereleaseVersion(CURRENT_VERSION);
+    expect(original.includePrereleaseLocked).toBe(locked);
+
+    if (locked) {
+      saveUpdateSettings({ includePrerelease: false });
+      const after = getUpdateSettings();
+      expect(after.includePrerelease).toBe(true);
+      expect(after.includePrereleaseLocked).toBe(true);
+    }
+
+    saveUpdateSettings(original);
+  });
+
   it("reads and persists updater settings", () => {
     const original = getUpdateSettings();
     expect(typeof original.autoCheck).toBe("boolean");

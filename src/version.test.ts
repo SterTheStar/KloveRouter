@@ -1,7 +1,14 @@
 import { describe, expect, it } from "bun:test";
-import { cleanVersionTag, compareSemver, CURRENT_VERSION, isNewerVersion, parseSemver } from "./version";
+import { cleanVersionTag, compareSemver, CURRENT_VERSION, isNewerVersion, isPrereleaseVersion, parseSemver } from "./version";
 
 describe("version utilities", () => {
+  it("detects prerelease versions", () => {
+    expect(isPrereleaseVersion("0.1.2-beta")).toBe(true);
+    expect(isPrereleaseVersion("v1.0.0-rc.1")).toBe(true);
+    expect(isPrereleaseVersion("1.0.0")).toBe(false);
+    expect(isPrereleaseVersion("v1.2.3")).toBe(false);
+  });
+
   it("has a valid CURRENT_VERSION string", () => {
     expect(CURRENT_VERSION).toBeDefined();
     expect(typeof CURRENT_VERSION).toBe("string");

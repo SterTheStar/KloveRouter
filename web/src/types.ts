@@ -750,6 +750,7 @@ export interface UpdateProgressState {
 export interface UpdateSettings {
   autoCheck: boolean;
   includePrerelease: boolean;
+  includePrereleaseLocked: boolean;
   lastCheck: string | null;
 }
 
