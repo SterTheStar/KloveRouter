@@ -1029,7 +1029,7 @@ export function RequestLogDetailsModal({
                                 </pre>
                               </div>
                             )}
-                            {detail.error_details && (
+                            {!!detail.error_details && (
                               <div className="space-y-1">
                                 <span className="text-[11px] font-normal text-muted-foreground uppercase">
                                   Raw Error Details
@@ -1039,7 +1039,7 @@ export function RequestLogDetailsModal({
                                 </pre>
                               </div>
                             )}
-                            {detail.response_details && (
+                            {!!detail.response_details && (
                               <div className="space-y-1">
                                 <span className="text-[11px] font-normal text-muted-foreground uppercase">
                                   Response Details

@@ -84,7 +84,7 @@ export default function UpdatesTab() {
 
   // Polling during active update
   useEffect(() => {
-    let timer: NodeJS.Timeout;
+    let timer: ReturnType<typeof setInterval> | undefined;
     const isUpdating =
       progressState.status === "checking" ||
       progressState.status === "downloading" ||

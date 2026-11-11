@@ -26,6 +26,21 @@ type DistributionMetric = "tokens" | "requests" | "cost";
 const MAX_PRIMARY_SLICES = 5;
 const OTHER_COLOR = "#64748b";
 
+interface DonutSlice {
+  name: string;
+  value: number;
+  color: string;
+  raw: StatsByProvider;
+  isOther: boolean;
+  totalTokens: number;
+  totalRequests: number;
+  totalCost: number;
+  /** Only set on the consolidated "Other" slice. */
+  otherCount?: number;
+  share?: number;
+  cost?: number;
+}
+
 function ProviderCustomTooltip({ active, payload }: any) {
   if (!active || !payload?.length) return null;
   const item = payload[0]?.payload;
@@ -171,7 +186,7 @@ export function UsageDistributionCharts({
       : totals.totalCost;
 
   // Sliced data for Donut Chart (Top 5 + "Other" if many providers)
-  const donutChartData = useMemo(() => {
+  const donutChartData = useMemo<DonutSlice[]>(() => {
     if (!hasMany) {
       return fullSortedList.map((p, idx) => {
         let value = p.tokens_total;
@@ -191,7 +206,7 @@ export function UsageDistributionCharts({
       });
     }
 
-    const topItems = fullSortedList.slice(0, MAX_PRIMARY_SLICES).map((p, idx) => {
+    const topItems: DonutSlice[] = fullSortedList.slice(0, MAX_PRIMARY_SLICES).map((p, idx) => {
       let value = p.tokens_total;
       if (metric === "requests") value = p.requests;
       else if (metric === "cost") value = p.estimated_cost_usd;
