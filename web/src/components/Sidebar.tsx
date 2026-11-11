@@ -46,6 +46,7 @@ export default function Sidebar({
   isResizing,
   onResizeStart,
   onResetWidth,
+  hasUpdate,
 }: {
   currentPage: Page;
   onNavigate: (page: Page) => void;
@@ -56,6 +57,7 @@ export default function Sidebar({
   isResizing?: boolean;
   onResizeStart?: (event: React.MouseEvent) => void;
   onResetWidth?: () => void;
+  hasUpdate?: boolean;
 }) {
   return (
     <aside
@@ -102,7 +104,13 @@ export default function Sidebar({
           >
             <Icon className="size-5 shrink-0" />
             <span className="truncate">{label}</span>
-            {badge && (
+            {page === "settings" && hasUpdate && (
+              <span className="ml-auto flex items-center gap-1.5 rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-medium text-primary border border-primary/30">
+                <span className="size-1.5 rounded-full bg-primary animate-pulse" />
+                Update
+              </span>
+            )}
+            {badge && (!hasUpdate || page !== "settings") && (
               <span className="ml-auto rounded-md bg-foreground/10 px-1.5 py-0.5 font-mono text-[10px] font-normal uppercase tracking-wider text-muted-foreground transition-colors group-hover/button:text-foreground">
                 {badge}
               </span>

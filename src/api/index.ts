@@ -22,6 +22,7 @@ import { rtkPlugin } from "../plugins/rtk";
 import { guardrailsPlugin } from "../plugins/guardrails";
 import { setupPlugin } from "./setup.plugin";
 import { avatarMediaPlugin } from "./avatar-media.plugin";
+import { updatesPlugin } from "./updates.plugin";
 
 export {
   authPlugin,
@@ -47,4 +48,5 @@ export {
   chatsPlugin,
   setupPlugin,
   avatarMediaPlugin,
+  updatesPlugin,
 };

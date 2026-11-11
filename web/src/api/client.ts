@@ -835,3 +835,32 @@ export const guardrails = {
       body: JSON.stringify({ text, settings: customSettings }),
     }),
 };
+
+// System Updates
+export const updates = {
+  status: () => request<import("../types").AppUpdateStatusResponse>("/api/updates/status"),
+  check: () => request<import("../types").CheckUpdateResponse>("/api/updates/check", { method: "POST" }),
+  releases: () =>
+    request<{
+      repo: string;
+      currentVersion: string;
+      releases: import("../types").GitHubReleaseInfo[];
+    }>("/api/updates/releases"),
+  progress: () => request<import("../types").UpdateProgressState>("/api/updates/progress"),
+  reset: () => request<import("../types").UpdateProgressState>("/api/updates/reset", { method: "POST" }),
+  apply: (releaseTag?: string) =>
+    request<{ success: boolean; message: string; progress: import("../types").UpdateProgressState }>(
+      "/api/updates/apply",
+      {
+        method: "POST",
+        body: JSON.stringify({ releaseTag }),
+      },
+    ),
+  restart: () => request<{ success: boolean; message: string }>("/api/updates/restart", { method: "POST" }),
+  getSettings: () => request<import("../types").UpdateSettings>("/api/updates/settings"),
+  updateSettings: (data: Partial<import("../types").UpdateSettings>) =>
+    request<import("../types").UpdateSettings>("/api/updates/settings", {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+};

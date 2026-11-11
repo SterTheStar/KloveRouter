@@ -28,6 +28,7 @@ import {
   chatsPlugin,
   setupPlugin,
   avatarMediaPlugin,
+  updatesPlugin,
 } from "./api";
 import { getSecuritySecrets } from "./services/security.service";
 import { insecureUrlsAllowed } from "./services/ssrf";
@@ -36,6 +37,8 @@ import { cavemanPublicPlugin, cavemanPlugin } from "./plugins/caveman";
 import { guardrailsPlugin } from "./plugins/guardrails";
 import { customSkillsPlugin } from "./plugins/custom-skills";
 import { refreshLiteLLMPricing } from "./services/litellm-pricing";
+import { initUpdateCheckOnStartup } from "./services/update";
+import { CURRENT_VERSION } from "./version";
 
 // Initialize database and resolve effective security secrets.
 const db = getDb();
@@ -49,6 +52,9 @@ pricingRefreshTimer.unref?.();
 
 // Auto-start RTK if enabled in settings
 initRtkOnStartup();
+
+// Auto-check updates in background if enabled
+initUpdateCheckOnStartup();
 
 const app = new Elysia()
   .onRequest(requestHooks.onRequest)
@@ -127,7 +133,8 @@ const protectedApp = new Elysia()
   .use(guardrailsPlugin)
   .use(chatsPlugin)
   .use(chatControlPlugin)
-  .use(chatPlugin);
+  .use(chatPlugin)
+  .use(updatesPlugin);
 
 app.use(protectedApp as any);
 
@@ -185,7 +192,7 @@ ${b}${white}   / ,<  / / __ \\ | / / _ \\${r}
 ${b}${pink}  / /| |/ / /_/ / |/ /  __/${r}
 ${b}${blue} /_/ |_/_/\\____/|___/\\___/${r}
 `;
-const version = "1.0.0";
+const version = CURRENT_VERSION;
 
 logger.badge(
   "SATURN",

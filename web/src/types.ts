@@ -700,3 +700,73 @@ export interface GuardrailsStats {
   redactedRequests: number;
   violationsCount: Record<string, number>;
 }
+
+export type UpdateStatus =
+  | "idle"
+  | "checking"
+  | "downloading"
+  | "installing_deps"
+  | "building"
+  | "ready_restart"
+  | "error";
+
+export interface GitHubReleaseAsset {
+  name: string;
+  size: number;
+  downloadUrl: string;
+  contentType: string;
+}
+
+export interface GitHubReleaseInfo {
+  id: number;
+  tag: string;
+  version: string;
+  name: string;
+  body: string;
+  publishedAt: string;
+  prerelease: boolean;
+  draft: boolean;
+  htmlUrl: string;
+  tarballUrl: string;
+  zipballUrl: string;
+  assets: GitHubReleaseAsset[];
+}
+
+export interface UpdateProgressState {
+  status: UpdateStatus;
+  step: string;
+  progress: number;
+  error: string | null;
+  targetVersion: string | null;
+  targetTag: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
+  logs: string[];
+}
+
+export interface UpdateSettings {
+  autoCheck: boolean;
+  includePrerelease: boolean;
+  lastCheck: string | null;
+}
+
+export interface AppUpdateStatusResponse {
+  currentVersion: string;
+  hasUpdate: boolean;
+  latestRelease: GitHubReleaseInfo | null;
+  lastCheck: string | null;
+  repo: string;
+  progress: UpdateProgressState;
+  settings: UpdateSettings;
+}
+
+export interface CheckUpdateResponse {
+  currentVersion: string;
+  hasUpdate: boolean;
+  latestRelease: GitHubReleaseInfo | null;
+  releases: GitHubReleaseInfo[];
+  checkedAt: string;
+  repo: string;
+  settings: UpdateSettings;
+}
+

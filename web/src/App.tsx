@@ -23,12 +23,13 @@ import RequestLogsPage from "./pages/RequestLogsPage";
 import DocsPage from "./pages/DocsPage";
 import type { Page } from "./types";
 import { ToastProvider } from "./components/ui/toast";
-import { settings } from "./api/client";
+import { settings, updates } from "./api/client";
 import type { UserProfile } from "./types";
 import { queryCache, queryKeys, invalidateChats } from "./lib/query-cache";
 import { navigateToRoute, pathForRoute, routeFromPath, type AppRoute } from "./lib/navigation";
 import { useSidebarWidth } from "./hooks/use-sidebar-width";
 import AsciiSaturnLoading from "./components/AsciiSaturnLoading";
+import UpdateNotificationBanner from "./components/updates/UpdateNotificationBanner";
 
 function sortChats(chats: ChatSession[]): ChatSession[] {
   return chats
@@ -66,6 +67,14 @@ export default function App() {
     resetWidth: resetSidebarWidth,
   } = useSidebarWidth();
   const [minLoadingElapsed, setMinLoadingElapsed] = useState(false);
+  const [updateInfo, setUpdateInfo] = useState<{
+    hasUpdate: boolean;
+    latestRelease: import("./types").GitHubReleaseInfo | null;
+  }>({
+    hasUpdate: false,
+    latestRelease: null,
+  });
+  const [settingsTab, setSettingsTab] = useState<string>("general");
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -134,11 +143,24 @@ export default function App() {
   }, [currentPage, activeChatId]);
 
   useEffect(() => {
-    if (isAuth)
+    if (isAuth) {
       settings
         .profile()
         .then(setProfile)
         .catch(() => undefined);
+
+      updates
+        .status()
+        .then((data) => {
+          if (data && data.hasUpdate) {
+            setUpdateInfo({
+              hasUpdate: true,
+              latestRelease: data.latestRelease,
+            });
+          }
+        })
+        .catch(() => undefined);
+    }
   }, [isAuth]);
 
   useEffect(() => {
@@ -301,7 +323,10 @@ export default function App() {
           ) : (
             <Sidebar
               currentPage={currentPage === "provider-detail" ? "dashboard" : currentPage}
-              onNavigate={(page) => handleNavigate(page)}
+              onNavigate={(page) => {
+                if (page === "settings") setSettingsTab("general");
+                handleNavigate(page);
+              }}
               onLogout={logout}
               profile={profile}
               mobileOpen={mobileSidebarOpen}
@@ -309,6 +334,7 @@ export default function App() {
               isResizing={isSidebarResizing}
               onResizeStart={startSidebarResize}
               onResetWidth={resetSidebarWidth}
+              hasUpdate={updateInfo.hasUpdate}
             />
           ))}
           {mobileSidebarOpen && currentPage !== "docs" && (
@@ -320,6 +346,16 @@ export default function App() {
             />
           )}
           <main className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-y-contain">
+            {updateInfo.hasUpdate && updateInfo.latestRelease && currentPage !== "chat" && (
+              <UpdateNotificationBanner
+                version={updateInfo.latestRelease.version}
+                tag={updateInfo.latestRelease.tag}
+                onViewUpdate={() => {
+                  setSettingsTab("updates");
+                  handleNavigate("settings");
+                }}
+              />
+            )}
             {currentPage === "dashboard" && (
               <DashboardPage onNavigate={handleNavigate} />
             )}
@@ -383,6 +419,7 @@ export default function App() {
                 onThemeChange={setDarkMode}
                 profile={profile}
                 onProfileChange={setProfile}
+                initialTab={settingsTab}
               />
             )}
           </main>

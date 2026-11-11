@@ -36,6 +36,8 @@ import { useToast } from "../components/ui/toast";
 import type { UserProfile, RtkStatus, CavemanStatus } from "../types";
 import { modelDisplayId, modelPublicId } from "../lib/model-id";
 import GuardrailsTab from "../components/guardrails/GuardrailsTab";
+import UpdatesTab from "../components/updates/UpdatesTab";
+import ChangelogTab from "../components/updates/ChangelogTab";
 
 const tabs: Tab[] = [
   { id: "general", label: "General" },
@@ -43,6 +45,8 @@ const tabs: Tab[] = [
   { id: "guardrails", label: "Guardrails" },
   { id: "plugins", label: "Plugins" },
   { id: "security", label: "Security" },
+  { id: "updates", label: "Updates" },
+  { id: "changelog", label: "Changelog" },
 ];
 
 const CAVEMAN_LEVELS = [
@@ -68,14 +72,22 @@ export default function SettingsPage({
   onThemeChange,
   profile,
   onProfileChange,
+  initialTab = "general",
 }: {
   darkMode: boolean;
   onThemeChange: (value: boolean) => void;
   profile: UserProfile;
   onProfileChange: (profile: UserProfile) => void;
+  initialTab?: string;
 }) {
   const { success: notifySuccess, error: notifyError } = useToast();
-  const [activeTab, setActiveTab] = useState("general");
+  const [activeTab, setActiveTab] = useState(initialTab);
+
+  useEffect(() => {
+    if (initialTab) {
+      setActiveTab(initialTab);
+    }
+  }, [initialTab]);
 
   const [name, setName] = useState(profile.name);
   const [avatar, setAvatar] = useState(profile.avatar);
@@ -657,6 +669,10 @@ export default function SettingsPage({
           </CardContent>
         </Card>
       )}
+
+      {activeTab === "updates" && <UpdatesTab />}
+
+      {activeTab === "changelog" && <ChangelogTab />}
     </div>
   );
 }
