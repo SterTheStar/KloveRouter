@@ -6,7 +6,6 @@ import {
   RiLoader4Line as LoaderCircle,
   RiRefreshLine as Refresh,
   RiSearchLine as Search,
-  RiGitCommitLine as GitCommit,
   RiArrowDownSLine as ChevronDown,
 } from "@remixicon/react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -203,7 +202,6 @@ export default function ChangelogTab() {
                         isExpanded ? "rotate-0" : "-rotate-90"
                       }`}
                     />
-                    <GitCommit className="size-4 text-primary shrink-0" />
                     <span className="text-sm font-semibold text-foreground tracking-tight">
                       {title}
                     </span>
