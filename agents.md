@@ -40,10 +40,15 @@ Saturn Router adheres to Semantic Versioning 2.0.0 (SemVer).
    - Purpose: General availability and production deployments.
 
 ### Source of Truth
-The version string must always be updated synchronously across:
-- Root `package.json` (`"version": "..."`)
-- Web frontend `web/package.json` (`"version": "..."`)
-- `src/version.ts` dynamically resolves `CURRENT_VERSION` from `package.json`.
+The version string is centralized in the root `package.json` (`"version": "..."`):
+- `web/package.json` is automatically kept in sync via `bun scripts/sync-version.ts` (triggered automatically during `build` and `dev`).
+- `src/version.ts` (backend) dynamically resolves `CURRENT_VERSION` from `package.json`.
+- `web/src/version.ts` (frontend) receives the version injected directly by Vite.
+- To bump versions across the entire codebase in a single command, run:
+  ```bash
+  bun run version:bump <new-version>
+  # Example: bun run version:bump 0.2.0-beta
+  ```
 
 ---
 
@@ -76,9 +81,12 @@ Every release must follow the clean, conventional GitHub release notes structure
 Follow this procedure when preparing and publishing releases:
 
 ### Step 1: Bump Versions
-Update the version string in:
-1. `package.json`
-2. `web/package.json`
+Run the centralized version bump command:
+```bash
+bun run version:bump <new-version>
+# e.g. bun run version:bump 0.2.0-beta
+```
+Or simply edit `"version"` in the root `package.json` (it will be automatically synchronized with `web/package.json` during build/dev).
 
 ### Step 2: Validate Builds and Test Suite
 ```bash
