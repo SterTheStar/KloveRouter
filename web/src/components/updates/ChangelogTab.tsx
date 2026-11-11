@@ -16,12 +16,13 @@ import { updates } from "@/api/client";
 import type { GitHubReleaseInfo } from "@/types";
 import { cn } from "@/lib/utils";
 import MarkdownRenderer from "./MarkdownRenderer";
+import { APP_VERSION } from "@/version";
 
 export default function ChangelogTab() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [releases, setReleases] = useState<GitHubReleaseInfo[]>([]);
-  const [currentVersion, setCurrentVersion] = useState("0.1.2-beta");
+  const [currentVersion, setCurrentVersion] = useState(APP_VERSION);
   const [searchQuery, setSearchQuery] = useState("");
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
 
@@ -33,7 +34,7 @@ export default function ChangelogTab() {
       const res = await updates.releases();
       const list = res.releases || [];
       setReleases(list);
-      setCurrentVersion(res.currentVersion || "0.1.2-beta");
+      setCurrentVersion(res.currentVersion || APP_VERSION);
       // By default expand the newest release
       if (list.length > 0 && !isManual) {
         setExpandedIds(new Set([list[0].id]));

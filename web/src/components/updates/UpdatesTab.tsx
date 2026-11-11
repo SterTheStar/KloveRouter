@@ -25,6 +25,7 @@ import type {
 } from "@/types";
 import UpdateProgressModal from "./UpdateProgressModal";
 import MarkdownRenderer from "./MarkdownRenderer";
+import { APP_VERSION } from "@/version";
 
 export default function UpdatesTab() {
   const { success: notifySuccess, error: notifyError, info: notifyInfo } = useToast();
@@ -184,7 +185,7 @@ export default function UpdatesTab() {
     );
   }
 
-  const currentVersion = statusData?.currentVersion || "0.1.2-beta";
+  const currentVersion = statusData?.currentVersion || APP_VERSION;
   const hasUpdate = Boolean(statusData?.hasUpdate && statusData?.latestRelease);
   const latestRelease = statusData?.latestRelease;
 
