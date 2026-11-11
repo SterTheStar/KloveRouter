@@ -345,7 +345,7 @@ export function initUpdateCheckOnStartup(): void {
     try {
       logger.debug("Performing scheduled update check...");
       const result = await checkForUpdates({
-        repo: DEFAULT_REPO,
+        repo: getEffectiveRepo(),
         includePrereleases: settings.includePrerelease,
       });
 
@@ -369,7 +369,7 @@ export function initUpdateCheckOnStartup(): void {
       if (!current.autoCheck) return;
       try {
         const result = await checkForUpdates({
-          repo: DEFAULT_REPO,
+          repo: getEffectiveRepo(),
           includePrereleases: current.includePrerelease,
         });
         saveUpdateSettings({ lastCheck: result.checkedAt });

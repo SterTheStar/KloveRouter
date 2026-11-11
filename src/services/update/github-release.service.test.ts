@@ -22,6 +22,12 @@ describe("github release service", () => {
     expect(getEffectiveRepo()).toBe("env-org/env-saturn");
   });
 
+  it("respects direct argument override if provided", () => {
+    expect(getEffectiveRepo("custom/repo")).toBe("custom/repo");
+    process.env.SATURN_UPDATE_REPO = "env-org/env-saturn";
+    expect(getEffectiveRepo("custom/repo")).toBe("custom/repo");
+  });
+
   it("handles check for updates safely even if repo has no releases", async () => {
     const result = await checkForUpdates({ repo: "SterTheStar/SaturnRouter", force: true });
     expect(result.currentVersion).toBe(CURRENT_VERSION);

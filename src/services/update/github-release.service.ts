@@ -43,7 +43,9 @@ interface CacheEntry {
 
 let releaseCache: CacheEntry | null = null;
 
-export function getEffectiveRepo(): string {
+export function getEffectiveRepo(overrideRepo?: string): string {
+  const direct = overrideRepo?.trim();
+  if (direct && direct.length > 0) return direct;
   const envRepo = process.env.SATURN_UPDATE_REPO?.trim();
   if (envRepo && envRepo.length > 0) return envRepo;
   return DEFAULT_REPO;
