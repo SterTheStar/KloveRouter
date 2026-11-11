@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { codexAuthService } from "./codex-auth.service";
 import { logger } from "../../logger";
 import { extractSseData, SSE_DONE } from "../../services/sse";
@@ -217,17 +218,85 @@ function toResponsesContent(content: any, role: "user" | "assistant") {
   });
 }
 
+export function responseCallId(value: unknown): string {
+  const original = String(value ?? "");
+  if (original.startsWith("fc_")) return original;
+  const hash = createHash("sha256").update(original).digest("hex").slice(0, 24);
+  return `fc_${hash}`;
+}
+
+export function stableUuid(input: string): string {
+  const hash = createHash("sha256").update(input).digest("hex");
+  return [
+    hash.slice(0, 8),
+    hash.slice(8, 12),
+    `4${hash.slice(13, 16)}`,
+    `a${hash.slice(17, 20)}`,
+    hash.slice(20, 32),
+  ].join("-");
+}
+
+function extractConversationAnchor(body: any): string | null {
+  if (Array.isArray(body?.messages) && body.messages.length > 0) {
+    const parts: string[] = [];
+    for (const m of body.messages) {
+      if (m && (m.role === "system" || m.role === "developer" || m.role === "user")) {
+        const text =
+          typeof m.content === "string"
+            ? m.content
+            : Array.isArray(m.content)
+              ? JSON.stringify(m.content)
+              : String(m.content ?? "");
+        if (text) {
+          parts.push(`${m.role}:${text}`);
+          if (m.role === "user") break;
+        }
+      }
+    }
+    if (parts.length > 0) return parts.join("||");
+  }
+  if (body?.instructions && typeof body.instructions === "string") {
+    return body.instructions;
+  }
+  if (Array.isArray(body?.input) && body.input.length > 0) {
+    return JSON.stringify(body.input[0]);
+  }
+  return null;
+}
+
+export function resolveCodexSessionId(
+  body: any,
+  providedSessionId?: string,
+): string {
+  const explicit =
+    providedSessionId ||
+    body?.session_id ||
+    body?.conversation_id ||
+    body?.metadata?.conversation_id ||
+    body?.metadata?.session_id ||
+    body?.prompt_cache_key;
+
+  if (typeof explicit === "string" && explicit.trim()) {
+    const trimmed = explicit.trim();
+    if (
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        trimmed,
+      )
+    ) {
+      return trimmed.toLowerCase();
+    }
+    return stableUuid(`session:${trimmed}`);
+  }
+
+  const anchor = extractConversationAnchor(body);
+  if (anchor) {
+    return stableUuid(`conversation:${anchor}`);
+  }
+
+  return crypto.randomUUID();
+}
+
 function toResponsesInput(messages: any[] = []) {
-  const callIds = new Map<string, string>();
-  const responseCallId = (value: unknown) => {
-    const original = String(value ?? "");
-    if (original.startsWith("fc_")) return original;
-    const existing = callIds.get(original);
-    if (existing) return existing;
-    const id = `fc_${crypto.randomUUID().replace(/-/g, "")}`;
-    callIds.set(original, id);
-    return id;
-  };
   const input: any[] = [];
   const instructions: string[] = [];
   for (const message of messages) {
@@ -327,6 +396,7 @@ export async function codexResponses(
   body: any,
   model: string,
   credentials?: { access_token?: string | null; account_id?: string | null },
+  sessionId?: string,
 ) {
   const legacySession =
     credentials && !credentials.access_token && credentials.account_id === null;
@@ -345,6 +415,7 @@ export async function codexResponses(
     ? { input: body.input, instructions: body.instructions ?? "" }
     : toResponsesInput(body.messages);
   const requestBody = codexRequestBody(body, model, converted);
+  const effectiveSessionId = resolveCodexSessionId(body, sessionId);
   const requestStarted = performance.now();
   const response = await fetch(
     "https://chatgpt.com/backend-api/codex/responses",
@@ -355,7 +426,7 @@ export async function codexResponses(
         "chatgpt-account-id": accountId || "",
         "OpenAI-Beta": "responses=experimental",
         originator: "codex_cli_rs",
-        session_id: crypto.randomUUID(),
+        session_id: effectiveSessionId,
         Accept: "text/event-stream",
         "Content-Type": "application/json",
       },
@@ -366,6 +437,7 @@ export async function codexResponses(
     model,
     duration_ms: Math.round(performance.now() - requestStarted),
     status: response.status,
+    session_id: effectiveSessionId,
   });
   if (!response.ok) {
     const text = await response.text();

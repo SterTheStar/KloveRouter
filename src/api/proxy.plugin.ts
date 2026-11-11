@@ -1623,6 +1623,13 @@ export const proxyPlugin = (app: Elysia) =>
         }
 
          if (provider.protocol === "codex") {
+          const incomingSession = (headers["x-opencode-session"] ?? headers["x-session-id"]) as string | undefined;
+          const sessionKey = incomingSession
+            || (body as any)?.metadata?.conversation_id
+            || (body as any)?.conversation_id
+            || (body as any)?.metadata?.session_id
+            || (body as any)?.session_id
+            || (body as any)?.prompt_cache_key;
           const attempted = new Set<string>();
           const failures: unknown[] = [];
           while (credential && !attempted.has(credential.id)) {
@@ -1630,7 +1637,7 @@ export const proxyPlugin = (app: Elysia) =>
             try {
               const start = performance.now();
               const response = codexStreamToOpenAI(
-                await codexResponses(body, parsed.modelId, credential),
+                await codexResponses(body, parsed.modelId, credential, sessionKey),
                 parsed.modelId,
               );
                const modelRecord = modelService.findByProviderAndModel(
