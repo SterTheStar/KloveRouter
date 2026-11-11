@@ -181,7 +181,7 @@ export default function UpdatesTab() {
     );
   }
 
-  const currentVersion = statusData?.currentVersion || "0.1.0-beta";
+  const currentVersion = statusData?.currentVersion || "0.1.1-beta";
   const hasUpdate = Boolean(statusData?.hasUpdate && statusData?.latestRelease);
   const latestRelease = statusData?.latestRelease;
 
