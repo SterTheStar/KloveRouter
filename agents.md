@@ -51,26 +51,22 @@ The version string must always be updated synchronously across:
 
 Every release must follow the clean, conventional GitHub release notes structure (matching Hydra Launcher standard).
 
-### Guidelines
+### Strict Rules
 - No emojis anywhere in the release title, sections, or bullet points.
 - No all-uppercase titles or headers. Use standard Title Case or Sentence Case.
 - Every change listed under What's Changed must cite the commit SHA and author.
+- **No Commit Repetition**: Release notes must strictly contain only commits created since the previous release tag (`git log <previous-tag>..HEAD`). Never repeat commits that were already published in previous releases.
+- **Ephemeral Release Notes**: The `release_notes.md` file is ignored in `.gitignore` and must be deleted immediately after publishing to keep the working tree clean.
 
 ### Standardized Release Template
 
 ```markdown
 ## What's Changed
 
-- feat(core): implement in-app github release updates and collapsible changelog by @SterTheStar in 847fb4d
-- fix(rtk): support extracting zip archives on Windows without unzip utility by @SterTheStar in 980c2f8
-- fix(codex): stabilize prompt caching with deterministic tool call IDs and session affinity by @SterTheStar in 7e99257
-- fix(antigravity): fix sequential tool calls indexing and chunk conversion for Claude models by @SterTheStar in 6a589d2
-- feat(providers): start disabled providers section collapsed by default by @SterTheStar in a293718
-- feat(chat): add delete-all chats with collapsible Recents and period filter by @SterTheStar in eb11c69
-- feat(guardrails): add AI firewall plugin with secrets, pii, and prompt protection by @SterTheStar in 147b1d0
-- feat(skills): add skills page with real-time marketplace and 16:9 markdown modal by @SterTheStar in 3c5f1b8
+- feat(scope): concise description of change by @SterTheStar in abc1234
+- fix(scope): concise description of fix by @SterTheStar in def5678
 
-**Full Changelog**: https://github.com/SterTheStar/SaturnRouter/commits/v0.1.0-beta
+**Full Changelog**: https://github.com/SterTheStar/SaturnRouter/compare/<previous-tag>...<current-tag>
 ```
 
 ---
@@ -91,18 +87,26 @@ bun run build
 ```
 Both commands must pass with zero errors before proceeding.
 
-### Step 3: Commit and Push Changes
+### Step 3: Gather Commits Since Previous Tag
+Inspect exclusively commits made since the last published release tag to avoid duplicating commits across updates:
 ```bash
-git add package.json web/package.json src/ web/ agents.md
+PREV_TAG=$(git describe --tags --abbrev=0)
+git log ${PREV_TAG}..HEAD --pretty=format:"- %s by @SterTheStar in %h"
+```
+Save these entries into a temporary `release_notes.md` file.
+
+### Step 4: Commit and Push Changes
+```bash
+git add package.json web/package.json src/ web/ agents.md .gitignore
 git commit -m "chore(release): bump version to vX.Y.Z[-beta]"
 git push origin <branch>
 ```
 
-### Step 4: Publish Release via GitHub CLI
+### Step 5: Publish Release via GitHub CLI
 For Beta Releases:
 ```bash
-gh release create v0.1.0-beta \
-  --title "v0.1.0-beta" \
+gh release create v0.2.0-beta \
+  --title "v0.2.0-beta" \
   --notes-file release_notes.md \
   --prerelease
 ```
@@ -114,6 +118,12 @@ gh release create v1.0.0 \
   --notes-file release_notes.md
 ```
 
+### Step 6: Delete Temporary Release Notes
+Always delete the temporary release notes file after publishing:
+```bash
+rm release_notes.md
+```
+
 ---
 
 ## 5. In-App Updates & GitHub Releases Sync
@@ -121,3 +131,4 @@ gh release create v1.0.0 \
 - The Saturn Router frontend features an automated update detection engine in Settings > Updates.
 - The Changelog tab in Settings pulls and formats releases from GitHub into clean, collapsible cards.
 - Pre-releases: Users can opt in or out of beta builds using the "Include Beta / Pre-releases" switch.
+- Author mentions (@username) and commit hashes in release notes automatically link to GitHub.
