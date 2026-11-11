@@ -15,8 +15,6 @@
 
 Saturn Router gives applications one API and one admin panel for multiple AI providers. Route OpenAI-compatible, Responses, and Anthropic Messages requests; manage provider credentials and models; and inspect request activity, token usage, and estimated costs.
 
-DeepAI Code provider supports browser sign-in with a loopback callback, encrypted account credentials, lane 4 model discovery, Chat Completions and Responses, Theos check-in, usage limits, session affinity, and `session_busy` retries. Add a DeepAI Code provider and use **Sign in with DeepAI Code** on its credential page. If browser loopback is unavailable, paste the callback URL into the login dialog.
-
 Compound models expose a stable `pool/<id>` model that routes across selected provider models. Choose priority fallback or random selection, set member fallback behavior, and configure token limits.
 
 ## Integrations
