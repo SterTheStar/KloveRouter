@@ -91,7 +91,10 @@ export function getUpdateSettings(): UpdateSettings {
 
   return {
     autoCheck: map.update_auto_check !== "false", // default true
-    includePrerelease: map.update_include_prerelease === "true", // default false
+    includePrerelease:
+      map.update_include_prerelease !== undefined
+        ? map.update_include_prerelease === "true"
+        : Boolean(CURRENT_VERSION.includes("-") || CURRENT_VERSION.includes("beta")),
     lastCheck: map.update_last_check || null,
   };
 }
