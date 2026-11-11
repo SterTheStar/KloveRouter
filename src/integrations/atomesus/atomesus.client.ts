@@ -328,6 +328,7 @@ export async function atomesusResponses(
   model: string,
   credential: AtomesusCredential,
   endpoint?: string,
+  signal?: AbortSignal,
 ): Promise<Response | ReturnType<typeof completion>> {
   if (!DEFAULT_MODELS.includes(model as any))
     throw new Error(`Unsupported Atomesus model: ${model}`);
@@ -369,6 +370,8 @@ export async function atomesusResponses(
   appendFile(form, body.file);
 
   let response: Response;
+  const timeoutSignal = AbortSignal.timeout(15 * 60_000);
+  const effectiveSignal = signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal;
   try {
     response = await fetch(apiUrl(endpoint), {
       method: "POST",
@@ -378,7 +381,7 @@ export async function atomesusResponses(
         Cookie: `__ax_cfg_v1=${encodeAtomesusConfig(model, effort)}`,
       },
       body: form,
-      signal: AbortSignal.timeout(15 * 60_000),
+      signal: effectiveSignal,
     });
   } catch (error) {
     if (error instanceof DOMException && error.name === "TimeoutError")

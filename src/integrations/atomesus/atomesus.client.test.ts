@@ -25,4 +25,18 @@ describe("Atomesus integration", () => {
       ),
     ).rejects.toThrow("gateway unavailable (504)");
   });
+
+  it("respects abort signals passed by callers", async () => {
+    const controller = new AbortController();
+    controller.abort(new Error("client canceled"));
+    await expect(
+      atomesusResponses(
+        { messages: [{ role: "user", content: "Say ok." }], stream: false },
+        "atomesus-2",
+        { id: "credential", secret: "redacted-test-token" },
+        "https://api.atomesus.com",
+        controller.signal,
+      ),
+    ).rejects.toThrow();
+  });
 });

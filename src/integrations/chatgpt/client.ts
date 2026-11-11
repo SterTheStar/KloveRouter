@@ -59,6 +59,7 @@ export async function chatgptResponses(
   model: string,
   credential?: unknown,
   baseUrl?: string,
+  signal?: AbortSignal,
 ) {
   const auth = normalizeChatGptAuth(credential);
   const base = normalizeChatGptBaseUrl(baseUrl);
@@ -68,6 +69,7 @@ export async function chatgptResponses(
     method: "POST",
     headers: await headers(credential, body?.stream ? "text/event-stream" : "application/json"),
     body: JSON.stringify(chatGptRequestBody(body, model, conversationId)),
+    signal,
   });
   if (body?.stream) {
     if (!response.ok) {

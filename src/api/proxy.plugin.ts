@@ -1060,7 +1060,8 @@ export const proxyPlugin = (app: Elysia) =>
             return { error: "Compound model input token limit exceeded", message: tokenLimitError };
           }
           const selfIp = clientIp(request, headers, server as any);
-          const response = await routeModelPool(poolSlug, body, headers.authorization!, request.signal, async (input, init) => fetch(input, {
+          const authHeader = headers.authorization ?? (headers["x-api-key"] ? `Bearer ${headers["x-api-key"]}` : "");
+          const response = await routeModelPool(poolSlug, body, authHeader, request.signal, async (input, init) => fetch(input, {
             ...init,
             headers: { ...(init?.headers as Record<string, string>), "X-Saturn-Model-Pool-Attempt": "true", "x-forwarded-for": selfIp },
           }));
@@ -2209,14 +2210,31 @@ export const proxyPlugin = (app: Elysia) =>
             attempted.add(credential.id);
             try {
               const start = performance.now();
-              const result = await atomesusResponses(body, parsed.modelId, credential, provider.base_url);
-              const durationMs = Math.round(performance.now() - start);
-              credentialService.clearError(credential.id);
-              credentialService.clearCooldown(credential.id);
-              requestLogService.complete(requestLogId, { durationMs });
-              return body.stream
-                ? fixThinkTagStream(result as Response)
-                : fixThinkTag(result);
+              const result = await atomesusResponses(body, parsed.modelId, credential, provider.base_url, request.signal);
+              const modelRecord = modelService.findByProviderAndModel(provider.id, parsed.modelId);
+              const credentialId = credential.id;
+              if (!body.stream) {
+                const durationMs = Math.round(performance.now() - start);
+                const completion = result as any;
+                const promptTokens = countMessages(body.messages, { model: parsed.modelId, provider: provider.name });
+                const completionText = completion.choices?.[0]?.message?.content ?? "";
+                const completionTokens = countCompletion(completionText, { model: parsed.modelId, provider: provider.name });
+                const usage = usageService.record(provider.id, modelRecord?.id ?? parsed.modelId, parsed.modelId, promptTokens, completionTokens, durationMs, durationMs, { cacheRead: 0, cacheWrite: 0 });
+                requestLogService.complete(requestLogId, { promptTokens, completionTokens, cost: usage.estimated_cost_usd, durationMs });
+                credentialService.clearError(credentialId);
+                credentialService.clearCooldown(credentialId);
+                return fixThinkTag(completion);
+              }
+              return recordSseUsageResponse(fixThinkTagStream(result as Response), (promptTokens, completionTokens, durationMs, generationDurationMs, details) => {
+                const usage = usageService.record(provider.id, modelRecord?.id ?? parsed.modelId, parsed.modelId, promptTokens, completionTokens, durationMs, generationDurationMs, details);
+                requestLogService.complete(requestLogId, { promptTokens, completionTokens, cacheRead: details?.cacheRead, cacheWrite: details?.cacheWrite, cost: usage.estimated_cost_usd, durationMs });
+                credentialService.clearError(credentialId);
+                credentialService.clearCooldown(credentialId);
+              }, start, (error) => {
+                credentialService.markError(credentialId, error.message);
+                requestLogService.captureError(requestLogId, error);
+                requestLogService.complete(requestLogId, { status: "error", statusCode: 502, error: error.message });
+              }, { messages: body.messages, model: parsed.modelId, provider: provider.name, onProgress: (chars) => requestLogService.progress(requestLogId, chars) });
             } catch (error: any) {
               failures.push(error);
               requestLogService.captureError(requestLogId, error);
@@ -2247,6 +2265,7 @@ export const proxyPlugin = (app: Elysia) =>
                 parsed.modelId,
                 credential,
                 provider.base_url,
+                request.signal,
               );
               requestLogService.captureResponse(requestLogId, { status: upstream.status, headers: upstream.headers, contentType: upstream.headers.get("content-type"), streaming: Boolean(body.stream) });
               const modelRecord = modelService.findByProviderAndModel(
