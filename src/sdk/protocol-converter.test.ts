@@ -142,6 +142,8 @@ describe("protocol conversion SDK", () => {
     expect(() => convertRequest("chat_completions", "responses", { model: "m", messages: [], logprobs: true })).toThrow("logprobs");
     expect(() => convertRequest("chat_completions", "anthropic", { model: "m", messages: [], n: 2 })).toThrow("n");
     expect(() => convertRequest("chat_completions", "anthropic", { model: "m", messages: [], tool_choice: "none" })).toThrow("tool_choice=none");
+    const directTool = convertRequest("chat_completions", "anthropic", { model: "m", messages: [], tool_choice: { type: "function", name: "search" } });
+    expect(directTool.tool_choice).toEqual({ type: "tool", name: "search", disable_parallel_tool_use: false });
     expect(() => requestToChat("responses", { model: "m", input: "hi", tools: [{ type: "web_search_preview" }] })).toThrow("tool type");
     expect(() => convertResponse("chat_completions", "responses", { choices: [{ message: {} }, { message: {} }] })).toThrow("n > 1");
   });

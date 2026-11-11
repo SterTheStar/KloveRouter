@@ -127,10 +127,8 @@ function chatToolChoiceToAnthropic(choice: any) {
   if (choice === "none") throw new Error("Anthropic Messages has no tool_choice=none equivalent; omit tools to disable them");
   if (choice === "auto") return { type: "auto" };
   if (choice === "required") return { type: "any" };
-  if (choice?.type === "function" && choice.function?.name) return { type: "tool", name: choice.function.name };
-  if (choice?.type === "auto") return { type: "auto" };
-  if (choice?.type === "required") return { type: "any" };
-  if (choice?.type === "function" && choice.function?.name) return { type: "tool", name: choice.function.name };
+  const toolName = choice?.function?.name ?? (choice?.type === "tool" || choice?.type === "function" ? choice?.name : undefined);
+  if (toolName) return { type: "tool", name: toolName };
   return undefined;
 }
 
