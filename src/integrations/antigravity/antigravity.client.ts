@@ -11,8 +11,12 @@ import {
   toGoogleBody,
 } from "./antigravity.transform";
 import {
+  cleanAntigravityDisplayName,
   filterAntigravityModels,
+  groupAntigravityModels,
   isBlockedAntigravityModel,
+  resolveAntigravityUpstreamModel,
+  titleizeModelId,
 } from "./antigravity.models";
 import { logger } from "../../logger";
 
@@ -74,17 +78,23 @@ export async function antigravityResponses(
   const projectId = credential.project_id || DEFAULT_ANTIGRAVITY_PROJECT_ID;
   if (!credential.access_token)
     throw new Error("Antigravity account has no access token");
+  const requestedEffort =
+    body.__saturn_reasoning?.effort ??
+    body.__saturn_reasoning?.upstreamValue ??
+    body.reasoning?.effort ??
+    body.reasoning_effort;
+  const upstreamModel = resolveAntigravityUpstreamModel(model, requestedEffort);
   const fingerprint = antigravityAuthService.fingerprint(credential);
   const sessionId = deriveSessionId(body, credential.email || credential.id);
   const headers = getImpersonationHeaders(
     credential.access_token,
     fingerprint,
-    model,
+    upstreamModel,
     sessionId,
     "text/event-stream",
   );
   const payload = JSON.stringify(
-    await toGoogleBody({ ...body, model }, projectId, sessionId),
+    await toGoogleBody({ ...body, model: upstreamModel }, projectId, sessionId),
   );
   let response: Response | null = null;
   let lastError: unknown;
@@ -98,7 +108,7 @@ export async function antigravityResponses(
           body: payload,
         });
         logger.debug("Antigravity response headers received", {
-          model,
+          model: upstreamModel,
           endpoint,
           attempt: attempt + 1,
           duration_ms: Math.round(performance.now() - requestStarted),
@@ -135,16 +145,6 @@ export async function antigravityResponses(
     model,
     `chatcmpl-${crypto.randomUUID()}`,
   );
-}
-function titleizeModelId(id: string) {
-  return id
-    .replace(/^models\//, "")
-    .split(/[-_]/)
-    .filter(Boolean)
-    .map((part) =>
-      /^v?\d/.test(part) ? part.toUpperCase() : part[0].toUpperCase() + part.slice(1),
-    )
-    .join(" ");
 }
 
 const QUOTA_SUMMARY_ENDPOINTS = [
@@ -276,7 +276,8 @@ export async function antigravityModels(credential: any) {
         ...m,
         display_name: m.display_name || titleizeModelId(m.id),
       }));
-    if (models.length) return models;
+    const grouped = groupAntigravityModels(models);
+    if (grouped.length) return grouped;
     throw new Error("Antigravity returned no available models");
   }
 
@@ -484,7 +485,7 @@ function groupsFromModels(raw: any): {
       (String(entry.item?.modelProvider || "").includes("GOOGLE") ? "gemini" : "3p");
     models.push({
       model_id: id,
-      display_name: displayName,
+      display_name: cleanAntigravityDisplayName(displayName, id),
       group_id: family,
       remaining_fraction: remaining,
       used_percent: remaining === null ? null : Math.round((1 - remaining) * 100),
