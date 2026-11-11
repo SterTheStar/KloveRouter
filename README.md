@@ -17,21 +17,6 @@ Saturn Router gives applications one API and one admin panel for multiple AI pro
 
 Compound models expose a stable `pool/<id>` model that routes across selected provider models. Choose priority fallback or random selection, set member fallback behavior, and configure token limits.
 
-## Integrations
-
-| Integration | Credentials | API support |
-| --- | --- | --- |
-| OpenAI-compatible providers | API key | Chat Completions and Responses, including streaming |
-| OpenAI-compatible media providers | API key | Image generation, edits and variations; text-to-speech; asynchronous video generation |
-| Anthropic | API key | Messages API, tools, thinking, and streaming |
-| Codex | OAuth | Responses-compatible requests and account rotation |
-| Antigravity | Google OAuth | Gemini, Claude, and supported GPT-family models |
-| ChatGPT | Session credentials | ChatGPT-backed models, depending on account access |
-| Perch AI | Perch session JSON/access token, or the host's `perch login` session | Perch models with streaming, reasoning, and tool calls |
-| OpenFREE | Authenticated OpenCode CLI | Live free OpenCode Zen models, including Big Pickle, streaming, and bridged tool calls |
-
-Perch AI issues short-lived turn tickets against a CLI session and rotates Supabase refresh tokens. Saturn stores a pasted session encrypted, or reads `~/.perch/cli-auth-session.json` from the host. Perch's documentation warns that calling its API outside the official CLI may violate its terms and risk account suspension; connect only an account you are permitted to use this way.
-
 ## Quick start
 
 ### Requirements
