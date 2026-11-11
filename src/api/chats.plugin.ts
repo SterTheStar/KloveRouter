@@ -118,13 +118,25 @@ export const chatsPlugin = (app: Elysia) =>
         body: t.Object({ title: t.Optional(t.String()), model: t.Optional(t.String()) }),
       },
     )
-    .delete("/api/chats", () => ({
-      success: true,
-      removed: chatService.deleteAll(),
-    }))
+    .delete("/api/chats", async () => {
+      for (const chat of chatService.listHints()) {
+        for (const msgId of chatGenerationService.activeMessageIds(chat.id)) {
+          chatGenerationService.stop(chat.id, msgId);
+        }
+        await waitForChatGeneration(chat.id);
+      }
+      return {
+        success: true,
+        removed: chatService.deleteAll(),
+      };
+    })
     .delete(
       "/api/chats/:id",
-      ({ params, set }) => {
+      async ({ params, set }) => {
+        for (const msgId of chatGenerationService.activeMessageIds(params.id)) {
+          chatGenerationService.stop(params.id, msgId);
+        }
+        await waitForChatGeneration(params.id);
         if (!chatService.delete(params.id)) {
           set.status = 404;
           return { error: "Chat not found" };
