@@ -1,202 +1,275 @@
+import { useMemo, useState } from "react";
 import {
-  RiArrowRightSLine as ChevronRight,
-  RiErrorWarningLine as ErrorWarningLine,
+  RiSearchLine,
+  RiArrowDownSLine,
+  RiArrowRightSLine,
+  RiHistoryLine,
+  RiFilter3Line,
 } from "@remixicon/react";
-import ProviderIcon from "@/components/ProviderIcon";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import type {
-  StatsHealth,
-  StatsProviderHealth,
-  StatsUptime,
-  StatsUptimeGroup,
-} from "@/types";
+import type { StatsHealth, StatsUptime, StatsUptimeGroup } from "@/types";
+import { StatusSummaryCards } from "./StatusSummaryCards";
+import { StatusProviderCard } from "./StatusProviderCard";
+import { StatusModelList } from "./StatusModelList";
 
-const date = (value: string | null) =>
-  value
-    ? new Date(value.replace(" ", "T") + (value.includes("Z") ? "" : "Z")).toLocaleString()
-    : "—";
-const percent = (value: number) => `${value.toFixed(2)}%`;
-const latency = (ms: number) =>
-  ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms.toFixed(0)}ms`;
-
-const statusMeta: Record<StatsProviderHealth["status"], { label: string; dot: string; text: string }> = {
-  online: { label: "Online", dot: "bg-success", text: "text-success" },
-  degraded: { label: "Degraded", dot: "bg-amber-500", text: "text-amber-700 dark:text-amber-400" },
-  offline: { label: "Offline", dot: "bg-destructive", text: "text-destructive" },
-};
-
-const uptimeTone = (value: number) =>
-  value >= 99
-    ? "text-foreground"
-    : value >= 90
-      ? "text-amber-600 dark:text-amber-400"
-      : "text-destructive";
-
-function StatusBadge({ status, label }: { status: StatsProviderHealth["status"] | null; label?: string }) {
-  const meta = status ? statusMeta[status] : { label: label ?? "Not checked", dot: "bg-muted-foreground/50", text: "text-tertiary" };
-  return (
-    <span className={cn("inline-flex items-center gap-1.5 whitespace-nowrap text-xs", meta.text)}>
-      <span aria-hidden="true" className={cn("size-1.5 shrink-0 rounded-full", meta.dot)} />{label ?? meta.label}
-    </span>
-  );
+interface StatusPanelProps {
+  uptime: StatsUptime;
+  health: StatsHealth;
 }
 
-function Metric({ label, value, tone }: { label: string; value: string | number; tone?: string }) {
-  return (
-    <div className="min-w-0">
-      <div className="truncate text-xs text-tertiary">{label}</div>
-      <div className={cn("mt-1 font-mono text-sm font-normal tabular-nums text-foreground", tone)}>{value}</div>
-    </div>
+type StatusFilter = "all" | "online" | "degraded" | "offline";
+
+export function StatusPanel({ uptime, health }: StatusPanelProps) {
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [historicalOpen, setHistoricalOpen] = useState(false);
+
+  // Group uptime records by provider_id
+  const groupsByProvider = useMemo(() => {
+    const map = new Map<string, StatsUptimeGroup[]>();
+    for (const group of uptime.groups) {
+      if (group.provider_id) {
+        const existing = map.get(group.provider_id) ?? [];
+        map.set(group.provider_id, [...existing, group]);
+      }
+    }
+    return map;
+  }, [uptime.groups]);
+
+  // Historical or unknown provider requests
+  const knownProviderIds = useMemo(
+    () => new Set(health.providers.map((p) => p.provider_id)),
+    [health.providers]
   );
-}
 
-function ErrorLine({ children }: { children: React.ReactNode }) {
-  return (
-    <p className="flex items-start gap-1.5 text-xs text-destructive">
-      <ErrorWarningLine className="size-3.5 shrink-0 translate-y-px" aria-hidden="true" />
-      <span className="min-w-0 break-words">{children}</span>
-    </p>
+  const historical = useMemo(
+    () =>
+      uptime.groups.filter(
+        (group) => !group.provider_id || !knownProviderIds.has(group.provider_id)
+      ),
+    [uptime.groups, knownProviderIds]
   );
-}
 
-function ModelGroups({ groups }: { groups: StatsUptimeGroup[] }) {
-  if (!groups.length) return null;
+  // Filter providers
+  const filteredProviders = useMemo(() => {
+    return health.providers.filter((provider) => {
+      // Status filter
+      if (statusFilter !== "all" && provider.status !== statusFilter) {
+        return false;
+      }
+      // Search filter
+      if (search.trim()) {
+        const query = search.toLowerCase();
+        const matchesName = provider.provider_name.toLowerCase().includes(query);
+        const matchesId = provider.provider_id.toLowerCase().includes(query);
+        const providerGroups = groupsByProvider.get(provider.provider_id) ?? [];
+        const matchesModel = providerGroups.some((g) =>
+          g.model_name.toLowerCase().includes(query)
+        );
+        return matchesName || matchesId || matchesModel;
+      }
+      return true;
+    });
+  }, [health.providers, statusFilter, search, groupsByProvider]);
+
+  // Status counts for filter chips
+  const counts = useMemo(() => {
+    let online = 0;
+    let degraded = 0;
+    let offline = 0;
+    for (const p of health.providers) {
+      if (p.status === "online") online++;
+      else if (p.status === "degraded") degraded++;
+      else if (p.status === "offline") offline++;
+    }
+    return { all: health.providers.length, online, degraded, offline };
+  }, [health.providers]);
+
   return (
-    <details className="group mt-4">
-      <summary className="flex w-fit cursor-pointer list-none items-center gap-1 text-xs font-normal text-tertiary transition-colors hover:text-foreground [&::-webkit-details-marker]:hidden">
-        <ChevronRight className="size-3.5 transition-transform group-open:rotate-90" aria-hidden="true" />
-        Models ({groups.length})
-      </summary>
-      <div className="mt-3 space-y-2">
-        {groups.map((group) => (
-          <div key={`${group.provider_id}-${group.model_name}`} className="grid gap-x-4 gap-y-1 rounded-lg bg-background/60 px-3 py-2 sm:grid-cols-[minmax(0,2fr)_repeat(4,minmax(0,1fr))] sm:items-center">
-            <code className="min-w-0 truncate font-mono text-xs text-foreground">{group.model_name}</code>
-            <span className="text-xs text-muted-foreground">{group.total_requests.toLocaleString()} requests</span>
-            <span className={cn("text-xs font-mono tabular-nums", uptimeTone(group.uptime_percent))}>{percent(group.uptime_percent)} success</span>
-            <span className="text-xs text-muted-foreground">P95 {latency(group.p95_latency_ms)}</span>
-            <span className="text-xs text-muted-foreground">Last {date(group.last_used_at)}</span>
-          </div>
-        ))}
-      </div>
-    </details>
-  );
-}
+    <div className="space-y-6">
+      {/* Top summary metrics */}
+      <StatusSummaryCards
+        summary={uptime.summary}
+        providers={health.providers}
+      />
 
-function ProviderDetails({ provider, groups }: { provider: StatsProviderHealth; groups: StatsUptimeGroup[] }) {
-  return (
-    <div className="space-y-4 pt-1">
-      <div className="grid gap-x-4 gap-y-1 text-xs text-muted-foreground sm:grid-cols-2 lg:grid-cols-4">
-        <span>Last use: {date(provider.last_used_at)}</span>
-        <span>Last error: {date(provider.last_error_at)}</span>
-        <span>Cooldowns: {provider.cooldown_count}</span>
-        <span>
-          Last test: {date(provider.last_test_at)} · {provider.last_test_success === null ? "—" : provider.last_test_success ? "success" : "error"} · {provider.last_test_duration_ms ?? "—"}ms
-        </span>
-      </div>
-      {provider.last_error && <ErrorLine>{provider.last_error}</ErrorLine>}
-      {provider.cooldown_details.length > 0 && (
-        <div className="space-y-1 text-xs text-amber-700 dark:text-amber-400">
-          {provider.cooldown_details.map((cooldown) => (
-            <div key={cooldown.credential_id} className="break-words">
-              {cooldown.credential_label ?? cooldown.credential_id}: {cooldown.reason ?? "cooldown"} ({cooldown.remaining_requests} remaining, until {cooldown.cooldown_until_sequence})
-            </div>
-          ))}
-        </div>
-      )}
-      {provider.last_test_error && <ErrorLine>{provider.last_test_error}</ErrorLine>}
-      <ModelGroups groups={groups} />
-    </div>
-  );
-}
-
-function ProviderRow({ provider, groups }: { provider: StatsProviderHealth; groups: StatsUptimeGroup[] }) {
-  const unverified = provider.requests === 0 && !provider.last_test_at && provider.status === "online";
-  const testLabel = provider.requests === 0 && provider.last_test_at
-    ? provider.last_test_success ? "Test passed" : "Test failed"
-    : undefined;
-  const shownStatus = unverified ? null : provider.status;
-  return (
-    <details className="group rounded-xl border border-border bg-card px-4">
-      <summary className="list-none cursor-pointer py-4 [&::-webkit-details-marker]:hidden">
-        <div className="grid grid-cols-2 gap-x-4 gap-y-3 md:grid-cols-[minmax(0,1.5fr)_repeat(4,minmax(5rem,0.65fr))_auto_auto] md:items-center">
-          <div className="col-span-2 flex min-w-0 items-center gap-3 md:col-span-1">
-            <ProviderIcon name={provider.provider_name} src={provider.avatar} sources={provider.avatar_sources} className="size-8 shrink-0" />
-            <div className="min-w-0 flex-1">
-              <div className="truncate text-sm font-normal text-foreground">{provider.provider_name}</div>
-              <div className="text-xs text-tertiary">
-                {provider.is_active ? "Enabled" : "Disabled"} · {provider.active_credential_count} active {provider.active_credential_count === 1 ? "credential" : "credentials"}
-              </div>
-            </div>
-          </div>
-          <Metric label="Requests" value={provider.requests.toLocaleString()} />
-          <Metric label="Success" value={provider.requests ? percent(provider.uptime_percent) : "—"} tone={provider.requests ? uptimeTone(provider.uptime_percent) : undefined} />
-          <Metric label="Avg / P95 latency" value={provider.requests ? `${latency(provider.avg_latency_ms)} / ${latency(provider.p95_latency_ms)}` : "—"} />
-          <Metric label="Errors" value={provider.error_count.toLocaleString()} tone={provider.error_count > 0 ? "text-destructive" : undefined} />
-          <div className="col-span-2 flex items-center justify-between gap-2 md:col-span-1 md:justify-end">
-            <StatusBadge status={shownStatus} label={testLabel ?? (unverified ? "Not checked" : undefined)} />
-            <ChevronRight className="size-4 shrink-0 text-tertiary transition-transform group-open:rotate-90" aria-hidden="true" />
-          </div>
-        </div>
-      </summary>
-      <div className="pb-4 pl-11">
-        <ProviderDetails provider={provider} groups={groups} />
-      </div>
-    </details>
-  );
-}
-
-export function StatusPanel({ uptime, health }: { uptime: StatsUptime; health: StatsHealth }) {
-  const groupsByProvider = new Map<string, StatsUptimeGroup[]>();
-  for (const group of uptime.groups) {
-    if (group.provider_id) groupsByProvider.set(group.provider_id, [...(groupsByProvider.get(group.provider_id) ?? []), group]);
-  }
-  const knownProviderIds = new Set(health.providers.map((provider) => provider.provider_id));
-  const historical = uptime.groups.filter((group) => !group.provider_id || !knownProviderIds.has(group.provider_id));
-  const summary = uptime.summary;
-  return (
-    <div className="space-y-7">
-      <section className="space-y-4 rounded-xl border border-border bg-card p-5" aria-labelledby="overall-status-title">
-        <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-          <h2 id="overall-status-title" className="text-base font-normal tracking-tight text-foreground">All providers</h2>
-          <span className="text-xs text-tertiary">{summary.total_requests.toLocaleString()} requests · {summary.success_count.toLocaleString()} succeeded · {summary.error_count.toLocaleString()} failed</span>
-        </div>
-        <div className="grid grid-cols-2 gap-5 sm:grid-cols-3">
-          <Metric label="Success rate" value={summary.total_requests ? percent(summary.uptime_percent) : "—"} tone={summary.total_requests ? uptimeTone(summary.uptime_percent) : undefined} />
-          <Metric label="Average latency" value={summary.total_requests ? latency(summary.avg_latency_ms) : "—"} />
-          <Metric label="P95 latency" value={summary.total_requests ? latency(summary.p95_latency_ms) : "—"} />
-        </div>
-        {summary.last_error && <ErrorLine>Last error · {date(summary.last_error_at)} · {summary.last_error}</ErrorLine>}
-      </section>
-
-      <section className="space-y-3">
-        <div className="flex items-baseline justify-between gap-3">
+      {/* Provider Controls and Filtering */}
+      <div className="space-y-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2 className="font-heading text-base font-normal tracking-tight text-foreground">Providers</h2>
+            <h2 className="text-base font-normal tracking-tight text-foreground">
+              Provider status
+            </h2>
+            <p className="text-xs text-muted-foreground">
+              {filteredProviders.length} of {health.providers.length} providers shown
+            </p>
           </div>
-          {health.providers.length > 0 && <span className="text-sm text-tertiary">{health.providers.length} providers</span>}
-        </div>
-        <div className="space-y-3">
-          {health.providers.map((provider) => (
-            <ProviderRow key={provider.provider_id} provider={provider} groups={groupsByProvider.get(provider.provider_id) ?? []} />
-          ))}
-        </div>
-        {historical.length > 0 && (
-          <details className="group rounded-xl border border-border bg-card px-4">
-            <summary className="flex cursor-pointer list-none items-center gap-2 py-4 text-sm font-normal [&::-webkit-details-marker]:hidden">
-              <ChevronRight className="size-4 text-tertiary transition-transform group-open:rotate-90" aria-hidden="true" />
-              Historical / unknown providers
-              <span className="text-xs font-normal text-tertiary">({historical.length})</span>
-            </summary>
-            <div className="pb-4 pl-5"><ModelGroups groups={historical} /></div>
-          </details>
-        )}
-        {!health.providers.length && !uptime.groups.length && (
-          <div className="rounded-xl border border-dashed border-border bg-background/60 px-6 py-10 text-center">
-            <p className="text-sm font-normal text-foreground">No requests in this period.</p>
-            <p className="mt-1 text-xs text-tertiary">Provider health will appear here after the first routed request.</p>
+
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Search Input */}
+            <div className="relative w-full sm:w-60">
+              <RiSearchLine className="absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search provider or model..."
+                className="h-8 pl-8 text-xs"
+              />
+            </div>
           </div>
+        </div>
+
+        {/* Filter Chips */}
+        <div className="flex flex-wrap items-center gap-1.5">
+          <Button
+            variant={statusFilter === "all" ? "secondary" : "outline"}
+            size="sm"
+            onClick={() => setStatusFilter("all")}
+            className="h-7 px-2.5 text-xs font-normal"
+          >
+            All ({counts.all})
+          </Button>
+
+          <Button
+            variant={statusFilter === "online" ? "secondary" : "outline"}
+            size="sm"
+            onClick={() => setStatusFilter("online")}
+            className={cn(
+              "h-7 px-2.5 text-xs font-normal",
+              statusFilter === "online"
+                ? "border-emerald-500/30 text-emerald-700 dark:text-emerald-400"
+                : ""
+            )}
+          >
+            Online ({counts.online})
+          </Button>
+
+          <Button
+            variant={statusFilter === "degraded" ? "secondary" : "outline"}
+            size="sm"
+            onClick={() => setStatusFilter("degraded")}
+            className={cn(
+              "h-7 px-2.5 text-xs font-normal",
+              statusFilter === "degraded"
+                ? "border-amber-500/30 text-amber-800 dark:text-amber-400"
+                : ""
+            )}
+          >
+            Degraded ({counts.degraded})
+          </Button>
+
+          <Button
+            variant={statusFilter === "offline" ? "secondary" : "outline"}
+            size="sm"
+            onClick={() => setStatusFilter("offline")}
+            className={cn(
+              "h-7 px-2.5 text-xs font-normal",
+              statusFilter === "offline"
+                ? "border-destructive/30 text-destructive"
+                : ""
+            )}
+          >
+            Offline ({counts.offline})
+          </Button>
+
+          {(search || statusFilter !== "all") && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setSearch("");
+                setStatusFilter("all");
+              }}
+              className="h-7 px-2 text-xs text-tertiary hover:text-foreground"
+            >
+              Clear filters
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {/* Provider List */}
+      <div className="space-y-3">
+        {filteredProviders.map((provider) => (
+          <StatusProviderCard
+            key={provider.provider_id}
+            provider={provider}
+            groups={groupsByProvider.get(provider.provider_id) ?? []}
+          />
+        ))}
+
+        {filteredProviders.length === 0 && health.providers.length > 0 && (
+          <Card className="border border-dashed border-border bg-card/40 shadow-none">
+            <CardContent className="flex flex-col items-center justify-center py-10 text-center">
+              <RiFilter3Line className="size-6 text-tertiary" />
+              <p className="mt-2 text-sm font-normal text-foreground">
+                No providers match your filter
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Try searching with a different term or clear the active status filter.
+              </p>
+            </CardContent>
+          </Card>
         )}
-      </section>
+
+        {health.providers.length === 0 && uptime.groups.length === 0 && (
+          <Card className="border border-dashed border-border bg-card/40 shadow-none">
+            <CardContent className="flex flex-col items-center justify-center py-12 text-center">
+              <p className="text-sm font-normal text-foreground">
+                No requests in this period
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Provider health and response metrics will appear here after your first routed request.
+              </p>
+            </CardContent>
+          </Card>
+        )}
+      </div>
+
+      {/* Historical / Unknown Providers Section */}
+      {historical.length > 0 && (
+        <Card className="border border-border bg-card shadow-none">
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={() => setHistoricalOpen((prev) => !prev)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                setHistoricalOpen((prev) => !prev);
+              }
+            }}
+            className="flex cursor-pointer select-none items-center justify-between p-4 hover:bg-accent/20 transition-colors"
+          >
+            <div className="flex items-center gap-2">
+              <RiHistoryLine className="size-4 text-tertiary" />
+              <span className="text-sm font-normal text-foreground">
+                Historical or unknown providers
+              </span>
+              <span className="text-xs text-muted-foreground">
+                ({historical.length} records)
+              </span>
+            </div>
+
+            <div className="text-tertiary">
+              {historicalOpen ? (
+                <RiArrowDownSLine className="size-4" />
+              ) : (
+                <RiArrowRightSLine className="size-4" />
+              )}
+            </div>
+          </div>
+
+          {historicalOpen && (
+            <CardContent className="border-t border-border bg-card/40 p-4">
+              <StatusModelList groups={historical} />
+            </CardContent>
+          )}
+        </Card>
+      )}
     </div>
   );
 }
