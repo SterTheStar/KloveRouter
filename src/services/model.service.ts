@@ -1,5 +1,8 @@
 import { getDb } from "../db/connection";
-import { isBlockedAntigravityModel } from "../integrations/antigravity/antigravity.models";
+import {
+  isBlockedAntigravityModel,
+  parseAntigravityModelEffort,
+} from "../integrations/antigravity/antigravity.models";
 import { generateDisplayName } from "./model-name";
 import type { ProviderProtocol } from "./provider-appearance";
 import { publicAvatar } from "./avatar.service";
@@ -486,7 +489,20 @@ export const modelService = {
   findByPublicId(providerId: string, publicId: string): Model | null {
     const db = getDb();
     const model = db.query("SELECT * FROM models WHERE provider_id = ? AND (pretty_id = ? OR (pretty_id IS NULL AND model_id = ?))").get(providerId, publicId, publicId) as Model | null;
-    return hydrate(model);
+    if (model) return hydrate(model);
+
+    // Fallback for Antigravity effort variant IDs (e.g. claude-sonnet-5-5-high resolving to claude-sonnet-5-5)
+    const parsedEffort = parseAntigravityModelEffort(publicId);
+    if (parsedEffort) {
+      const baseModel = db
+        .query(
+          "SELECT * FROM models WHERE provider_id = ? AND (pretty_id = ? OR (pretty_id IS NULL AND model_id = ?))",
+        )
+        .get(providerId, parsedEffort.baseId, parsedEffort.baseId) as Model | null;
+      if (baseModel) return hydrate(baseModel);
+    }
+
+    return null;
   },
 
   generateUniquePrettyId(providerId: string, source: string): string {

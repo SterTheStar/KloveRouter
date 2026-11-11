@@ -13,8 +13,11 @@ import {
 import { codexResponses, codexStreamToOpenAI } from "../integrations/codex";
 import { credentialService } from "../services/credential.service";
 import { logger } from "../logger";
-import { antigravityResponses } from "../integrations/antigravity";
-import { isBlockedAntigravityModel } from "../integrations/antigravity";
+import {
+  antigravityResponses,
+  isBlockedAntigravityModel,
+  parseAntigravityModelEffort,
+} from "../integrations/antigravity";
 import { requestLogService } from "../services/request-log.service";
 import { modelPoolService, poolSlugFromModelId, poolTokenLimitError, routeModelPool, poolRequestIncompatibility } from "../services/model-pool.service";
 import { openAIStreamResponse } from "./openai-stream";
@@ -1083,6 +1086,7 @@ export const proxyPlugin = (app: Elysia) =>
           };
          }
 
+        const requestedModelId = parsed.modelId;
         const modelRecord = modelService.findByPublicId(provider.id, parsed.modelId);
         if (!modelRecord || !modelRecord.is_active) {
           logProxyRejection({ request, headers, server }, { statusCode: 404, error: `No active model "${parsed.modelId}" is configured for provider "${provider.name}"`, providerId: provider.id, providerName: provider.name, modelName: parsed.modelId, payload: body, streaming: streamHint, apiKeyPrefix: apiKey.prefix, requesterName: apiKey.name });
@@ -1094,6 +1098,17 @@ export const proxyPlugin = (app: Elysia) =>
         }
         // Public identifier resolved; use upstream technical ID internally.
         parsed.modelId = modelRecord.model_id;
+        if (
+          provider.protocol === "antigravity" &&
+          requestedModelId !== modelRecord.model_id &&
+          !body.reasoning_effort &&
+          !body.reasoning?.effort
+        ) {
+          const parsedEffort = parseAntigravityModelEffort(requestedModelId);
+          if (parsedEffort && parsedEffort.effort !== "none") {
+            body.reasoning_effort = parsedEffort.effort;
+          }
+        }
         let currentRequestLogId: string | null = null;
         const fixThinkTag = (completion: any) =>
           applyGuardrailsToCompletion(
