@@ -217,6 +217,13 @@ Every release must follow the clean, conventional GitHub release notes structure
 
 Follow this exact procedure when preparing and publishing releases:
 
+### Step 0: Fetch Remote Tags
+Always fetch the latest tags from the remote repository before checking tags, determining the next version, or gathering release notes:
+```bash
+git fetch --tags
+```
+Never rely solely on local tags: tags published through GitHub Releases or remote environments are only recognized locally after an explicit `git fetch --tags`.
+
 ### Step 1: Bump Versions
 Run the centralized version bump script:
 ```bash
