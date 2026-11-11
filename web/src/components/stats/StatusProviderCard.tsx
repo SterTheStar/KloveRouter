@@ -10,7 +10,6 @@ import {
 } from "@remixicon/react";
 import ProviderIcon from "@/components/ProviderIcon";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import type { StatsProviderHealth, StatsUptimeGroup } from "@/types";
 import { StatusBadge } from "./StatusBadge";
@@ -46,7 +45,7 @@ export function StatusProviderCard({
   const effectiveStatus = unverified ? null : provider.status;
 
   return (
-    <Card className="border border-border bg-card shadow-none transition-colors">
+    <div className="overflow-hidden rounded-xl border border-border bg-card shadow-none transition-colors">
       <div
         role="button"
         tabIndex={0}
@@ -57,7 +56,10 @@ export function StatusProviderCard({
             setOpen((prev) => !prev);
           }
         }}
-        className="cursor-pointer select-none p-4 hover:bg-accent/20 transition-colors"
+        className={cn(
+          "cursor-pointer select-none p-4 transition-colors hover:bg-accent/20",
+          open && "border-b border-border bg-accent/5"
+        )}
       >
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           {/* Provider Identity & Status */}
@@ -148,7 +150,7 @@ export function StatusProviderCard({
 
       {/* Expanded Diagnostics & Model Breakdown */}
       {open && (
-        <CardContent className="border-t border-border bg-card/40 p-4 space-y-4">
+        <div className="border-t border-border bg-card/40 p-4 space-y-4">
           {/* Diagnostic overview tiles */}
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             <div className="rounded-lg border border-border/60 bg-background/50 p-2.5">
@@ -250,8 +252,8 @@ export function StatusProviderCard({
               No routed model requests recorded for this provider in the selected period.
             </div>
           )}
-        </CardContent>
+        </div>
       )}
-    </Card>
+    </div>
   );
 }

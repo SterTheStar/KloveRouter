@@ -7,7 +7,6 @@ import {
   RiFilter3Line,
 } from "@remixicon/react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import type { StatsHealth, StatsUptime, StatsUptimeGroup } from "@/types";
@@ -202,36 +201,32 @@ export function StatusPanel({ uptime, health }: StatusPanelProps) {
         ))}
 
         {filteredProviders.length === 0 && health.providers.length > 0 && (
-          <Card className="border border-dashed border-border bg-card/40 shadow-none">
-            <CardContent className="flex flex-col items-center justify-center py-10 text-center">
-              <RiFilter3Line className="size-6 text-tertiary" />
-              <p className="mt-2 text-sm font-normal text-foreground">
-                No providers match your filter
-              </p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Try searching with a different term or clear the active status filter.
-              </p>
-            </CardContent>
-          </Card>
+          <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border bg-card/40 py-10 text-center">
+            <RiFilter3Line className="size-6 text-tertiary" />
+            <p className="mt-2 text-sm font-normal text-foreground">
+              No providers match your filter
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Try searching with a different term or clear the active status filter.
+            </p>
+          </div>
         )}
 
         {health.providers.length === 0 && uptime.groups.length === 0 && (
-          <Card className="border border-dashed border-border bg-card/40 shadow-none">
-            <CardContent className="flex flex-col items-center justify-center py-12 text-center">
-              <p className="text-sm font-normal text-foreground">
-                No requests in this period
-              </p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Provider health and response metrics will appear here after your first routed request.
-              </p>
-            </CardContent>
-          </Card>
+          <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border bg-card/40 py-12 text-center">
+            <p className="text-sm font-normal text-foreground">
+              No requests in this period
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Provider health and response metrics will appear here after your first routed request.
+            </p>
+          </div>
         )}
       </div>
 
       {/* Historical / Unknown Providers Section */}
       {historical.length > 0 && (
-        <Card className="border border-border bg-card shadow-none">
+        <div className="overflow-hidden rounded-xl border border-border bg-card shadow-none transition-colors">
           <div
             role="button"
             tabIndex={0}
@@ -242,7 +237,10 @@ export function StatusPanel({ uptime, health }: StatusPanelProps) {
                 setHistoricalOpen((prev) => !prev);
               }
             }}
-            className="flex cursor-pointer select-none items-center justify-between p-4 hover:bg-accent/20 transition-colors"
+            className={cn(
+              "flex cursor-pointer select-none items-center justify-between p-4 transition-colors hover:bg-accent/20",
+              historicalOpen && "border-b border-border bg-accent/5"
+            )}
           >
             <div className="flex items-center gap-2">
               <RiHistoryLine className="size-4 text-tertiary" />
@@ -264,11 +262,11 @@ export function StatusPanel({ uptime, health }: StatusPanelProps) {
           </div>
 
           {historicalOpen && (
-            <CardContent className="border-t border-border bg-card/40 p-4">
+            <div className="bg-card/40 p-4">
               <StatusModelList groups={historical} />
-            </CardContent>
+            </div>
           )}
-        </Card>
+        </div>
       )}
     </div>
   );
