@@ -1,4 +1,5 @@
 import { Elysia, t } from "elysia";
+import { createHmac } from "node:crypto";
 import { keyService } from "../services/key.service";
 import { providerService } from "../services/provider.service";
 import { modelService, providerModelPublicId } from "../services/model.service";
@@ -10,6 +11,8 @@ import { assertSafeRemoteUrl } from "../services/ssrf";
 import { getDb } from "../db/connection";
 import { parseModelName } from "../clients/openai";
 import { clientIp } from "../services/request-ip";
+import { getSecuritySecrets } from "../services/security.service";
+import { isImageModel, isTtsModel, isVideoModel, isMediaModel } from "../services/model-type";
 
 type MediaType = "image-generation" | "image-edit" | "image-variation" | "text-to-speech" | "video-generation" | "video-status" | "video-content" | "video-cancel" | "video-delete" | "video-list";
 
@@ -75,6 +78,10 @@ function logMediaRejection(ctx: MediaRejectionContext, input: {
 
 function endpointUrl(provider: MediaRoute["provider"], resourcePath: string, query?: string) {
   const base = provider.base_url.replace(/\/+$/, "");
+  if (resourcePath.startsWith("../")) {
+    const parent = base.replace(/\/v1$/i, "");
+    return `${parent}/${resourcePath.slice(3)}${query ?? ""}`;
+  }
   const versioned = /\/v1$/i.test(base) ? base : `${base}/v1`;
   return `${versioned}/${resourcePath.replace(/^\/+/, "")}${query ?? ""}`;
 }
@@ -135,6 +142,67 @@ function withMediaDefaults(body: any, route: MediaRoute, mediaType: MediaType) {
   return result;
 }
 
+function sanitizeMediaPayload(body: any, route: MediaRoute, mediaType: MediaType) {
+  if (!body || typeof body !== "object") return body;
+  if (body instanceof FormData) return body;
+
+  const sanitized = { ...body };
+  const isAgnes = route.provider.name.toLowerCase().includes("agnes") ||
+                  route.provider.base_url.includes("agnes") ||
+                  route.model.model_id.toLowerCase().includes("agnes");
+
+  // 1. Video generation
+  if (mediaType === "video-generation") {
+    if (isAgnes) {
+      // Agnes Video API rules (official documentation):
+      // - mode: "text" | "keyframe" | "reference". Default for text-to-video is "text".
+      // - size: for flash models, size MUST be "720P".
+      // - seconds: string from "4"-"12".
+      // - aspect_ratio: default "16:9".
+      if (!sanitized.mode || sanitized.mode === "std") {
+        sanitized.mode = "text";
+      }
+      if (route.model.model_id.includes("flash") || sanitized.size === "1280x720" || !sanitized.size) {
+        sanitized.size = "720P";
+      }
+      if (!sanitized.aspect_ratio) {
+        sanitized.aspect_ratio = "16:9";
+      }
+      if (sanitized.seconds !== undefined) {
+        sanitized.seconds = String(sanitized.seconds);
+      }
+      delete sanitized.quality;
+    } else {
+      if (!sanitized.mode) {
+        sanitized.mode = (route.model.media_settings?.video as any)?.mode || "std";
+      }
+    }
+  }
+
+  // 2. Image generation
+  if (mediaType === "image-generation") {
+    const isDallE3 = /dall[-_ ]?e[-_ ]?3/i.test(route.model.model_id);
+    if (!isDallE3) {
+      delete sanitized.quality;
+      delete sanitized.style;
+    }
+    if (isAgnes) {
+      // Agnes Image API rules (official documentation):
+      // - Do not place response_format at the top level (causes 400). Move to extra_body if present.
+      // - Only model, prompt, and size are required.
+      // - Do not pass 'n' (causes errors on text image queue).
+      delete sanitized.n;
+      if (sanitized.response_format) {
+        if (!sanitized.extra_body || typeof sanitized.extra_body !== "object") sanitized.extra_body = {};
+        sanitized.extra_body.response_format = sanitized.response_format;
+        delete sanitized.response_format;
+      }
+    }
+  }
+
+  return sanitized;
+}
+
 type MediaRouteCtx = {
   headers: Record<string, string | undefined>;
   request: Request;
@@ -156,11 +224,19 @@ async function resolveMediaRoute(modelName: unknown, modality: "image_generation
   if (!isOpenAICompatibleProtocol(provider.protocol)) { reject(400, `Provider "${provider.name}" does not expose OpenAI-compatible media endpoints`, { providerId: provider.id, providerName: provider.name, modelName: parsed.modelId }); return { status: 400, error: apiError(`Provider "${provider.name}" does not expose OpenAI-compatible media endpoints`, "invalid_request_error", "incompatible_provider") } as const; }
   const model = modelService.findByPublicId(provider.id, parsed.modelId);
   if (!model || !model.is_active) { reject(404, `Model "${parsed.modelId}" was not found or is disabled`, { providerId: provider.id, providerName: provider.name, modelName: parsed.modelId }); return { status: 404, error: apiError(`Model "${parsed.modelId}" was not found or is disabled`, "invalid_request_error", "model_not_found") } as const; }
-  if (model.capabilities?.[modality] === false) { reject(400, `Model "${modelName}" is not marked as supporting ${modality.replaceAll("_", " ")}`, { providerId: provider.id, providerName: provider.name, modelName: parsed.modelId }); return { status: 400, error: apiError(`Model "${modelName}" is not marked as supporting ${modality.replaceAll("_", " ")}`, "invalid_request_error", "unsupported_model_modality") } as const; }
+  
+  const supportsRequestedModality = modality === "image_generation"
+    ? isImageModel(model)
+    : modality === "text_to_speech"
+      ? isTtsModel(model)
+      : isVideoModel(model);
 
-  const auth = headers.authorization;
-  const gatewayKey = auth?.startsWith("Bearer ") ? auth.slice(7) : headers["x-api-key"];
-  const apiKey = gatewayKey ? await keyService.verify(gatewayKey) : null;
+  if (!supportsRequestedModality || model.capabilities?.[modality] === false) {
+    reject(400, `Model "${modelName}" does not support ${modality.replaceAll("_", " ")}`, { providerId: provider.id, providerName: provider.name, modelName: parsed.modelId });
+    return { status: 400, error: apiError(`Model "${modelName}" does not support ${modality.replaceAll("_", " ")}`, "invalid_request_error", "unsupported_model_modality") } as const;
+  }
+
+  const apiKey = await authenticateMediaCaller(headers);
   if (!apiKey) { reject(401, "Valid API key required", { providerName: "(unauthenticated)", modelName: `${provider.name}/${model.model_id}`, requesterName: null }); return { status: 401, error: apiError("Valid API key required", "authentication_error") } as const; }
 
   const sequence = provider.credential_mode === "round_robin" || provider.credential_mode === "failover" ? credentialService.beginRequest(provider.id) : undefined;
@@ -172,7 +248,19 @@ async function resolveMediaRoute(modelName: unknown, modality: "image_generation
 
 function trackedResponse(upstream: Response, requestId: string, started: number, type: MediaType, completeOnEnd = true): Response {
   const responseHeaders = new Headers(upstream.headers);
-  for (const header of ["connection", "keep-alive", "proxy-authenticate", "proxy-authorization", "te", "trailer", "transfer-encoding", "upgrade", "set-cookie"]) responseHeaders.delete(header);
+  for (const header of [
+    "connection",
+    "keep-alive",
+    "proxy-authenticate",
+    "proxy-authorization",
+    "te",
+    "trailer",
+    "transfer-encoding",
+    "upgrade",
+    "set-cookie",
+    "content-encoding",
+    "content-length",
+  ]) responseHeaders.delete(header);
   requestLogService.captureResponse(requestId, { status: upstream.status, headers: responseHeaders, contentType: responseHeaders.get("content-type"), streaming: type === "text-to-speech" || type === "video-content" });
   if (!upstream.body) {
     requestLogService.complete(requestId, {
@@ -241,7 +329,8 @@ async function proxyMediaRequest(input: {
   formData?: boolean;
 }) {
   const { request, headers, set, gatewayKeyName, gatewayKeyPrefix, route, mediaType, resourcePath } = input;
-  const body = withMediaDefaults(input.body, route, mediaType);
+  const defaultedBody = withMediaDefaults(input.body, route, mediaType);
+  const body = sanitizeMediaPayload(defaultedBody, route, mediaType);
   const contentType = headers["content-type"] ?? null;
   const requestLogId = requestLogService.start({
     providerId: route.provider.id,
@@ -297,10 +386,40 @@ async function proxyMediaRequest(input: {
   }
 }
 
-async function requireGatewayKey(headers: Record<string, string | undefined>) {
+async function authenticateMediaCaller(headers: Record<string, string | undefined>) {
   const auth = headers.authorization;
   const key = auth?.startsWith("Bearer ") ? auth.slice(7) : headers["x-api-key"];
-  return key ? keyService.verify(key) : null;
+  if (!key) return null;
+  if (key === keyService.internalKey()) {
+    return { name: "Saturn Admin", prefix: "internal" };
+  }
+  const verifiedKey = await keyService.verify(key);
+  if (verifiedKey) return { name: verifiedKey.name, prefix: verifiedKey.prefix };
+
+  try {
+    const { jwtSecret } = getSecuritySecrets();
+    const parts = key.split(".");
+    if (parts.length === 3) {
+      const [headerB64, payloadB64, signatureB64] = parts;
+      const data = `${headerB64}.${payloadB64}`;
+      const hmac = createHmac("sha256", jwtSecret);
+      hmac.update(data);
+      const expectedSig = hmac.digest("base64url");
+      if (expectedSig === signatureB64) {
+        const payload = JSON.parse(Buffer.from(payloadB64, "base64url").toString("utf-8"));
+        if (!payload.exp || payload.exp > Math.floor(Date.now() / 1000)) {
+          return { name: "Saturn Admin", prefix: "admin" };
+        }
+      }
+    }
+  } catch {
+    // ignore token decoding errors
+  }
+  return null;
+}
+
+async function requireGatewayKey(headers: Record<string, string | undefined>) {
+  return authenticateMediaCaller(headers);
 }
 
 function saveVideoJob(proxyId: string, upstreamId: string, route: MediaRoute, status: string, response: unknown) {
@@ -347,11 +466,23 @@ async function videoAction(context: any, action: "retrieve" | "content" | "cance
     set.status = 503;
     return apiError("The provider credential for this video is unavailable", "server_error", "no_active_credential");
   }
+  const isAgnes = route.provider.name.toLowerCase().includes("agnes") ||
+                  route.provider.base_url.includes("agnes") ||
+                  job.model_name.toLowerCase().includes("agnes");
+
   const suffix = action === "content" ? `/content${query?.variant ? `?variant=${encodeURIComponent(query.variant)}` : ""}` : action === "cancel" ? "/cancel" : "";
-  const path = `videos/${encodeURIComponent(job.upstream_id)}${suffix}`;
+  let path = `videos/${encodeURIComponent(job.upstream_id)}${suffix}`;
+  let queryParam = query?.variant ? `?variant=${encodeURIComponent(query.variant)}` : undefined;
+
+  if (isAgnes && action === "retrieve") {
+    path = `../agnesapi`;
+    const modelParam = job.model_name.includes("/") ? job.model_name.split("/")[1] : job.model_name;
+    queryParam = `?video_id=${encodeURIComponent(job.upstream_id)}&model_name=${encodeURIComponent(modelParam)}`;
+  }
+
   const method = action === "cancel" ? "POST" : action === "delete" ? "DELETE" : "GET";
   const mediaType: MediaType = action === "content" ? "video-content" : action === "cancel" ? "video-cancel" : action === "delete" ? "video-delete" : "video-status";
-  const result = await proxyMediaRequest({ request, headers, server, set, gatewayKeyName: apiKey.name, gatewayKeyPrefix: apiKey.prefix, route, mediaType, resourcePath: path, method });
+  const result = await proxyMediaRequest({ request, headers, server, set, gatewayKeyName: apiKey.name, gatewayKeyPrefix: apiKey.prefix, route, mediaType, resourcePath: path, method, query: queryParam });
   if ("error" in result) return result.error;
   if (action === "content") return trackedResponse(result.upstream, result.requestLogId, result.started, mediaType);
   if (!result.upstream.ok) return trackedResponse(result.upstream, result.requestLogId, result.started, mediaType);
@@ -378,6 +509,20 @@ export const mediaProxyPlugin = (app: Elysia) => app
     if (typeof bodyValue(body, "prompt") !== "string" || !String(bodyValue(body, "prompt")).trim()) { logMediaRejection({ headers, request, server, body }, { statusCode: 400, error: "prompt is required", providerId: resolved.route.provider.id, providerName: resolved.route.provider.name, modelName: resolved.route.model.model_id, requesterName: resolved.gatewayKeyName, apiKeyPrefix: resolved.gatewayKeyPrefix }); set.status = 400; return apiError("prompt is required"); }
     const result = await proxyMediaRequest({ request, body, headers, server, set, gatewayKeyName: resolved.gatewayKeyName, gatewayKeyPrefix: resolved.gatewayKeyPrefix, route: resolved.route, mediaType: "image-generation", resourcePath: "images/generations" });
     if ("error" in result) return result.error;
+    const isJson = result.upstream.headers.get("content-type")?.includes("application/json");
+    if (isJson) {
+      const responseData = await result.upstream.json().catch(() => null);
+      const statusCode = result.upstream.status;
+      requestLogService.complete(result.requestLogId, {
+        status: result.upstream.ok ? "success" : "error",
+        statusCode,
+        durationMs: Math.round(performance.now() - result.started),
+        responseDetails: responseData ?? { status_code: statusCode },
+        ...(!result.upstream.ok ? { error: `Upstream returned ${statusCode}` } : {}),
+      });
+      set.status = statusCode;
+      return responseData;
+    }
     return trackedResponse(result.upstream, result.requestLogId, result.started, result.mediaType);
   }, { body: t.Any() })
   .post("/v1/images/edits", async (context) => {
@@ -419,10 +564,11 @@ export const mediaProxyPlugin = (app: Elysia) => app
     if ("error" in result) return result.error;
     if (!result.upstream.ok) return trackedResponse(result.upstream, result.requestLogId, result.started, result.mediaType);
     const response = await result.upstream.json().catch(() => null);
-    if (!response || typeof response.id !== "string") { set.status = 502; requestLogService.complete(result.requestLogId, { status: "error", statusCode: 502, error: "Provider response did not include a video ID" }); return apiError("Provider returned a video response without an ID", "server_error"); }
+    const upstreamId = typeof response?.id === "string" ? response.id : typeof response?.video_id === "string" ? response.video_id : typeof response?.task_id === "string" ? response.task_id : null;
+    if (!response || !upstreamId) { set.status = 502; requestLogService.complete(result.requestLogId, { status: "error", statusCode: 502, error: "Provider response did not include a video ID" }); return apiError("Provider returned a video response without an ID", "server_error"); }
     const proxyId = `video_${crypto.randomUUID().replaceAll("-", "")}`;
     const rewritten = { ...response, id: proxyId, model: resolved.route.requestedModel };
-    saveVideoJob(proxyId, response.id, resolved.route, String(response.status ?? "queued"), rewritten);
+    saveVideoJob(proxyId, upstreamId, resolved.route, String(response.status ?? "queued"), rewritten);
     requestLogService.complete(result.requestLogId, { statusCode: result.upstream.status, durationMs: Math.round(performance.now() - result.started), responseDetails: rewritten });
     return rewritten;
   }, { body: t.Any() })
@@ -458,4 +604,38 @@ export const mediaProxyPlugin = (app: Elysia) => app
   .get("/v1/videos/:id/content", (context) => videoAction(context, "content"))
   .post("/v1/videos/:id/cancel", (context) => videoAction(context, "cancel"))
   .get("/v1/videos/:id", (context) => videoAction(context, "retrieve"))
-  .delete("/v1/videos/:id", (context) => videoAction(context, "delete"));
+  .delete("/v1/videos/:id", (context) => videoAction(context, "delete"))
+  .get("/api/media/models", async ({ headers, set }) => {
+    const auth = await authenticateMediaCaller(headers);
+    if (!auth) {
+      set.status = 401;
+      return apiError("Valid API key or admin token required", "authentication_error");
+    }
+    const allModels = modelService.findAllActiveWithProvider();
+    const mediaModels = allModels.filter((m) => isMediaModel(m)).map((m) => {
+      const caps = m.capabilities ?? {};
+      const isImg = isImageModel(m);
+      const isTts = isTtsModel(m);
+      const isVid = isVideoModel(m);
+      return {
+        id: m.id,
+        public_id: providerModelPublicId(m.provider_name, m),
+        model_id: m.model_id,
+        pretty_id: m.pretty_id,
+        display_name: m.display_name,
+        provider_id: m.provider_id,
+        provider_name: m.provider_name,
+        model_type: m.model_type,
+        input_modalities: m.input_modalities,
+        output_modalities: m.output_modalities,
+        capabilities: {
+          ...caps,
+          image_generation: isImg ? true : (caps.image_generation ?? false),
+          text_to_speech: isTts ? true : (caps.text_to_speech ?? false),
+          video_generation: isVid ? true : (caps.video_generation ?? false),
+        },
+        media_settings: m.media_settings ?? {},
+      };
+    });
+    return { data: mediaModels };
+  });
