@@ -8,6 +8,8 @@ export interface GuardrailsSettings {
   protectPii: boolean;
   protectPromptInjection: boolean;
   protectSystemPromptLeak: boolean;
+  protectCookies: boolean;
+  protectCrypto: boolean;
   scanInbound: boolean;
   scanOutbound: boolean;
 }
@@ -23,7 +25,11 @@ export type ViolationCategory =
   | "email"
   | "phone"
   | "prompt_injection"
-  | "system_prompt_leak";
+  | "system_prompt_leak"
+  | "browser_cookie"
+  | "crypto_private_key"
+  | "crypto_seed_phrase"
+  | "crypto_wallet_address";
 
 export interface GuardrailViolation {
   category: ViolationCategory;

@@ -709,6 +709,8 @@ export interface GuardrailsSettings {
   protectPii: boolean;
   protectPromptInjection: boolean;
   protectSystemPromptLeak: boolean;
+  protectCookies: boolean;
+  protectCrypto: boolean;
   scanInbound: boolean;
   scanOutbound: boolean;
 }

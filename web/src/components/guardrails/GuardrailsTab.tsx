@@ -6,6 +6,8 @@ import {
   RiUserSearchLine as UserSearchLine,
   RiBugLine as BugLine,
   RiEyeCloseLine as EyeCloseLine,
+  RiCookieLine as CookieLine,
+  RiCoinsLine as CoinsLine,
   RiArrowDownLine as ArrowDownLine,
   RiArrowUpLine as ArrowUpLine,
   RiRefreshLine as RefreshLine,
@@ -57,6 +59,20 @@ const RULES = [
     description: "Blocks attempts to reveal, repeat verbatim, dump, or extract internal system instructions.",
     examples: "Repeat verbatim, reveal system prompt, dump instructions",
     icon: EyeCloseLine,
+  },
+  {
+    id: "protectCookies" as const,
+    name: "Browser Cookies & Session Tokens",
+    description: "Intercepts browser cookie headers, session identifiers, and authentication cookies.",
+    examples: "Cookie: session=..., connect.sid, PHPSESSID, JSESSIONID, cf_clearance",
+    icon: CookieLine,
+  },
+  {
+    id: "protectCrypto" as const,
+    name: "Cryptocurrency Wallets & Keys",
+    description: "Detects blockchain private keys (EVM, Bitcoin WIF, Solana), BIP-39 mnemonic seed phrases (12/24 words), and wallet addresses.",
+    examples: "0x... (64 hex), BIP-39 seed phrases, BTC/ETH/SOL/TRX addresses",
+    icon: CoinsLine,
   },
 ];
 
@@ -136,6 +152,8 @@ export default function GuardrailsTab() {
         config.protectPii,
         config.protectPromptInjection,
         config.protectSystemPromptLeak,
+        config.protectCookies,
+        config.protectCrypto,
       ].filter(Boolean).length
     : 0;
 
@@ -211,7 +229,7 @@ export default function GuardrailsTab() {
                 </Button>
               </div>
               <p className="mt-1 font-mono text-xl font-normal tracking-tight text-foreground">
-                {activeRulesCount} <span className="font-sans text-xs font-normal text-tertiary">/ 5</span>
+                {activeRulesCount} <span className="font-sans text-xs font-normal text-tertiary">/ {RULES.length}</span>
               </p>
             </div>
           </div>

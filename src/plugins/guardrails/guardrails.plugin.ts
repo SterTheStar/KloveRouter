@@ -22,6 +22,8 @@ export const guardrailsPlugin = (app: Elysia) =>
           protectPii: t.Optional(t.Boolean()),
           protectPromptInjection: t.Optional(t.Boolean()),
           protectSystemPromptLeak: t.Optional(t.Boolean()),
+          protectCookies: t.Optional(t.Boolean()),
+          protectCrypto: t.Optional(t.Boolean()),
           scanInbound: t.Optional(t.Boolean()),
           scanOutbound: t.Optional(t.Boolean()),
         }),

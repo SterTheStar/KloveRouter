@@ -14,6 +14,8 @@ import {
   scanPii,
   scanPromptInjection,
   scanSystemPromptLeak,
+  scanCookies,
+  scanCrypto,
 } from "./rules";
 
 export const DEFAULT_GUARDRAILS_SETTINGS: GuardrailsSettings = {
@@ -24,6 +26,8 @@ export const DEFAULT_GUARDRAILS_SETTINGS: GuardrailsSettings = {
   protectPii: true,
   protectPromptInjection: true,
   protectSystemPromptLeak: true,
+  protectCookies: true,
+  protectCrypto: true,
   scanInbound: true,
   scanOutbound: true,
 };
@@ -99,6 +103,10 @@ class GuardrailsService {
         phone: 0,
         prompt_injection: 0,
         system_prompt_leak: 0,
+        browser_cookie: 0,
+        crypto_private_key: 0,
+        crypto_seed_phrase: 0,
+        crypto_wallet_address: 0,
       },
     };
   }
@@ -163,6 +171,20 @@ class GuardrailsService {
     // 5. System Prompt Exfiltration
     if (settings.protectSystemPromptLeak) {
       const { violations, sanitized: nextText } = scanSystemPromptLeak(sanitized);
+      allViolations.push(...violations);
+      sanitized = nextText;
+    }
+
+    // 6. Browser Cookies & Session Tokens
+    if (settings.protectCookies) {
+      const { violations, sanitized: nextText } = scanCookies(sanitized);
+      allViolations.push(...violations);
+      sanitized = nextText;
+    }
+
+    // 7. Cryptocurrencies (Private Keys, Seed Phrases, Wallet Addresses)
+    if (settings.protectCrypto) {
+      const { violations, sanitized: nextText } = scanCrypto(sanitized);
       allViolations.push(...violations);
       sanitized = nextText;
     }
