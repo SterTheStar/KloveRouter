@@ -1,6 +1,6 @@
 import type { ModelCapabilities, ModelType } from "../types";
 
-export type ModelCategory = "chat" | "image" | "tts" | "stt" | "video" | "embedding";
+export type ModelCategory = "chat" | "image" | "tts" | "stt" | "video" | "embedding" | "systemone";
 
 export type CategorizedModel = {
   model_id?: string;
@@ -20,13 +20,15 @@ const categoryInfo: Record<ModelCategory, { label: string; shortLabel: string }>
   stt: { label: "Speech to text", shortLabel: "STT" },
   video: { label: "Video Generation", shortLabel: "Video" },
   embedding: { label: "Text Embedding", shortLabel: "Embedding" },
+  systemone: { label: "SystemOne Decision", shortLabel: "System1" },
 };
 
-const imagePattern = /(?:image[-_ ]?(?:gen|generation|create|edit|variation)|text[-_ ]?to[-_ ]?image|t2i|dall[-_ ]?e|gpt[-_ ]?image|\bimagen(?:[-_ ]?\d)?\b|\bflux\b|stable[-_ ]?diffusion|sdxl|sd[-_ ]?3|ideogram|recraft|midjourney|bria|aura[-_ ]?flow)/i;
+const imagePattern = /(?:[-_ ]image[-_ ]|\bimage[-_ ]?(?:gen|generation|create|edit|variation|\d)|text[-_ ]?to[-_ ]?image|t2i|dall[-_ ]?e|gpt[-_ ]?image|\bimagen(?:[-_ ]?\d)?\b|\bflux\b|stable[-_ ]?diffusion|sdxl|sd[-_ ]?3|ideogram|recraft|midjourney|bria|aura[-_ ]?flow)/i;
 const ttsPattern = /(?:text[-_ ]?to[-_ ]?speech|\btts\b|speech[-_ ]?(?:generation|synthesis)|voice[-_ ]?(?:gen|generation)|voxtral(?:[-_ ]?.*)?tts|eleven(?:labs)?|cartesia|playht|kokoro|chatterbox)/i;
 const sttPattern = /(?:speech[-_ ]?to[-_ ]?text|\bstt\b|audio[-_ ]?(?:transcription|transcribe)|audio[-_ ]?translation|\bwhisper\b|\bnova[-_ ]?2\b)/i;
-const videoPattern = /(?:video[-_ ]?(?:gen|generation|create)|text[-_ ]?to[-_ ]?video|t2v|image[-_ ]?to[-_ ]?video|i2v|\bsora\b|\bveo\b|runway|kling|seedance|hailuo|wan[-_ ]?video|luma|cogvideo|pika|gen-3|hunyuan[-_ ]?video)/i;
+const videoPattern = /(?:[-_ ]video[-_ ]|\bvideo[-_ ]?(?:gen|generation|create|\d)|text[-_ ]?to[-_ ]?video|t2v|image[-_ ]?to[-_ ]?video|i2v|\bsora\b|\bveo\b|runway|kling|seedance|hailuo|wan[-_ ]?video|luma|cogvideo|pika|gen-3|hunyuan[-_ ]?video)/i;
 const embeddingPattern = /(?:text[-_ ]?embedding|dense[-_ ]?vector|\bembedding\b|\bembeddings\b|\bbge\b|\bvoyage\b|nomic[-_ ]?embed|cohere[-_ ]?embed)/i;
+const systemOnePattern = /\b(?:jev(?:[-_ ]?\d.*)?|systemone|system[-_ ]?1)\b|(?:[-_ ]decision(?:[-_ ]?\d)?)\b/i;
 
 export function modelCategories(model: CategorizedModel): ModelCategory[] {
   // If canonical model_type is explicitly set, use it directly
@@ -37,6 +39,9 @@ export function modelCategories(model: CategorizedModel): ModelCategory[] {
   const identity = `${model.model_id ?? model.id ?? ""} ${model.display_name ?? ""}`.toLowerCase();
   const capabilities = model.capabilities ?? {};
   const isChatModel = capabilities.reasoning === true || capabilities.tools === true || capabilities.streaming === true;
+
+  const systemone = systemOnePattern.test(identity);
+  if (systemone) return ["systemone"];
 
   const image = capabilities.image_generation === true || (capabilities.image_generation !== false && !isChatModel && imagePattern.test(identity));
   const tts = capabilities.text_to_speech === true || (capabilities.text_to_speech !== false && !isChatModel && ttsPattern.test(identity));

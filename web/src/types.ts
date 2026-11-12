@@ -54,7 +54,7 @@ export type CatalogPricing =
   | { billing_unit: "token"; input_per_million: number; output_per_million: number; cache_read_per_million: number; cache_write_per_million: number; rates: CatalogPricingRate[] }
   | { billing_unit: "second" | "character" | "other" | "mixed"; input_per_unit: number | null; output_per_unit: number | null; rates: CatalogPricingRate[] };
 
-export type ModelType = "chat" | "image" | "tts" | "stt" | "video" | "embedding";
+export type ModelType = "chat" | "image" | "tts" | "stt" | "video" | "embedding" | "systemone";
 
 export interface Model {
   id: string;

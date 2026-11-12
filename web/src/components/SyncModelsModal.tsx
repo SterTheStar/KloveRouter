@@ -6,13 +6,13 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/components/ui/input";
 import ConfirmDialog from "./ConfirmDialog";
 import { Switch } from "@/components/ui/switch";
-import type { CatalogPricing } from "../types";
-import type { ModelCapabilities } from "../types";
+import type { CatalogPricing, ModelCapabilities, ModelType } from "../types";
 import { modelCategories, modelCategoryBadge, type ModelCategory } from "../lib/model-modality";
 
 export type SyncModelItem = {
   id: string;
   display_name: string;
+  model_type?: ModelType;
   is_free: boolean;
   is_existing: boolean;
   pricing?: CatalogPricing | null;
@@ -77,7 +77,7 @@ export default function SyncModelsModal({
   const counts = useMemo(
     () =>
       Object.fromEntries(
-        (["all", "chat", "image", "tts", "video"] as const).map((item) => [
+        (["all", "chat", "image", "tts", "video", "embedding"] as const).map((item) => [
           item,
           item === "all"
             ? items.length
@@ -146,6 +146,7 @@ export default function SyncModelsModal({
             ["image", "Image"],
             ["tts", "TTS"],
             ["video", "Video"],
+            ["embedding", "Embedding"],
           ] as const).map(([value, label]) => (
             <button
               key={value}

@@ -6,7 +6,7 @@ import { MODEL_TYPE_INFO, VALID_MODEL_TYPES } from "./model-type.types";
  * Updated with coverage of current and leading industry families (2024-2026).
  */
 export const IMAGE_GENERATION_PATTERNS = [
-  /(?:image[-_ ]?(?:gen|generation|create|edit|variation)|text[-_ ]?to[-_ ]?image|t2i)/i,
+  /(?:[-_ ]image[-_ ]|\bimage[-_ ]?(?:gen|generation|create|edit|variation|\d)|text[-_ ]?to[-_ ]?image|t2i)/i,
   /\b(?:dall[-_ ]?e|gpt[-_ ]?image)\b/i,
   /\b(?:imagen(?:[-_ ]?\d)?|imagen[-_ ]?3)\b/i,
   /\b(?:flux(?:[-_ ]?(?:schnell|dev|pro|ultra|1\.1|2))?)\b/i,
@@ -27,7 +27,7 @@ export const STT_PATTERNS = [
 ];
 
 export const VIDEO_GENERATION_PATTERNS = [
-  /(?:video[-_ ]?(?:gen|generation|create)|text[-_ ]?to[-_ ]?video|t2v|image[-_ ]?to[-_ ]?video|i2v)/i,
+  /(?:[-_ ]video[-_ ]|\bvideo[-_ ]?(?:gen|generation|create|\d)|text[-_ ]?to[-_ ]?video|t2v|image[-_ ]?to[-_ ]?video|i2v)/i,
   /\b(?:sora(?:[-_ ]?turbo)?|veo(?:[-_ ]?2)?)\b/i,
   /\b(?:runway(?:[-_ ]?(?:gen[-_ ]?2|gen[-_ ]?3))?|kling(?:[-_ ]?v?\d)?|seedance)\b/i,
   /\b(?:hailuo|wan[-_ ]?video|luma(?:[-_ ]?dream[-_ ]?machine)?|cogvideo(?:[-_ ]?x)?|pika|hunyuan[-_ ]?video)\b/i,
@@ -38,6 +38,11 @@ export const EMBEDDING_PATTERNS = [
   /\b(?:text[-_ ]?embedding[-_ ]?(?:3[-_ ]?(?:small|large)|ada[-_ ]?002))\b/i,
   /\b(?:bge[-_ ]?(?:large|base|small|m3)|voyage(?:[-_ ]?(?:code|finance|law|\d))?)\b/i,
   /\b(?:nomic[-_ ]?embed|cohere[-_ ]?embed|all[-_ ]?minilm|e5[-_ ]?(?:large|base|small))\b/i,
+];
+
+export const SYSTEMONE_PATTERNS = [
+  /\b(?:jev(?:[-_ ]?\d.*)?|systemone|system[-_ ]?1)\b/i,
+  /(?:[-_ ]decision(?:[-_ ]?\d)?)\b/i,
 ];
 
 export interface ClassificationInput {
@@ -131,6 +136,7 @@ export function classifyModel(input: ClassificationInput): ClassificationResult 
   // 4. Pattern matching on model ID and display name
   if (!resolvedType) {
     if (matchesAny(identity, EMBEDDING_PATTERNS)) resolvedType = "embedding";
+    else if (matchesAny(identity, SYSTEMONE_PATTERNS)) resolvedType = "systemone";
     else if (matchesAny(identity, IMAGE_GENERATION_PATTERNS)) resolvedType = "image";
     else if (matchesAny(identity, TTS_PATTERNS)) resolvedType = "tts";
     else if (matchesAny(identity, STT_PATTERNS)) resolvedType = "stt";
@@ -253,6 +259,14 @@ export function isEmbeddingModel(model: { model_type?: string | null; capabiliti
     modelId: model.model_id ?? "",
     capabilities: model.capabilities,
   }).modelType === "embedding";
+}
+
+export function isSystemOneModel(model: { model_type?: string | null; capabilities?: any; model_id?: string }): boolean {
+  if (model.model_type) return model.model_type === "systemone";
+  return classifyModel({
+    modelId: model.model_id ?? "",
+    capabilities: model.capabilities,
+  }).modelType === "systemone";
 }
 
 export function isMediaModel(model: { model_type?: string | null; capabilities?: any; model_id?: string; media_settings?: any }): boolean {

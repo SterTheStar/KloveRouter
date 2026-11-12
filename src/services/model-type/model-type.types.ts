@@ -4,7 +4,8 @@ export type ModelType =
   | "tts"
   | "stt"
   | "video"
-  | "embedding";
+  | "embedding"
+  | "systemone";
 
 export type Modality =
   | "text"
@@ -31,6 +32,7 @@ export const VALID_MODEL_TYPES: ModelType[] = [
   "stt",
   "video",
   "embedding",
+  "systemone",
 ];
 
 export const VALID_MODALITIES: Modality[] = [
@@ -96,5 +98,14 @@ export const MODEL_TYPE_INFO: Record<ModelType, ModelTypeDefinition> = {
     defaultInputModalities: ["text"],
     defaultOutputModalities: ["embedding"],
     targetEndpoint: "/v1/embeddings",
+  },
+  systemone: {
+    type: "systemone",
+    label: "SystemOne Decision",
+    shortLabel: "System1",
+    description: "Fast, structured decision evaluations and probabilities (Jev / Decision models)",
+    defaultInputModalities: ["text"],
+    defaultOutputModalities: ["text"],
+    targetEndpoint: "/v1/systemone",
   },
 };

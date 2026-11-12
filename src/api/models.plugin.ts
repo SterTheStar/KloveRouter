@@ -320,6 +320,9 @@ export const modelsPlugin = (app: Elysia) =>
             return {
               id: model.id,
               display_name: model.display_name || generateDisplayName(model.id),
+              model_type: (enriched as any).model_type || rawMeta.model_type || "chat",
+              input_modalities: (enriched as any).input_modalities || rawMeta.input_modalities,
+              output_modalities: (enriched as any).output_modalities || rawMeta.output_modalities,
               context_window: (enriched as any).context_window,
               capabilities: (enriched as any).capabilities,
               is_free: isFree,
