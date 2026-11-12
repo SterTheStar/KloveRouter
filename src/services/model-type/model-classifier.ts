@@ -50,6 +50,9 @@ export interface ClassificationInput {
   displayName?: string | null;
   declaredType?: string | null;
   mode?: string | null;
+  apiFamilies?: string[];
+  supportedGenerationMethods?: string[];
+  architectureModality?: string | null;
   inputModalities?: string[];
   outputModalities?: string[];
   capabilities?: Record<string, boolean | null | undefined>;
@@ -104,7 +107,7 @@ export function classifyModel(input: ClassificationInput): ClassificationResult 
   const caps = input.capabilities ?? {};
   const mediaSettings = input.mediaSettings ?? {};
 
-  // 1. Explicit declared type if valid
+  // 1. Explicit declared type if valid (e.g. OpenCode type, Together type, Saturn model_type)
   const declared = (input.declaredType?.toLowerCase()?.trim()) as ModelType | undefined;
   let resolvedType: ModelType | null = null;
 
@@ -112,17 +115,46 @@ export function classifyModel(input: ClassificationInput): ClassificationResult 
     resolvedType = declared;
   }
 
-  // 2. LiteLLM / Provider upstream "mode" hint
+  // 2. OpenRouter architecture.modality (e.g. "text->image", "text->embedding", "text->audio")
+  if (!resolvedType && input.architectureModality) {
+    const arch = input.architectureModality.toLowerCase().trim();
+    if (arch.endsWith("->image") || arch.includes("+image->image")) resolvedType = "image";
+    else if (arch.endsWith("->audio")) resolvedType = "tts";
+    else if (arch.endsWith("->video")) resolvedType = "video";
+    else if (arch.endsWith("->embedding") || arch.includes("embedding")) resolvedType = "embedding";
+  }
+
+  // 3. Provider official "api" dictionary (e.g. OpenCode {"systemone": {...}}, {"chat-completions": {...}})
+  if (!resolvedType && input.apiFamilies?.length) {
+    const apis = input.apiFamilies.map((s) => s.toLowerCase());
+    if (apis.some((a) => a.includes("systemone"))) resolvedType = "systemone";
+    else if (apis.some((a) => a.includes("images") || a.includes("image-generations") || a.includes("t2i"))) resolvedType = "image";
+    else if (apis.some((a) => a.includes("embeddings") || a.includes("embedding"))) resolvedType = "embedding";
+    else if (apis.some((a) => a.includes("speech") || a.includes("tts"))) resolvedType = "tts";
+    else if (apis.some((a) => a.includes("video"))) resolvedType = "video";
+    else if (apis.some((a) => a.includes("chat") || a.includes("messages") || a.includes("responses"))) resolvedType = "chat";
+  }
+
+  // 4. Google Gemini supportedGenerationMethods (e.g. ["embedContent"], ["generateImages"])
+  if (!resolvedType && input.supportedGenerationMethods?.length) {
+    const methods = input.supportedGenerationMethods;
+    if (methods.includes("embedContent")) resolvedType = "embedding";
+    else if (methods.includes("generateImages")) resolvedType = "image";
+    else if (methods.includes("generateContent")) resolvedType = "chat";
+  }
+
+  // 5. LiteLLM / Provider upstream "mode" hint
   if (!resolvedType) {
     if (mode === "image_generation") resolvedType = "image";
     else if (mode === "audio_speech" || mode === "tts") resolvedType = "tts";
     else if (mode === "audio_transcription" || mode === "stt") resolvedType = "stt";
     else if (mode === "video_generation") resolvedType = "video";
     else if (mode === "embedding" || mode === "embeddings") resolvedType = "embedding";
+    else if (mode === "systemone") resolvedType = "systemone";
     else if (mode === "chat" || mode === "completion") resolvedType = "chat";
   }
 
-  // 3. Media settings hints (if media settings exist with non-empty configuration)
+  // 6. Media settings hints (if media settings exist with non-empty configuration)
   if (!resolvedType) {
     if (caps.image_generation === true || (Boolean(mediaSettings.image) && Object.keys(mediaSettings.image as object).length > 0)) {
       resolvedType = "image";
@@ -133,7 +165,7 @@ export function classifyModel(input: ClassificationInput): ClassificationResult 
     }
   }
 
-  // 4. Pattern matching on model ID and display name
+  // 7. Pattern matching on model ID and display name (fallback quando o provedor não declara metadados)
   if (!resolvedType) {
     if (matchesAny(identity, EMBEDDING_PATTERNS)) resolvedType = "embedding";
     else if (matchesAny(identity, SYSTEMONE_PATTERNS)) resolvedType = "systemone";
@@ -143,7 +175,7 @@ export function classifyModel(input: ClassificationInput): ClassificationResult 
     else if (matchesAny(identity, VIDEO_GENERATION_PATTERNS)) resolvedType = "video";
   }
 
-  // 5. Default to chat (conversational LLM)
+  // 8. Default to chat (conversational LLM)
   if (!resolvedType) {
     resolvedType = "chat";
   }

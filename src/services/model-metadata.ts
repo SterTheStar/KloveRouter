@@ -78,11 +78,21 @@ export function parseRawModelMetadata(raw: any): ModelMetadataInput {
   const explicit = raw?.capabilities && typeof raw.capabilities === "object"
     ? raw.capabilities
     : {};
+  const apiFamilies = raw?.api && typeof raw.api === "object" ? Object.keys(raw.api) : undefined;
+  const supportedGenerationMethods = Array.isArray(raw?.supportedGenerationMethods)
+    ? raw.supportedGenerationMethods.map(String)
+    : undefined;
+  const architectureModality = typeof architecture?.modality === "string" ? architecture.modality : undefined;
+  const declaredType = raw?.model_type ?? raw?.type ?? nested?.type;
+
   const classification = classifyModel({
     modelId: raw?.id ?? raw?.model_id ?? nested?.id ?? "",
     displayName: raw?.display_name ?? raw?.name ?? nested?.name ?? "",
-    declaredType: raw?.model_type ?? raw?.type,
-    mode: raw?.mode,
+    declaredType,
+    mode: raw?.mode ?? nested?.mode,
+    apiFamilies,
+    supportedGenerationMethods,
+    architectureModality,
     inputModalities,
     outputModalities,
     capabilities: explicit,
