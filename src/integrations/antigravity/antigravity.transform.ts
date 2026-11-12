@@ -93,7 +93,7 @@ function modelReasoningEffort(model: string) {
     normalized.includes("gemini-pro-agent")
   )
     return "high";
-  return normalized.match(/-(low|medium|high)$/)?.[1];
+  return normalized.match(/-(low|medium|high|xhigh)$/)?.[1];
 }
 
 // Gemini Pro variants have a minimum thinking budget and reject thinkingBudget 0.
@@ -557,10 +557,13 @@ export async function toGoogleBody(
           } as Record<string, number>
         )[normalizedEffort] ?? 8192;
     } else if (effort) {
-      thinkingConfig.thinkingLevel =
-        normalizedEffort === "xhigh" || normalizedEffort === "max"
-          ? "high"
-          : normalizedEffort;
+      if (normalizedEffort === "xhigh") {
+        thinkingConfig.thinkingLevel = /gemini-4/i.test(body.model) ? "xhigh" : "high";
+      } else if (normalizedEffort === "max") {
+        thinkingConfig.thinkingLevel = /gemini-4-hydrogen/i.test(body.model) ? "xhigh" : "high";
+      } else {
+        thinkingConfig.thinkingLevel = normalizedEffort;
+      }
     }
     generationConfig.thinkingConfig = thinkingConfig;
   }

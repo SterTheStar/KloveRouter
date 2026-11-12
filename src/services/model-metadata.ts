@@ -24,7 +24,7 @@ function boolean(value: unknown): boolean | undefined {
 function effortRows(values: string[], defaultEffort?: string): ReasoningEffort[] {
   return values.map((effort, sort_order) => ({
     effort,
-    display_name: effort[0].toUpperCase() + effort.slice(1),
+    display_name: effort.toLowerCase() === "xhigh" ? "XHigh" : effort[0].toUpperCase() + effort.slice(1),
     upstream_value: effort,
     sort_order,
     is_default: defaultEffort !== undefined && effort === defaultEffort,

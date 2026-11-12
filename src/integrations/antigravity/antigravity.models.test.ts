@@ -45,6 +45,13 @@ describe("Antigravity Models Consolidation & Reasoning Variations", () => {
       upstreamModel: "gpt-oss-120b-medium",
     });
 
+    expect(parseAntigravityModelEffort("gemini-4-hydrogen-xhigh")).toEqual({
+      baseId: "gemini-4-hydrogen",
+      effort: "xhigh",
+      rawSuffix: "xhigh",
+      upstreamModel: "gemini-4-hydrogen-xhigh",
+    });
+
     expect(parseAntigravityModelEffort("gemini-3-flash")).toBeNull();
     expect(parseAntigravityModelEffort("gemini-2.5-pro")).toBeNull();
     expect(parseAntigravityModelEffort("gemini-3.1-flash-lite")).toBeNull();
@@ -65,6 +72,9 @@ describe("Antigravity Models Consolidation & Reasoning Variations", () => {
     );
     expect(cleanAntigravityDisplayName("GPT-OSS 120B (Medium)")).toBe(
       "GPT-OSS 120B",
+    );
+    expect(cleanAntigravityDisplayName("Gemini 4 Hydrogen (XHigh)")).toBe(
+      "Gemini 4 Hydrogen",
     );
     expect(cleanAntigravityDisplayName("Gemini 3 Flash")).toBe("Gemini 3 Flash");
 
@@ -279,6 +289,29 @@ describe("Antigravity Models Consolidation & Reasoning Variations", () => {
       "gemini-3.8-flash-low",
     );
 
+    // Gemini 4 Hydrogen
+    expect(resolveAntigravityUpstreamModel("gemini-4-hydrogen", "low")).toBe(
+      "gemini-4-hydrogen-low",
+    );
+    expect(resolveAntigravityUpstreamModel("gemini-4-hydrogen", "medium")).toBe(
+      "gemini-4-hydrogen-medium",
+    );
+    expect(resolveAntigravityUpstreamModel("gemini-4-hydrogen", "high")).toBe(
+      "gemini-4-hydrogen-high",
+    );
+    expect(resolveAntigravityUpstreamModel("gemini-4-hydrogen", "xhigh")).toBe(
+      "gemini-4-hydrogen-xhigh",
+    );
+    expect(resolveAntigravityUpstreamModel("gemini-4-hydrogen", "max")).toBe(
+      "gemini-4-hydrogen-xhigh",
+    );
+    expect(resolveAntigravityUpstreamModel("gemini-4-hydrogen")).toBe(
+      "gemini-4-hydrogen-high",
+    );
+    expect(resolveAntigravityUpstreamModel("gemini-4-hydrogen-xhigh")).toBe(
+      "gemini-4-hydrogen-xhigh",
+    );
+
     // Standalone models
     expect(resolveAntigravityUpstreamModel("gemini-3-flash")).toBe(
       "gemini-3-flash",
@@ -320,5 +353,60 @@ describe("Antigravity Models Consolidation & Reasoning Variations", () => {
     expect(
       resolved.reasoning_efforts?.find((e) => e.effort === "medium")?.is_default,
     ).toBe(true);
+  });
+
+  it("groupAntigravityModels consolidates Gemini 4 Hydrogen variants with all efforts and high as default", async () => {
+    // Case 1: Separate effort variants
+    const rawVariants = [
+      { id: "gemini-4-hydrogen-high", display_name: "Gemini 4 Hydrogen (High)" },
+      { id: "gemini-4-hydrogen-low", display_name: "Gemini 4 Hydrogen (Low)" },
+      { id: "gemini-4-hydrogen-medium", display_name: "Gemini 4 Hydrogen (Medium)" },
+      { id: "gemini-4-hydrogen-xhigh", display_name: "Gemini 4 Hydrogen (XHigh)" },
+    ];
+
+    const grouped1 = groupAntigravityModels(rawVariants);
+    expect(grouped1).toHaveLength(1);
+    const hydrogen1 = grouped1[0];
+    expect(hydrogen1.id).toBe("gemini-4-hydrogen");
+    expect(hydrogen1.display_name).toBe("Gemini 4 Hydrogen");
+    expect(hydrogen1.capabilities?.reasoning).toBe(true);
+    expect(hydrogen1.default_reasoning_effort).toBe("high");
+    expect(hydrogen1.reasoning_efforts).toHaveLength(4);
+    expect(hydrogen1.reasoning_efforts?.map((e) => e.effort)).toEqual([
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+    ]);
+    expect(hydrogen1.reasoning_efforts?.find((e) => e.effort === "high")?.is_default).toBe(true);
+    expect(hydrogen1.reasoning_efforts?.find((e) => e.effort === "xhigh")?.display_name).toBe("XHigh");
+
+    // Case 2: Base model and XHigh variant appearing together
+    const rawMixed = [
+      { id: "gemini-4-hydrogen", display_name: "Gemini 4 Hydrogen" },
+      { id: "gemini-4-hydrogen-xhigh", display_name: "Gemini 4 Hydrogen (XHigh)" },
+    ];
+
+    const grouped2 = groupAntigravityModels(rawMixed);
+    expect(grouped2).toHaveLength(1);
+    const hydrogen2 = grouped2[0];
+    expect(hydrogen2.id).toBe("gemini-4-hydrogen");
+    expect(hydrogen2.display_name).toBe("Gemini 4 Hydrogen");
+    expect(hydrogen2.capabilities?.reasoning).toBe(true);
+    expect(hydrogen2.reasoning_efforts).toHaveLength(4);
+    expect(hydrogen2.reasoning_efforts?.map((e) => e.effort)).toEqual([
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+    ]);
+    expect(hydrogen2.reasoning_efforts?.find((e) => e.effort === "high")?.is_default).toBe(true);
+
+    // Metadata resolution
+    const resolved = await resolveModelMetadata("antigravity", hydrogen2.id, hydrogen2);
+    expect(resolved.capabilities?.reasoning).toBe(true);
+    expect(resolved.reasoning_efforts).toHaveLength(4);
+    expect(resolved.reasoning_efforts?.find((e) => e.effort === "high")?.is_default).toBe(true);
+    expect(resolved.reasoning_efforts?.find((e) => e.effort === "xhigh")?.display_name).toBe("XHigh");
   });
 });
