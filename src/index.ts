@@ -15,6 +15,7 @@ import {
   proxyPlugin,
   mediaProxyPlugin,
   embeddingsProxyPlugin,
+  systemOneProxyPlugin,
   statsPlugin,
   codexPlugin,
   codexPublicPlugin,
@@ -93,6 +94,7 @@ const app = new Elysia()
   .use(proxyPlugin);
 app.use(mediaProxyPlugin);
 app.use(embeddingsProxyPlugin);
+app.use(systemOneProxyPlugin);
 
 // RTK public routes
 app.use(rtkPublicPlugin);

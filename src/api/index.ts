@@ -7,6 +7,7 @@ import { settingsPlugin } from "./settings.plugin";
 import { proxyPlugin } from "./proxy.plugin";
 import { mediaProxyPlugin } from "./media-proxy.plugin";
 import { embeddingsProxyPlugin } from "./embeddings-proxy.plugin";
+import { systemOneProxyPlugin } from "./systemone-proxy.plugin";
 import { statsPlugin } from "./stats.plugin";
 import { chatPlugin, chatControlPlugin } from "./chat.plugin";
 import { chatsPlugin } from "./chats.plugin";
@@ -35,6 +36,7 @@ export {
   proxyPlugin,
   mediaProxyPlugin,
   embeddingsProxyPlugin,
+  systemOneProxyPlugin,
   statsPlugin,
   codexPlugin,
   codexPublicPlugin,

@@ -793,8 +793,12 @@ export const proxyPlugin = (app: Elysia) =>
               set.status = 404;
               return { error: { message: `No active model "${parsedModel.modelId}" is configured for provider "${provider.name}"`, type: "invalid_request_error", code: "model_not_found" } };
             }
-            if (modelRecord.model_type !== "chat" && (isMediaModel(modelRecord) || modelRecord.model_type === "embedding")) {
-              const target = modelRecord.model_type === "image" ? "/v1/images/generations" : modelRecord.model_type === "tts" ? "/v1/audio/speech" : modelRecord.model_type === "video" ? "/v1/videos" : "/v1/embeddings";
+            if (modelRecord.model_type !== "chat" && (isMediaModel(modelRecord) || modelRecord.model_type === "embedding" || modelRecord.model_type === "systemone")) {
+              const target = modelRecord.model_type === "image" ? "/v1/images/generations"
+                : modelRecord.model_type === "tts" ? "/v1/audio/speech"
+                : modelRecord.model_type === "video" ? "/v1/videos"
+                : modelRecord.model_type === "systemone" ? "/v1/systemone"
+                : "/v1/embeddings";
               const message = `Model "${parsedModel.modelId}" is a ${modelRecord.model_type} model and cannot be used with responses API. Use ${target} instead.`;
               logProxyRejection({ request, headers, server }, { statusCode: 400, error: message, providerId: provider.id, providerName: provider.name, modelName: parsedModel.modelId, payload: body, streaming: streamHint, apiKeyPrefix: apiKey.prefix, requesterName: apiKey.name });
               set.status = 400;
@@ -1113,8 +1117,12 @@ export const proxyPlugin = (app: Elysia) =>
             message: `No active model "${parsed.modelId}" is configured for provider "${provider.name}"`,
           };
         }
-        if (modelRecord.model_type !== "chat" && (isMediaModel(modelRecord) || modelRecord.model_type === "embedding")) {
-          const target = modelRecord.model_type === "image" ? "/v1/images/generations" : modelRecord.model_type === "tts" ? "/v1/audio/speech" : modelRecord.model_type === "video" ? "/v1/videos" : "/v1/embeddings";
+        if (modelRecord.model_type !== "chat" && (isMediaModel(modelRecord) || modelRecord.model_type === "embedding" || modelRecord.model_type === "systemone")) {
+          const target = modelRecord.model_type === "image" ? "/v1/images/generations"
+            : modelRecord.model_type === "tts" ? "/v1/audio/speech"
+            : modelRecord.model_type === "video" ? "/v1/videos"
+            : modelRecord.model_type === "systemone" ? "/v1/systemone"
+            : "/v1/embeddings";
           const message = `Model "${parsed.modelId}" is a ${modelRecord.model_type} model and cannot be used with chat completions. Use ${target} instead.`;
           logProxyRejection({ request, headers, server }, { statusCode: 400, error: message, providerId: provider.id, providerName: provider.name, modelName: parsed.modelId, payload: body, streaming: streamHint, apiKeyPrefix: apiKey.prefix, requesterName: apiKey.name });
           set.status = 400;

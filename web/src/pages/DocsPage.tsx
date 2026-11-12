@@ -15,7 +15,7 @@ import SaturnMark from "@/components/SaturnMark";
 import { copyToClipboard } from "@/lib/clipboard";
 import { navigateToRoute, routeFromPath, shouldHandleLinkClick } from "@/lib/navigation";
 
-type DocId = "overview" | "quickstart" | "auth" | "models" | "compound-models" | "chat" | "responses" | "messages" | "media" | "streaming" | "claude-code" | "codex" | "opencode";
+type DocId = "overview" | "quickstart" | "auth" | "models" | "compound-models" | "chat" | "responses" | "messages" | "media" | "systemone" | "streaming" | "claude-code" | "codex" | "opencode";
 type DocGroup = "Guide" | "API reference" | "Integrations";
 type DocItem = { id: DocId; title: string; group: DocGroup; description: string; keywords: string };
 
@@ -29,6 +29,7 @@ const docs: DocItem[] = [
   { id: "responses", title: "Responses", group: "API reference", description: "OpenAI Responses format", keywords: "POST input output response" },
   { id: "messages", title: "Anthropic Messages", group: "API reference", description: "Anthropic-compatible messages", keywords: "POST anthropic claude system content" },
   { id: "media", title: "Media & Generation", group: "API reference", description: "Images, Audio & Video endpoints", keywords: "POST images generations edits audio speech videos sora dall-e tts" },
+  { id: "systemone", title: "SystemOne Decisions", group: "API reference", description: "Jev & structured decision evaluations", keywords: "POST systemone jev decision evaluation noul choice score" },
   { id: "streaming", title: "Streaming and errors", group: "API reference", description: "SSE, passthrough, and error handling", keywords: "streaming sse chunks buffer event errors status" },
   { id: "claude-code", title: "Claude Code", group: "Integrations", description: "Connect Claude Code to Saturn", keywords: "anthropic base url token env" },
   { id: "codex", title: "Codex CLI", group: "Integrations", description: "Configure a custom Codex provider", keywords: "openai config toml responses wire_api" },
@@ -360,6 +361,19 @@ function DocContent({ id, onSelectDoc }: { id: DocId; onSelectDoc: (id: DocId) =
   -H "Content-Type: application/json" \\
   -d '{"model":"openai/tts-1","input":"Welcome to Saturn Router","voice":"alloy"}' \\
   --output speech.mp3`} /></>;
+    case "systemone": return <><SectionTitle eyebrow="API reference · SystemOne" title="SystemOne Decision Evaluations" description="Execute fast, structured decisions with probability outputs (TypeSafe AI Jev, Gemini Decision, GPT 6 Luna Decision)." /><div className="space-y-3"><Endpoint method="POST" path="/v1/systemone" description="Structured decision evaluation" /><Endpoint method="POST" path="/v1/systemone/evaluations" description="Alias for systemone evaluations" /></div><h2 className="mb-3 mt-6 text-lg font-normal tracking-tight text-foreground">cURL Example</h2><CodeBlock language="bash" code={`curl http://localhost:3000/v1/systemone \\
+  -H "Authorization: Bearer $SATURN_API_KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "model": "typesafe/jev-1.13",
+    "state": "Customer has pending invoices and service disruption.",
+    "questions": {
+      "is_urgent": {
+        "type": "noul",
+        "instructions": "Does this require urgent action?"
+      }
+    }
+  }'`} /></>;
     case "streaming": return <><SectionTitle eyebrow="API reference" title="Streaming and errors" description="Chat, Responses, and Anthropic Messages can stream text as Server-Sent Events. Responses are delivered as server-sent events; consume them incrementally." /><h2 className="mb-3 text-lg font-normal tracking-tight text-foreground">OpenAI Chat stream</h2><CodeBlock language="text/event-stream" code={`data: {"choices":[{"delta":{"content":"Hello"},"index":0}]}
 
 data: {"choices":[{"delta":{"content":" there"},"index":0}]}

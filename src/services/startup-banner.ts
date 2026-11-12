@@ -52,6 +52,7 @@ export const ANSI = {
   bgAudio: "\x1b[48;2;168;85;247m",       // Violet-500
   bgVideos: "\x1b[48;2;239;68;68m",       // Red-500
   bgEmbed: "\x1b[48;2;20;184;166m",        // Teal-500
+  bgSystemOne: "\x1b[48;2;14;165;233m",    // Sky-500
   bgOAuth: "\x1b[48;2;245;158;11m",       // Amber-500
 };
 
@@ -176,6 +177,13 @@ export function getRegisteredEndpoints(options: { port: number; host?: string; o
           badgeBg: ANSI.bgEmbed,
           path: "/v1/embeddings",
           description: "Vector Embeddings",
+        },
+        {
+          method: "POST",
+          badge: "SYSTEM1",
+          badgeBg: ANSI.bgSystemOne,
+          path: "/v1/systemone",
+          description: "SystemOne Structured Decisions",
         },
       ],
     },
