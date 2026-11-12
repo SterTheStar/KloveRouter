@@ -18,7 +18,6 @@ import ModelsPage from "./pages/ModelsPage";
 import ModelPoolsPage from "./pages/ModelPoolsPage";
 import SkillsPage from "./pages/SkillsPage";
 import ChatPage from "./pages/ChatPage";
-import MediaHubPage from "./pages/MediaHubPage";
 import StatsPage from "./pages/StatsPage";
 import UsageLimitsPage from "./pages/UsageLimitsPage";
 import RequestLogsPage from "./pages/RequestLogsPage";
@@ -395,7 +394,6 @@ export default function App() {
                 onBack={() => handleNavigate("dashboard")}
               />
             )}
-            {currentPage === "media" && <MediaHubPage />}
             {currentPage === "models" && <ModelsPage />}
             {currentPage === "model-pools" && <ModelPoolsPage />}
             {currentPage === "skills" && <SkillsPage />}

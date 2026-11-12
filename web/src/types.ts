@@ -440,7 +440,6 @@ export interface AntigravityUsage {
 export type Page =
   | "dashboard"
   | "chat"
-  | "media"
   | "models"
   | "model-pools"
   | "skills"

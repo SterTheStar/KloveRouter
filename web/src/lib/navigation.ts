@@ -9,7 +9,6 @@ export type AppRoute = {
 const pagePaths: Partial<Record<Page, string>> = {
   dashboard: "/providers",
   chat: "/chat",
-  media: "/media",
   models: "/models",
   "model-pools": "/compound-models",
   skills: "/skills",
