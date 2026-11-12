@@ -2,9 +2,12 @@ import type {
   ModelCapabilities,
   ModelMetadataInput,
   ReasoningEffort,
+  ModelType,
+  Modality,
 } from "./model.service";
 import type { ProviderProtocol } from "./provider-appearance";
 import type { CatalogModelInfo } from "./litellm-pricing";
+import { classifyModel } from "./model-type";
 
 function positiveInteger(value: unknown): number | null | undefined {
   if (value === null) return null;
@@ -72,15 +75,19 @@ export function parseRawModelMetadata(raw: any): ModelMetadataInput {
     ...(Array.isArray(raw?.modalities?.output) ? raw.modalities.output : []),
     ...(Array.isArray(architecture?.output_modalities) ? architecture.output_modalities : []),
   ].map((value) => String(value).toLowerCase());
-  const identity = [raw?.id, raw?.model_id, raw?.name, raw?.display_name, nested?.id, nested?.name]
-    .filter((value): value is string => typeof value === "string")
-    .join(" ");
-  const identitySuggestsImageGeneration = /(?:\bimage(?:[-_ ]?(?:gen|generation|create))?\b|dall[-_ ]?e|gpt[-_ ]?image|\bimagen\b|\bflux\b|stable[-_ ]?diffusion|ideogram|recraft)/i.test(identity);
-  const identitySuggestsTextToSpeech = /(?:text[-_ ]?to[-_ ]?speech|\btts\b|speech[-_ ]?(?:generation|synthesis)|voice[-_ ]?(?:gen|generation)|voxtral(?:[-_ ]?.*)?tts)/i.test(identity);
-  const identitySuggestsVideoGeneration = /(?:\bvideo(?:[-_ ]?(?:gen|generation|create))?\b|\bsora\b|\bveo\b|runway|kling|seedance|hailuo|wan[-_ ]?video)/i.test(identity);
   const explicit = raw?.capabilities && typeof raw.capabilities === "object"
     ? raw.capabilities
     : {};
+  const classification = classifyModel({
+    modelId: raw?.id ?? raw?.model_id ?? nested?.id ?? "",
+    displayName: raw?.display_name ?? raw?.name ?? nested?.name ?? "",
+    declaredType: raw?.model_type ?? raw?.type,
+    mode: raw?.mode,
+    inputModalities,
+    outputModalities,
+    capabilities: explicit,
+    mediaSettings: raw?.media_settings,
+  });
   const supportedMimeTypes = Array.isArray(raw?.supportedMimeTypes)
     ? raw.supportedMimeTypes.map(String).map((value: string) => value.toLowerCase())
     : [];
@@ -91,6 +98,9 @@ export function parseRawModelMetadata(raw: any): ModelMetadataInput {
     boolean(explicit[key]) ?? inferred;
   const reasoningEfforts = parseEfforts(raw);
   return {
+    model_type: classification.modelType,
+    input_modalities: classification.inputModalities,
+    output_modalities: classification.outputModalities,
     context_window: positiveInteger(
       raw?.maxTokens ?? raw?.max_context_window ?? raw?.context_window ?? raw?.context_length ?? raw?.max_context_length ??
         raw?.input_token_limit ?? raw?.limit?.context ?? nested?.context_window ??
@@ -112,13 +122,13 @@ export function parseRawModelMetadata(raw: any): ModelMetadataInput {
         ((raw?.supports_parallel_tool_calls === true || typeof raw?.tool_mode === "string" ||
           (Array.isArray(raw?.experimental_supported_tools) && raw.experimental_supported_tools.length > 0)) ||
           supported(["tools", "tool_choice", "function_call"]))),
-      vision: capability("vision", boolean(raw?.supportsImages) ?? (inputModalities.length ? inputModalities.some((item) => item.includes("image")) : undefined)),
-      audio_input: capability("audio_input", boolean(raw?.supportsAudioInput) ?? (inputModalities.length ? inputModalities.some((item) => item.includes("audio") || item.includes("speech")) : undefined)),
-      audio_output: capability("audio_output", boolean(raw?.supportsAudioOutput) ?? (outputModalities.length ? outputModalities.some((item) => item.includes("audio") || item.includes("speech")) : undefined)),
-      video: capability("video", boolean(raw?.supportsVideo) ?? (inputModalities.length ? inputModalities.some((item) => item.includes("video")) : undefined)),
-      image_generation: capability("image_generation", boolean(raw?.supportsImageGeneration) ?? (outputModalities.length ? outputModalities.some((item) => item.includes("image")) : identitySuggestsImageGeneration ? true : undefined)),
-      text_to_speech: capability("text_to_speech", boolean(raw?.supportsTextToSpeech) ?? (outputModalities.length ? outputModalities.some((item) => item.includes("audio") || item.includes("speech")) : undefined) ?? (identitySuggestsTextToSpeech ? true : undefined)),
-      video_generation: capability("video_generation", boolean(raw?.supportsVideoGeneration) ?? (outputModalities.length ? outputModalities.some((item) => item.includes("video")) : identitySuggestsVideoGeneration ? true : undefined)),
+      vision: capability("vision", boolean(raw?.supportsImages) ?? classification.inferredCapabilities.vision ?? (inputModalities.length ? inputModalities.some((item) => item.includes("image")) : undefined)),
+      audio_input: capability("audio_input", boolean(raw?.supportsAudioInput) ?? classification.inferredCapabilities.audio_input ?? (inputModalities.length ? inputModalities.some((item) => item.includes("audio") || item.includes("speech")) : undefined)),
+      audio_output: capability("audio_output", boolean(raw?.supportsAudioOutput) ?? classification.inferredCapabilities.audio_output ?? (outputModalities.length ? outputModalities.some((item) => item.includes("audio") || item.includes("speech")) : undefined)),
+      video: capability("video", boolean(raw?.supportsVideo) ?? classification.inferredCapabilities.video ?? (inputModalities.length ? inputModalities.some((item) => item.includes("video")) : undefined)),
+      image_generation: capability("image_generation", boolean(raw?.supportsImageGeneration) ?? classification.inferredCapabilities.image_generation),
+      text_to_speech: capability("text_to_speech", boolean(raw?.supportsTextToSpeech) ?? classification.inferredCapabilities.text_to_speech),
+      video_generation: capability("video_generation", boolean(raw?.supportsVideoGeneration) ?? classification.inferredCapabilities.video_generation),
       attachments: capability("attachments", boolean(raw?.supportsAttachments) ?? boolean(raw?.attachment) ?? (supportedMimeTypes.length ? supportedMimeTypes.some((item: string) => !item.startsWith("image/") && !item.startsWith("audio/") && !item.startsWith("video/") && item !== "text/plain") : (inputModalities.length ? inputModalities.some((item) => item.includes("file")) : undefined))),
       streaming: capability("streaming", boolean(raw?.supportsStreaming) ?? boolean(raw?.streaming) ?? boolean(raw?.supports_streaming)),
       non_streaming: capability("non_streaming", boolean(raw?.supportsNonStreaming) ?? boolean(raw?.non_streaming) ?? boolean(raw?.supports_non_streaming)),
@@ -145,8 +155,10 @@ function numericMetadata(source: ModelMetadataInput): ModelMetadataInput {
 }
 
 export function mergeMetadata(...sources: ModelMetadataInput[]): ModelMetadataInput {
-  const scalar = (key: "context_window" | "max_output_tokens") =>
+  const scalar = (key: "context_window" | "max_output_tokens" | "model_type") =>
     sources.find((source) => source[key] != null)?.[key];
+  const input_modalities = sources.find((source) => source.input_modalities?.length)?.input_modalities;
+  const output_modalities = sources.find((source) => source.output_modalities?.length)?.output_modalities;
   const capabilities = Object.fromEntries(
     ["reasoning", "tools", "vision", "audio_input", "audio_output", "video", "image_generation", "text_to_speech", "video_generation", "attachments", "streaming", "non_streaming"].map((key) => [
       key,
@@ -155,8 +167,11 @@ export function mergeMetadata(...sources: ModelMetadataInput[]): ModelMetadataIn
     ]),
   ) as Partial<ModelCapabilities>;
   return {
-    context_window: scalar("context_window"),
-    max_output_tokens: scalar("max_output_tokens"),
+    model_type: scalar("model_type") as ModelType | undefined,
+    input_modalities,
+    output_modalities,
+    context_window: scalar("context_window") as number | null | undefined,
+    max_output_tokens: scalar("max_output_tokens") as number | null | undefined,
     capabilities,
     reasoning_efforts: sources.find((source) => source.reasoning_efforts !== undefined)?.reasoning_efforts,
   };
@@ -219,11 +234,23 @@ export function applyLiteLLMMetadata(
   fill("audio_output", modalityIncludes(info?.supportedOutputModalities, "audio") ?? modalityIncludes(info?.supportedOutputModalities, "speech"));
   fill("video", modalityIncludes(info?.supportedModalities, "video"));
   fill("attachments", info?.supportsPdfInput ?? modalityIncludes(info?.supportedModalities, "file"));
+  fill("image_generation", info?.supportsImageGeneration ?? (info?.mode === "image_generation" ? true : undefined));
+  fill("text_to_speech", info?.supportsTextToSpeech ?? (info?.mode === "audio_speech" ? true : undefined));
+  fill("video_generation", info?.supportsVideoGeneration ?? (info?.mode === "video_generation" ? true : undefined));
+
+  let inferredModelType = base.model_type;
+  if (!inferredModelType || inferredModelType === "chat") {
+    if (info?.mode === "image_generation" || capabilities.image_generation === true) inferredModelType = "image";
+    else if (info?.mode === "audio_speech" || capabilities.text_to_speech === true) inferredModelType = "tts";
+    else if (info?.mode === "video_generation" || capabilities.video_generation === true) inferredModelType = "video";
+    else if (info?.mode === "embedding") inferredModelType = "embedding";
+  }
 
   const pick = (current: number | null | undefined, fallback?: number) =>
     current !== undefined && current !== null ? current : fallback;
   return {
     ...base,
+    model_type: inferredModelType,
     context_window: pick(base.context_window, info?.maxInputTokens) ?? null,
     max_output_tokens: pick(base.max_output_tokens, info?.maxOutputTokens) ?? null,
     capabilities,

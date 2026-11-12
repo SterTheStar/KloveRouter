@@ -44,6 +44,7 @@ import { upstreamProviderHeaders } from "../services/provider-headers";
 import { getLiteLLMPricing, refreshLiteLLMPricing, getLiteLLMModelInfo } from "../services/litellm-pricing";
 import { deepaiModels, deepaiTest } from "../integrations/deepai";
 import { isFreeModel } from "../services/model-billing.helper";
+import { isMediaOnlyModel, testMediaModel } from "../services/media-test.service";
 
 const nullableBoolean = t.Union([t.Boolean(), t.Null()]);
 const capabilitiesSchema = t.Object({
@@ -306,14 +307,15 @@ export const modelsPlugin = (app: Elysia) =>
             ? freeSelected.filter((model) => existingIds.has(model.id))
             : freeSelected;
         };
-        const preview = (available: { id: string; display_name?: string; is_free?: boolean }[]) => {
+        const preview = async (available: { id: string; display_name?: string; is_free?: boolean }[]) => {
           const catalog = requestedIds
             ? available.filter((model) => requestedIds.includes(model.id))
             : available;
           const freeModels = catalog.filter(isFreeModel);
           const selected = freeOnly ? freeModels : catalog;
-          const items = selected.map((model) => {
-            const enriched = enrichWithLiteLLM({ ...model, model_id: model.id } as any);
+          const items = await Promise.all(selected.map(async (model) => {
+            const rawMeta = await resolveModelMetadata(provider.protocol, model.id, model);
+            const enriched = enrichWithLiteLLM({ ...model, model_id: model.id, ...rawMeta } as any);
             const isFree = isFreeModel(model);
             return {
               id: model.id,
@@ -324,7 +326,7 @@ export const modelsPlugin = (app: Elysia) =>
               is_existing: existingIds.has(model.id),
               pricing: !isFree && useLiteLLMPricing && !isSubscriptionOrFreeProvider ? getLiteLLMPricing(provider.protocol, model.id, `${provider.name} ${provider.base_url}`) : null,
             };
-          });
+          }));
           const existingModels = items.filter((model) => model.is_existing).length;
           return {
             preview: true,
@@ -353,7 +355,7 @@ export const modelsPlugin = (app: Elysia) =>
               return { error: "No active Codex account" };
             }
             const available = await codexModels(credential);
-            if (query.preview === true) return preview(available);
+            if (query.preview === true) return await preview(available);
             const selected = selectModels(available);
             for (const model of selected) {
               saveSyncedModel({
@@ -383,7 +385,7 @@ export const modelsPlugin = (app: Elysia) =>
               return { error: "No active Antigravity account" };
             }
             const available = await antigravityModels(credential);
-            if (query.preview === true) return preview(available);
+            if (query.preview === true) return await preview(available);
             const selected = selectModels(available);
             for (const model of selected)
               saveSyncedModel({
@@ -402,7 +404,7 @@ export const modelsPlugin = (app: Elysia) =>
 
           if (provider.protocol === "openfree") {
             const available = await openfreeModels();
-            if (query.preview === true) return preview(available);
+            if (query.preview === true) return await preview(available);
             const selected = selectModels(available);
             for (const model of selected)
               saveSyncedModel({
@@ -417,7 +419,7 @@ export const modelsPlugin = (app: Elysia) =>
 
           if (provider.protocol === "claude-agent") {
             const available = await claudeAgentModels();
-            if (query.preview === true) return preview(available);
+            if (query.preview === true) return await preview(available);
             const selected = selectModels(available);
             for (const model of selected)
               saveSyncedModel({
@@ -449,7 +451,7 @@ export const modelsPlugin = (app: Elysia) =>
                     ? Object.values(model.theosPerSecond).every((rate) => Number(rate) === 0)
                     : model.premier !== true,
             }));
-            if (query.preview === true) return preview(available);
+            if (query.preview === true) return await preview(available);
             const selected = selectModels(available);
             for (const model of selected) {
               saveSyncedModel({
@@ -469,7 +471,7 @@ export const modelsPlugin = (app: Elysia) =>
 
            if (provider.protocol === "freebuff") {
             const available = (await freebuffModels()).map((model) => ({ ...model, is_free: true }));
-            if (query.preview === true) return preview(available);
+            if (query.preview === true) return await preview(available);
             const selected = selectModels(available);
             for (const model of selected)
               saveSyncedModel({
@@ -494,7 +496,7 @@ export const modelsPlugin = (app: Elysia) =>
               return { error: "No active Qwen credential" };
             }
             const available = await qwenModels(credential, provider.base_url);
-            if (query.preview === true) return preview(available);
+            if (query.preview === true) return await preview(available);
             const selected = selectModels(available);
             for (const model of selected)
               saveSyncedModel({
@@ -510,7 +512,7 @@ export const modelsPlugin = (app: Elysia) =>
 
           if (provider.protocol === "atomesus") {
             const available = atomesusModels();
-            if (query.preview === true) return preview(available);
+            if (query.preview === true) return await preview(available);
             const selected = selectModels(available);
             for (const model of selected)
               saveSyncedModel({
@@ -525,7 +527,7 @@ export const modelsPlugin = (app: Elysia) =>
 
           if (provider.protocol === "perch") {
             const available = perchModels();
-            if (query.preview === true) return preview(available);
+            if (query.preview === true) return await preview(available);
             const selected = selectModels(available);
             for (const model of selected)
               saveSyncedModel({
@@ -550,7 +552,7 @@ export const modelsPlugin = (app: Elysia) =>
               return { error: "No active Conol credential" };
             }
             const available = await conolModels(credential, provider.base_url);
-            if (query.preview === true) return preview(available);
+            if (query.preview === true) return await preview(available);
             const selected = selectModels(available);
             for (const model of selected)
               saveSyncedModel({
@@ -576,7 +578,7 @@ export const modelsPlugin = (app: Elysia) =>
               return { error: "No active ChatGPT credential" };
             }
             const available = await chatgptModels(credential, { baseUrl: provider.base_url });
-            if (query.preview === true) return preview(available);
+            if (query.preview === true) return await preview(available);
             const selected = selectModels(available);
             for (const model of selected)
               saveSyncedModel({
@@ -638,7 +640,7 @@ export const modelsPlugin = (app: Elysia) =>
             models = body.models;
           }
 
-          if (query.preview === true) return preview(models);
+          if (query.preview === true) return await preview(models);
           models = selectModels(models);
 
           let added = 0;
@@ -718,6 +720,25 @@ export const modelsPlugin = (app: Elysia) =>
           ...provider,
           api_key: credential.secret ?? "",
         };
+
+        const mediaModality = isMediaOnlyModel(model);
+        if (mediaModality) {
+          const mediaResult = await testMediaModel(
+            provider,
+            model,
+            credential.secret ?? "",
+            mediaModality,
+          );
+          const durationMs = Math.round(performance.now() - start);
+          healthService.recordTest(provider.id, true, durationMs);
+          return {
+            success: true,
+            duration_ms: durationMs,
+            reply: mediaResult.reply,
+            usage: null,
+          };
+        }
+
         if (
           provider.protocol === "antigravity" &&
           isBlockedAntigravityModel(model.model_id)

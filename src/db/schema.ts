@@ -3,6 +3,7 @@ import { config } from "../config";
 import { encryptSecret } from "../services/secret.service";
 import { textContentOf } from "../services/chat-content";
 import { storeMessageAttachments, type ClientAttachment } from "../services/chat-attachments";
+import { classifyModel } from "../services/model-type/model-classifier";
 import { isFreeModel } from "../services/model-billing.helper";
 
 function parseJsonColumn(value: string | null): unknown {
@@ -47,6 +48,9 @@ export function initSchema(db: Database): void {
       max_output_tokens INTEGER,
       max_output_tokens_source TEXT NOT NULL DEFAULT 'auto',
       media_settings TEXT,
+      model_type    TEXT NOT NULL DEFAULT 'chat',
+      input_modalities TEXT,
+      output_modalities TEXT,
       fix_missing_think_opening_tag INTEGER NOT NULL DEFAULT 0,
       think_opening_tag_mode TEXT NOT NULL DEFAULT 'off',
       is_manual     INTEGER NOT NULL DEFAULT 0,
@@ -494,9 +498,52 @@ export function initSchema(db: Database): void {
   }
   if (!modelCols.find((c) => c.name === "media_settings"))
     db.exec("ALTER TABLE models ADD COLUMN media_settings TEXT");
+  if (!modelCols.find((c) => c.name === "model_type"))
+    db.exec("ALTER TABLE models ADD COLUMN model_type TEXT NOT NULL DEFAULT 'chat'");
+  if (!modelCols.find((c) => c.name === "input_modalities"))
+    db.exec("ALTER TABLE models ADD COLUMN input_modalities TEXT");
+  if (!modelCols.find((c) => c.name === "output_modalities"))
+    db.exec("ALTER TABLE models ADD COLUMN output_modalities TEXT");
   if (!modelCols.find((c) => c.name === "updated_at")) {
     db.exec("ALTER TABLE models ADD COLUMN updated_at TEXT NOT NULL DEFAULT ''");
     db.exec("UPDATE models SET updated_at = created_at WHERE updated_at = ''");
+  }
+
+  const modelClassificationMigration = db.query("SELECT value FROM settings WHERE key = ?")
+    .get("migration_model_type_modalities_v1") as { value: string } | undefined;
+  if (!modelClassificationMigration) {
+    db.transaction(() => {
+      const existingModels = db.query("SELECT id, model_id, display_name, media_settings FROM models").all() as Array<{
+        id: string;
+        model_id: string;
+        display_name: string | null;
+        media_settings: string | null;
+      }>;
+      for (const m of existingModels) {
+        let mediaSettingsObj: any = undefined;
+        try { mediaSettingsObj = m.media_settings ? JSON.parse(m.media_settings) : undefined; } catch {}
+        const caps = db.query("SELECT image_generation, text_to_speech, video_generation, vision, audio_input, audio_output, video, attachments FROM model_capabilities WHERE model_id = ?").get(m.id) as any;
+        const classified = classifyModel({
+          modelId: m.model_id,
+          displayName: m.display_name,
+          capabilities: {
+            image_generation: caps?.image_generation === 1,
+            text_to_speech: caps?.text_to_speech === 1,
+            video_generation: caps?.video_generation === 1,
+            vision: caps?.vision === 1,
+            audio_input: caps?.audio_input === 1,
+            audio_output: caps?.audio_output === 1,
+            video: caps?.video === 1,
+            attachments: caps?.attachments === 1,
+          },
+          mediaSettings: mediaSettingsObj,
+        });
+        db.query("UPDATE models SET model_type = ?, input_modalities = ?, output_modalities = ? WHERE id = ?")
+          .run(classified.modelType, JSON.stringify(classified.inputModalities), JSON.stringify(classified.outputModalities), m.id);
+      }
+      db.query("INSERT INTO settings (key, value) VALUES (?, ?)")
+        .run("migration_model_type_modalities_v1", "true");
+    })();
   }
 
   const openfreeContextMigration = db.query("SELECT value FROM settings WHERE key = ?")

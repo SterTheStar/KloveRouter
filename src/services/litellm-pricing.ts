@@ -235,6 +235,10 @@ export interface CatalogModelInfo {
   supportsReasoning?: boolean;
   supportsNativeStreaming?: boolean;
   supportsPdfInput?: boolean;
+  supportsImageGeneration?: boolean;
+  supportsTextToSpeech?: boolean;
+  supportsVideoGeneration?: boolean;
+  mode?: string;
   supportedModalities?: string[];
   supportedOutputModalities?: string[];
 }
@@ -244,6 +248,8 @@ export function getLiteLLMModelInfo(protocol: ProviderProtocol, modelId: string,
   const found = findCatalogEntry(protocol, modelId, providerHint);
   if (!found) return null;
   const entry = found.entry;
+  const mode = typeof entry.mode === "string" ? entry.mode.toLowerCase() : undefined;
+  const outputModalities = asStringArray(entry.supported_output_modalities) ?? [];
   return {
     maxInputTokens: asNumber(entry.max_input_tokens ?? entry.max_tokens),
     maxOutputTokens: asNumber(entry.max_output_tokens),
@@ -252,6 +258,10 @@ export function getLiteLLMModelInfo(protocol: ProviderProtocol, modelId: string,
     supportsReasoning: asBoolean(entry.supports_reasoning),
     supportsNativeStreaming: asBoolean(entry.supports_native_streaming),
     supportsPdfInput: asBoolean(entry.supports_pdf_input),
+    supportsImageGeneration: asBoolean(entry.supports_image_generation) ?? (mode === "image_generation" ? true : undefined) ?? (asNumber(entry.output_cost_per_image) !== undefined ? true : undefined),
+    supportsTextToSpeech: asBoolean(entry.supports_text_to_speech) ?? (mode === "audio_speech" ? true : undefined) ?? (asNumber(entry.output_cost_per_second) !== undefined && /(?:tts|speech|voice)/i.test(modelId) ? true : undefined),
+    supportsVideoGeneration: asBoolean(entry.supports_video_generation) ?? (mode === "video_generation" ? true : undefined) ?? (asNumber(entry.output_cost_per_second) !== undefined && /(?:video|sora|runway|luma|kling)/i.test(modelId) ? true : undefined),
+    mode,
     supportedModalities: asStringArray(entry.supported_modalities),
     supportedOutputModalities: asStringArray(entry.supported_output_modalities),
   };

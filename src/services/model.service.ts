@@ -11,8 +11,15 @@ import { getLiteLLMPricing } from "./litellm-pricing";
 import type { LiteLLMPricing } from "./litellm-pricing";
 import type { ModelMetadataSource, MetadataSourceTag } from "./model-metadata";
 import { isFreeModel } from "./model-billing.helper";
+import {
+  type ModelType,
+  type Modality,
+  VALID_MODEL_TYPES,
+  MODEL_TYPE_INFO,
+  classifyModel,
+} from "./model-type";
 
-export { isFreeModel };
+export { isFreeModel, type ModelType, type Modality, VALID_MODEL_TYPES, MODEL_TYPE_INFO };
 
 export type ModelBillingType = "inherit" | "subscription" | "pay_as_you_go" | "free";
 
@@ -38,6 +45,9 @@ export interface Model {
   max_output_tokens: number | null;
   max_output_tokens_source: MaxOutputTokensSource;
   max_output_tokens_is_default: boolean;
+  model_type: ModelType;
+  input_modalities: Modality[];
+  output_modalities: Modality[];
   think_opening_tag_mode: ThinkOpeningTagMode;
   fix_missing_think_opening_tag: boolean;
   capabilities: ModelCapabilities;
@@ -87,6 +97,9 @@ export interface ModelMetadataInput {
   context_window?: number | null;
   max_output_tokens?: number | null;
   max_output_tokens_source?: MaxOutputTokensSource;
+  model_type?: ModelType;
+  input_modalities?: Modality[];
+  output_modalities?: Modality[];
   think_opening_tag_mode?: ThinkOpeningTagMode;
   fix_missing_think_opening_tag?: boolean;
   capabilities?: Partial<ModelCapabilities>;
@@ -208,6 +221,13 @@ function validateMetadata(input: ModelMetadataInput): void {
     throw new InvalidModelMetadataError(
       "think_opening_tag_mode must be off, detect, or force",
     );
+  if (
+    input.model_type !== undefined &&
+    !VALID_MODEL_TYPES.includes(input.model_type)
+  )
+    throw new InvalidModelMetadataError(
+      `Unknown model_type: ${input.model_type}`,
+    );
   for (const [name, value] of [
     ["context_window", input.context_window],
     ["max_output_tokens", input.max_output_tokens],
@@ -290,6 +310,43 @@ function saveMetadata(modelId: string, input: ModelMetadataInput): void {
   if (input.media_settings !== undefined) {
     scalarUpdates.push("media_settings = ?");
     scalarValues.push(JSON.stringify(input.media_settings));
+  }
+  if (input.model_type !== undefined) {
+    scalarUpdates.push("model_type = ?");
+    scalarValues.push(input.model_type);
+  }
+  if (input.input_modalities !== undefined) {
+    scalarUpdates.push("input_modalities = ?");
+    scalarValues.push(JSON.stringify(input.input_modalities));
+  }
+  if (input.output_modalities !== undefined) {
+    scalarUpdates.push("output_modalities = ?");
+    scalarValues.push(JSON.stringify(input.output_modalities));
+  }
+  if (input.model_type === undefined) {
+    const existingRow = db.query("SELECT model_id, display_name, model_type, media_settings FROM models WHERE id = ?").get(modelId) as { model_id: string; display_name: string | null; model_type: string; media_settings: string | null } | null;
+    if (existingRow && (!existingRow.model_type || existingRow.model_type === "chat")) {
+      let existingSettings: any = undefined;
+      try { existingSettings = existingRow.media_settings ? JSON.parse(existingRow.media_settings) : undefined; } catch {}
+      const classified = classifyModel({
+        modelId: existingRow.model_id,
+        displayName: existingRow.display_name,
+        capabilities: input.capabilities as any,
+        mediaSettings: input.media_settings ?? existingSettings,
+      });
+      if (classified.modelType !== "chat") {
+        scalarUpdates.push("model_type = ?");
+        scalarValues.push(classified.modelType);
+        if (input.input_modalities === undefined) {
+          scalarUpdates.push("input_modalities = ?");
+          scalarValues.push(JSON.stringify(classified.inputModalities));
+        }
+        if (input.output_modalities === undefined) {
+          scalarUpdates.push("output_modalities = ?");
+          scalarValues.push(JSON.stringify(classified.outputModalities));
+        }
+      }
+    }
   }
   if (scalarUpdates.length)
     db.query(`UPDATE models SET ${scalarUpdates.join(", ")} WHERE id = ?`).run(...scalarValues, modelId);
@@ -452,8 +509,28 @@ function hydrate(model: Model | null): Model | null {
   } catch {
     metadata_source = null;
   }
+  const resolvedModelType: ModelType = (model as any).model_type || "chat";
+  const defaultModalities = MODEL_TYPE_INFO[resolvedModelType] ?? MODEL_TYPE_INFO.chat;
+  const inputModalities: Modality[] = (() => {
+    try {
+      const parsed = (model as any).input_modalities ? JSON.parse((model as any).input_modalities) : null;
+      if (Array.isArray(parsed) && parsed.length) return parsed;
+    } catch {}
+    return [...defaultModalities.defaultInputModalities];
+  })();
+  const outputModalities: Modality[] = (() => {
+    try {
+      const parsed = (model as any).output_modalities ? JSON.parse((model as any).output_modalities) : null;
+      if (Array.isArray(parsed) && parsed.length) return parsed;
+    } catch {}
+    return [...defaultModalities.defaultOutputModalities];
+  })();
+
   return {
     ...model,
+    model_type: resolvedModelType,
+    input_modalities: inputModalities,
+    output_modalities: outputModalities,
     billing_type: model.billing_type ?? "inherit",
     effective_billing_type: effectiveBillingType,
     media_settings: (() => { try { return model.media_settings ? JSON.parse(model.media_settings as unknown as string) : {}; } catch { return {}; } })(),
