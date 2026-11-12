@@ -279,6 +279,12 @@ export default function ModelsPage() {
                 Embeddings
               </DropdownMenuCheckboxItem>
               <DropdownMenuCheckboxItem
+                checked={categoryFilter === "systemone"}
+                onCheckedChange={() => setCategoryFilter("systemone")}
+              >
+                SystemOne Decisions
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem
                 checked={categoryFilter === "stt"}
                 onCheckedChange={() => setCategoryFilter("stt")}
               >

@@ -14,6 +14,7 @@ import {
   RiAttachmentLine,
   RiDatabase2Line,
   RiVoiceprintLine,
+  RiGitBranchLine,
 } from "@remixicon/react";
 import { Badge } from "@/components/ui/badge";
 import { copyToClipboard } from "@/lib/clipboard";
@@ -53,6 +54,8 @@ function categoryIcon(category: string) {
       return <RiVideoLine className="size-3" />;
     case "embedding":
       return <RiDatabase2Line className="size-3" />;
+    case "systemone":
+      return <RiGitBranchLine className="size-3" />;
     case "stt":
       return <RiVoiceprintLine className="size-3" />;
     default:

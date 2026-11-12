@@ -75,6 +75,15 @@ const mediaSettingsSchema = t.Object({
   text_to_speech: t.Optional(t.Object({ voice: t.Optional(t.String({ maxLength: 100 })), response_format: t.Optional(t.String({ maxLength: 100 })), speed: t.Optional(t.Number({ exclusiveMinimum: 0 })) })),
   video: t.Optional(t.Object({ size: t.Optional(t.String({ maxLength: 100 })), seconds: t.Optional(t.Number({ exclusiveMinimum: 0 })) })),
 });
+const modelTypeSchema = t.Union([
+  t.Literal("chat"),
+  t.Literal("image"),
+  t.Literal("tts"),
+  t.Literal("stt"),
+  t.Literal("video"),
+  t.Literal("embedding"),
+  t.Literal("systemone"),
+]);
 
 export const parseGenericModelMetadata = parseRawModelMetadata;
 
@@ -198,6 +207,7 @@ export const modelsPlugin = (app: Elysia) =>
             model_id: body.model_id,
             pretty_id: body.pretty_id,
             display_name: body.display_name || generateDisplayName(body.model_id),
+            model_type: body.model_type ?? enriched.model_type,
             pricing_tiers: isFree && !body.pricing_tiers?.length ? [] : body.pricing_tiers,
             use_litellm_pricing: isFree && body.use_litellm_pricing === undefined ? false : body.use_litellm_pricing,
             billing_type: body.billing_type && body.billing_type !== "inherit" ? body.billing_type : (isFree ? "free" : (body.billing_type ?? "inherit")),
@@ -233,6 +243,7 @@ export const modelsPlugin = (app: Elysia) =>
           model_id: t.String({ minLength: 1 }),
           pretty_id: t.Optional(t.Union([t.String({ minLength: 1, maxLength: 80 }), t.Null()])),
           display_name: t.Optional(t.String()),
+          model_type: t.Optional(modelTypeSchema),
           context_window: t.Optional(t.Union([t.Integer({ minimum: 1 }), t.Null()])),
           max_output_tokens: t.Optional(t.Union([t.Integer({ minimum: 1 }), t.Null()])),
           max_output_tokens_source: t.Optional(t.Union([t.Literal("auto"), t.Literal("api"), t.Literal("manual")])),
@@ -920,6 +931,7 @@ export const modelsPlugin = (app: Elysia) =>
           model_id: t.Optional(t.String({ minLength: 1 })),
           pretty_id: t.Optional(t.Union([t.String({ minLength: 1, maxLength: 80 }), t.Null()])),
           display_name: t.Optional(t.Union([t.String(), t.Null()])),
+          model_type: t.Optional(modelTypeSchema),
           context_window: t.Optional(t.Union([t.Integer({ minimum: 1 }), t.Null()])),
           max_output_tokens: t.Optional(t.Union([t.Integer({ minimum: 1 }), t.Null()])),
           max_output_tokens_source: t.Optional(t.Union([t.Literal("auto"), t.Literal("api"), t.Literal("manual")])),

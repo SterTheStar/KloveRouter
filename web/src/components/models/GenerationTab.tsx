@@ -162,9 +162,10 @@ export function GenerationTab({
     { type: "tts" as const, label: "Text-to-Speech", hint: "Audio & voice generation" },
     { type: "video" as const, label: "Video Generation", hint: "Text & image to video synthesis" },
     { type: "embedding" as const, label: "Text Embeddings", hint: "Vector representations for RAG" },
+    { type: "systemone" as const, label: "SystemOne Decision", hint: "Structured decisions & evaluations" },
   ];
 
-  const currentType = value.model_type || (detectedTypes.includes("image") ? "image" : detectedTypes.includes("tts") ? "tts" : detectedTypes.includes("video") ? "video" : detectedTypes.includes("embedding") ? "embedding" : "chat");
+  const currentType = value.model_type || (detectedTypes.includes("image") ? "image" : detectedTypes.includes("tts") ? "tts" : detectedTypes.includes("video") ? "video" : detectedTypes.includes("embedding") ? "embedding" : detectedTypes.includes("systemone") ? "systemone" : "chat");
 
   const selectPrimaryType = (type: typeof modelTypeChoices[number]["type"]) => {
     const isImg = type === "image";
