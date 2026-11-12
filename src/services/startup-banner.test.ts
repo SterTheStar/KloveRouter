@@ -27,7 +27,7 @@ describe("startup-banner service", () => {
     const titles = groups.map((g) => g.title);
     expect(titles).toContain("Control Plane & Management");
     expect(titles).toContain("AI Routing & Gateways");
-    expect(titles).toContain("Multimodal & Media Hub");
+    expect(titles).toContain("Media & Generation Gateways");
     expect(titles).toContain("Integrations & OAuth");
 
     const allPaths = groups.flatMap((g) => g.endpoints.map((e) => e.path));
@@ -38,6 +38,7 @@ describe("startup-banner service", () => {
     expect(allPaths).toContain("/v1/images/generations");
     expect(allPaths).toContain("/v1/audio/speech");
     expect(allPaths).toContain("/v1/videos");
+    expect(allPaths).toContain("/v1/embeddings");
   });
 
   it("renders a complete startup banner string containing all key details", () => {

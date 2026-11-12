@@ -51,6 +51,7 @@ export const ANSI = {
   bgImages: "\x1b[48;2;236;72;153m",      // Pink-500
   bgAudio: "\x1b[48;2;168;85;247m",       // Violet-500
   bgVideos: "\x1b[48;2;239;68;68m",       // Red-500
+  bgEmbed: "\x1b[48;2;20;184;166m",        // Teal-500
   bgOAuth: "\x1b[48;2;245;158;11m",       // Amber-500
 };
 
@@ -132,7 +133,7 @@ export function getRegisteredEndpoints(options: { port: number; host?: string; o
       ],
     },
     {
-      title: "Multimodal & Media Hub",
+      title: "Media & Generation Gateways",
       endpoints: [
         {
           method: "POST",
@@ -168,6 +169,13 @@ export function getRegisteredEndpoints(options: { port: number; host?: string; o
           badgeBg: ANSI.bgVideos,
           path: "/v1/videos/:id",
           description: "Video Status & Content Stream",
+        },
+        {
+          method: "POST",
+          badge: "EMBED",
+          badgeBg: ANSI.bgEmbed,
+          path: "/v1/embeddings",
+          description: "Vector Embeddings",
         },
       ],
     },

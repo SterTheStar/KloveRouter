@@ -120,89 +120,6 @@ function formBody(body: any, modelId: string): FormData {
   return form;
 }
 
-function withMediaDefaults(body: any, route: MediaRoute, mediaType: MediaType) {
-  const settings = route.model.media_settings ?? {};
-  const defaults = mediaType.startsWith("image-")
-    ? settings.image
-    : mediaType === "text-to-speech"
-      ? settings.text_to_speech
-      : mediaType === "video-generation"
-        ? settings.video
-        : undefined;
-  if (!defaults) return body;
-  const values = Object.fromEntries(Object.entries(defaults).filter(([, value]) => value !== undefined && value !== ""));
-  if (body instanceof FormData) {
-    const form = new FormData();
-    for (const [key, value] of body.entries()) form.append(key, value);
-    for (const [key, value] of Object.entries(values)) if (!form.has(key)) form.set(key, String(value));
-    return form;
-  }
-  const result = { ...(body ?? {}) };
-  for (const [key, value] of Object.entries(values)) if (result[key] === undefined || result[key] === null || result[key] === "") result[key] = value;
-  return result;
-}
-
-function sanitizeMediaPayload(body: any, route: MediaRoute, mediaType: MediaType) {
-  if (!body || typeof body !== "object") return body;
-  if (body instanceof FormData) return body;
-
-  const sanitized = { ...body };
-  const isAgnes = route.provider.name.toLowerCase().includes("agnes") ||
-                  route.provider.base_url.includes("agnes") ||
-                  route.model.model_id.toLowerCase().includes("agnes");
-
-  // 1. Video generation
-  if (mediaType === "video-generation") {
-    if (isAgnes) {
-      // Agnes Video API rules (official documentation):
-      // - mode: "text" | "keyframe" | "reference". Default for text-to-video is "text".
-      // - size: for flash models, size MUST be "720P".
-      // - seconds: string from "4"-"12".
-      // - aspect_ratio: default "16:9".
-      if (!sanitized.mode || sanitized.mode === "std") {
-        sanitized.mode = "text";
-      }
-      if (route.model.model_id.includes("flash") || sanitized.size === "1280x720" || !sanitized.size) {
-        sanitized.size = "720P";
-      }
-      if (!sanitized.aspect_ratio) {
-        sanitized.aspect_ratio = "16:9";
-      }
-      if (sanitized.seconds !== undefined) {
-        sanitized.seconds = String(sanitized.seconds);
-      }
-      delete sanitized.quality;
-    } else {
-      if (!sanitized.mode) {
-        sanitized.mode = (route.model.media_settings?.video as any)?.mode || "std";
-      }
-    }
-  }
-
-  // 2. Image generation
-  if (mediaType === "image-generation") {
-    const isDallE3 = /dall[-_ ]?e[-_ ]?3/i.test(route.model.model_id);
-    if (!isDallE3) {
-      delete sanitized.quality;
-      delete sanitized.style;
-    }
-    if (isAgnes) {
-      // Agnes Image API rules (official documentation):
-      // - Do not place response_format at the top level (causes 400). Move to extra_body if present.
-      // - Only model, prompt, and size are required.
-      // - Do not pass 'n' (causes errors on text image queue).
-      delete sanitized.n;
-      if (sanitized.response_format) {
-        if (!sanitized.extra_body || typeof sanitized.extra_body !== "object") sanitized.extra_body = {};
-        sanitized.extra_body.response_format = sanitized.response_format;
-        delete sanitized.response_format;
-      }
-    }
-  }
-
-  return sanitized;
-}
-
 type MediaRouteCtx = {
   headers: Record<string, string | undefined>;
   request: Request;
@@ -329,8 +246,13 @@ async function proxyMediaRequest(input: {
   formData?: boolean;
 }) {
   const { request, headers, set, gatewayKeyName, gatewayKeyPrefix, route, mediaType, resourcePath } = input;
-  const defaultedBody = withMediaDefaults(input.body, route, mediaType);
-  const body = sanitizeMediaPayload(defaultedBody, route, mediaType);
+  // Pass-through puro: transporta fielmente a requisição do cliente, atualizando apenas o model_id técnico do provedor
+  const body = input.formData
+    ? formBody(input.body, route.model.model_id)
+    : typeof input.body === "object" && input.body !== null
+      ? { ...input.body, model: route.model.model_id }
+      : input.body;
+
   const contentType = headers["content-type"] ?? null;
   const requestLogId = requestLogService.start({
     providerId: route.provider.id,
@@ -362,7 +284,7 @@ async function proxyMediaRequest(input: {
     const upstream = await fetch(url, {
       method: input.method ?? request.method,
       headers: providerHeaders,
-      body: body == null ? undefined : input.formData ? formBody(body, route.model.model_id) : JSON.stringify({ ...body, model: route.model.model_id }),
+      body: body == null ? undefined : input.formData ? formBody(body, route.model.model_id) : JSON.stringify(body),
       signal: request.signal,
     });
     if (upstream.ok) {
