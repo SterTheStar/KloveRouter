@@ -65,7 +65,7 @@ describe("systemone-proxy.plugin", () => {
     try {
       const key = keyService.create("SystemOne Key");
       const provider = providerService.create({
-        name: "TypeSafe AI",
+        name: "TypeSafe",
         protocol: "openai",
         base_url: "https://opencode.ai/inference/systemone/v1",
       });
@@ -77,7 +77,7 @@ describe("systemone-proxy.plugin", () => {
       });
 
       const userPayload = {
-        model: "typesafeai/jev-1.13",
+        model: "typesafe/jev-1.13",
         state: "Payment failed three times and server is down",
         questions: {
           is_urgent: {

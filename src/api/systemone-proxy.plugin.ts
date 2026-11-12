@@ -165,7 +165,7 @@ export const systemOneProxyPlugin = (app: Elysia) =>
           model: model.model_id,
         };
 
-        const requestLogId = requestLogService.create({
+        const requestLogId = requestLogService.start({
           providerId: provider.id,
           providerName: provider.name,
           modelName: model.model_id,

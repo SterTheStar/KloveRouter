@@ -155,7 +155,7 @@ export const embeddingsProxyPlugin = (app: Elysia) =>
         return reject(400, `Invalid upstream endpoint: ${err.message}`, "invalid_request_error", "invalid_endpoint");
       }
 
-      const requestLogId = requestLogService.create({
+      const requestLogId = requestLogService.start({
         providerId: provider.id,
         providerName: provider.name,
         modelName: model.model_id,
