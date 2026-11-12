@@ -34,11 +34,12 @@ export function GenerationTab({
           ? "tts"
           : "video";
     const detected = current === null && detectedTypes.includes(category);
+    const next = current === true ? false : current === false ? null : detected ? false : true;
     onChange({
       ...value,
       capabilities: {
         ...value.capabilities,
-        [key]: current === true || detected ? false : true,
+        [key]: next,
       },
     });
   };
@@ -119,11 +120,27 @@ export function GenerationTab({
     },
   ] as const;
 
-  const activeModalities = modalityChoices.filter(
-    ({ key, category }) =>
-      value.capabilities[key] === true ||
-      (value.capabilities[key] == null && detectedTypes.includes(category)),
-  );
+  const isImageActive =
+    value.capabilities.image_generation === true ||
+    (value.capabilities.image_generation == null && detectedTypes.includes("image")) ||
+    Boolean(value.media_settings?.image);
+
+  const isTtsActive =
+    value.capabilities.text_to_speech === true ||
+    (value.capabilities.text_to_speech == null && detectedTypes.includes("tts")) ||
+    Boolean(value.media_settings?.text_to_speech);
+
+  const isVideoActive =
+    value.capabilities.video_generation === true ||
+    (value.capabilities.video_generation == null && detectedTypes.includes("video")) ||
+    Boolean(value.media_settings?.video);
+
+  const activeModalities = modalityChoices.filter(({ key }) => {
+    if (key === "image_generation") return isImageActive;
+    if (key === "text_to_speech") return isTtsActive;
+    if (key === "video_generation") return isVideoActive;
+    return false;
+  });
 
   const configSection = (
     title: string,
@@ -139,38 +156,101 @@ export function GenerationTab({
     </section>
   );
 
+  const modelTypeChoices = [
+    { type: "chat" as const, label: "Chat / LLM", hint: "Conversational & instruction text" },
+    { type: "image" as const, label: "Image Generation", hint: "Text-to-image synthesis & edits" },
+    { type: "tts" as const, label: "Text-to-Speech", hint: "Audio & voice generation" },
+    { type: "video" as const, label: "Video Generation", hint: "Text & image to video synthesis" },
+    { type: "embedding" as const, label: "Text Embeddings", hint: "Vector representations for RAG" },
+  ];
+
+  const currentType = value.model_type || (detectedTypes.includes("image") ? "image" : detectedTypes.includes("tts") ? "tts" : detectedTypes.includes("video") ? "video" : detectedTypes.includes("embedding") ? "embedding" : "chat");
+
+  const selectPrimaryType = (type: typeof modelTypeChoices[number]["type"]) => {
+    const isImg = type === "image";
+    const isTts = type === "tts";
+    const isVid = type === "video";
+    onChange({
+      ...value,
+      model_type: type,
+      capabilities: {
+        ...value.capabilities,
+        image_generation: isImg ? true : isImg === false && value.capabilities.image_generation === true ? false : value.capabilities.image_generation,
+        text_to_speech: isTts ? true : isTts === false && value.capabilities.text_to_speech === true ? false : value.capabilities.text_to_speech,
+        video_generation: isVid ? true : isVid === false && value.capabilities.video_generation === true ? false : value.capabilities.video_generation,
+      },
+    });
+  };
+
   return (
     <div className="space-y-5 py-1">
       <div>
         <h3 className="text-sm font-normal text-foreground">
-          Supported generation types
+          Primary Model Architecture
         </h3>
         <p className="mt-1 text-xs text-muted-foreground">
-          Select only the modalities this model supports. Configuration fields appear only for enabled types.
+          Categorizes the model for routing, target endpoints, and administrative management.
+        </p>
+      </div>
+
+      <div className="grid gap-2 sm:grid-cols-3">
+        {modelTypeChoices.map(({ type, label, hint }) => {
+          const isSelected = currentType === type;
+          return (
+            <button
+              key={type}
+              type="button"
+              onClick={() => selectPrimaryType(type)}
+              className={`rounded-xl border p-2.5 text-left transition-colors cursor-pointer ${
+                isSelected
+                  ? "border-primary bg-primary/10 shadow-xs"
+                  : "border-border bg-card text-muted-foreground hover:bg-accent/40"
+              }`}
+            >
+              <div className="flex items-center justify-between gap-1.5">
+                <span className={`text-xs font-medium ${isSelected ? "text-foreground" : "text-foreground/80"}`}>{label}</span>
+              </div>
+              <span className="mt-1 block text-[11px] text-muted-foreground leading-tight">
+                {hint}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="border-t border-border pt-4">
+        <h3 className="text-sm font-normal text-foreground">
+          Supported generation modalities
+        </h3>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Configure default generation parameters and overrides for media models.
         </p>
       </div>
 
       <div className="grid gap-2.5 sm:grid-cols-3">
-        {modalityChoices.map(({ key, title, hint }) => {
+        {modalityChoices.map(({ key, title, hint, category }) => {
           const state = value.capabilities[key] ?? null;
+          const isAutoOn = state === null && detectedTypes.includes(category);
           return (
             <button
               key={key}
               type="button"
               onClick={() => updateCapability(key)}
-              aria-pressed={state === true}
+              aria-pressed={state === true || isAutoOn}
               className={`rounded-xl border p-3 text-left transition-colors cursor-pointer ${
                 state === true
                   ? "border-primary/50 bg-primary/10 shadow-xs"
                   : state === false
                     ? "border-border bg-muted/20 text-muted-foreground opacity-60"
-                    : "border-dashed border-border bg-card text-muted-foreground hover:bg-accent/50"
+                    : isAutoOn
+                      ? "border-primary/40 bg-primary/5 text-foreground"
+                      : "border-dashed border-border bg-card text-muted-foreground hover:bg-accent/50"
               }`}
             >
               <div className="flex items-center justify-between gap-2">
                 <span className="text-xs font-normal text-foreground">{title}</span>
                 <span className="text-[10px] font-mono text-muted-foreground font-normal">
-                  {state === true ? "On" : state === false ? "Off" : "Auto"}
+                  {state === true ? "On" : state === false ? "Off" : isAutoOn ? "Auto (On)" : "Auto (Off)"}
                 </span>
               </div>
               <span className="mt-1.5 block text-[11px] text-muted-foreground leading-snug">
@@ -192,7 +272,7 @@ export function GenerationTab({
             </p>
           </div>
 
-          {value.capabilities.image_generation === true &&
+          {isImageActive &&
             configSection(
               "Image",
               "Image size, quality, and output format.",
@@ -203,7 +283,7 @@ export function GenerationTab({
               </>,
             )}
 
-          {value.capabilities.text_to_speech === true &&
+          {isTtsActive &&
             configSection(
               "Text to speech",
               "Default voice, audio format, and speed.",
@@ -214,7 +294,7 @@ export function GenerationTab({
               </>,
             )}
 
-          {value.capabilities.video_generation === true &&
+          {isVideoActive &&
             configSection(
               "Video",
               "Default frame size and duration.",

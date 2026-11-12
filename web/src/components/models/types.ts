@@ -58,6 +58,9 @@ export const capabilityLabels: Record<
 
 export function emptyModelMetadata(): ModelMetadataInput {
   return {
+    model_type: "chat",
+    input_modalities: ["text"],
+    output_modalities: ["text"],
     context_window: null,
     max_output_tokens: null,
     capabilities: {

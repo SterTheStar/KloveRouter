@@ -39,8 +39,12 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const data = await res.json().catch(() => null);
 
   if (!res.ok) {
+    const errorObj = typeof data?.error === "object" && data?.error !== null ? data.error : null;
     const message =
-      data?.message || data?.error || `HTTP ${res.status}: ${res.statusText}`;
+      errorObj?.message ||
+      (typeof data?.error === "string" ? data.error : null) ||
+      data?.message ||
+      `HTTP ${res.status}: ${res.statusText}`;
     throw new Error(message);
   }
 
@@ -865,5 +869,112 @@ export const updates = {
     request<import("../types").UpdateSettings>("/api/updates/settings", {
       method: "PUT",
       body: JSON.stringify(data),
+    }),
+};
+
+// Media Hub
+export const mediaApi = {
+  models: () =>
+    request<{ data: import("../types").MediaModelItem[] }>("/api/media/models"),
+  generateImage: (data: {
+    model: string;
+    prompt: string;
+    size?: string;
+    quality?: string;
+    style?: string;
+    n?: number;
+    response_format?: "url" | "b64_json";
+  }) =>
+    request<{ created: number; data: Array<{ url?: string; b64_json?: string; revised_prompt?: string }> }>(
+      "/v1/images/generations",
+      {
+        method: "POST",
+        body: JSON.stringify(data),
+      },
+    ),
+  editImage: (formData: FormData) => {
+    const token = getToken();
+    return fetch(`${API_BASE}/v1/images/edits`, {
+      method: "POST",
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: formData,
+    }).then(async (res) => {
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err?.error?.message || `HTTP ${res.status}`);
+      }
+      return res.json();
+    });
+  },
+  varyImage: (formData: FormData) => {
+    const token = getToken();
+    return fetch(`${API_BASE}/v1/images/variations`, {
+      method: "POST",
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: formData,
+    }).then(async (res) => {
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err?.error?.message || `HTTP ${res.status}`);
+      }
+      return res.json();
+    });
+  },
+  speech: async (data: {
+    model: string;
+    input: string;
+    voice?: string;
+    response_format?: string;
+    speed?: number;
+  }): Promise<Blob> => {
+    const token = getToken();
+    const res = await fetch(`${API_BASE}/v1/audio/speech`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err?.error?.message || `HTTP ${res.status}: Failed to synthesize audio`);
+    }
+    return res.blob();
+  },
+  createVideo: (data: {
+    model: string;
+    prompt: string;
+    mode?: string;
+    seconds?: number;
+    size?: string;
+  }) =>
+    request<import("../types").VideoJobItem>("/v1/videos", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  listVideos: (params?: { limit?: number; after?: string }) => {
+    const sp = new URLSearchParams();
+    if (params?.limit) sp.set("limit", String(params.limit));
+    if (params?.after) sp.set("after", params.after);
+    const qs = sp.toString();
+    return request<{ object: string; data: import("../types").VideoJobItem[]; has_more: boolean }>(
+      `/v1/videos${qs ? `?${qs}` : ""}`,
+    );
+  },
+  getVideo: (id: string) =>
+    request<import("../types").VideoJobItem>(`/v1/videos/${encodeURIComponent(id)}`),
+  getVideoContentUrl: (id: string) => `${API_BASE}/v1/videos/${encodeURIComponent(id)}/content`,
+  cancelVideo: (id: string) =>
+    request<import("../types").VideoJobItem>(`/v1/videos/${encodeURIComponent(id)}/cancel`, {
+      method: "POST",
+    }),
+  deleteVideo: (id: string) =>
+    request<{ id: string; object: string; deleted: boolean }>(`/v1/videos/${encodeURIComponent(id)}`, {
+      method: "DELETE",
     }),
 };

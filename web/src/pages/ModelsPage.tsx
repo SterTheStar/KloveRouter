@@ -45,6 +45,7 @@ import { modelCategories, type ModelCategory } from "../lib/model-modality";
 import { ModelCapabilityBadges } from "../components/ModelCapabilities";
 
 type SourceFilter = "all" | "manual" | "synced";
+type CategoryFilter = "all" | ModelCategory;
 
 function litellmSourced(source?: MetadataSource | null): boolean {
   if (!source) return false;
@@ -63,6 +64,7 @@ export default function ModelsPage() {
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>("all");
+  const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>("all");
   const [selectedProviders, setSelectedProviders] = useState<Set<string>>(
     new Set(),
   );
@@ -110,9 +112,12 @@ export default function ModelsPage() {
       result = result.filter((m) => m.is_manual === 0);
     }
 
+    if (categoryFilter !== "all") {
+      result = result.filter((m) => modelCategories(m).includes(categoryFilter));
+    }
 
-       if (selectedProviders.size > 0) {
-       result = result.filter((m) => selectedProviders.has(m.model_pool ? "Compound models" : m.provider_name));
+    if (selectedProviders.size > 0) {
+      result = result.filter((m) => selectedProviders.has(m.model_pool ? "Compound models" : m.provider_name));
     }
 
     return result;
@@ -236,6 +241,52 @@ export default function ModelsPage() {
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
+              <DropdownMenuLabel>Modality</DropdownMenuLabel>
+              <DropdownMenuCheckboxItem
+                checked={categoryFilter === "all"}
+                onCheckedChange={() => setCategoryFilter("all")}
+              >
+                All modalities
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem
+                checked={categoryFilter === "chat"}
+                onCheckedChange={() => setCategoryFilter("chat")}
+              >
+                Chat
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem
+                checked={categoryFilter === "image"}
+                onCheckedChange={() => setCategoryFilter("image")}
+              >
+                Image
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem
+                checked={categoryFilter === "tts"}
+                onCheckedChange={() => setCategoryFilter("tts")}
+              >
+                Text to speech (TTS)
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem
+                checked={categoryFilter === "video"}
+                onCheckedChange={() => setCategoryFilter("video")}
+              >
+                Video
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem
+                checked={categoryFilter === "embedding"}
+                onCheckedChange={() => setCategoryFilter("embedding")}
+              >
+                Embeddings
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem
+                checked={categoryFilter === "stt"}
+                onCheckedChange={() => setCategoryFilter("stt")}
+              >
+                Speech to text (STT)
+              </DropdownMenuCheckboxItem>
+            </DropdownMenuGroup>
+            <DropdownMenuSeparator />
+            <DropdownMenuGroup>
               <DropdownMenuLabel>Providers</DropdownMenuLabel>
               {providers.map((name) => (
                 <DropdownMenuCheckboxItem
@@ -322,7 +373,7 @@ export default function ModelsPage() {
                       models.map((model) => {
                         const tps = tpsMap[model.id];
                         const result = testResult[model.id];
-                        const canTest = !model.model_pool && modelCategories(model).includes("chat");
+                        const canTest = !model.model_pool;
                         const fullModelId = model.model_pool ? `pool/${model.pretty_id || model.model_id}` : modelPublicId(model);
                         return (
                           <TableRow key={model.id}>
@@ -348,7 +399,7 @@ export default function ModelsPage() {
                                     <TooltipContent>Some limits or capabilities come from the LiteLLM catalog because the provider does not declare its own.</TooltipContent>
                                   </Tooltip>
                                 )}
-                                <ModelCapabilityBadges capabilities={model.capabilities} contextWindow={model.context_window} />
+                                <ModelCapabilityBadges capabilities={model.capabilities} contextWindow={model.context_window} modelType={model.model_type} />
                                 {model.effective_billing_type === "subscription" && (
                                   <Badge variant="outline" className="border-purple-500/20 bg-purple-500/10 text-purple-600 dark:text-purple-300 text-[10px] font-normal">
                                     Subscription

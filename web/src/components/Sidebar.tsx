@@ -12,6 +12,7 @@ import {
   RiSettings4Line as Settings4Line,
   RiChatAiLine as ChatAiLine,
   RiSparklingLine as SkillsLine,
+  RiPaletteLine as MediaLine,
 } from "@remixicon/react";
 import { Button } from "@/components/ui/button";
 import DisplayAvatar from "./DisplayAvatar";
@@ -25,6 +26,7 @@ import { pathForPage, shouldHandleLinkClick } from "../lib/navigation";
 const items = [
   { page: "dashboard" as Page, label: "Providers", icon: ProvidersLine },
   { page: "chat" as Page, label: "Chat", icon: ChatAiLine, badge: "Beta" },
+  { page: "media" as Page, label: "Media Hub", icon: MediaLine },
   { page: "models" as Page, label: "Models", icon: ModelsLine },
   { page: "model-pools" as Page, label: "Compound models", icon: CompoundLine },
   { page: "skills" as Page, label: "Skills & Prompts", icon: SkillsLine },

@@ -1374,10 +1374,10 @@ export default function ProviderDetailPage({
             <div className="space-y-3 p-3 md:hidden">
               {filteredList.map((model) => {
                 const fullId = modelPublicId({ ...model, provider_name: provider.name });
-                const canTest = modelCategories(model).includes("chat");
+                const canTest = true;
                 return <div key={model.id} className="min-w-0 rounded-lg border border-border bg-card p-3">
                   <div className="flex min-w-0 items-start justify-between gap-3">
-                    <div className="min-w-0"><p className="break-all font-mono text-xs">{fullId}</p><div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1"><p className="min-w-0 truncate text-sm font-normal">{model.display_name || "Unnamed model"}</p><ModelCapabilityBadges capabilities={model.capabilities} contextWindow={model.context_window} /></div></div>
+                    <div className="min-w-0"><p className="break-all font-mono text-xs">{fullId}</p><div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1"><p className="min-w-0 truncate text-sm font-normal">{model.display_name || "Unnamed model"}</p><ModelCapabilityBadges capabilities={model.capabilities} contextWindow={model.context_window} modelType={model.model_type} /></div></div>
                     <Badge variant={model.is_manual ? "outline" : "secondary"}>{model.is_manual ? "Manual" : "Synced"}</Badge>
                   </div>
                   <div className="mt-3 flex items-center justify-between gap-2 border-t border-border pt-3">
@@ -1438,7 +1438,7 @@ export default function ProviderDetailPage({
                           <span className="text-tertiary">—</span>
                         )}
                       </span>
-                      <ModelCapabilityBadges capabilities={model.capabilities} contextWindow={model.context_window} />
+                      <ModelCapabilityBadges capabilities={model.capabilities} contextWindow={model.context_window} modelType={model.model_type} />
                       {model.effective_billing_type === "subscription" && (
                         <Badge variant="outline" className="border-purple-500/20 bg-purple-500/10 text-purple-600 dark:text-purple-300 text-[10px] font-normal">
                           Subscription
@@ -1481,7 +1481,7 @@ export default function ProviderDetailPage({
                   </TableCell>
                   <TableCell>
                     <div className="flex justify-center gap-1">
-                      {modelCategories(model).includes("chat") && (testResult[model.id] === "success" ? (
+                      {testResult[model.id] === "success" ? (
                         <span className="flex size-7 items-center justify-center">
                           <Check className="block size-5 text-success" />
                         </span>
@@ -1510,7 +1510,7 @@ export default function ProviderDetailPage({
                           </TooltipTrigger>
                           <TooltipContent>Test</TooltipContent>
                         </Tooltip>
-                      ))}
+                      )}
                       <Tooltip>
                         <TooltipTrigger
                           render={

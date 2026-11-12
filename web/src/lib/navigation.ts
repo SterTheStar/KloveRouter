@@ -9,6 +9,7 @@ export type AppRoute = {
 const pagePaths: Partial<Record<Page, string>> = {
   dashboard: "/providers",
   chat: "/chat",
+  media: "/media",
   models: "/models",
   "model-pools": "/compound-models",
   skills: "/skills",
@@ -59,6 +60,7 @@ export function routeFromPath(pathname: string): AppRoute {
   }
 
   const staticRoutes: Record<string, Page> = {
+    "/media": "media",
     "/models": "models",
     "/compound-models": "model-pools",
     "/skills": "skills",

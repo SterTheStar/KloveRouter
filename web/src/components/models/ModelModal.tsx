@@ -117,6 +117,9 @@ export function ModelModal({
       setUseLiteLLMPricing(model.use_litellm_pricing === 1);
       setPricingEdited(false);
       setMetadata({
+        model_type: model.model_type ?? "chat",
+        input_modalities: model.input_modalities ?? ["text"],
+        output_modalities: model.output_modalities ?? ["text"],
         context_window: model.context_window ?? null,
         max_output_tokens: model.max_output_tokens ?? null,
         capabilities: {

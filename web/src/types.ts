@@ -54,12 +54,17 @@ export type CatalogPricing =
   | { billing_unit: "token"; input_per_million: number; output_per_million: number; cache_read_per_million: number; cache_write_per_million: number; rates: CatalogPricingRate[] }
   | { billing_unit: "second" | "character" | "other" | "mixed"; input_per_unit: number | null; output_per_unit: number | null; rates: CatalogPricingRate[] };
 
+export type ModelType = "chat" | "image" | "tts" | "stt" | "video" | "embedding";
+
 export interface Model {
   id: string;
   provider_id: string;
   model_id: string;
   pretty_id: string | null;
   display_name: string | null;
+  model_type?: ModelType;
+  input_modalities?: string[];
+  output_modalities?: string[];
   is_manual: number;
   is_active: number;
   billing_type?: ModelBillingType;
@@ -115,6 +120,9 @@ export interface ReasoningEffort {
 export interface ModelMetadataInput {
   use_litellm_pricing?: boolean;
   billing_type?: ModelBillingType;
+  model_type?: ModelType;
+  input_modalities?: string[];
+  output_modalities?: string[];
   context_window: number | null;
   max_output_tokens: number | null;
   think_opening_tag_mode?: ThinkOpeningTagMode;
@@ -432,6 +440,7 @@ export interface AntigravityUsage {
 export type Page =
   | "dashboard"
   | "chat"
+  | "media"
   | "models"
   | "model-pools"
   | "skills"
@@ -443,6 +452,29 @@ export type Page =
   | "docs"
   | "login"
   | "provider-detail";
+
+export interface MediaModelItem {
+  id: string;
+  public_id: string;
+  model_id: string;
+  pretty_id?: string | null;
+  display_name?: string | null;
+  provider_id: string;
+  provider_name: string;
+  capabilities?: ModelCapabilities;
+  media_settings?: MediaModelSettings;
+}
+
+export interface VideoJobItem {
+  id: string;
+  object?: string;
+  model?: string;
+  status: "queued" | "in_progress" | "processing" | "completed" | "failed" | "cancelled" | string;
+  created_at?: number | string;
+  finished_at?: number | string;
+  expires_at?: number | string;
+  error?: { message: string; code?: string } | null;
+}
 
 export interface RequestLog {
   id: string;

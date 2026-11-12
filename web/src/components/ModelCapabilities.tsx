@@ -8,14 +8,15 @@ import {
   RiToolsLine as ToolsIcon,
   RiVideoLine as VideoIcon,
   RiEyeLine as VisionIcon,
+  RiImageLine as ImageIcon,
+  RiVoiceprintLine as TtsIcon,
+  RiMovieLine as VideoGenIcon,
 } from "@remixicon/react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import type { ModelCapabilities } from "../types";
+import type { ModelCapabilities, ModelType } from "../types";
+import { modelCategoryBadge } from "../lib/model-modality";
 
-type CapabilityKey = Exclude<
-  keyof ModelCapabilities,
-  "image_generation" | "text_to_speech" | "video_generation"
->;
+type CapabilityKey = keyof ModelCapabilities;
 
 const capabilityMeta: Record<CapabilityKey, { label: string; hint: string; icon: typeof ToolsIcon }> = {
   reasoning: { label: "Reasoning", hint: "Supports extended thinking or reasoning effort", icon: ReasoningIcon },
@@ -24,6 +25,9 @@ const capabilityMeta: Record<CapabilityKey, { label: string; hint: string; icon:
   audio_input: { label: "Audio input", hint: "Accepts audio input", icon: AudioInputIcon },
   audio_output: { label: "Audio output", hint: "Can return synthesized audio", icon: AudioOutputIcon },
   video: { label: "Video", hint: "Accepts video input", icon: VideoIcon },
+  image_generation: { label: "Image generation", hint: "Generates or edits images", icon: ImageIcon },
+  text_to_speech: { label: "Text to speech", hint: "Synthesizes speech from text", icon: TtsIcon },
+  video_generation: { label: "Video generation", hint: "Generates videos from prompts", icon: VideoGenIcon },
   attachments: { label: "Files", hint: "Accepts file attachments", icon: FilesIcon },
   streaming: { label: "Streaming", hint: "Streams tokens as they are generated", icon: StreamingIcon },
   non_streaming: { label: "Non-streaming", hint: "Also supports non-streamed responses", icon: ContinuousIcon },
@@ -38,17 +42,24 @@ export function formatContextWindow(value: number): string {
 export function ModelCapabilityBadges({
   capabilities,
   contextWindow,
+  modelType,
 }: {
   capabilities?: Partial<ModelCapabilities> | null;
   contextWindow?: number | null;
+  modelType?: ModelType | null;
 }) {
   const supported = (Object.keys(capabilityMeta) as CapabilityKey[]).filter(
     (key) => capabilities?.[key] === true,
   );
-  if (contextWindow == null && !supported.length) return null;
+  if (contextWindow == null && !supported.length && !modelType) return null;
 
   return (
     <div className="flex shrink-0 flex-nowrap items-center gap-1">
+      {modelType && modelType !== "chat" && (
+        <span className="inline-flex h-5 items-center rounded-md bg-accent px-1.5 font-mono text-[10px] font-normal text-foreground">
+          {modelCategoryBadge(modelType)}
+        </span>
+      )}
       {contextWindow != null && (
         <Tooltip>
           <TooltipTrigger

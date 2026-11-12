@@ -74,7 +74,18 @@ export default function SyncModelsModal({
     const value = query.trim().toLowerCase();
     return items.filter((model) => (!value || `${model.id} ${model.display_name}`.toLowerCase().includes(value)) && (category === "all" || modelCategories(model).includes(category)));
   }, [items, query, category]);
-  const counts = useMemo(() => Object.fromEntries((["all", "chat"] as const).map((item) => [item, item === "all" ? items.length : items.filter((model) => modelCategories(model).includes(item)).length])), [items]);
+  const counts = useMemo(
+    () =>
+      Object.fromEntries(
+        (["all", "chat", "image", "tts", "video"] as const).map((item) => [
+          item,
+          item === "all"
+            ? items.length
+            : items.filter((model) => modelCategories(model).includes(item)).length,
+        ]),
+      ),
+    [items],
+  );
   const selectable = visible.filter((model) =>
     (!freeOnly || model.is_free) && (!resetExisting || model.is_existing),
   );
@@ -129,7 +140,29 @@ export default function SyncModelsModal({
           <DialogDescription>Select models by type. Existing models stay unchanged unless reset is enabled.</DialogDescription>
         </DialogHeader>
         <div role="tablist" aria-label="Model type" className="flex gap-1 overflow-x-auto border-b border-border">
-          {([ ["all", "All"], ["chat", "Chat"] ] as const).map(([value, label]) => <button key={value} type="button" role="tab" aria-selected={category === value} onClick={() => setCategory(value)} className={`shrink-0 rounded-t-lg border-b-2 px-3 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong ${category === value ? "border-foreground font-normal text-foreground" : "border-transparent text-muted-foreground hover:bg-accent hover:text-foreground"}`}>{label}<span className="ml-1 text-xs text-tertiary">{counts[value]}</span></button>)}
+          {([
+            ["all", "All"],
+            ["chat", "Chat"],
+            ["image", "Image"],
+            ["tts", "TTS"],
+            ["video", "Video"],
+          ] as const).map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              role="tab"
+              aria-selected={category === value}
+              onClick={() => setCategory(value)}
+              className={`shrink-0 rounded-t-lg border-b-2 px-3 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong ${
+                category === value
+                  ? "border-foreground font-normal text-foreground"
+                  : "border-transparent text-muted-foreground hover:bg-accent hover:text-foreground"
+              }`}
+            >
+              {label}
+              <span className="ml-1 text-xs text-tertiary">{counts[value]}</span>
+            </button>
+          ))}
         </div>
         <div className="flex items-center gap-2">
           <div className="relative min-w-0 flex-1">
