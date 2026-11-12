@@ -38,6 +38,7 @@ import { guardrailsPlugin } from "./plugins/guardrails";
 import { customSkillsPlugin } from "./plugins/custom-skills";
 import { refreshLiteLLMPricing } from "./services/litellm-pricing";
 import { initUpdateCheckOnStartup } from "./services/update";
+import { printStartupBanner } from "./services/startup-banner";
 import { CURRENT_VERSION } from "./version";
 
 // Initialize database and resolve effective security secrets.
@@ -169,44 +170,13 @@ if (!config.isDev) {
 
 app.listen({ port: config.port, hostname: "0.0.0.0", idleTimeout: 255 });
 
-const b = "\x1b[1m",
-  r = "\x1b[0m";
-const blue = "\x1b[38;2;91;206;250m",
-  pink = "\x1b[38;2;245;169;184m",
-  white = "\x1b[97m",
-  dim = "\x1b[2m";
-const green = "\x1b[38;2;80;200;120m",
-  cyan = "\x1b[38;2;0;200;200m",
-  yellow = "\x1b[38;2;255;200;50m";
-const bgBlue = "\x1b[48;2;91;206;250m",
-  bgGreen = "\x1b[48;2;80;200;120m";
-
-function badge(text: string, color: string) {
-  return `${color}${white}${b} ${text} ${r}`;
-}
-
-const ascii = `
-${b}${blue}     __ __ __${r}
-${b}${pink}    / //_// /___ _   _____${r}
-${b}${white}   / ,<  / / __ \\ | / / _ \\${r}
-${b}${pink}  / /| |/ / /_/ / |/ /  __/${r}
-${b}${blue} /_/ |_/_/\\____/|___/\\___/${r}
-`;
-const version = CURRENT_VERSION;
-
-logger.badge(
-  "SATURN",
-  `v${version} · https://github.com/SterTheStar/SaturnRouter`,
-);
-logger.success("Server running", {
-  panel: `http://0.0.0.0:${config.port}`,
-  api: `http://0.0.0.0:${config.port}/api`,
-  chat_completions: `http://0.0.0.0:${config.port}/v1/chat/completions`,
-  responses_api: `http://0.0.0.0:${config.port}/v1/responses`,
+printStartupBanner({
+  port: config.port,
+  version: CURRENT_VERSION,
+  oauthPort: 1455,
 });
-logger.info("Codex callback listener", {
-  address: "http://0.0.0.0:1455/auth/callback",
-});
+
+logger.success(`Server running on http://0.0.0.0:${config.port}`);
 
 if (insecureUrlsAllowed()) {
   logger.warn(
