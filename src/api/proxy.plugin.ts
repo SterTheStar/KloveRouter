@@ -28,6 +28,7 @@ import { claudeAgentResponses, CLAUDE_AGENT_ENABLED } from "../integrations/clau
 import { cleanQwenStream, extractQwenContent, qwenResponses } from "../integrations/qwen";
 import { atomesusResponses } from "../integrations/atomesus";
 import { conolContent, conolModelMetadataFromId, conolResponses } from "../integrations/conol";
+import { isMediaModel } from "../services/model-type";
 import { perchResponses } from "../integrations/perch";
 import { deepaiModels, deepaiRequest } from "../integrations/deepai";
 import {
@@ -627,6 +628,14 @@ export const proxyPlugin = (app: Elysia) =>
             object: "model",
             created: Math.floor(new Date(m.created_at).getTime() / 1000),
              owned_by: provider?.name.toLowerCase() ?? "unknown",
+             model_type: m.model_type,
+             type: m.model_type,
+             input_modalities: m.input_modalities,
+             output_modalities: m.output_modalities,
+             architecture: {
+               modality: `${(m.input_modalities || ["text"]).join("+")}->${(m.output_modalities || ["text"]).join("+")}`,
+               model_type: m.model_type,
+             },
              context_window: m.context_window,
              max_output_tokens: m.max_output_tokens,
              max_output_tokens_source: m.max_output_tokens_source,
@@ -783,6 +792,13 @@ export const proxyPlugin = (app: Elysia) =>
               logProxyRejection({ request, headers, server }, { statusCode: 404, error: `No active model "${parsedModel.modelId}" is configured for provider "${provider.name}"`, providerId: provider.id, providerName: provider.name, modelName: parsedModel.modelId, payload: body, streaming: streamHint, apiKeyPrefix: apiKey.prefix, requesterName: apiKey.name });
               set.status = 404;
               return { error: { message: `No active model "${parsedModel.modelId}" is configured for provider "${provider.name}"`, type: "invalid_request_error", code: "model_not_found" } };
+            }
+            if (modelRecord.model_type !== "chat" && (isMediaModel(modelRecord) || modelRecord.model_type === "embedding")) {
+              const target = modelRecord.model_type === "image" ? "/v1/images/generations" : modelRecord.model_type === "tts" ? "/v1/audio/speech" : modelRecord.model_type === "video" ? "/v1/videos" : "/v1/embeddings";
+              const message = `Model "${parsedModel.modelId}" is a ${modelRecord.model_type} model and cannot be used with responses API. Use ${target} instead.`;
+              logProxyRejection({ request, headers, server }, { statusCode: 400, error: message, providerId: provider.id, providerName: provider.name, modelName: parsedModel.modelId, payload: body, streaming: streamHint, apiKeyPrefix: apiKey.prefix, requesterName: apiKey.name });
+              set.status = 400;
+              return { error: { message, type: "invalid_request_error", code: "unsupported_model_type" } };
             }
             const requestModel = modelRecord.model_id;
             const canonicalBody = requestToChat("responses", body);
@@ -1095,6 +1111,19 @@ export const proxyPlugin = (app: Elysia) =>
           return {
             error: "Model not found or inactive",
             message: `No active model "${parsed.modelId}" is configured for provider "${provider.name}"`,
+          };
+        }
+        if (modelRecord.model_type !== "chat" && (isMediaModel(modelRecord) || modelRecord.model_type === "embedding")) {
+          const target = modelRecord.model_type === "image" ? "/v1/images/generations" : modelRecord.model_type === "tts" ? "/v1/audio/speech" : modelRecord.model_type === "video" ? "/v1/videos" : "/v1/embeddings";
+          const message = `Model "${parsed.modelId}" is a ${modelRecord.model_type} model and cannot be used with chat completions. Use ${target} instead.`;
+          logProxyRejection({ request, headers, server }, { statusCode: 400, error: message, providerId: provider.id, providerName: provider.name, modelName: parsed.modelId, payload: body, streaming: streamHint, apiKeyPrefix: apiKey.prefix, requesterName: apiKey.name });
+          set.status = 400;
+          return {
+            error: {
+              message,
+              type: "invalid_request_error",
+              code: "unsupported_model_type",
+            },
           };
         }
         // Public identifier resolved; use upstream technical ID internally.
